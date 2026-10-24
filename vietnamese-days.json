@@ -1,0 +1,36 @@
+﻿{
+    "holidays":  {
+                     "2026-01-01":  "New Year\u0027s Day,Tết Dương lịch,1",
+                     "2026-01-02":  "New Year\u0027s Day,Tết Dương lịch,1",
+                     "2026-01-03":  "New Year\u0027s Day,Tết Dương lịch,1",
+                     "2026-01-04":  "New Year\u0027s Day,Tết Dương lịch,1",
+                     "2026-02-14":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-15":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-16":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-17":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-18":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-19":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-20":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-21":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-02-22":  "Tet Holiday,Tết Nguyên đán,5",
+                     "2026-04-25":  "Hung Kings Festival,Giỗ Tổ Hùng Vương,1",
+                     "2026-04-26":  "Hung Kings Festival,Giỗ Tổ Hùng Vương,1",
+                     "2026-04-27":  "Hung Kings Festival,Giỗ Tổ Hùng Vương,1",
+                     "2026-04-30":  "Reunification Day,Ngày Giải phóng miền Nam,1",
+                     "2026-05-01":  "Labour Day,Ngày Quốc tế Lao động,1",
+                     "2026-05-02":  "Labour Day,Ngày Quốc tế Lao động,1",
+                     "2026-05-03":  "Labour Day,Ngày Quốc tế Lao động,1",
+                     "2026-08-29":  "Independence Day,Ngày Quốc khánh,2",
+                     "2026-08-30":  "Independence Day,Ngày Quốc khánh,2",
+                     "2026-08-31":  "Independence Day,Ngày Quốc khánh,2",
+                     "2026-09-01":  "Independence Day,Ngày Quốc khánh,2",
+                     "2026-09-02":  "Independence Day,Ngày Quốc khánh,2",
+                     "2026-11-24":  "Vietnam Culture Day,Ngày Văn hóa Việt Nam,1"
+                 },
+    "workdays":  {
+
+                 },
+    "inLieuDays":  {
+
+                   }
+}
