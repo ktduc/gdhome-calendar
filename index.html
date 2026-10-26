@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lập Tiến Độ Dự Án - GD HOME</title>
+  <!-- Google Fonts: Roboto (với độ mảnh 100, 300 cho ngày âm nét cực mảnh) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,300&display=swap" rel="stylesheet">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- html2canvas for Export PNG & Copy Clipboard -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Header Bar tương tự Google Calendar -->
+  <header class="app-header">
+    <div class="header-left">
+      <button class="icon-btn" id="btn-toggle-sidebar" title="Ẩn/Hiện danh sách lịch bên trái">
+        <i data-lucide="menu"></i>
+      </button>
+      <div class="app-logo">
+        <img src="gdhome-icon.png" alt="GD HOME" class="header-logo-img">
+        <span>Lịch Tiến Độ</span>
+      </div>
+      <button class="btn btn-outline btn-sm" id="btn-today">Hôm nay</button>
+      <div class="nav-controls">
+        <button class="icon-btn" id="btn-prev" title="Lùi lại 1 tháng"><i data-lucide="chevron-left"></i></button>
+        <button class="icon-btn" id="btn-next" title="Tiến tới 1 tháng"><i data-lucide="chevron-right"></i></button>
+      </div>
+      <h2 class="current-range-title" id="display-range-title">Tháng 6, 2026 - Tháng 9, 2026</h2>
+    </div>
+
+    <!-- Filter & Khoảng thời gian mong muốn -->
+    <div class="header-center">
+      <div class="range-selector-box">
+        <label for="start-month-input">Từ:</label>
+        <input type="month" id="start-month-input" value="2026-06">
+        <label for="end-month-input">Đến:</label>
+        <input type="month" id="end-month-input" value="2026-09">
+        <button class="btn btn-primary btn-sm" id="btn-apply-range">Áp dụng</button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <button class="btn btn-outline btn-crop" id="btn-start-crop-export" title="Quét chọn vùng nhìn trực tiếp trên lịch để tải hoặc copy ảnh">
+        <i data-lucide="crop"></i> Chọn vùng xuất
+      </button>
+      <button class="btn btn-success" id="btn-quick-copy-clipboard" title="Copy ngay bảng tiến độ vào Clipboard để Ctrl+V dán vào Zalo / Word / Photoshop">
+        <i data-lucide="copy"></i> Copy ảnh
+      </button>
+      <button class="btn btn-primary" id="btn-open-export-modal" title="Tùy chọn vùng nhìn, Tải ảnh & Copy Clipboard">
+        <i data-lucide="camera"></i> Xuất ảnh
+      </button>
+      <button class="btn btn-outline" id="btn-add-task">
+        <i data-lucide="plus"></i> Thêm việc
+      </button>
+      <button class="btn btn-outline icon-only-btn" id="btn-project-settings" title="Cài đặt dự án & Logo">
+        <i data-lucide="settings"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- Thanh thông báo khi đang ở chế độ Chọn Vùng Nhìn Xuất Ảnh -->
+  <div class="crop-mode-banner" id="crop-mode-banner">
+    <div class="crop-banner-content">
+      <i data-lucide="scan"></i>
+      <span id="crop-banner-instruction"><strong>Chế độ tạo vùng nhìn xuất ảnh:</strong> Hãy kéo chọn từ Hàng tuần bắt đầu đến Hàng tuần kết thúc trên lịch...</span>
+    </div>
+    <div class="crop-banner-actions">
+      <button class="btn btn-success btn-sm" id="btn-copy-cropped" style="display: none;">
+        <i data-lucide="copy"></i> Copy vùng đã chọn (Ctrl+V)
+      </button>
+      <button class="btn btn-primary btn-sm" id="btn-capture-cropped" style="display: none;">
+        <i data-lucide="download"></i> Tải ảnh vùng đã chọn
+      </button>
+      <button class="btn btn-outline btn-sm" id="btn-cancel-crop">Thoát chế độ chọn vùng</button>
+    </div>
+  </div>
+
+  <!-- Bố cục chính gồm Sidebar Trái + Vùng Lịch Chính -->
+  <div class="app-body-layout">
+    
+    <!-- Sidebar Danh sách lịch bên trái -->
+    <aside class="app-sidebar" id="app-sidebar">
+      <div class="sidebar-top-action">
+        <button class="btn-google-create" id="btn-sidebar-create-task">
+          <i data-lucide="plus"></i>
+          <span>Tạo công việc</span>
+        </button>
+      </div>
+
+      <!-- Thông báo Lịch đang chọn để nhập việc -->
+      <div class="active-calendar-indicator">
+        <span class="indicator-label">Đang chọn nhập vào lịch:</span>
+        <div class="active-cal-badge" id="active-cal-badge">
+          <span class="cal-dot" id="active-cal-dot" style="background:#cc0000;"></span>
+          <strong id="active-cal-name">A DŨNG VŨ YÊN - HẢI PHÒNG</strong>
+        </div>
+      </div>
+
+      <!-- Danh sách Lịch dự án -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">
+          <span>DANH SÁCH LỊCH DỰ ÁN</span>
+          <button class="icon-btn btn-sm-icon" id="btn-open-new-calendar-modal" title="Tạo lịch dự án mới">
+            <i data-lucide="plus"></i>
+          </button>
+        </div>
+
+        <div class="calendar-list-container" id="calendar-list-container">
+          <!-- Render bằng JS -->
+        </div>
+      </div>
+
+      <!-- Tác vụ nhanh với Lịch đang chọn -->
+      <div class="sidebar-section sidebar-actions-box">
+        <div class="sidebar-section-header">
+          <span>THAO TÁC DANH MỤC ĐANG CHỌN</span>
+        </div>
+        <button class="btn btn-danger-outline btn-full" id="btn-clear-active-calendar" title="Xóa toàn bộ các thanh công việc thuộc lịch đang chọn bên trái">
+          <i data-lucide="eraser"></i> Xóa toàn bộ việc của lịch này
+        </button>
+      </div>
+
+      <!-- Lịch khác (Ngày lễ VN & Âm lịch) -->
+      <div class="sidebar-section">
+        <div class="sidebar-section-header">
+          <span>HIỂN THỊ & LỊCH HỆ THỐNG</span>
+        </div>
+        <label class="sidebar-holiday-item" title="Hiển thị ngày Âm lịch bên phải ngày Dương lịch (nét mảnh 60%)">
+          <input type="checkbox" id="toggle-lunar-dates" checked>
+          <span class="cal-color-box" style="background:#64748b;"></span>
+          <span class="cal-item-name">Hiển thị Ngày Âm Lịch</span>
+        </label>
+        <label class="sidebar-holiday-item" title="Bật/tắt thanh Ngày lễ Việt Nam">
+          <input type="checkbox" id="toggle-vn-holidays" checked>
+          <span class="cal-color-box" style="background:#388e3c;"></span>
+          <span class="cal-item-name">Ngày lễ ở Việt Nam</span>
+        </label>
+      </div>
+    </aside>
+
+    <!-- Main Work Area -->
+    <main class="calendar-workspace">
+      <div class="workspace-wrapper">
+        
+        <!-- Thanh điều khiển mở rộng vùng lịch phía trên -->
+        <div class="range-expander-bar top-expander">
+          <button class="expander-btn" id="btn-add-week-top" title="Thêm 1 tuần vào phía trước">
+            <i data-lucide="plus-circle"></i> Thêm 1 tuần phía trước
+          </button>
+          <button class="expander-btn" id="btn-add-month-top" title="Mở rộng thêm 1 tháng về trước">
+            <i data-lucide="chevrons-up"></i> Mở rộng +1 tháng trước
+          </button>
+          <button class="expander-btn expander-sub" id="btn-sub-week-top" title="Thu gọn 1 tuần phía trên">
+            <i data-lucide="minus-circle"></i> Bớt 1 tuần đầu
+          </button>
+        </div>
+
+        <!-- Printable / Exportable Container -->
+        <div class="schedule-sheet" id="schedule-sheet">
+          
+          <!-- Khối cố định (Sticky): Gồm cả Tiêu đề dự án + Hàng Thứ trong tuần -->
+          <div class="sheet-sticky-top">
+            <!-- TIÊU ĐỀ TRÊN CÙNG: TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - "tên khách hàng" -->
+            <div class="sheet-top-banner">
+              <div class="sheet-banner-left" id="sheet-banner-left">
+                <i data-lucide="calendar" style="width: 16px; height: 16px; color: #64748b; flex-shrink: 0;"></i>
+                <input type="text" id="schedule-month-input" class="schedule-month-inline-input" value="Tháng 9, 2026" placeholder="Tháng lập bảng..." title="Bấm vào để chỉnh sửa tháng lập bảng">
+              </div>
+              <div class="sheet-banner-title">
+                <span class="banner-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - </span>
+                <input type="text" id="customer-name-input" class="customer-name-inline-input" placeholder="Nhập tên khách hàng (VD: A DŨNG VŨ YÊN - HẢI PHÒNG)..." value="A DŨNG VŨ YÊN - HẢI PHÒNG" title="Nhập tên khách hàng tại đây - Tự động gắn vào hậu tố các bước công việc">
+              </div>
+            </div>
+
+            <!-- Bảng ngày trong tuần (To rõ hơn) -->
+            <div class="calendar-week-header">
+              <div class="weekday-col">THỨ 2</div>
+              <div class="weekday-col">THỨ 3</div>
+              <div class="weekday-col">THỨ 4</div>
+              <div class="weekday-col">THỨ 5</div>
+              <div class="weekday-col">THỨ 6</div>
+              <div class="weekday-col">THỨ 7</div>
+              <div class="weekday-col holiday-col">CN</div>
+            </div>
+          </div>
+
+          <!-- Container chứa tất cả các tuần trải dài liên tục -->
+          <div class="calendar-weeks-container" id="calendar-grid">
+            <!-- Render bằng Javascript -->
+          </div>
+
+          <!-- Footer thông tin dự án & Logo chuẩn màu đỏ đen (To hơn 20%) -->
+          <footer class="schedule-footer" id="schedule-footer">
+            <div class="footer-brand">
+              <div class="brand-logo-preview" id="footer-logo-container">
+                <img src="gdhome-logo.png" alt="GD HOME" class="gdhome-full-logo-img" id="footer-default-logo">
+              </div>
+            </div>
+            <div class="footer-note">
+              <span class="note-label">GHI CHÚ:</span>
+              <span id="footer-note-text" contenteditable="true" title="Bấm vào để chỉnh sửa ghi chú">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
+            </div>
+          </footer>
+
+        </div>
+
+        <!-- Thanh điều khiển mở rộng vùng lịch phía dưới -->
+        <div class="range-expander-bar bottom-expander">
+          <button class="expander-btn primary-expander" id="btn-add-week-bottom" title="Thêm 1 hàng tuần trống vào bên dưới">
+            <i data-lucide="plus-circle"></i> + Thêm 1 tuần bên dưới
+          </button>
+          <button class="expander-btn" id="btn-add-month-bottom" title="Mở rộng thêm 1 tháng tiếp theo">
+            <i data-lucide="chevrons-down"></i> Mở rộng +1 tháng sau
+          </button>
+          <button class="expander-btn expander-sub" id="btn-sub-week-bottom" title="Thu gọn bớt 1 tuần cuối">
+            <i data-lucide="minus-circle"></i> Bớt 1 tuần cuối
+          </button>
+        </div>
+
+      </div>
+    </main>
+  </div>
+
+  <!-- Modal Tạo / Đổi tên Danh mục Lịch Dự Án -->
+  <div class="modal-overlay" id="calendar-category-modal">
+    <div class="modal-card" style="max-width: 440px;">
+      <div class="modal-header">
+        <h3 id="modal-cal-cat-title">Tạo Lịch Dự Án Mới</h3>
+        <button class="icon-btn close-modal" id="btn-close-cal-cat-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="calendar-category-form">
+          <input type="hidden" id="cal-cat-id">
+          <div class="form-group">
+            <label for="cal-cat-name">Tên khách hàng / Dự án <span class="required">*</span></label>
+            <input type="text" id="cal-cat-name" required placeholder="Ví dụ: A DŨNG VŨ YÊN - HẢI PHÒNG">
+            <small class="helper-text">Tên này sẽ tự động đồng bộ lên tiêu đề và hậu tố các bước (3D, CHỈNH SỬA 3D, HSKT)</small>
+          </div>
+          <div class="form-group">
+            <label>Màu đại diện (Theo dải màu chuyển sắc)</label>
+            <div class="color-palette" id="cal-cat-color-palette">
+              <button type="button" class="color-swatch active" data-color="#cc0000" style="background-color: #cc0000;" title="Đỏ (3D)"></button>
+              <button type="button" class="color-swatch" data-color="#e65100" style="background-color: #e65100;" title="Đỏ cam"></button>
+              <button type="button" class="color-swatch" data-color="#f57c00" style="background-color: #f57c00;" title="Cam (CHỈNH SỬA 3D)"></button>
+              <button type="button" class="color-swatch" data-color="#d4a017" style="background-color: #d4a017;" title="Vàng"></button>
+              <button type="button" class="color-swatch" data-color="#2e7d32" style="background-color: #2e7d32;" title="Xanh lá (HSKT)"></button>
+              <button type="button" class="color-swatch" data-color="#00897b" style="background-color: #00897b;" title="Xanh ngọc"></button>
+              <button type="button" class="color-swatch" data-color="#0288d1" style="background-color: #0288d1;" title="Xanh dương"></button>
+              <button type="button" class="color-swatch" data-color="#3949ab" style="background-color: #3949ab;" title="Xanh chàm"></button>
+              <button type="button" class="color-swatch" data-color="#7b1fa2" style="background-color: #7b1fa2;" title="Tím"></button>
+            </div>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="btn-cancel-cal-cat">Huỷ</button>
+            <button type="submit" class="btn btn-primary">Lưu lịch</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Thêm / Chỉnh Sửa Công Việc -->
+  <div class="modal-overlay" id="task-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modal-task-title">Thêm công việc tiến độ</h3>
+        <button class="icon-btn close-modal" id="btn-close-task-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="task-form">
+          <input type="hidden" id="task-id">
+          
+          <div class="form-group">
+            <label for="task-calendar-select">Thuộc Lịch Dự Án</label>
+            <select id="task-calendar-select" class="form-select"></select>
+          </div>
+
+          <!-- Chọn nhanh Tag giai đoạn trong Modal -->
+          <div class="form-group">
+            <label>Chọn nhanh Tag giai đoạn (Tự động điền tên + màu):</label>
+            <div class="quick-stage-tags" id="modal-stage-tags">
+              <button type="button" class="stage-tag-btn tag-3d" data-prefix="3D" data-color="#cc0000">
+                <span class="tag-dot" style="background:#cc0000;"></span> 3D (Đỏ)
+              </button>
+              <button type="button" class="stage-tag-btn tag-edit3d" data-prefix="CHỈNH SỬA 3D" data-color="#f57c00">
+                <span class="tag-dot" style="background:#f57c00;"></span> CHỈNH SỬA 3D (Cam)
+              </button>
+              <button type="button" class="stage-tag-btn tag-hskt" data-prefix="HSKT" data-color="#2e7d32">
+                <span class="tag-dot" style="background:#2e7d32;"></span> HSKT (Xanh lá)
+              </button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="task-title">Tên công việc / Giai đoạn <span class="required">*</span></label>
+            <input type="text" id="task-title" required placeholder="Ví dụ: 3D - A DŨNG VŨ YÊN - HẢI PHÒNG">
+          </div>
+
+          <div class="form-row">
+            <div class="form-group col">
+              <label for="task-start-date">Ngày bắt đầu <span class="required">*</span></label>
+              <input type="date" id="task-start-date" required>
+            </div>
+            <div class="form-group col">
+              <label for="task-end-date">Ngày kết thúc <span class="required">*</span></label>
+              <input type="date" id="task-end-date" required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label>Màu sắc thanh tiến độ (Theo dải màu chuyển sắc)</label>
+            <div class="color-palette" id="color-palette">
+              <button type="button" class="color-swatch active" data-color="#cc0000" style="background-color: #cc0000;" title="Đỏ (Tag 3D)"></button>
+              <button type="button" class="color-swatch" data-color="#e65100" style="background-color: #e65100;" title="Đỏ cam"></button>
+              <button type="button" class="color-swatch" data-color="#f57c00" style="background-color: #f57c00;" title="Cam (Tag CHỈNH SỬA 3D)"></button>
+              <button type="button" class="color-swatch" data-color="#d4a017" style="background-color: #d4a017;" title="Vàng"></button>
+              <button type="button" class="color-swatch" data-color="#2e7d32" style="background-color: #2e7d32;" title="Xanh lá (Tag HSKT)"></button>
+              <button type="button" class="color-swatch" data-color="#00897b" style="background-color: #00897b;" title="Xanh ngọc"></button>
+              <button type="button" class="color-swatch" data-color="#0288d1" style="background-color: #0288d1;" title="Xanh dương"></button>
+              <button type="button" class="color-swatch" data-color="#3949ab" style="background-color: #3949ab;" title="Xanh chàm"></button>
+              <button type="button" class="color-swatch" data-color="#7b1fa2" style="background-color: #7b1fa2;" title="Tím"></button>
+              <input type="color" id="custom-color-picker" value="#cc0000" title="Chọn màu tùy chỉnh">
+            </div>
+          </div>
+
+          <div class="form-row align-center-row">
+            <div class="form-group col" style="margin-bottom: 0;">
+              <div class="duration-badge-box">
+                <span>Số ngày thực tế: <strong id="calculated-days-count" style="color: #1a73e8; font-size: 15px;">0 ngày</strong></span>
+                <span id="calculated-total-span" style="color: #70757a; font-size: 12px; margin-left: 6px;">(Tổng: 0 ngày)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group options-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="task-skip-sundays" checked>
+              <span><strong>Mặc định không bôi màu / trừ ngày Chủ nhật</strong> (Thanh sẽ ngắt qua CN)</span>
+            </label>
+            <label class="checkbox-label" style="margin-top: 6px;">
+              <input type="checkbox" id="task-show-count" checked>
+              <span><strong>Hiển thị số ngày làm việc trên thanh</strong> (ví dụ: <em>[12 ngày]</em>)</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label for="task-note">Ghi chú bổ sung (tuỳ chọn)</label>
+            <input type="text" id="task-note" placeholder="Ví dụ: Giai đoạn 1 nghiệm thu">
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-danger mr-auto" id="btn-delete-task" style="display: none;">Xoá</button>
+            <button type="button" class="btn btn-outline" id="btn-cancel-task">Huỷ</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-task">Lưu công việc</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Cài đặt Dự Án & Thông tin Footer -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Cài đặt Bảng Tiến Độ & Thương Hiệu</h3>
+        <button class="icon-btn close-modal" id="btn-close-settings-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="settings-form">
+          <div class="form-group">
+            <label for="setting-company-name">Tên đơn vị / Thương hiệu (Nếu đổi sang công ty khác)</label>
+            <input type="text" id="setting-company-name" value="GD HOME" placeholder="Nhập tên công ty">
+          </div>
+
+          <div class="form-group">
+            <label for="setting-logo-url">Thay đổi Logo khác (Tùy chọn tải ảnh mới)</label>
+            <input type="file" id="setting-logo-file" accept="image/*" class="file-input">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-reset-default-logo" style="margin-top:6px;">Khôi phục Logo GD HOME chuẩn</button>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-note-text">Nội dung ghi chú chân trang</label>
+            <textarea id="setting-note-text" rows="3">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</textarea>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="btn-cancel-settings">Huỷ</button>
+            <button type="submit" class="btn btn-primary">Lưu cài đặt</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Tùy Chọn Vùng Nhìn Khi Xuất Ảnh & Copy Clipboard -->
+  <div class="modal-overlay" id="export-modal">
+    <div class="modal-card" style="max-width: 540px;">
+      <div class="modal-header">
+        <h3>Tùy Chọn Vùng Nhìn, Xuất Ảnh & Copy</h3>
+        <button class="icon-btn close-modal" id="btn-close-export-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Chọn phạm vi vùng nhìn:</label>
+          <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
+            <label class="checkbox-label">
+              <input type="radio" name="export-scope" value="all" checked>
+              <span><strong>Toàn bộ bảng lịch đang hiển thị</strong> (<span id="export-all-label">Tháng 6 - Tháng 9</span>)</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="radio" name="export-scope" value="custom-date">
+              <span><strong>Tùy chỉnh Từ ngày ... Đến ngày ...</strong> (Cắt theo tuần chính xác):</span>
+            </label>
+            <label class="checkbox-label">
+              <input type="radio" name="export-scope" value="interactive-crop">
+              <span style="color:#1a73e8; font-weight:600;">🎯 Quét chọn trực tiếp vùng nhìn trên màn hình lịch</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-row" id="export-custom-range-row" style="opacity: 0.5; pointer-events: none; margin-bottom: 16px;">
+          <div class="form-group col">
+            <label for="export-start-date">Từ ngày:</label>
+            <input type="date" id="export-start-date" value="2026-06-01">
+          </div>
+          <div class="form-group col">
+            <label for="export-end-date">Đến ngày:</label>
+            <input type="date" id="export-end-date" value="2026-09-06">
+          </div>
+        </div>
+
+        <div class="form-group options-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="export-include-footer" checked>
+            <span>Kèm Tiêu đề trên cùng & Logo chân trang (GD HOME)</span>
+          </label>
+          <label class="checkbox-label" style="margin-top: 6px;">
+            <input type="checkbox" id="export-high-res" checked>
+            <span>Chất lượng ảnh siêu nét (2x HD rõ chữ)</span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline mr-auto" id="btn-cancel-export">Đóng</button>
+          <button type="button" class="btn btn-success" id="btn-copy-export-clipboard" title="Copy ảnh vào bộ nhớ tạm để dán trực tiếp (Ctrl+V) vào Zalo, Word, Messenger...">
+            <i data-lucide="copy"></i> Copy vào Clipboard
+          </button>
+          <button type="button" class="btn btn-primary" id="btn-confirm-export">
+            <i data-lucide="download"></i> Tải file PNG
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Google Calendar Style Quick Create Popover (Có sẵn Tag 1-click: 3D, CHỈNH SỬA 3D, HSKT) -->
+  <div class="quick-create-popover" id="quick-create-popover">
+    <div class="popover-header">
+      <span class="popover-heading-label">Chọn nhanh giai đoạn (1-Click là xong):</span>
+      <button type="button" class="icon-btn close-popover" id="btn-close-popover">&times;</button>
+    </div>
+
+    <!-- 3 Nút Tag 1-Click: Bấm vào là tự ghép với Tên Khách Hàng + Màu chuẩn và Lưu luôn -->
+    <div class="popover-instant-tags">
+      <button type="button" class="instant-tag-btn instant-3d" data-prefix="3D" data-color="#cc0000" title="Tự động tạo thanh màu Đỏ: 3D - Tên khách hàng">
+        <span class="instant-tag-name">3D</span>
+        <span class="instant-tag-sub">Màu Đỏ • Tự ghép tên KH</span>
+      </button>
+      <button type="button" class="instant-tag-btn instant-edit3d" data-prefix="CHỈNH SỬA 3D" data-color="#f57c00" title="Tự động tạo thanh màu Cam: CHỈNH SỬA 3D - Tên khách hàng">
+        <span class="instant-tag-name">CHỈNH SỬA 3D</span>
+        <span class="instant-tag-sub">Màu Cam • Tự ghép tên KH</span>
+      </button>
+      <button type="button" class="instant-tag-btn instant-hskt" data-prefix="HSKT" data-color="#2e7d32" title="Tự động tạo thanh màu Xanh lá: HSKT - Tên khách hàng">
+        <span class="instant-tag-name">HSKT</span>
+        <span class="instant-tag-sub">Màu Xanh lá • Tự ghép tên KH</span>
+      </button>
+    </div>
+
+    <div class="popover-divider">
+      <span>Hoặc nhập tên thủ công</span>
+    </div>
+
+    <div class="popover-manual-box">
+      <input type="text" id="popover-task-title" placeholder="Nhập tiêu đề khác (Enter để lưu)..." autocomplete="off">
+    </div>
+
+    <div class="popover-body">
+      <div class="popover-cal-target">
+        <span>Khách hàng / Lịch:</span>
+        <strong id="popover-target-cal-name" style="color:#1a73e8;">A DŨNG VŨ YÊN - HẢI PHÒNG</strong>
+      </div>
+      <div class="popover-date-badge">
+        <i data-lucide="calendar-range" class="mini-icon"></i>
+        <span id="popover-date-range-text">8 thg 6 - 31 thg 6, 2026</span>
+      </div>
+      <div class="popover-count-summary" id="popover-count-summary">
+        20 ngày làm việc (đã tự động trừ Chủ nhật)
+      </div>
+      <div class="popover-color-row">
+        <span>Dải màu:</span>
+        <div class="popover-swatches" id="popover-swatches">
+          <button type="button" class="p-swatch active" data-color="#cc0000" style="background:#cc0000;" title="Đỏ (Tag 3D)"></button>
+          <button type="button" class="p-swatch" data-color="#e65100" style="background:#e65100;" title="Đỏ cam"></button>
+          <button type="button" class="p-swatch" data-color="#f57c00" style="background:#f57c00;" title="Cam (Tag CHỈNH SỬA 3D)"></button>
+          <button type="button" class="p-swatch" data-color="#d4a017" style="background:#d4a017;" title="Vàng"></button>
+          <button type="button" class="p-swatch" data-color="#2e7d32" style="background:#2e7d32;" title="Xanh lá (Tag HSKT)"></button>
+          <button type="button" class="p-swatch" data-color="#00897b" style="background:#00897b;" title="Xanh ngọc"></button>
+          <button type="button" class="p-swatch" data-color="#0288d1" style="background:#0288d1;" title="Xanh dương"></button>
+          <button type="button" class="p-swatch" data-color="#3949ab" style="background:#3949ab;" title="Xanh chàm"></button>
+          <button type="button" class="p-swatch" data-color="#7b1fa2" style="background:#7b1fa2;" title="Tím"></button>
+        </div>
+      </div>
+    </div>
+    <div class="popover-footer">
+      <button type="button" class="btn btn-outline btn-sm" id="btn-popover-more">Mở rộng chi tiết</button>
+      <button type="button" class="btn btn-primary btn-sm" id="btn-popover-save">Lưu thủ công</button>
+    </div>
+  </div>
+
+  <!-- Toast thông báo khi Copy ảnh thành công -->
+  <div id="toast-notification" class="toast-notification"></div>
+
+  <!-- Tooltip nổi hiển thị khi đang kéo 2 đầu mút hoặc quét ngày -->
+  <div id="floating-action-tooltip" class="floating-action-tooltip"></div>
+
+  <script src="holidays-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

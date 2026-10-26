@@ -1,0 +1,23 @@
+{
+  "startMonth": "2026-10",
+  "endMonth": "2027-01",
+  "tasks": [],
+  "companyName": "GD HOME",
+  "companyLogo": null,
+  "footerNote": "Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế",
+  "showVnHolidays": true,
+  "extraWeeksTop": 0,
+  "extraWeeksBottom": 1,
+  "calendars": [
+    {
+      "id": "cal_1792737384775",
+      "name": "CHỊ HỒNG",
+      "customerName": "CHỊ HỒNG",
+      "color": "#cc0000",
+      "visible": true
+    }
+  ],
+  "activeCalendarId": "cal_1792737384775",
+  "showLunarDates": true,
+  "scheduleMonth": "Tháng 9, 2026"
+}
