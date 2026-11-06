@@ -151,6 +151,7 @@
         <label class="msp-opt-label" for="sidebar-palette-select">Chọn Palette màu (Tự nhảy màu theo thứ tự):</label>
         <select id="sidebar-palette-select" class="form-select msp-mini-select" style="margin-top:3px;">
           <option value="default">Mặc định GD HOME (20 màu - 2 hàng)</option>
+          <option value="default_soft">Mặc định Dịu mắt (Giảm độ rực - 20 màu)</option>
           <option value="olive">Olive / Rêu Đất (20 màu - 2 hàng)</option>
           <option value="mauve">Mauve / Khói Tím (20 màu - 2 hàng)</option>
         </select>
@@ -217,10 +218,15 @@
           <span class="cal-color-box" style="background:#16a34a;"></span>
           <span class="cal-item-name">Ngày lễ ở Việt Nam</span>
         </label>
-        <label class="sidebar-holiday-item" title="Tính Thứ 7 là ngày nghỉ và tự cập nhật xuống Ghi chú">
+        <label class="sidebar-holiday-item" title="Nghỉ chiều Thứ 7 (Tính Thứ 7 làm 0.5 ngày sáng, nghỉ 0.5 ngày chiều) và tự cập nhật xuống Ghi chú">
+          <input type="checkbox" id="toggle-off-saturday-half">
+          <span class="cal-color-box" style="background:#fb923c;"></span>
+          <span class="cal-item-name">Nghỉ chiều Thứ 7 (0.5 ngày)</span>
+        </label>
+        <label class="sidebar-holiday-item" title="Tính Thứ 7 nghỉ cả ngày và tự cập nhật xuống Ghi chú">
           <input type="checkbox" id="toggle-off-saturday">
           <span class="cal-color-box" style="background:#f59e0b;"></span>
-          <span class="cal-item-name">Thứ 7</span>
+          <span class="cal-item-name">Thứ 7 (Nghỉ cả ngày)</span>
         </label>
         <label class="sidebar-holiday-item" title="Tính Chủ nhật là ngày nghỉ và tự cập nhật xuống Ghi chú">
           <input type="checkbox" id="toggle-off-sunday" checked>
@@ -379,18 +385,30 @@
         <div id="msproject-view-wrapper" class="msproject-view-wrapper" style="display: none;">
           <div class="msp-sheet" id="msp-sheet">
             
-            <!-- Thanh Công Cụ & Tiêu đề kiểu MS Project (Chỉnh sửa trực tiếp đồng bộ 2 chiều) -->
+            <!-- Thanh Công Cụ & Tiêu đề kiểu MS Project (Cho phép tự gõ toàn bộ tiêu đề & đồng bộ 2 chiều) -->
             <div class="msp-top-header">
               <div class="msp-header-left">
                 <span class="msp-badge-icon"><i data-lucide="gantt-chart-square"></i> MS PROJECT</span>
                 <input type="text" id="msp-month-input" class="msp-inline-month-input" value="Tháng 9, 2026" title="Bấm vào để sửa Tháng lập bảng (đồng bộ với Bảng Lịch)">
               </div>
               <div class="msp-header-center">
-                <span class="msp-title-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - </span>
-                <input type="text" id="msp-customer-input" class="msp-inline-customer-input" value="A DŨNG VŨ YÊN - HẢI PHÒNG" placeholder="Nhập tên khách hàng..." title="Sửa tên khách hàng tại đây - Tự động đồng bộ sang Bảng Lịch & các bước công việc">
+                <input type="text" id="msp-title-prefix-input" class="msp-inline-title-prefix-input" value="TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -" placeholder="Tự gõ tiêu đề tiến độ..." title="Bấm vào để tự gõ tiêu đề bất kỳ cho bảng Timeline">
+                <input type="text" id="msp-customer-input" class="msp-inline-customer-input" value="A DŨNG VŨ YÊN - HẢI PHÒNG" placeholder="Nhập tên dự án / khách hàng..." title="Sửa tên dự án / khách hàng tại đây - Tự động đồng bộ sang Bảng Lịch & các bước công việc">
               </div>
               <div class="msp-header-right" id="msp-kpi-summary">
                 <!-- Render KPI badges bằng JS -->
+              </div>
+            </div>
+
+            <!-- Thanh trạng thái khi chọn nhiều việc để kéo di chuyển đồng thời -->
+            <div class="msp-multisel-bar" id="msp-multisel-bar" style="display: none;">
+              <div class="msp-multisel-info">
+                <span id="msp-multisel-count-text">Đang chọn <strong>0</strong> công việc — Kéo 1 thanh Gantt hoặc đổi ngày để dịch chuyển đồng thời tất cả các mục đã chọn!</span>
+              </div>
+              <div class="msp-multisel-actions">
+                <button type="button" class="msp-multisel-btn" id="btn-multisel-shift-prev" title="Lùi đồng thời các việc đang chọn 1 ngày làm việc">◀ -1 ngày</button>
+                <button type="button" class="msp-multisel-btn" id="btn-multisel-shift-next" title="Tiến đồng thời các việc đang chọn 1 ngày làm việc">+1 ngày ▶</button>
+                <button type="button" class="msp-multisel-btn clear" id="btn-multisel-clear" title="Bỏ chọn tất cả">Bỏ chọn</button>
               </div>
             </div>
 
@@ -399,12 +417,14 @@
               <!-- Cột Bảng WBS (Task Grid - Cho phép chỉnh sửa trực tiếp từng ô & kéo giãn cột như Excel) -->
               <div class="msp-table-pane" id="msp-table-pane">
                 <div class="msp-table-header" id="msp-table-header">
-                  <div class="msp-th col-wbs" data-col-key="wbs">
+                  <div class="msp-th col-wbs" data-col-key="wbs" title="Tick để chọn tất cả công việc (hoặc giữ Ctrl/Shift bấm chọn nhiều dòng để kéo di chuyển đồng thời)">
+                    <input type="checkbox" id="msp-select-all-tasks" class="msp-header-select-chk" title="Chọn / Bỏ chọn tất cả công việc để kéo dịch chuyển đồng thời">
                     <span>WBS</span>
                     <div class="msp-col-resizer" data-resize-col="wbs" title="Kéo để chỉnh độ rộng cột WBS (Nháy đúp để tự căn vừa khít)"></div>
                   </div>
                   <div class="msp-th col-name" data-col-key="name">
                     <span>Hạng mục / Công việc</span>
+                    <button type="button" class="msp-sort-date-btn" id="btn-msp-sort-by-date" title="Sắp xếp lại toàn bộ các hạng mục theo đúng thứ tự Ngày bắt đầu tăng dần">🔃 Theo ngày</button>
                     <div class="msp-col-resizer" data-resize-col="name" title="Kéo để chỉnh độ rộng cột Tên công việc (Nháy đúp để tự giãn vừa khít chữ dài nhất)"></div>
                   </div>
                   <div class="msp-th col-dur" data-col-key="dur" title="Số ngày làm việc (đã trừ Chủ Nhật) - Gõ số ngày để tự tính ngày kết thúc">
@@ -585,6 +605,7 @@
               <div style="display:flex; align-items:center; gap:6px;">
                 <select id="modal-palette-select" class="form-select" style="width:auto; padding:3px 8px; font-size:12px; font-weight:600;">
                   <option value="default">Palette Mặc định (20 màu)</option>
+                  <option value="default_soft">Palette Mặc định Dịu mắt (20 màu)</option>
                   <option value="olive">Palette Olive / Rêu Đất (20 màu)</option>
                   <option value="mauve">Palette Mauve / Khói Tím (20 màu)</option>
                 </select>
