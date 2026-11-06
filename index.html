@@ -92,6 +92,44 @@
         </button>
       </div>
 
+      <!-- CHUYỂN ĐỔI CHẾ ĐỘ XEM: LỊCH GOOGLE vs MICROSOFT PROJECT TIMELINE -->
+      <div class="sidebar-section view-mode-section">
+        <div class="sidebar-section-header">
+          <span>CHẾ ĐỘ XEM TIẾN ĐỘ</span>
+        </div>
+        <div class="view-mode-switcher">
+          <button type="button" class="view-mode-btn active" id="btn-view-calendar" data-view="calendar">
+            <i data-lucide="calendar-days"></i>
+            <div class="vm-text">
+              <strong>Bảng Lịch (Tháng)</strong>
+              <span>Dàn nhiều tháng kiểu Google Lịch</span>
+            </div>
+          </button>
+          <button type="button" class="view-mode-btn" id="btn-view-msproject" data-view="msproject">
+            <i data-lucide="gantt-chart-square"></i>
+            <div class="vm-text">
+              <strong>Timeline (MS Project)</strong>
+              <span>Biểu đồ Gantt & WBS các dự án</span>
+            </div>
+          </button>
+        </div>
+
+        <!-- Tùy chọn nhanh khi đang ở chế độ MS Project -->
+        <div class="msp-sidebar-options" id="msp-sidebar-options" style="display: none;">
+          <label class="msp-opt-label">Phạm vi dự án trên Timeline:</label>
+          <select id="msp-scope-select" class="form-select msp-mini-select">
+            <option value="all-visible">Tất cả lịch dự án đang bật</option>
+            <option value="active-only">Chỉ lịch khách hàng đang chọn</option>
+          </select>
+          <label class="msp-opt-label" style="margin-top: 6px;">Độ rộng cột ngày (Zoom):</label>
+          <div class="msp-zoom-btns">
+            <button type="button" class="msp-zoom-btn" data-zoom="compact">Thu gọn</button>
+            <button type="button" class="msp-zoom-btn active" data-zoom="normal">Chuẩn</button>
+            <button type="button" class="msp-zoom-btn" data-zoom="wide">Rộng</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Thông báo Lịch đang chọn để nhập việc -->
       <div class="active-calendar-indicator">
         <span class="indicator-label">Đang chọn nhập vào lịch:</span>
@@ -145,81 +183,152 @@
 
     <!-- Main Work Area -->
     <main class="calendar-workspace">
-      <div class="workspace-wrapper">
+      <div class="workspace-wrapper" id="workspace-wrapper">
         
-        <!-- Thanh điều khiển mở rộng vùng lịch phía trên -->
-        <div class="range-expander-bar top-expander">
-          <button class="expander-btn" id="btn-add-week-top" title="Thêm 1 tuần vào phía trước">
-            <i data-lucide="plus-circle"></i> Thêm 1 tuần phía trước
-          </button>
-          <button class="expander-btn" id="btn-add-month-top" title="Mở rộng thêm 1 tháng về trước">
-            <i data-lucide="chevrons-up"></i> Mở rộng +1 tháng trước
-          </button>
-          <button class="expander-btn expander-sub" id="btn-sub-week-top" title="Thu gọn 1 tuần phía trên">
-            <i data-lucide="minus-circle"></i> Bớt 1 tuần đầu
-          </button>
-        </div>
-
-        <!-- Printable / Exportable Container -->
-        <div class="schedule-sheet" id="schedule-sheet">
-          
-          <!-- Khối cố định (Sticky): Gồm cả Tiêu đề dự án + Hàng Thứ trong tuần -->
-          <div class="sheet-sticky-top">
-            <!-- TIÊU ĐỀ TRÊN CÙNG: TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - "tên khách hàng" -->
-            <div class="sheet-top-banner">
-              <div class="sheet-banner-left" id="sheet-banner-left">
-                <i data-lucide="calendar" style="width: 16px; height: 16px; color: #64748b; flex-shrink: 0;"></i>
-                <input type="text" id="schedule-month-input" class="schedule-month-inline-input" value="Tháng 9, 2026" placeholder="Tháng lập bảng..." title="Bấm vào để chỉnh sửa tháng lập bảng">
-              </div>
-              <div class="sheet-banner-title">
-                <span class="banner-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - </span>
-                <input type="text" id="customer-name-input" class="customer-name-inline-input" placeholder="Nhập tên khách hàng (VD: A DŨNG VŨ YÊN - HẢI PHÒNG)..." value="A DŨNG VŨ YÊN - HẢI PHÒNG" title="Nhập tên khách hàng tại đây - Tự động gắn vào hậu tố các bước công việc">
-              </div>
-            </div>
-
-            <!-- Bảng ngày trong tuần (To rõ hơn) -->
-            <div class="calendar-week-header">
-              <div class="weekday-col">THỨ 2</div>
-              <div class="weekday-col">THỨ 3</div>
-              <div class="weekday-col">THỨ 4</div>
-              <div class="weekday-col">THỨ 5</div>
-              <div class="weekday-col">THỨ 6</div>
-              <div class="weekday-col">THỨ 7</div>
-              <div class="weekday-col holiday-col">CN</div>
-            </div>
+        <!-- ==================== CHẾ ĐỘ 1: BẢNG LỊCH GOOGLE CALENDAR ==================== -->
+        <div id="calendar-view-wrapper" class="calendar-view-wrapper">
+          <!-- Thanh điều khiển mở rộng vùng lịch phía trên -->
+          <div class="range-expander-bar top-expander">
+            <button class="expander-btn" id="btn-add-week-top" title="Thêm 1 tuần vào phía trước">
+              <i data-lucide="plus-circle"></i> Thêm 1 tuần phía trước
+            </button>
+            <button class="expander-btn" id="btn-add-month-top" title="Mở rộng thêm 1 tháng về trước">
+              <i data-lucide="chevrons-up"></i> Mở rộng +1 tháng trước
+            </button>
+            <button class="expander-btn expander-sub" id="btn-sub-week-top" title="Thu gọn 1 tuần phía trên">
+              <i data-lucide="minus-circle"></i> Bớt 1 tuần đầu
+            </button>
           </div>
 
-          <!-- Container chứa tất cả các tuần trải dài liên tục -->
-          <div class="calendar-weeks-container" id="calendar-grid">
-            <!-- Render bằng Javascript -->
-          </div>
+          <!-- Printable / Exportable Container -->
+          <div class="schedule-sheet" id="schedule-sheet">
+            
+            <!-- Khối cố định (Sticky): Gồm cả Tiêu đề dự án + Hàng Thứ trong tuần -->
+            <div class="sheet-sticky-top">
+              <!-- TIÊU ĐỀ TRÊN CÙNG: TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - "tên khách hàng" -->
+              <div class="sheet-top-banner">
+                <div class="sheet-banner-left" id="sheet-banner-left">
+                  <i data-lucide="calendar" style="width: 16px; height: 16px; color: #64748b; flex-shrink: 0;"></i>
+                  <input type="text" id="schedule-month-input" class="schedule-month-inline-input" value="Tháng 9, 2026" placeholder="Tháng lập bảng..." title="Bấm vào để chỉnh sửa tháng lập bảng">
+                </div>
+                <div class="sheet-banner-title">
+                  <span class="banner-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - </span>
+                  <input type="text" id="customer-name-input" class="customer-name-inline-input" placeholder="Nhập tên khách hàng (VD: A DŨNG VŨ YÊN - HẢI PHÒNG)..." value="A DŨNG VŨ YÊN - HẢI PHÒNG" title="Nhập tên khách hàng tại đây - Tự động gắn vào hậu tố các bước công việc">
+                </div>
+              </div>
 
-          <!-- Footer thông tin dự án & Logo chuẩn màu đỏ đen (To hơn 20%) -->
-          <footer class="schedule-footer" id="schedule-footer">
-            <div class="footer-brand">
-              <div class="brand-logo-preview" id="footer-logo-container">
-                <img src="gdhome-logo.png" alt="GD HOME" class="gdhome-full-logo-img" id="footer-default-logo">
+              <!-- Bảng ngày trong tuần (To rõ hơn) -->
+              <div class="calendar-week-header">
+                <div class="weekday-col">THỨ 2</div>
+                <div class="weekday-col">THỨ 3</div>
+                <div class="weekday-col">THỨ 4</div>
+                <div class="weekday-col">THỨ 5</div>
+                <div class="weekday-col">THỨ 6</div>
+                <div class="weekday-col">THỨ 7</div>
+                <div class="weekday-col holiday-col">CN</div>
               </div>
             </div>
-            <div class="footer-note">
-              <span class="note-label">GHI CHÚ:</span>
-              <span id="footer-note-text" contenteditable="true" title="Bấm vào để chỉnh sửa ghi chú">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
-            </div>
-          </footer>
 
+            <!-- Container chứa tất cả các tuần trải dài liên tục -->
+            <div class="calendar-weeks-container" id="calendar-grid">
+              <!-- Render bằng Javascript -->
+            </div>
+
+            <!-- Footer thông tin dự án & Logo chuẩn màu đỏ đen (To hơn 20%) -->
+            <footer class="schedule-footer" id="schedule-footer">
+              <div class="footer-brand">
+                <div class="brand-logo-preview" id="footer-logo-container">
+                  <img src="gdhome-logo.png" alt="GD HOME" class="gdhome-full-logo-img" id="footer-default-logo">
+                </div>
+              </div>
+              <div class="footer-note">
+                <span class="note-label">GHI CHÚ:</span>
+                <span id="footer-note-text" contenteditable="true" title="Bấm vào để chỉnh sửa ghi chú">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
+              </div>
+            </footer>
+
+          </div>
+
+          <!-- Thanh điều khiển mở rộng vùng lịch phía dưới -->
+          <div class="range-expander-bar bottom-expander">
+            <button class="expander-btn primary-expander" id="btn-add-week-bottom" title="Thêm 1 hàng tuần trống vào bên dưới">
+              <i data-lucide="plus-circle"></i> + Thêm 1 tuần bên dưới
+            </button>
+            <button class="expander-btn" id="btn-add-month-bottom" title="Mở rộng thêm 1 tháng tiếp theo">
+              <i data-lucide="chevrons-down"></i> Mở rộng +1 tháng sau
+            </button>
+            <button class="expander-btn expander-sub" id="btn-sub-week-bottom" title="Thu gọn bớt 1 tuần cuối">
+              <i data-lucide="minus-circle"></i> Bớt 1 tuần cuối
+            </button>
+          </div>
         </div>
 
-        <!-- Thanh điều khiển mở rộng vùng lịch phía dưới -->
-        <div class="range-expander-bar bottom-expander">
-          <button class="expander-btn primary-expander" id="btn-add-week-bottom" title="Thêm 1 hàng tuần trống vào bên dưới">
-            <i data-lucide="plus-circle"></i> + Thêm 1 tuần bên dưới
-          </button>
-          <button class="expander-btn" id="btn-add-month-bottom" title="Mở rộng thêm 1 tháng tiếp theo">
-            <i data-lucide="chevrons-down"></i> Mở rộng +1 tháng sau
-          </button>
-          <button class="expander-btn expander-sub" id="btn-sub-week-bottom" title="Thu gọn bớt 1 tuần cuối">
-            <i data-lucide="minus-circle"></i> Bớt 1 tuần cuối
-          </button>
+        <!-- ==================== CHẾ ĐỘ 2: MICROSOFT PROJECT TIMELINE / GANTT ==================== -->
+        <div id="msproject-view-wrapper" class="msproject-view-wrapper" style="display: none;">
+          <div class="msp-sheet" id="msp-sheet">
+            
+            <!-- Thanh Công Cụ & Tiêu đề kiểu MS Project -->
+            <div class="msp-top-header">
+              <div class="msp-header-left">
+                <span class="msp-badge-icon"><i data-lucide="gantt-chart-square"></i> MS PROJECT TIMELINE</span>
+                <span class="msp-month-label" id="msp-month-label">Tháng 9, 2026</span>
+              </div>
+              <div class="msp-header-center">
+                <h2 class="msp-main-title" id="msp-main-title">TIẾN ĐỘ THIẾT KẾ TỔNG HỢP - GD HOME</h2>
+              </div>
+              <div class="msp-header-right" id="msp-kpi-summary">
+                <!-- Render KPI badges bằng JS -->
+              </div>
+            </div>
+
+            <!-- Thanh Timeline Overview đặc trưng phía trên của Microsoft Project -->
+            <div class="msp-overview-strip" id="msp-overview-strip">
+              <!-- Render thanh tóm tắt các giai đoạn lớn kiểu MS Project -->
+            </div>
+
+            <!-- Khung Chia Đôi: Bảng WBS bên trái + Biểu đồ Gantt bên phải -->
+            <div class="msp-split-workspace" id="msp-split-workspace">
+              <!-- Cột Bảng WBS (Task Grid) -->
+              <div class="msp-table-pane" id="msp-table-pane">
+                <div class="msp-table-header">
+                  <div class="msp-th col-wbs">WBS</div>
+                  <div class="msp-th col-name">Hạng mục / Công việc</div>
+                  <div class="msp-th col-dur">Số ngày</div>
+                  <div class="msp-th col-date">Bắt đầu</div>
+                  <div class="msp-th col-date">Kết thúc</div>
+                  <div class="msp-th col-prog">Tiến độ</div>
+                </div>
+                <div class="msp-table-body" id="msp-table-body">
+                  <!-- Render bằng JS -->
+                </div>
+              </div>
+
+              <!-- Cột Biểu đồ Thanh Ngang (Gantt Timeline Chart) -->
+              <div class="msp-gantt-pane" id="msp-gantt-pane">
+                <div class="msp-gantt-canvas" id="msp-gantt-canvas">
+                  <div class="msp-gantt-header" id="msp-gantt-header">
+                    <!-- Tầng 1: Tháng, Tầng 2: Ngày -->
+                  </div>
+                  <div class="msp-gantt-body" id="msp-gantt-body">
+                    <!-- Các dòng thanh Gantt + Đường nối phụ thuộc -->
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Chân trang MS Project -->
+            <footer class="schedule-footer msp-footer">
+              <div class="footer-brand">
+                <div class="brand-logo-preview" id="msp-footer-logo-container">
+                  <img src="gdhome-logo.png" alt="GD HOME" class="gdhome-full-logo-img">
+                </div>
+              </div>
+              <div class="footer-note">
+                <span class="note-label">GHI CHÚ:</span>
+                <span id="msp-footer-note-text">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
+              </div>
+            </footer>
+          </div>
         </div>
 
       </div>
@@ -348,9 +457,21 @@
             </label>
           </div>
 
-          <div class="form-group">
-            <label for="task-note">Ghi chú bổ sung (tuỳ chọn)</label>
-            <input type="text" id="task-note" placeholder="Ví dụ: Giai đoạn 1 nghiệm thu">
+          <div class="form-row">
+            <div class="form-group col">
+              <label for="task-progress">Tiến độ hoàn thành (%)</label>
+              <select id="task-progress" class="form-select">
+                <option value="0">0% - Chưa bắt đầu</option>
+                <option value="25">25% - Đang triển khai</option>
+                <option value="50">50% - Đạt một nửa</option>
+                <option value="75">75% - Sắp hoàn thiện</option>
+                <option value="100">100% - Đã hoàn thành</option>
+              </select>
+            </div>
+            <div class="form-group col">
+              <label for="task-note">Ghi chú bổ sung (tuỳ chọn)</label>
+              <input type="text" id="task-note" placeholder="Ví dụ: Nghiệm thu">
+            </div>
           </div>
 
           <div class="modal-actions">
