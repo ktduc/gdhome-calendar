@@ -85,6 +85,9 @@ function updateUndoRedoButtonsUI() {
     btnRedo.style.display = _redoStack.length > 0 ? 'inline-flex' : 'none';
   }
 }
+
+// Khởi tạo state của ứng dụng
+const AppState = {
   startMonth: '2026-06',
   endMonth: '2026-09',
   scheduleMonth: 'Tháng 9, 2026', // Tháng đang lập bảng hiển thị bên trái tiêu đề
