@@ -2193,6 +2193,63 @@ function syncAllFromMSProject(toastMsg = null) {
   }
 }
 
+// Đo chính xác độ rộng pixel của chữ tiếng Việt trên Canvas 2D để không bao giờ bị dư khoảng trắng thừa
+let _textMeasureCanvas = null;
+function measureTextWidthPx(text, fontSpec) {
+  if (!text) return 0;
+  try {
+    if (!_textMeasureCanvas && typeof document !== 'undefined') {
+      _textMeasureCanvas = document.createElement('canvas');
+    }
+    const ctx = _textMeasureCanvas && typeof _textMeasureCanvas.getContext === 'function'
+      ? _textMeasureCanvas.getContext('2d')
+      : null;
+    if (ctx) {
+      ctx.font = fontSpec;
+      return Math.ceil(ctx.measureText(String(text)).width);
+    }
+  } catch (_) {}
+  return Math.ceil(String(text).length * 5.8);
+}
+
+// Tính độ rộng cột "Hạng mục / Công việc" vừa khít 100% dòng chữ dài nhất (không dư khoảng trống bên phải)
+function computeTightMspNameColWidth() {
+  let maxTextPx = 175;
+  let targetCalendars = [];
+  if (AppState.mspScope === 'active-only' || AppState.mspScope === 'active') {
+    const activeCal = getActiveCalendar();
+    if (activeCal) targetCalendars = [activeCal];
+  } else {
+    targetCalendars = AppState.calendars.filter(c => c.visible !== false);
+    if (targetCalendars.length === 0 && AppState.calendars.length > 0) {
+      targetCalendars = [getActiveCalendar()];
+    }
+  }
+  const visCalIds = new Set(targetCalendars.map(c => c.id));
+
+  targetCalendars.forEach(c => {
+    if (c.name) {
+      const w = measureTextWidthPx(
+        c.name,
+        '800 12.5px "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      ) + 46;
+      if (w > maxTextPx) maxTextPx = w;
+    }
+  });
+
+  AppState.tasks.forEach(t => {
+    if (t.visibleOnBoard !== false && visCalIds.has(t.calendarId) && t.title) {
+      const w = measureTextWidthPx(
+        t.title,
+        '600 12px "Be Vietnam Pro", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      ) + 34;
+      if (w > maxTextPx) maxTextPx = w;
+    }
+  });
+
+  return Math.min(520, Math.max(175, maxTextPx));
+}
+
 // Áp dụng độ rộng các cột kiểu Excel + trạng thái ẩn/hiện cột từ mục "ĐỀ MỤC"
 function applyMspGridColumnWidths(targetPane = null, forceExportMode = false, exportNameWidth = null) {
   const pane = targetPane || document.getElementById('msp-table-pane');
@@ -2200,10 +2257,15 @@ function applyMspGridColumnWidths(targetPane = null, forceExportMode = false, ex
 
   const vis = AppState.mspVisibility || {};
   const cw = AppState.mspColWidths || { wbs: 44, name: 310, dur: 64, start: 86, end: 86, prog: 62, act: 50 };
+  const tightNameWidth = computeTightMspNameColWidth();
+  const effectiveNameWidth = exportNameWidth || (AppState.userManuallyResizedNameCol ? (cw.name || tightNameWidth) : tightNameWidth);
+  if (!exportNameWidth && !AppState.userManuallyResizedNameCol) {
+    cw.name = tightNameWidth;
+  }
 
   const colDefs = [
     { key: 'wbs', selector: '.col-wbs', show: vis.colWbs !== false, width: cw.wbs || 44 },
-    { key: 'name', selector: '.col-name', show: true, width: exportNameWidth || cw.name || 310 },
+    { key: 'name', selector: '.col-name', show: true, width: effectiveNameWidth },
     { key: 'dur', selector: '.col-dur', show: vis.colDur !== false, width: cw.dur || 64 },
     { key: 'start', selector: '.col-start', show: vis.colDate !== false, width: cw.start || 86 },
     { key: 'end', selector: '.col-end', show: vis.colDate !== false, width: cw.end || 86 },
@@ -2227,25 +2289,13 @@ function applyMspGridColumnWidths(targetPane = null, forceExportMode = false, ex
 
 // Tự động giãn độ rộng cột Tên công việc vừa khít nội dung dài nhất (Auto-fit như Excel)
 function autoFitMspColumns(silent = false) {
-  let maxChars = 22;
-  AppState.calendars.forEach(c => {
-    if (c.visible !== false && c.name) {
-      maxChars = Math.max(maxChars, c.name.length + 6);
-    }
-  });
-  AppState.tasks.forEach(t => {
-    if (t.visibleOnBoard !== false && t.title) {
-      maxChars = Math.max(maxChars, t.title.length + 4);
-    }
-  });
-
-  // Ước lượng độ rộng pixel chuẩn cho font Be Vietnam Pro 12px + padding + chấm màu
-  const fittedNameWidth = Math.min(620, Math.max(240, Math.round(maxChars * 7.4) + 38));
+  AppState.userManuallyResizedNameCol = false;
+  const fittedNameWidth = computeTightMspNameColWidth();
   AppState.mspColWidths.name = fittedNameWidth;
   applyMspGridColumnWidths();
   saveToStorage();
   if (!silent) {
-    showToast(`Đã tự động giãn độ rộng cột vừa khít nội dung (${fittedNameWidth}px)!`);
+    showToast(`Đã tự động co giãn cột vừa khít dòng chữ dài nhất (${fittedNameWidth}px)!`);
   }
 }
 
@@ -2292,6 +2342,7 @@ function setupExcelColumnResizing() {
 
         const onMove = (ev) => {
           const dx = ev.clientX - startX;
+          if (colKey === 'name') AppState.userManuallyResizedNameCol = true;
           AppState.mspColWidths[colKey] = Math.max(minW, Math.min(750, origWidth + dx));
           applyMspGridColumnWidths();
         };
@@ -2318,13 +2369,14 @@ function setupExcelColumnResizing() {
       if (e.button !== 0) return;
       e.preventDefault();
       const startX = e.clientX;
-      const origNameWidth = AppState.mspColWidths.name || 300;
+      const origNameWidth = AppState.mspColWidths.name || computeTightMspNameColWidth();
       splitter.classList.add('dragging');
       document.body.style.cursor = 'col-resize';
       document.body.style.userSelect = 'none';
 
       const onMove = (ev) => {
         const dx = ev.clientX - startX;
+        AppState.userManuallyResizedNameCol = true;
         AppState.mspColWidths.name = Math.max(150, Math.min(750, origNameWidth + dx));
         applyMspGridColumnWidths();
       };
@@ -2660,7 +2712,6 @@ function renderMSProjectView() {
   const ganttRowsLayer = document.getElementById('msp-gantt-rows-layer');
   const ganttSvg = document.getElementById('msp-dependency-svg');
   const ganttBody = document.getElementById('msp-gantt-body');
-  const overviewStrip = document.getElementById('msp-overview-strip');
   const kpiSummary = document.getElementById('msp-kpi-summary');
   const mspMonthInput = document.getElementById('msp-month-input');
   const mspCustomerInput = document.getElementById('msp-customer-input');
@@ -2751,17 +2802,16 @@ function renderMSProjectView() {
     globalMinDate = formatDateStr(sDate);
     globalMaxDate = formatDateStr(eDate);
   } else {
-    const padStart = parseDateStr(globalMinDate);
-    padStart.setDate(padStart.getDate() - 3);
+    // Bắt đầu ngay từ ngày đầu tiên có công việc (không đệm ngày trống ở đầu)
+    // Kết thúc chỉ đệm đúng 3 ngày để hiển thị gọn nhãn ngày của công việc cuối cùng (bỏ các cột trống thừa ở cuối)
     const padEnd = parseDateStr(globalMaxDate);
-    padEnd.setDate(padEnd.getDate() + 6);
-    globalMinDate = formatDateStr(padStart);
+    padEnd.setDate(padEnd.getDate() + 3);
     globalMaxDate = formatDateStr(padEnd);
   }
 
   const timelineDates = getDatesBetween(globalMinDate, globalMaxDate);
   const colWidth = getMspColWidth();
-  const totalTimelineWidth = Math.max(600, timelineDates.length * colWidth);
+  const totalTimelineWidth = Math.max(colWidth * 5, timelineDates.length * colWidth);
 
   // 4. Render KPI Summary Pills
   if (kpiSummary) {
@@ -2794,72 +2844,6 @@ function renderMSProjectView() {
         <strong>${formatShortVNDate(firstTaskStart)} → ${formatShortVNDate(lastTaskEnd)}</strong>
       </div>` : ''}
     `;
-  }
-
-  // 5. Render Thanh Top Timeline Overview (Có thể bật/tắt từ mục ĐỀ MỤC bên trái)
-  if (overviewStrip) {
-    if (vis.overviewStrip === false) {
-      overviewStrip.style.display = 'none';
-    } else {
-      overviewStrip.style.display = 'block';
-      if (allVisibleTasks.length === 0) {
-        overviewStrip.innerHTML = `<div style="font-size:12.5px; color:#475569; padding:4px 0;">Chưa có hạng mục nào đang bật trên bảng. Hãy tick chọn ở mục <strong>📋 ĐỀ MỤC</strong> bên trái hoặc nhấn <strong>+ 3D / + CHỈNH SỬA 3D / + HSKT</strong> bên dưới!</div>`;
-      } else {
-        let firstStart = allVisibleTasks[0].startDate;
-        let lastEnd = allVisibleTasks[0].endDate;
-        allVisibleTasks.forEach(t => {
-          if (t.startDate < firstStart) firstStart = t.startDate;
-          if (t.endDate > lastEnd) lastEnd = t.endDate;
-        });
-        const totalSpanDays = Math.max(1, diffDaysInclusive(firstStart, lastEnd));
-
-        const calloutsHtml = vis.overviewCallouts === false ? '' : `
-          <div class="msp-overview-callouts">
-            ${allVisibleTasks.map(t => {
-              const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays !== false);
-              return `
-                <div class="msp-overview-callout" style="border-color:${t.color}; color:${t.color};" data-task-id="${t.id}" title="Bấm để mở chỉnh sửa: ${t.title} (Có thể ẩn thẻ này tại mục ĐỀ MỤC bên trái)">
-                  <span class="callout-dot" style="background:${t.color};"></span>
-                  <span>${t.title}</span>
-                  <span class="callout-dates">(${formatDayMonthVN(t.startDate)} - ${formatDayMonthVN(t.endDate)} • ${wDays} ngày)</span>
-                </div>
-              `;
-            }).join('')}
-          </div>
-        `;
-
-        const segmentsHtml = allVisibleTasks.map(t => {
-          const offsetDays = diffDaysFromStart(firstStart, t.startDate);
-          const durDays = diffDaysInclusive(t.startDate, t.endDate);
-          const leftPct = Math.max(0, Math.min(100, (offsetDays / totalSpanDays) * 100));
-          const widthPct = Math.max(3.5, Math.min(100 - leftPct, (durDays / totalSpanDays) * 100));
-          const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays !== false);
-          return `
-            <div class="msp-overview-seg" data-task-id="${t.id}" style="left:${leftPct}%; width:${widthPct}%; background:${t.color};" title="${t.title}: ${formatShortVNDate(t.startDate)} → ${formatShortVNDate(t.endDate)} (${wDays} ngày)">
-              <span>${t.title} (${wDays} ngày)</span>
-            </div>
-          `;
-        }).join('');
-
-        overviewStrip.innerHTML = `
-          ${calloutsHtml}
-          <div class="msp-overview-bar-track">${segmentsHtml}</div>
-          <div class="msp-overview-axis">
-            <span>Bắt đầu: ${formatShortVNDate(firstStart)}</span>
-            <span>💡 Kéo vạch tiêu đề cột để chỉnh độ rộng như Excel • Bấm thẳng vào ngày để mở lịch</span>
-            <span>Hoàn thành: ${formatShortVNDate(lastEnd)}</span>
-          </div>
-        `;
-
-        overviewStrip.querySelectorAll('[data-task-id]').forEach(el => {
-          el.addEventListener('click', () => {
-            const tId = el.getAttribute('data-task-id');
-            const taskObj = AppState.tasks.find(x => x.id === tId);
-            if (taskObj) openTaskModal(taskObj);
-          });
-        });
-      }
-    }
   }
 
   // 6. Render Header Tháng & Ngày bên khung Gantt
@@ -3796,15 +3780,8 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
     activeBtn.disabled = true;
   }
 
-  // 1. Tính độ rộng tối ưu cho cột "Hạng mục / Công việc" để 100% chữ dài nhất không bao giờ bị che
-  let maxTitleChars = 24;
-  AppState.calendars.filter(c => c.visible !== false).forEach(c => {
-    if (c.name) maxTitleChars = Math.max(maxTitleChars, c.name.length + 6);
-  });
-  AppState.tasks.filter(t => t.visibleOnBoard !== false).forEach(t => {
-    if (t.title) maxTitleChars = Math.max(maxTitleChars, t.title.length + 5);
-  });
-  const exportNameColWidth = Math.max(AppState.mspColWidths.name || 310, Math.round(maxTitleChars * 7.6) + 46);
+  // 1. Tính độ rộng vừa khít chính xác (pixel) cho cột "Hạng mục / Công việc" để không dư khoảng trống và không mất chữ
+  const exportNameColWidth = computeTightMspNameColWidth();
 
   // 2. Tạo bản sao (Clone) chuyên biệt để chụp ảnh sắc nét, không làm giật màn hình
   const cloneSheet = mspSheet.cloneNode(true);
@@ -3887,8 +3864,8 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
     cloneGanttPane.style.overflow = 'visible';
   }
   const fullGanttWidth = ganttBody.scrollWidth || 900;
-  const fullTableWidth = parseFloat(cloneTablePane.style.width) || 720;
-  const targetTotalWidth = fullTableWidth + fullGanttWidth + 24;
+  const fullTableWidth = parseFloat(cloneTablePane.style.width) || 680;
+  const targetTotalWidth = fullTableWidth + fullGanttWidth + 2;
 
   cloneSheet.style.width = `${targetTotalWidth}px`;
   document.body.appendChild(cloneSheet);
