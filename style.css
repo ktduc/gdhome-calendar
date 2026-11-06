@@ -1725,8 +1725,8 @@ body {
   overflow: hidden;
 }
 
-/* Header phong cách Microsoft Project */
-.msp-top-header {
+/* Header phong cách Microsoft Project (Tone màu Đỏ - Đen chuẩn GD HOME) */
+.msp-top-header,
 .msp-top-banner {
   display: flex;
   align-items: center;
