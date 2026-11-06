@@ -2178,6 +2178,8 @@ body {
   color: #b91c1c;
   white-space: nowrap;
 }
+
+.msp-td {
   padding: 0 5px;
   height: 100%;
   display: flex;
