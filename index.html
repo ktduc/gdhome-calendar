@@ -61,6 +61,12 @@
       <button class="btn btn-primary" id="btn-open-export-modal" title="Tùy chọn vùng nhìn, Tải ảnh & Copy Clipboard">
         <i data-lucide="camera"></i> Xuất ảnh
       </button>
+      <button class="btn btn-outline" id="btn-undo-action" title="Hoàn tác (Undo - Ctrl+Z)">
+        <i data-lucide="undo-2"></i> Hoàn tác
+      </button>
+      <button class="btn btn-outline" id="btn-redo-action" title="Làm lại (Redo - Ctrl+Y)" style="display: none;">
+        <i data-lucide="redo-2"></i>
+      </button>
       <button class="btn btn-outline" id="btn-add-task">
         <i data-lucide="plus"></i> Thêm việc
       </button>
@@ -392,8 +398,7 @@
                 <input type="text" id="msp-month-input" class="msp-inline-month-input" value="Tháng 9, 2026" title="Bấm vào để sửa Tháng lập bảng (đồng bộ với Bảng Lịch)">
               </div>
               <div class="msp-header-center">
-                <input type="text" id="msp-title-prefix-input" class="msp-inline-title-prefix-input" value="TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -" placeholder="Tự gõ tiêu đề tiến độ..." title="Bấm vào để tự gõ tiêu đề bất kỳ cho bảng Timeline">
-                <input type="text" id="msp-customer-input" class="msp-inline-customer-input" value="A DŨNG VŨ YÊN - HẢI PHÒNG" placeholder="Nhập tên dự án / khách hàng..." title="Sửa tên dự án / khách hàng tại đây - Tự động đồng bộ sang Bảng Lịch & các bước công việc">
+                <input type="text" id="msp-title-prefix-input" class="msp-inline-title-prefix-input" value="TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - THI CÔNG HOÀN THIỆN NỘI THẤT" placeholder="Tự gõ tiêu đề tiến độ..." title="Bấm vào để tự gõ tiêu đề bất kỳ cho bảng Timeline (Độc lập, không bị ghi đè)">
               </div>
               <div class="msp-header-right" id="msp-kpi-summary">
                 <!-- Render KPI badges bằng JS -->
@@ -798,6 +803,13 @@
       <button type="button" class="instant-tag-btn instant-hskt" data-prefix="HSKT" data-color="#2e7d32" title="Tự động tạo thanh màu Xanh lá: HSKT - Tên khách hàng">
         <span class="instant-tag-name">HSKT</span>
         <span class="instant-tag-sub">Màu Xanh lá • Tự ghép tên KH</span>
+      </button>
+    </div>
+
+    <!-- Nút thêm giai đoạn mới không liền nhau vào chính dự án đang chọn -->
+    <div style="padding: 0 16px 8px;">
+      <button type="button" class="btn btn-outline btn-sm btn-full" id="btn-popover-append-same-project" style="font-weight:700; color:#1e40af; border-color:#93c5fd; background:#eff6ff; justify-content:center;">
+        ➕ Thêm giai đoạn này vào chính dự án đang chọn
       </button>
     </div>
 

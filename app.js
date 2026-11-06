@@ -1,5 +1,90 @@
-// Khởi tạo state của ứng dụng
-const AppState = {
+// Quản lý Lịch sử Undo / Redo (khoảng 50 bước)
+const MAX_UNDO_STACK = 50;
+let _undoStack = [];
+let _redoStack = [];
+let _isUndoOrRedoInProgress = false;
+
+function snapshotState() {
+  if (_isUndoOrRedoInProgress) return;
+  try {
+    const snap = JSON.stringify({
+      tasks: AppState.tasks,
+      calendars: AppState.calendars,
+      activeCalendarId: AppState.activeCalendarId,
+      mspCustomTitlePrefix: AppState.mspCustomTitlePrefix,
+      daysOffConfig: AppState.daysOffConfig,
+      startMonth: AppState.startMonth,
+      endMonth: AppState.endMonth
+    });
+    if (_undoStack.length > 0 && _undoStack[_undoStack.length - 1] === snap) {
+      return;
+    }
+    _undoStack.push(snap);
+    if (_undoStack.length > MAX_UNDO_STACK) {
+      _undoStack.shift();
+    }
+    _redoStack = [];
+    updateUndoRedoButtonsUI();
+  } catch (err) {
+    console.error('Lỗi khi snapshot state:', err);
+  }
+}
+
+function undoLastAction() {
+  if (_undoStack.length <= 1) {
+    showToast('Đã ở trạng thái ban đầu, không còn bước nào để hoàn tác!');
+    return;
+  }
+  const currentState = _undoStack.pop();
+  _redoStack.push(currentState);
+  const prevStateStr = _undoStack[_undoStack.length - 1];
+  applyRestoredSnapshot(prevStateStr, 'Đã hoàn tác (Undo) thành công!');
+}
+
+function redoLastAction() {
+  if (_redoStack.length === 0) return;
+  const nextStateStr = _redoStack.pop();
+  _undoStack.push(nextStateStr);
+  applyRestoredSnapshot(nextStateStr, 'Đã làm lại (Redo) thành công!');
+}
+
+function applyRestoredSnapshot(jsonStr, toastMsg) {
+  if (!jsonStr) return;
+  _isUndoOrRedoInProgress = true;
+  try {
+    const data = JSON.parse(jsonStr);
+    if (data.tasks) AppState.tasks = data.tasks;
+    if (data.calendars) AppState.calendars = data.calendars;
+    if (data.activeCalendarId) AppState.activeCalendarId = data.activeCalendarId;
+    if (data.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = data.mspCustomTitlePrefix;
+    if (data.daysOffConfig) AppState.daysOffConfig = data.daysOffConfig;
+    if (data.startMonth) AppState.startMonth = data.startMonth;
+    if (data.endMonth) AppState.endMonth = data.endMonth;
+    normalizeAppState();
+    updateUIElements();
+    saveToStorage();
+    renderCalendarSidebar();
+    renderCalendar();
+    showToast(toastMsg || 'Đã khôi phục dữ liệu!');
+  } catch (err) {
+    console.error('Lỗi apply snapshot:', err);
+  } finally {
+    _isUndoOrRedoInProgress = false;
+    updateUndoRedoButtonsUI();
+  }
+}
+
+function updateUndoRedoButtonsUI() {
+  const btnUndo = document.getElementById('btn-undo-action');
+  const btnRedo = document.getElementById('btn-redo-action');
+  if (btnUndo) {
+    btnUndo.disabled = _undoStack.length <= 1;
+    btnUndo.style.opacity = _undoStack.length <= 1 ? '0.5' : '1';
+  }
+  if (btnRedo) {
+    btnRedo.style.display = _redoStack.length > 0 ? 'inline-flex' : 'none';
+  }
+}
   startMonth: '2026-06',
   endMonth: '2026-09',
   scheduleMonth: 'Tháng 9, 2026', // Tháng đang lập bảng hiển thị bên trái tiêu đề
@@ -553,6 +638,7 @@ async function syncWithBackend() {
   }
   normalizeAppState();
   updateUIElements();
+  snapshotState();
 }
 
 async function saveToBackend() {
@@ -1996,6 +2082,7 @@ function setupQuickPopoverEvents() {
       const activeCal = getActiveCalendar();
       activeCal.visible = true;
 
+      snapshotState();
       AppState.tasks.push({
         id: 'task_' + Date.now(),
         calendarId: activeCal.id,
@@ -2015,6 +2102,36 @@ function setupQuickPopoverEvents() {
       showToast(`Đã tạo: ${fullTitle}`);
     });
   });
+
+  // Nút thêm giai đoạn mới không liền nhau vào chính dự án đang chọn
+  const btnAppendSame = document.getElementById('btn-popover-append-same-project');
+  if (btnAppendSame) {
+    btnAppendSame.addEventListener('click', () => {
+      const activeCal = getActiveCalendar();
+      activeCal.visible = true;
+      const rawTitle = document.getElementById('popover-task-title').value.trim();
+      const title = rawTitle || formatStageTitleWithCustomer('Giai đoạn bổ sung');
+
+      snapshotState();
+      AppState.tasks.push({
+        id: 'task_' + Date.now(),
+        calendarId: activeCal.id,
+        title,
+        startDate: currentPopoverRange.start,
+        endDate: currentPopoverRange.end,
+        color: popoverColor,
+        skipSundays: true,
+        showCount: true,
+        note: ''
+      });
+
+      saveToBackend();
+      renderCalendarSidebar();
+      renderCalendar();
+      closeQuickPopover();
+      showToast(`Đã thêm giai đoạn (${currentPopoverRange.start} → ${currentPopoverRange.end}) vào dự án "${activeCal.name}"!`);
+    });
+  }
 
   const pSwatches = document.querySelectorAll('.p-swatch');
   pSwatches.forEach(sw => {
@@ -3209,6 +3326,7 @@ function getNextWorkingDateStr(dateStr, skipSundays = true) {
 
 // Đồng bộ toàn diện từ MS Project ngược về Bảng Lịch & Sidebar & Backend
 function syncAllFromMSProject(toastMsg = null) {
+  snapshotState();
   syncCustomerInputWithActiveCalendar();
   saveToBackend();
   renderCalendarSidebar();
@@ -3643,10 +3761,32 @@ function setupMSProjectEvents() {
   if (btnSortByDate) {
     btnSortByDate.addEventListener('click', (e) => {
       e.stopPropagation();
+      snapshotState();
       sortAllTasksChronologically();
       syncAllFromMSProject('Đã sắp xếp toàn bộ công việc theo thứ tự ngày bắt đầu!');
     });
   }
+
+  // Nút Hoàn tác (Undo) và Làm lại (Redo)
+  const btnUndo = document.getElementById('btn-undo-action');
+  if (btnUndo) {
+    btnUndo.addEventListener('click', () => undoLastAction());
+  }
+  const btnRedo = document.getElementById('btn-redo-action');
+  if (btnRedo) {
+    btnRedo.addEventListener('click', () => redoLastAction());
+  }
+  window.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z') && !e.shiftKey) {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && document.activeElement.value !== '') return;
+      e.preventDefault();
+      undoLastAction();
+    } else if ((e.ctrlKey || e.metaKey) && ((e.key === 'y' || e.key === 'Y') || (e.shiftKey && (e.key === 'z' || e.key === 'Z')))) {
+      if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName) && document.activeElement.value !== '') return;
+      e.preventDefault();
+      redoLastAction();
+    }
+  });
 
   // Checkbox Chọn / Bỏ chọn tất cả công việc trên bảng WBS
   const chkSelectAll = document.getElementById('msp-select-all-tasks');
@@ -3930,6 +4070,7 @@ function renderMSProjectView() {
 
     totalWorkDays = Math.round(totalWorkDays * 10) / 10;
     const overallWorkDays = (minStart && maxEnd) ? countWorkingDays(minStart, maxEnd, true) : 0;
+    const totalActualDays = (minStart && maxEnd) ? diffDaysInclusive(minStart, maxEnd) : 0;
     const avgProgress = totalWorkDays > 0 ? Math.round(weightedProgressSum / totalWorkDays) : 0;
 
     return {
@@ -3940,6 +4081,7 @@ function renderMSProjectView() {
       maxEnd,
       overallWorkDays,
       totalWorkDays,
+      totalActualDays,
       avgProgress
     };
   });
@@ -4140,7 +4282,11 @@ function renderMSProjectView() {
         <span class="msp-task-dot" style="background:${pg.cal.color}; border-radius:50%;"></span>
         <input type="text" class="msp-inline-project-input" value="${pg.cal.name.replace(/"/g, '&quot;')}" title="Gõ để đổi tên Khách hàng / Dự án (Chuột phải để Nhân đôi dự án)">
       </div>
-      <div class="msp-td col-dur" title="Số ngày thi công thực tế từ ${startDisp} đến ${endDisp} (đã trừ ngày nghỉ)">${pg.overallWorkDays} ngày</div>
+      <div class="msp-td col-dur" title="Số ngày làm việc: ${pg.totalWorkDays} ngày • Số ngày thực tế (gồm cả ngày nghỉ): ${pg.totalActualDays || pg.overallWorkDays} ngày">
+        <span class="msp-summary-dur-work" style="font-weight:800; color:#b91c1c;">${pg.totalWorkDays} ngày LV</span>
+        <span class="msp-summary-dur-sep" style="margin: 0 2px; opacity:0.5;">•</span>
+        <span class="msp-summary-dur-act" style="font-weight:700; color:#475569; font-size:11px;">${pg.totalActualDays} ngày TT</span>
+      </div>
       <div class="msp-td col-date col-start">
         <div class="msp-date-cell-wrap proj-start-wrap" title="Bấm để đổi Ngày Bắt Đầu của cả Dự án (Tự động dịch toàn bộ các mục theo, giữ nguyên ngày làm việc)">
           <span class="msp-date-display-text">${startDisp}</span>
@@ -4354,7 +4500,7 @@ function renderMSProjectView() {
 
       const sumLabel = document.createElement('div');
       sumLabel.className = 'msp-summary-label';
-      sumLabel.textContent = `${pg.cal.name} (${pg.overallWorkDays} ngày làm việc • ${pg.avgProgress}%)`;
+      sumLabel.textContent = `${pg.cal.name} (${pg.totalWorkDays} ngày LV • ${pg.totalActualDays} ngày TT • ${pg.avgProgress}%)`;
       sumBar.appendChild(sumLabel);
 
       gRowSum.appendChild(sumBar);
@@ -4787,7 +4933,7 @@ function renderMSProjectView() {
     }
   });
 
-  // 9. Vẽ mũi tên liên kết Finish-to-Start (FS) chuẩn Microsoft Project
+  // 9. Vẽ mũi tên liên kết Finish-to-Start (FS) chuẩn Microsoft Project (nét mảnh, bo góc tròn cong mềm mại)
   ganttSvg.setAttribute('width', totalTimelineWidth);
   ganttSvg.setAttribute('height', totalBodyHeight);
   ganttSvg.style.width = `${totalTimelineWidth}px`;
@@ -4798,12 +4944,13 @@ function renderMSProjectView() {
   } else {
     const svgDefs = `
       <defs>
-        <marker id="msp-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-          <path d="M 0 1 L 8 5 L 0 9 z" fill="#475569" />
+        <marker id="msp-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+          <path d="M 1 2 L 7 5 L 1 8 z" fill="#0284c7" />
         </marker>
       </defs>
     `;
     let svgPaths = '';
+    const r = 4; // Bán kính bo góc cong mềm mại kiểu MS Project
 
     projectGroups.forEach(pg => {
       const projRows = rowRecords.filter(r => r.calId === pg.cal.id);
@@ -4817,16 +4964,27 @@ function renderMSProjectView() {
         const y2 = next.centerY;
 
         let dPath = '';
-        if (x2 >= x1 + 8) {
-          const midX = x1 + 8;
-          dPath = `M ${x1} ${y1} L ${midX} ${y1} L ${midX} ${y2} L ${x2 - 2} ${y2}`;
+        if (x2 >= x1 + 14) {
+          // Đi thẳng sang phải rồi rẽ xuống hoặc lên tới việc tiếp theo
+          const midX = Math.round((x1 + x2) / 2);
+          if (y2 > y1) {
+            dPath = `M ${x1} ${y1} L ${midX - r} ${y1} Q ${midX} ${y1} ${midX} ${y1 + r} L ${midX} ${y2 - r} Q ${midX} ${y2} ${midX + r} ${y2} L ${x2 - 1} ${y2}`;
+          } else {
+            dPath = `M ${x1} ${y1} L ${midX - r} ${y1} Q ${midX} ${y1} ${midX} ${y1 - r} L ${midX} ${y2 + r} Q ${midX} ${y2} ${midX + r} ${y2} L ${x2 - 1} ${y2}`;
+          }
         } else {
-          const dropY = y1 + 14;
-          const backX = Math.max(4, x2 - 10);
-          dPath = `M ${x1} ${y1} L ${x1 + 8} ${y1} L ${x1 + 8} ${dropY} L ${backX} ${dropY} L ${backX} ${y2} L ${x2 - 2} ${y2}`;
+          // Việc tiếp theo bắt đầu sớm hơn hoặc bằng ngày việc trước -> vòng ra ngoài và đi xuống
+          const outX = x1 + 10;
+          const dropY = Math.round((y1 + y2) / 2);
+          const backX = Math.max(4, x2 - 12);
+          if (y2 > y1) {
+            dPath = `M ${x1} ${y1} L ${outX - r} ${y1} Q ${outX} ${y1} ${outX} ${y1 + r} L ${outX} ${dropY - r} Q ${outX} ${dropY} ${outX - r} ${dropY} L ${backX + r} ${dropY} Q ${backX} ${dropY} ${backX} ${dropY + r} L ${backX} ${y2 - r} Q ${backX} ${y2} ${backX + r} ${y2} L ${x2 - 1} ${y2}`;
+          } else {
+            dPath = `M ${x1} ${y1} L ${outX} ${y1} L ${outX} ${y2} L ${x2 - 1} ${y2}`;
+          }
         }
 
-        svgPaths += `<path d="${dPath}" fill="none" stroke="#64748b" stroke-width="1.6" marker-end="url(#msp-arrow)" opacity="0.85" />`;
+        svgPaths += `<path d="${dPath}" fill="none" stroke="#0284c7" stroke-width="1.15" marker-end="url(#msp-arrow)" opacity="0.85" />`;
       }
     });
 
