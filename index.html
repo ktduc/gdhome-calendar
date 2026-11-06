@@ -267,14 +267,15 @@
         <div id="msproject-view-wrapper" class="msproject-view-wrapper" style="display: none;">
           <div class="msp-sheet" id="msp-sheet">
             
-            <!-- Thanh Công Cụ & Tiêu đề kiểu MS Project -->
+            <!-- Thanh Công Cụ & Tiêu đề kiểu MS Project (Chỉnh sửa trực tiếp đồng bộ 2 chiều) -->
             <div class="msp-top-header">
               <div class="msp-header-left">
-                <span class="msp-badge-icon"><i data-lucide="gantt-chart-square"></i> MS PROJECT TIMELINE</span>
-                <span class="msp-month-label" id="msp-month-label">Tháng 9, 2026</span>
+                <span class="msp-badge-icon"><i data-lucide="gantt-chart-square"></i> MS PROJECT</span>
+                <input type="text" id="msp-month-input" class="msp-inline-month-input" value="Tháng 9, 2026" title="Bấm vào để sửa Tháng lập bảng (đồng bộ với Bảng Lịch)">
               </div>
               <div class="msp-header-center">
-                <h2 class="msp-main-title" id="msp-main-title">TIẾN ĐỘ THIẾT KẾ TỔNG HỢP - GD HOME</h2>
+                <span class="msp-title-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - </span>
+                <input type="text" id="msp-customer-input" class="msp-inline-customer-input" value="A DŨNG VŨ YÊN - HẢI PHÒNG" placeholder="Nhập tên khách hàng..." title="Sửa tên khách hàng tại đây - Tự động đồng bộ sang Bảng Lịch & các bước công việc">
               </div>
               <div class="msp-header-right" id="msp-kpi-summary">
                 <!-- Render KPI badges bằng JS -->
@@ -288,18 +289,27 @@
 
             <!-- Khung Chia Đôi: Bảng WBS bên trái + Biểu đồ Gantt bên phải -->
             <div class="msp-split-workspace" id="msp-split-workspace">
-              <!-- Cột Bảng WBS (Task Grid) -->
+              <!-- Cột Bảng WBS (Task Grid - Cho phép chỉnh sửa trực tiếp từng ô) -->
               <div class="msp-table-pane" id="msp-table-pane">
                 <div class="msp-table-header">
                   <div class="msp-th col-wbs">WBS</div>
-                  <div class="msp-th col-name">Hạng mục / Công việc</div>
-                  <div class="msp-th col-dur">Số ngày</div>
+                  <div class="msp-th col-name">Hạng mục / Công việc (Sửa trực tiếp)</div>
+                  <div class="msp-th col-dur" title="Số ngày làm việc (đã trừ Chủ Nhật) - Gõ số ngày để tự tính ngày kết thúc">Số ngày</div>
                   <div class="msp-th col-date">Bắt đầu</div>
                   <div class="msp-th col-date">Kết thúc</div>
                   <div class="msp-th col-prog">Tiến độ</div>
+                  <div class="msp-th col-act">Tác vụ</div>
                 </div>
                 <div class="msp-table-body" id="msp-table-body">
-                  <!-- Render bằng JS -->
+                  <!-- Render các dòng WBS có thể chỉnh sửa trực tiếp bằng JS -->
+                </div>
+                <!-- Thanh Thêm Nhanh Công Việc ở cuối bảng MS Project -->
+                <div class="msp-quick-toolbar" id="msp-quick-toolbar">
+                  <span class="msp-qt-label">+ Thêm nhanh vào dự án đang chọn:</span>
+                  <button type="button" class="msp-qt-btn qt-3d" data-prefix="3D" data-color="#cc0000">+ 3D (Đỏ)</button>
+                  <button type="button" class="msp-qt-btn qt-edit3d" data-prefix="CHỈNH SỬA 3D" data-color="#f57c00">+ CHỈNH SỬA 3D (Cam)</button>
+                  <button type="button" class="msp-qt-btn qt-hskt" data-prefix="HSKT" data-color="#2e7d32">+ HSKT (Xanh)</button>
+                  <button type="button" class="msp-qt-btn qt-custom" id="btn-msp-add-custom">+ Tuỳ chỉnh...</button>
                 </div>
               </div>
 
@@ -307,10 +317,13 @@
               <div class="msp-gantt-pane" id="msp-gantt-pane">
                 <div class="msp-gantt-canvas" id="msp-gantt-canvas">
                   <div class="msp-gantt-header" id="msp-gantt-header">
-                    <!-- Tầng 1: Tháng, Tầng 2: Ngày -->
+                    <div class="msp-gantt-months-row" id="msp-gantt-months-row"></div>
+                    <div class="msp-gantt-days-row" id="msp-gantt-days-row"></div>
                   </div>
                   <div class="msp-gantt-body" id="msp-gantt-body">
-                    <!-- Các dòng thanh Gantt + Đường nối phụ thuộc -->
+                    <div class="msp-gantt-grid-bg" id="msp-gantt-grid-bg"></div>
+                    <svg class="msp-dependency-svg" id="msp-dependency-svg"></svg>
+                    <div class="msp-gantt-rows-layer" id="msp-gantt-rows-layer"></div>
                   </div>
                 </div>
               </div>
@@ -325,7 +338,7 @@
               </div>
               <div class="footer-note">
                 <span class="note-label">GHI CHÚ:</span>
-                <span id="msp-footer-note-text">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
+                <span id="msp-footer-note-text" contenteditable="true" title="Bấm vào để chỉnh sửa ghi chú">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
               </div>
             </footer>
           </div>

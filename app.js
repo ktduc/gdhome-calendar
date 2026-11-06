@@ -297,6 +297,10 @@ function updateUIElements() {
   if (monthInput) {
     monthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
   }
+  const mspMonthInput = document.getElementById('msp-month-input');
+  if (mspMonthInput) {
+    mspMonthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
+  }
 
   syncCustomerInputWithActiveCalendar();
   renderCalendarSidebar();
@@ -306,9 +310,14 @@ function updateUIElements() {
 
 function syncCustomerInputWithActiveCalendar() {
   const activeCal = getActiveCalendar();
+  const displayVal = activeCal.name === 'CHƯA ĐẶT TÊN KHÁCH HÀNG' ? '' : activeCal.name;
   const custInput = document.getElementById('customer-name-input');
-  if (custInput) {
-    custInput.value = activeCal.name === 'CHƯA ĐẶT TÊN KHÁCH HÀNG' ? '' : activeCal.name;
+  if (custInput && document.activeElement !== custInput) {
+    custInput.value = displayVal;
+  }
+  const mspCustInput = document.getElementById('msp-customer-input');
+  if (mspCustInput && document.activeElement !== mspCustInput) {
+    mspCustInput.value = displayVal;
   }
 }
 
@@ -2103,13 +2112,66 @@ function setupEvents() {
 }
 
 // =========================================================================
-// CHẾ ĐỘ XEM TIMELINE (MICROSOFT PROJECT - WBS & GANTT CHART)
+// CHẾ ĐỘ XEM TIMELINE (MICROSOFT PROJECT - WBS & GANTT CHART ĐỒNG BỘ 2 CHIỀU)
 // =========================================================================
+
+function getMspColWidth() {
+  if (AppState.mspZoom === 'compact' || AppState.mspZoom === 24) return 24;
+  if (AppState.mspZoom === 'wide' || AppState.mspZoom === 46) return 46;
+  return 34; // normal
+}
+
+function countWorkingDays(startDateStr, endDateStr, skipSundays = true) {
+  return calculateTaskDays(startDateStr, endDateStr, skipSundays !== false).workDays;
+}
+
+// Tính ngày kết thúc dựa trên ngày bắt đầu + số ngày làm việc (tự động nhảy qua Chủ Nhật nếu skipSundays = true)
+function computeEndDateByWorkingDays(startDateStr, targetWorkingDays, skipSundays = true) {
+  const days = Math.max(1, parseInt(targetWorkingDays, 10) || 1);
+  const curr = parseDateStr(startDateStr);
+  // Nếu ngày bắt đầu rơi vào Chủ Nhật và có trừ Chủ Nhật thì dời ngày bắt đầu sang Thứ 2
+  if (skipSundays && curr.getDay() === 0) {
+    curr.setDate(curr.getDate() + 1);
+  }
+  let counted = 0;
+  while (true) {
+    if (!skipSundays || curr.getDay() !== 0) {
+      counted++;
+    }
+    if (counted >= days) {
+      break;
+    }
+    curr.setDate(curr.getDate() + 1);
+  }
+  return formatDateStr(curr);
+}
+
+// Tìm ngày làm việc kế tiếp sau 1 ngày (nhảy qua Chủ Nhật)
+function getNextWorkingDateStr(dateStr, skipSundays = true) {
+  const d = parseDateStr(dateStr);
+  d.setDate(d.getDate() + 1);
+  if (skipSundays && d.getDay() === 0) {
+    d.setDate(d.getDate() + 1);
+  }
+  return formatDateStr(d);
+}
+
+// Đồng bộ toàn diện từ MS Project ngược về Bảng Lịch & Sidebar & Backend
+function syncAllFromMSProject(toastMsg = null) {
+  syncCustomerInputWithActiveCalendar();
+  saveToBackend();
+  renderCalendarSidebar();
+  renderCalendar(); // renderCalendar tự động gọi renderMSProjectView()
+  if (toastMsg) {
+    showToast(toastMsg);
+  }
+}
 
 function switchViewMode(mode) {
   AppState.viewMode = mode;
   const calWrapper = document.getElementById('calendar-view-wrapper');
   const mspWrapper = document.getElementById('msproject-view-wrapper');
+  const workspaceWrapper = document.getElementById('workspace-wrapper');
   const btnCal = document.getElementById('btn-view-calendar');
   const btnMsp = document.getElementById('btn-view-msproject');
   const mspOptions = document.getElementById('msp-sidebar-options');
@@ -2117,16 +2179,20 @@ function switchViewMode(mode) {
   if (mode === 'msproject') {
     if (calWrapper) calWrapper.style.display = 'none';
     if (mspWrapper) mspWrapper.style.display = 'block';
+    if (workspaceWrapper) workspaceWrapper.classList.add('msp-mode-active');
     if (btnCal) btnCal.classList.remove('active');
     if (btnMsp) btnMsp.classList.add('active');
-    if (mspOptions) mspOptions.style.display = 'block';
+    if (mspOptions) mspOptions.style.display = 'flex';
+    syncCustomerInputWithActiveCalendar();
     renderMSProjectView();
   } else {
-    if (calWrapper) calWrapper.style.display = 'block';
+    if (calWrapper) calWrapper.style.display = 'flex';
     if (mspWrapper) mspWrapper.style.display = 'none';
+    if (workspaceWrapper) workspaceWrapper.classList.remove('msp-mode-active');
     if (btnCal) btnCal.classList.add('active');
     if (btnMsp) btnMsp.classList.remove('active');
     if (mspOptions) mspOptions.style.display = 'none';
+    syncCustomerInputWithActiveCalendar();
     renderCalendar();
   }
 }
@@ -2137,6 +2203,8 @@ function setupMSProjectEvents() {
   const scopeSelect = document.getElementById('msp-scope-select');
   const zoomBtns = document.querySelectorAll('.msp-zoom-btn');
   const mspFooterNote = document.getElementById('msp-footer-note-text');
+  const mspMonthInput = document.getElementById('msp-month-input');
+  const mspCustomerInput = document.getElementById('msp-customer-input');
 
   if (btnCal) {
     btnCal.addEventListener('click', () => switchViewMode('calendar'));
@@ -2154,10 +2222,56 @@ function setupMSProjectEvents() {
     btn.addEventListener('click', () => {
       zoomBtns.forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      AppState.mspZoom = parseInt(btn.dataset.zoom, 10) || 34;
+      AppState.mspZoom = btn.dataset.zoom || 'normal';
       renderMSProjectView();
     });
   });
+
+  // Đồng bộ sửa Tháng lập bảng trên Header MS Project <-> Bảng Lịch
+  if (mspMonthInput) {
+    mspMonthInput.addEventListener('input', () => {
+      AppState.scheduleMonth = mspMonthInput.value.trim();
+      const calMonthInput = document.getElementById('schedule-month-input');
+      if (calMonthInput) calMonthInput.value = AppState.scheduleMonth;
+      saveToBackend();
+    });
+  }
+
+  // Đồng bộ sửa Tên khách hàng trên Header MS Project <-> Bảng Lịch & Hậu tố công việc
+  if (mspCustomerInput) {
+    mspCustomerInput.addEventListener('input', () => {
+      const activeCal = getActiveCalendar();
+      renameCalendarAndSyncTasks(activeCal, mspCustomerInput.value);
+      const calCustInput = document.getElementById('customer-name-input');
+      if (calCustInput) calCustInput.value = mspCustomerInput.value;
+      saveToBackend();
+      renderCalendarSidebar();
+      renderCalendar();
+    });
+  }
+
+  // Các nút Thêm nhanh (+ 3D, + CHỈNH SỬA 3D, + HSKT, + Tuỳ chỉnh) ở đáy bảng MS Project
+  document.querySelectorAll('#msp-quick-toolbar .msp-qt-btn[data-prefix]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const prefix = btn.dataset.prefix;
+      const color = btn.dataset.color;
+      quickAppendStageToCalendar(getActiveCalendar().id, prefix, color, 10);
+    });
+  });
+
+  const btnMspAddCustom = document.getElementById('btn-msp-add-custom');
+  if (btnMspAddCustom) {
+    btnMspAddCustom.addEventListener('click', () => {
+      const activeCal = getActiveCalendar();
+      const calTasks = AppState.tasks.filter(t => t.calendarId === activeCal.id);
+      let nextStart = formatDateStr(new Date());
+      if (calTasks.length > 0) {
+        const maxEnd = calTasks.reduce((m, t) => (t.endDate > m ? t.endDate : m), calTasks[0].endDate);
+        nextStart = getNextWorkingDateStr(maxEnd, true);
+      }
+      openTaskModal(null, nextStart, activeCal.id);
+    });
+  }
 
   if (mspFooterNote) {
     mspFooterNote.addEventListener('blur', (e) => {
@@ -2167,6 +2281,42 @@ function setupMSProjectEvents() {
       saveToBackend();
     });
   }
+}
+
+// Hàm thêm nhanh 1 giai đoạn nối tiếp vào lịch dự án ngay trong MS Project
+function quickAppendStageToCalendar(calId, stagePrefix, stageColor, defaultWorkingDays = 10) {
+  const cal = AppState.calendars.find(c => c.id === calId) || getActiveCalendar();
+  cal.visible = true;
+  AppState.activeCalendarId = cal.id;
+
+  const calTasks = AppState.tasks.filter(t => t.calendarId === cal.id);
+  let startStr = formatDateStr(new Date());
+  if (calTasks.length > 0) {
+    const maxEnd = calTasks.reduce((m, t) => (t.endDate > m ? t.endDate : m), calTasks[0].endDate);
+    startStr = getNextWorkingDateStr(maxEnd, true);
+  } else {
+    const [sy, sm] = AppState.startMonth.split('-').map(Number);
+    startStr = formatDateStr(new Date(sy, sm - 1, 1));
+  }
+
+  const endStr = computeEndDateByWorkingDays(startStr, defaultWorkingDays, true);
+  const custSuffix = (cal.name && cal.name !== 'CHƯA ĐẶT TÊN KHÁCH HÀNG') ? ` - ${cal.name}` : '';
+  const fullTitle = `${stagePrefix}${custSuffix}`;
+
+  AppState.tasks.push({
+    id: 'task_' + Date.now(),
+    calendarId: cal.id,
+    title: fullTitle,
+    startDate: startStr,
+    endDate: endStr,
+    color: stageColor,
+    skipSundays: true,
+    showCount: true,
+    progress: 0,
+    note: ''
+  });
+
+  syncAllFromMSProject(`Đã thêm "${fullTitle}" (${defaultWorkingDays} ngày làm việc) và đồng bộ sang Bảng Lịch!`);
 }
 
 function formatShortVNDate(dateStr) {
@@ -2208,7 +2358,7 @@ function diffDaysFromStart(timelineStartStr, targetDateStr) {
 
 function renderMSProjectView() {
   const mspWrapper = document.getElementById('msproject-view-wrapper');
-  if (!mspWrapper || AppState.viewMode !== 'msproject') return;
+  if (!mspWrapper) return;
 
   const tableBody = document.getElementById('msp-table-body');
   const ganttMonthsRow = document.getElementById('msp-gantt-months-row');
@@ -2219,33 +2369,33 @@ function renderMSProjectView() {
   const ganttBody = document.getElementById('msp-gantt-body');
   const overviewStrip = document.getElementById('msp-overview-strip');
   const kpiSummary = document.getElementById('msp-kpi-summary');
-  const titleHeading = document.getElementById('msp-title-heading');
+  const mspMonthInput = document.getElementById('msp-month-input');
+  const mspCustomerInput = document.getElementById('msp-customer-input');
   const mspFooterNote = document.getElementById('msp-footer-note-text');
 
-  if (!tableBody || !ganttDaysRow) return;
+  if (!tableBody || !ganttMonthsRow || !ganttDaysRow) return;
 
-  if (mspFooterNote) {
-    mspFooterNote.textContent = AppState.footerNote;
+  if (mspMonthInput && document.activeElement !== mspMonthInput) {
+    mspMonthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
+  }
+  if (mspCustomerInput && document.activeElement !== mspCustomerInput) {
+    const activeCal = getActiveCalendar();
+    mspCustomerInput.value = activeCal.name === 'CHƯA ĐẶT TÊN KHÁCH HÀNG' ? '' : activeCal.name;
+  }
+  if (mspFooterNote && document.activeElement !== mspFooterNote) {
+    mspFooterNote.textContent = AppState.footerNote || '';
   }
 
-  // 1. Xác định danh sách dự án hiển thị
+  // 1. Xác định danh sách dự án hiển thị (Đồng bộ với checkbox ẩn/hiện bên Sidebar trái)
+  normalizeAppState();
   let targetCalendars = [];
-  if (AppState.mspScope === 'active') {
-    const activeCal = AppState.calendars.find(c => c.id === AppState.activeCalendarId) || AppState.calendars[0];
+  if (AppState.mspScope === 'active-only' || AppState.mspScope === 'active') {
+    const activeCal = getActiveCalendar();
     if (activeCal) targetCalendars = [activeCal];
   } else {
-    targetCalendars = AppState.calendars.filter(c => c.visible);
+    targetCalendars = AppState.calendars.filter(c => c.visible !== false);
     if (targetCalendars.length === 0 && AppState.calendars.length > 0) {
-      targetCalendars = [AppState.calendars[0]];
-    }
-  }
-
-  // Cập nhật tiêu đề MS Project Header
-  if (titleHeading) {
-    if (targetCalendars.length === 1) {
-      titleHeading.textContent = `TIMELINE TIẾN ĐỘ DỰ ÁN - ${targetCalendars[0].name.toUpperCase()}`;
-    } else {
-      titleHeading.textContent = `TỔNG HỢP TIMELINE TIẾN ĐỘ (${targetCalendars.length} DỰ ÁN ĐANG BẬT)`;
+      targetCalendars = [getActiveCalendar()];
     }
   }
 
@@ -2264,7 +2414,7 @@ function renderMSProjectView() {
     calTasks.forEach(t => {
       if (!minStart || t.startDate < minStart) minStart = t.startDate;
       if (!maxEnd || t.endDate > maxEnd) maxEnd = t.endDate;
-      const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays);
+      const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays !== false);
       const prog = typeof t.progress === 'number' ? t.progress : 0;
       totalWorkDays += wDays;
       weightedProgressSum += wDays * prog;
@@ -2288,7 +2438,7 @@ function renderMSProjectView() {
   // 3. Xác định khoảng ngày toàn cục của biểu đồ Gantt
   let globalMinDate = null;
   let globalMaxDate = null;
-  let allVisibleTasks = [];
+  const allVisibleTasks = [];
 
   projectGroups.forEach(pg => {
     pg.tasks.forEach(t => {
@@ -2302,22 +2452,21 @@ function renderMSProjectView() {
   if (!globalMinDate || !globalMaxDate) {
     const [sy, sm] = AppState.startMonth.split('-').map(Number);
     const sDate = new Date(sy, sm - 1, 1);
-    const eDate = new Date(sy, sm, 15);
+    const eDate = new Date(sy, sm, 0);
     globalMinDate = formatDateStr(sDate);
     globalMaxDate = formatDateStr(eDate);
   } else {
-    // Mở rộng lề 4 ngày trước và 7 ngày sau để nhìn thoáng chuẩn MS Project
     const padStart = parseDateStr(globalMinDate);
-    padStart.setDate(padStart.getDate() - 4);
+    padStart.setDate(padStart.getDate() - 3);
     const padEnd = parseDateStr(globalMaxDate);
-    padEnd.setDate(padEnd.getDate() + 7);
+    padEnd.setDate(padEnd.getDate() + 6);
     globalMinDate = formatDateStr(padStart);
     globalMaxDate = formatDateStr(padEnd);
   }
 
   const timelineDates = getDatesBetween(globalMinDate, globalMaxDate);
-  const colWidth = AppState.mspZoom || 34;
-  const totalTimelineWidth = timelineDates.length * colWidth;
+  const colWidth = getMspColWidth();
+  const totalTimelineWidth = Math.max(600, timelineDates.length * colWidth);
 
   // 4. Render KPI Summary Pills
   if (kpiSummary) {
@@ -2338,11 +2487,11 @@ function renderMSProjectView() {
       </div>
       <div class="msp-kpi-pill">
         <span>Hạng mục:</span>
-        <strong>${totalTasksCount} giai đoạn</strong>
+        <strong>${totalTasksCount} việc</strong>
       </div>
       <div class="msp-kpi-pill">
-        <span>Tổng thời gian:</span>
-        <strong class="kpi-highlight">${spanWorkDays} ngày làm việc</strong>
+        <span>Tổng công:</span>
+        <strong>${spanWorkDays} ngày</strong>
       </div>
       ${firstTaskStart && lastTaskEnd ? `
       <div class="msp-kpi-pill">
@@ -2352,10 +2501,10 @@ function renderMSProjectView() {
     `;
   }
 
-  // 5. Render Thanh Top Timeline Overview ( giống thanh Timeline phía trên của MS Project )
+  // 5. Render Thanh Top Timeline Overview (Thanh tóm tắt các giai đoạn lớn kiểu MS Project)
   if (overviewStrip) {
     if (allVisibleTasks.length === 0) {
-      overviewStrip.innerHTML = `<div style="font-size:12px; color:#64748b; padding:8px 0;">Chưa có giai đoạn nào. Hãy nhấn nút <strong>+ Thêm giai đoạn</strong> để khởi tạo lộ trình.</div>`;
+      overviewStrip.innerHTML = `<div style="font-size:12.5px; color:#475569; padding:4px 0;">Dự án hiện chưa có giai đoạn nào. Hãy bấm các nút <strong>+ 3D</strong>, <strong>+ CHỈNH SỬA 3D</strong>, <strong>+ HSKT</strong> bên dưới để khởi tạo ngay!</div>`;
     } else {
       let firstStart = allVisibleTasks[0].startDate;
       let lastEnd = allVisibleTasks[0].endDate;
@@ -2366,9 +2515,9 @@ function renderMSProjectView() {
       const totalSpanDays = Math.max(1, diffDaysInclusive(firstStart, lastEnd));
 
       const calloutsHtml = allVisibleTasks.map(t => {
-        const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays);
+        const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays !== false);
         return `
-          <div class="msp-overview-callout" style="border-color:${t.color}; color:${t.color};" data-task-id="${t.id}" title="Click để chỉnh sửa: ${t.title}">
+          <div class="msp-overview-callout" style="border-color:${t.color}; color:${t.color};" data-task-id="${t.id}" title="Bấm để mở hộp thoại chỉnh sửa: ${t.title}">
             <span class="callout-dot" style="background:${t.color};"></span>
             <span>${t.title}</span>
             <span class="callout-dates">(${formatDayMonthVN(t.startDate)} - ${formatDayMonthVN(t.endDate)} • ${wDays} ngày)</span>
@@ -2381,10 +2530,10 @@ function renderMSProjectView() {
         const durDays = diffDaysInclusive(t.startDate, t.endDate);
         const leftPct = Math.max(0, Math.min(100, (offsetDays / totalSpanDays) * 100));
         const widthPct = Math.max(4, Math.min(100 - leftPct, (durDays / totalSpanDays) * 100));
-        const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays);
+        const wDays = countWorkingDays(t.startDate, t.endDate, t.skipSundays !== false);
         return `
           <div class="msp-overview-seg" data-task-id="${t.id}" style="left:${leftPct}%; width:${widthPct}%; background:${t.color};" title="${t.title}: ${formatShortVNDate(t.startDate)} → ${formatShortVNDate(t.endDate)} (${wDays} ngày)">
-            <span>${t.title} (${wDays}N)</span>
+            <span>${t.title} (${wDays} ngày)</span>
           </div>
         `;
       }).join('');
@@ -2394,8 +2543,8 @@ function renderMSProjectView() {
         <div class="msp-overview-bar-track">${segmentsHtml}</div>
         <div class="msp-overview-axis">
           <span>Bắt đầu: ${formatShortVNDate(firstStart)}</span>
-          <span>Tổng lộ trình: ${countWorkingDays(firstStart, lastEnd, true)} ngày làm việc (Trừ Chủ Nhật)</span>
-          <span>Hoàn thành dự kiến: ${formatShortVNDate(lastEnd)}</span>
+          <span>💡 Mẹo: Bạn có thể gõ sửa Tên, Số ngày, Ngày Bắt đầu/Kết thúc trực tiếp trong bảng bên dưới hoặc kéo thanh Gantt</span>
+          <span>Hoàn thành: ${formatShortVNDate(lastEnd)}</span>
         </div>
       `;
 
@@ -2415,7 +2564,6 @@ function renderMSProjectView() {
   ganttMonthsRow.style.width = `${totalTimelineWidth}px`;
   ganttDaysRow.style.width = `${totalTimelineWidth}px`;
 
-  // Gom nhóm các ngày theo Tháng
   const monthBuckets = [];
   timelineDates.forEach(d => {
     const ymKey = `${d.getFullYear()}-${d.getMonth() + 1}`;
@@ -2429,7 +2577,7 @@ function renderMSProjectView() {
 
   monthBuckets.forEach(mb => {
     const mCell = document.createElement('div');
-    mCell.className = 'msp-month-cell';
+    mCell.className = 'msp-gantt-month-cell';
     mCell.style.width = `${mb.count * colWidth}px`;
     mCell.textContent = mb.label;
     ganttMonthsRow.appendChild(mCell);
@@ -2439,10 +2587,10 @@ function renderMSProjectView() {
   timelineDates.forEach(d => {
     const dStr = formatDateStr(d);
     const dow = d.getDay();
-    const holidayName = AppState.showVnHolidays ? getVietnameseHoliday(d) : null;
+    const holidayName = AppState.showVnHolidays !== false ? getHolidayName(dStr) : null;
 
     const dCell = document.createElement('div');
-    dCell.className = 'msp-day-cell';
+    dCell.className = 'msp-gantt-day-cell';
     if (dow === 0) dCell.classList.add('is-sunday');
     if (holidayName) dCell.classList.add('is-holiday');
     if (dStr === todayStr) dCell.classList.add('is-today');
@@ -2450,72 +2598,91 @@ function renderMSProjectView() {
     if (holidayName) dCell.title = `Nghỉ lễ: ${holidayName}`;
 
     dCell.innerHTML = `
-      <span class="day-num">${String(d.getDate()).padStart(2, '0')}</span>
-      <span class="day-dow">${dowNames[dow]}</span>
+      <span>${String(d.getDate()).padStart(2, '0')}</span>
+      <span style="font-size:8.5px; opacity:0.8;">${dowNames[dow]}</span>
     `;
     ganttDaysRow.appendChild(dCell);
   });
 
-  // 7. Render các dòng trong bảng WBS (Trái) & các dòng thanh Gantt (Phải)
+  // 7. Render các dòng trong bảng WBS (Trái - Cho phép chỉnh sửa trực tiếp) & các dòng thanh Gantt (Phải)
   tableBody.innerHTML = '';
   ganttRowsLayer.innerHTML = '';
   ganttGridBg.innerHTML = '';
   ganttSvg.innerHTML = '';
 
-  const rowRecords = []; // Lưu thông tin toạ độ từng dòng để vẽ mũi tên liên kết FS (Finish-to-Start)
+  const rowRecords = [];
   let currentRowIndex = 0;
+  const ROW_HEIGHT = 42;
 
   projectGroups.forEach(pg => {
     const isCollapsed = !!AppState.collapsedProjects[pg.cal.id];
-
-    // --- DÒNG SUMMARY CỦA DỰ ÁN (WBS Cấp 1) ---
-    const trSum = document.createElement('tr');
-    trSum.className = 'msp-row-summary';
     const startDisp = pg.minStart ? formatShortVNDate(pg.minStart) : '--/--/--';
     const endDisp = pg.maxEnd ? formatShortVNDate(pg.maxEnd) : '--/--/--';
 
-    trSum.innerHTML = `
-      <td class="col-wbs">${pg.wbsIndex}</td>
-      <td class="col-name">
-        <div class="msp-summary-name-wrap">
-          <span class="msp-toggle-caret" data-cal-id="${pg.cal.id}" title="Thu gọn / Mở rộng dự án">${isCollapsed ? '▶' : '▼'}</span>
-          <span class="msp-project-badge-dot" style="background:${pg.cal.color};"></span>
-          <span class="msp-summary-title-text" title="${pg.cal.name}">${pg.cal.name}</span>
-          <button type="button" class="msp-quick-add-btn" data-cal-id="${pg.cal.id}" title="Thêm giai đoạn mới vào dự án này">+</button>
-        </div>
-      </td>
-      <td class="col-duration"><span class="msp-duration-badge">${pg.overallWorkDays} ngày</span></td>
-      <td class="col-start">${startDisp}</td>
-      <td class="col-end">${endDisp}</td>
-      <td class="col-progress">
-        <span style="font-size:11px; font-weight:800; color:#0f172a;">${pg.avgProgress}%</span>
-      </td>
+    // --- DÒNG SUMMARY CỦA DỰ ÁN (WBS Cấp 1) ---
+    const sumRowEl = document.createElement('div');
+    sumRowEl.className = 'msp-tr summary-row';
+
+    sumRowEl.innerHTML = `
+      <div class="msp-td col-wbs">${pg.wbsIndex}</div>
+      <div class="msp-td col-name">
+        <button type="button" class="msp-project-toggle" title="Thu gọn / Mở rộng dự án">${isCollapsed ? '▶' : '▼'}</button>
+        <span class="msp-task-dot" style="background:${pg.cal.color}; border-radius:50%;"></span>
+        <input type="text" class="msp-inline-project-input" value="${pg.cal.name}" title="Gõ để đổi tên Khách hàng / Dự án (Đồng bộ với Bảng Lịch)">
+      </div>
+      <div class="msp-td col-dur">${pg.totalWorkDays} ngày</div>
+      <div class="msp-td col-date">${startDisp}</div>
+      <div class="msp-td col-date">${endDisp}</div>
+      <div class="msp-td col-prog">
+        <span class="msp-prog-badge ${pg.avgProgress === 100 ? 'msp-prog-100' : pg.avgProgress > 0 ? 'msp-prog-mid' : 'msp-prog-0'}">${pg.avgProgress}%</span>
+      </div>
+      <div class="msp-td col-act">
+        <button type="button" class="msp-quick-add-btn" title="Thêm công việc mới vào dự án này">+ Việc</button>
+      </div>
     `;
 
-    trSum.querySelector('.msp-toggle-caret').addEventListener('click', (e) => {
+    // Thu gọn / Mở rộng
+    sumRowEl.querySelector('.msp-project-toggle').addEventListener('click', (e) => {
       e.stopPropagation();
       AppState.collapsedProjects[pg.cal.id] = !AppState.collapsedProjects[pg.cal.id];
       renderMSProjectView();
     });
 
-    trSum.querySelector('.msp-summary-title-text').addEventListener('click', () => {
+    // Sửa trực tiếp tên Dự án / Khách hàng ngay trên dòng Summary
+    const projNameInput = sumRowEl.querySelector('.msp-inline-project-input');
+    projNameInput.addEventListener('focus', () => {
       AppState.activeCalendarId = pg.cal.id;
       renderCalendarSidebar();
-      syncCustomerNameInput();
+      syncCustomerInputWithActiveCalendar();
+    });
+    projNameInput.addEventListener('change', () => {
+      const newName = projNameInput.value.trim();
+      if (newName) {
+        AppState.activeCalendarId = pg.cal.id;
+        renameCalendarAndSyncTasks(pg.cal, newName);
+        syncAllFromMSProject(`Đã đổi tên dự án thành "${pg.cal.name}" và đồng bộ sang Bảng Lịch!`);
+      }
+    });
+    projNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        projNameInput.blur();
+      }
     });
 
-    trSum.querySelector('.msp-quick-add-btn').addEventListener('click', (e) => {
+    // Nút "+ Việc" ngay trên dòng Dự án
+    sumRowEl.querySelector('.msp-quick-add-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       AppState.activeCalendarId = pg.cal.id;
-      const defaultStart = pg.maxEnd || formatDateStr(new Date());
-      openTaskModal(null, defaultStart, defaultStart);
+      const nextStart = pg.maxEnd ? getNextWorkingDateStr(pg.maxEnd, true) : formatDateStr(new Date());
+      openTaskModal(null, nextStart, pg.cal.id);
     });
 
-    tableBody.appendChild(trSum);
+    tableBody.appendChild(sumRowEl);
 
     // Dòng Gantt bên phải cho Summary Row
     const gRowSum = document.createElement('div');
-    gRowSum.className = 'msp-gantt-row is-summary-row';
+    gRowSum.className = 'msp-gantt-row summary-row';
     gRowSum.style.width = `${totalTimelineWidth}px`;
 
     if (pg.minStart && pg.maxEnd) {
@@ -2528,11 +2695,11 @@ function renderMSProjectView() {
       sumBar.className = 'msp-summary-bar';
       sumBar.style.left = `${leftPx}px`;
       sumBar.style.width = `${widthPx}px`;
-      sumBar.title = `${pg.cal.name}: ${startDisp} → ${endDisp} (${pg.overallWorkDays} ngày làm việc)`;
+      sumBar.title = `${pg.cal.name}: ${startDisp} → ${endDisp} (Tổng ${pg.totalWorkDays} ngày làm việc)`;
 
       const sumLabel = document.createElement('div');
-      sumLabel.className = 'msp-summary-bar-label';
-      sumLabel.textContent = `${pg.cal.name} (${pg.overallWorkDays} ngày)`;
+      sumLabel.className = 'msp-summary-label';
+      sumLabel.textContent = `${pg.cal.name} (${pg.totalWorkDays} ngày làm việc • ${pg.avgProgress}%)`;
       sumBar.appendChild(sumLabel);
 
       gRowSum.appendChild(sumBar);
@@ -2541,58 +2708,134 @@ function renderMSProjectView() {
     ganttRowsLayer.appendChild(gRowSum);
     currentRowIndex++;
 
-    // --- CÁC DÒNG CÔNG VIỆC CON (WBS 1.1, 1.2...) ---
+    // --- CÁC DÒNG CÔNG VIỆC CON (WBS 1.1, 1.2... - CHỈNH SỬA TRỰC TIẾP MỌI Ô) ---
     if (!isCollapsed) {
       pg.tasks.forEach((task, tIdx) => {
         const wbsCode = `${pg.wbsIndex}.${tIdx + 1}`;
-        const workDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays);
+        const workDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays !== false);
         const taskProg = typeof task.progress === 'number' ? task.progress : 0;
 
-        const trTask = document.createElement('tr');
-        trTask.className = 'msp-row-task';
-        trTask.dataset.taskId = task.id;
+        const taskRowEl = document.createElement('div');
+        taskRowEl.className = 'msp-tr task-row';
+        taskRowEl.dataset.taskId = task.id;
 
         const progressOptions = [0, 10, 25, 50, 75, 90, 100].map(val =>
           `<option value="${val}" ${taskProg === val ? 'selected' : ''}>${val}%</option>`
         ).join('');
 
-        trTask.innerHTML = `
-          <td class="col-wbs">${wbsCode}</td>
-          <td class="col-name">
-            <div class="msp-task-name-wrap">
-              <span class="msp-task-color-bar" style="background:${task.color};"></span>
-              <span class="msp-task-title-text" title="${task.title}">${task.title}</span>
+        taskRowEl.innerHTML = `
+          <div class="msp-td col-wbs">${wbsCode}</div>
+          <div class="msp-td col-name">
+            <span class="msp-task-dot" style="background:${task.color}; cursor:pointer;" title="Bấm để đổi màu hoặc mở chi tiết"></span>
+            <input type="text" class="msp-inline-title-input" value="${task.title.replace(/"/g, '&quot;')}" title="Gõ để sửa trực tiếp tên hạng mục (Enter để lưu)">
+          </div>
+          <div class="msp-td col-dur">
+            <div class="msp-inline-dur-wrap">
+              <input type="number" min="1" max="365" class="msp-inline-dur-input" value="${workDays}" title="Nhập số ngày làm việc -> Tự động tính ngày kết thúc (đã trừ Chủ Nhật)">
+              <span class="msp-dur-unit">ng</span>
             </div>
-          </td>
-          <td class="col-duration"><span class="msp-duration-badge">${workDays} ngày</span></td>
-          <td class="col-start">${formatShortVNDate(task.startDate)}</td>
-          <td class="col-end">${formatShortVNDate(task.endDate)}</td>
-          <td class="col-progress">
-            <select class="msp-progress-select ${taskProg === 100 ? 'is-done' : ''}" data-task-id="${task.id}" title="Cập nhật % hoàn thành">
+          </div>
+          <div class="msp-td col-date">
+            <input type="date" class="msp-inline-date-input msp-start-input" value="${task.startDate}" title="Đổi ngày bắt đầu">
+          </div>
+          <div class="msp-td col-date">
+            <input type="date" class="msp-inline-date-input msp-end-input" value="${task.endDate}" title="Đổi ngày kết thúc">
+          </div>
+          <div class="msp-td col-prog">
+            <select class="msp-progress-select ${taskProg === 100 ? 'is-done' : ''}" title="Cập nhật % tiến độ">
               ${progressOptions}
             </select>
-          </td>
+          </div>
+          <div class="msp-td col-act">
+            <button type="button" class="msp-row-icon-btn edit" title="Mở bảng chỉnh sửa đầy đủ">✎</button>
+            <button type="button" class="msp-row-icon-btn del" title="Xóa hạng mục này">×</button>
+          </div>
         `;
 
-        // Click vào dòng để mở modal chỉnh sửa công việc
-        trTask.addEventListener('click', (e) => {
-          if (e.target.tagName.toLowerCase() === 'select') return;
-          openTaskModal(task);
+        // 1) Click vào chấm màu hoặc nút ✎ để mở Modal đầy đủ
+        taskRowEl.querySelector('.msp-task-dot').addEventListener('click', () => openTaskModal(task));
+        taskRowEl.querySelector('.msp-row-icon-btn.edit').addEventListener('click', () => openTaskModal(task));
+
+        // 2) Nút × xóa nhanh công việc
+        taskRowEl.querySelector('.msp-row-icon-btn.del').addEventListener('click', () => {
+          if (confirm(`Xóa hạng mục "${task.title}"?`)) {
+            AppState.tasks = AppState.tasks.filter(t => t.id !== task.id);
+            syncAllFromMSProject(`Đã xóa "${task.title}" và đồng bộ sang Bảng Lịch!`);
+          }
         });
 
-        // Đổi nhanh % tiến độ ngay trên bảng WBS
-        const progSelect = trTask.querySelector('.msp-progress-select');
+        // 3) Sửa trực tiếp Tên công việc
+        const titleInput = taskRowEl.querySelector('.msp-inline-title-input');
+        titleInput.addEventListener('change', () => {
+          const val = titleInput.value.trim();
+          if (val && val !== task.title) {
+            task.title = val;
+            // Tự động nhận diện màu nếu đổi tiền tố sang 3D / CHỈNH SỬA 3D / HSKT
+            if (/^3D\b/i.test(val)) task.color = '#cc0000';
+            else if (/^CHỈNH SỬA 3D\b/i.test(val)) task.color = '#f57c00';
+            else if (/^HSKT\b/i.test(val)) task.color = '#2e7d32';
+            syncAllFromMSProject(`Đã cập nhật tên "${task.title}"!`);
+          }
+        });
+        titleInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            titleInput.blur();
+          }
+        });
+
+        // 4) Sửa trực tiếp Số ngày làm việc -> Tự động tính lại Ngày kết thúc!
+        const durInput = taskRowEl.querySelector('.msp-inline-dur-input');
+        durInput.addEventListener('change', () => {
+          const newDays = Math.max(1, parseInt(durInput.value, 10) || 1);
+          task.endDate = computeEndDateByWorkingDays(task.startDate, newDays, task.skipSundays !== false);
+          syncAllFromMSProject(`Đã đổi "${task.title}" thành ${newDays} ngày làm việc (Kết thúc: ${formatShortVNDate(task.endDate)})!`);
+        });
+        durInput.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            durInput.blur();
+          }
+        });
+
+        // 5) Sửa trực tiếp Ngày bắt đầu
+        const startInput = taskRowEl.querySelector('.msp-start-input');
+        startInput.addEventListener('change', () => {
+          const newStart = startInput.value;
+          if (!newStart) return;
+          task.startDate = newStart;
+          if (task.endDate < newStart) {
+            task.endDate = computeEndDateByWorkingDays(newStart, workDays, task.skipSundays !== false);
+          }
+          const updatedDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays !== false);
+          syncAllFromMSProject(`Đã đổi ngày bắt đầu "${task.title}" → ${formatShortVNDate(task.startDate)} (${updatedDays} ngày)!`);
+        });
+
+        // 6) Sửa trực tiếp Ngày kết thúc
+        const endInput = taskRowEl.querySelector('.msp-end-input');
+        endInput.addEventListener('change', () => {
+          const newEnd = endInput.value;
+          if (!newEnd) return;
+          if (newEnd < task.startDate) {
+            alert('Ngày kết thúc không được nhỏ hơn ngày bắt đầu!');
+            endInput.value = task.endDate;
+            return;
+          }
+          task.endDate = newEnd;
+          const updatedDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays !== false);
+          syncAllFromMSProject(`Đã đổi ngày kết thúc "${task.title}" → ${formatShortVNDate(task.endDate)} (${updatedDays} ngày)!`);
+        });
+
+        // 7) Sửa trực tiếp % Tiến độ
+        const progSelect = taskRowEl.querySelector('.msp-progress-select');
         progSelect.addEventListener('change', (e) => {
-          e.stopPropagation();
           task.progress = parseInt(e.target.value, 10) || 0;
-          saveToBackend();
-          renderMSProjectView();
-          showToast(`Đã cập nhật tiến độ "${task.title}" → ${task.progress}%`);
+          syncAllFromMSProject(`Đã cập nhật tiến độ "${task.title}" → ${task.progress}%`);
         });
 
-        tableBody.appendChild(trTask);
+        tableBody.appendChild(taskRowEl);
 
-        // Dòng Gantt tương ứng bên phải
+        // --- DÒNG GANTT BÊN PHẢI TƯƠNG ỨNG ---
         const gRowTask = document.createElement('div');
         gRowTask.className = 'msp-gantt-row';
         gRowTask.style.width = `${totalTimelineWidth}px`;
@@ -2606,10 +2849,9 @@ function renderMSProjectView() {
         taskBar.className = 'msp-task-bar';
         taskBar.style.left = `${leftPx}px`;
         taskBar.style.width = `${widthPx}px`;
-        taskBar.style.background = task.color;
-        taskBar.title = `${task.title}\nTừ: ${formatShortVNDate(task.startDate)} đến ${formatShortVNDate(task.endDate)} (${workDays} ngày làm việc)\nTiến độ: ${taskProg}%${task.note ? '\nGhi chú: ' + task.note : ''}`;
+        taskBar.style.background = task.color || '#cc0000';
+        taskBar.title = `${task.title}\nTừ: ${formatShortVNDate(task.startDate)} đến ${formatShortVNDate(task.endDate)} (${workDays} ngày làm việc)\nTiến độ: ${taskProg}%\n(Kéo giữa thanh để dời ngày, kéo 2 đầu để co giãn, hoặc click để mở chi tiết)`;
 
-        // Lớp hiển thị % hoàn thành bên trong thanh Gantt
         if (taskProg > 0) {
           const progFill = document.createElement('div');
           progFill.className = 'msp-task-progress-fill';
@@ -2617,8 +2859,7 @@ function renderMSProjectView() {
           taskBar.appendChild(progFill);
         }
 
-        // Đánh dấu các ngày Chủ Nhật nằm trong thanh công việc (nếu có trừ Chủ Nhật)
-        if (task.skipSundays) {
+        if (task.skipSundays !== false) {
           const taskDates = getDatesBetween(task.startDate, task.endDate);
           taskDates.forEach((d, dOffset) => {
             if (d.getDay() === 0) {
@@ -2632,25 +2873,25 @@ function renderMSProjectView() {
           });
         }
 
-        // Hai đầu kéo co giãn ngày trực tiếp trên thanh Gantt
         const handleL = document.createElement('div');
-        handleL.className = 'msp-bar-handle handle-left';
+        handleL.className = 'msp-gantt-handle left';
+        handleL.title = 'Kéo sang trái/phải để đổi ngày Bắt đầu';
         const handleR = document.createElement('div');
-        handleR.className = 'msp-bar-handle handle-right';
+        handleR.className = 'msp-gantt-handle right';
+        handleR.title = 'Kéo sang trái/phải để đổi ngày Kết thúc';
         taskBar.appendChild(handleL);
         taskBar.appendChild(handleR);
 
         const innerLabel = document.createElement('div');
-        innerLabel.className = 'msp-task-bar-inner';
-        innerLabel.textContent = `${task.title} (${workDays}N)`;
+        innerLabel.className = 'msp-task-bar-label';
+        innerLabel.textContent = `${task.title} (${workDays} ngày)`;
         taskBar.appendChild(innerLabel);
 
-        const rightLabel = document.createElement('div');
-        rightLabel.className = 'msp-task-bar-right-label';
-        rightLabel.textContent = `${task.title} (${formatDayMonthVN(task.startDate)} - ${formatDayMonthVN(task.endDate)})`;
-        taskBar.appendChild(rightLabel);
+        const outsideLabel = document.createElement('div');
+        outsideLabel.className = 'msp-task-outside-label';
+        outsideLabel.textContent = `${formatDayMonthVN(task.startDate)} - ${formatDayMonthVN(task.endDate)} (${workDays}N)`;
+        taskBar.appendChild(outsideLabel);
 
-        // Sự kiện kéo thay đổi ngày hoặc click mở chi tiết
         setupGanttBarDragAndClick(taskBar, handleL, handleR, task, colWidth);
 
         gRowTask.appendChild(taskBar);
@@ -2662,7 +2903,7 @@ function renderMSProjectView() {
           rowIndex: currentRowIndex,
           leftPx,
           rightPx: leftPx + widthPx,
-          centerY: currentRowIndex * 38 + 19
+          centerY: currentRowIndex * ROW_HEIGHT + (ROW_HEIGHT / 2)
         });
 
         currentRowIndex++;
@@ -2671,7 +2912,7 @@ function renderMSProjectView() {
   });
 
   // 8. Dựng lớp nền lưới dọc (Ngày lễ, Chủ Nhật, Đường kẻ Đỏ HÔM NAY)
-  const totalBodyHeight = Math.max(240, currentRowIndex * 38);
+  const totalBodyHeight = Math.max(220, currentRowIndex * ROW_HEIGHT);
   ganttBody.style.width = `${totalTimelineWidth}px`;
   ganttBody.style.minHeight = `${totalBodyHeight}px`;
   ganttGridBg.style.width = `${totalTimelineWidth}px`;
@@ -2680,10 +2921,10 @@ function renderMSProjectView() {
   timelineDates.forEach((d, idx) => {
     const dStr = formatDateStr(d);
     const dow = d.getDay();
-    const holidayName = AppState.showVnHolidays ? getVietnameseHoliday(d) : null;
+    const holidayName = AppState.showVnHolidays !== false ? getHolidayName(dStr) : null;
 
     const gCol = document.createElement('div');
-    gCol.className = 'msp-grid-col';
+    gCol.className = 'msp-gantt-bg-col';
     if (dow === 0) gCol.classList.add('is-sunday');
     if (holidayName) gCol.classList.add('is-holiday');
     gCol.style.width = `${colWidth}px`;
@@ -2697,13 +2938,13 @@ function renderMSProjectView() {
     }
   });
 
-  // 9. Vẽ mũi tên liên kết Finish-to-Start (FS) chuẩn Microsoft Project giữa các giai đoạn kế tiếp nhau trong cùng dự án
+  // 9. Vẽ mũi tên liên kết Finish-to-Start (FS) chuẩn Microsoft Project giữa các giai đoạn kế tiếp nhau
   ganttSvg.setAttribute('width', totalTimelineWidth);
   ganttSvg.setAttribute('height', totalBodyHeight);
   ganttSvg.style.width = `${totalTimelineWidth}px`;
   ganttSvg.style.height = `${totalBodyHeight}px`;
 
-  let svgDefs = `
+  const svgDefs = `
     <defs>
       <marker id="msp-arrow" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
         <path d="M 0 1 L 8 5 L 0 9 z" fill="#475569" />
@@ -2738,15 +2979,21 @@ function renderMSProjectView() {
   });
 
   ganttSvg.innerHTML = svgDefs + svgPaths;
+
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
 }
 
-// Hỗ trợ kéo thả dịch chuyển hoặc co giãn thanh công việc ngay trên biểu đồ Gantt MS Project
+// Kéo thả dịch chuyển hoặc co giãn thanh công việc trên biểu đồ Gantt MS Project (đồng bộ ngược về Bảng Lịch)
 function setupGanttBarDragAndClick(taskBar, handleL, handleR, task, colWidth) {
   let isDragging = false;
   let dragType = null; // 'move', 'left', 'right'
   let startX = 0;
   let origStart = task.startDate;
   let origEnd = task.endDate;
+  let origLeftPx = 0;
+  let origWidthPx = 0;
   let hasMoved = false;
 
   const onMouseDown = (e, type) => {
@@ -2757,8 +3004,11 @@ function setupGanttBarDragAndClick(taskBar, handleL, handleR, task, colWidth) {
     startX = e.clientX;
     origStart = task.startDate;
     origEnd = task.endDate;
+    origLeftPx = parseFloat(taskBar.style.left) || 0;
+    origWidthPx = parseFloat(taskBar.style.width) || 40;
     hasMoved = false;
     document.body.style.userSelect = 'none';
+    document.body.style.cursor = type === 'move' ? 'grabbing' : 'ew-resize';
 
     const onMouseMove = (ev) => {
       if (!isDragging) return;
@@ -2773,12 +3023,15 @@ function setupGanttBarDragAndClick(taskBar, handleL, handleR, task, colWidth) {
         ne.setDate(ne.getDate() + deltaDays);
         task.startDate = formatDateStr(ns);
         task.endDate = formatDateStr(ne);
+        taskBar.style.left = `${origLeftPx + deltaDays * colWidth}px`;
       } else if (dragType === 'left') {
         const ns = parseDateStr(origStart);
         ns.setDate(ns.getDate() + deltaDays);
         const candidate = formatDateStr(ns);
         if (candidate <= origEnd) {
           task.startDate = candidate;
+          taskBar.style.left = `${origLeftPx + deltaDays * colWidth}px`;
+          taskBar.style.width = `${Math.max(18, origWidthPx - deltaDays * colWidth)}px`;
         }
       } else if (dragType === 'right') {
         const ne = parseDateStr(origEnd);
@@ -2786,22 +3039,26 @@ function setupGanttBarDragAndClick(taskBar, handleL, handleR, task, colWidth) {
         const candidate = formatDateStr(ne);
         if (candidate >= origStart) {
           task.endDate = candidate;
+          taskBar.style.width = `${Math.max(18, origWidthPx + deltaDays * colWidth)}px`;
         }
       }
+
+      const wDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays !== false);
+      showFloatingTooltip(`${task.title}: ${formatShortVNDate(task.startDate)} → ${formatShortVNDate(task.endDate)} (${wDays} ngày làm việc)`, ev.clientX, ev.clientY);
     };
 
     const onMouseUp = () => {
       if (!isDragging) return;
       isDragging = false;
       document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+      hideFloatingTooltip();
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
 
       if (hasMoved) {
-        saveToBackend();
-        renderMSProjectView();
-        const wDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays);
-        showToast(`Đã cập nhật "${task.title}": ${formatShortVNDate(task.startDate)} → ${formatShortVNDate(task.endDate)} (${wDays} ngày)`);
+        const wDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays !== false);
+        syncAllFromMSProject(`Đã cập nhật "${task.title}": ${formatShortVNDate(task.startDate)} → ${formatShortVNDate(task.endDate)} (${wDays} ngày) và đồng bộ sang Bảng Lịch!`);
       } else {
         openTaskModal(task);
       }
@@ -2833,11 +3090,10 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
     activeBtn.disabled = true;
   }
 
-  // Tạm thời mở rộng toàn bộ khung cuộn ngang của Gantt để chụp trọn vẹn cả bảng WBS lẫn biểu đồ Gantt
   const origSheetWidth = mspSheet.style.width;
   const origGanttOverflow = ganttPane.style.overflow;
   const fullGanttWidth = document.getElementById('msp-gantt-body').scrollWidth || 900;
-  const fullTableWidth = tablePane.offsetWidth || 540;
+  const fullTableWidth = tablePane.offsetWidth || 680;
   const targetTotalWidth = fullTableWidth + fullGanttWidth + 10;
 
   mspSheet.style.width = `${targetTotalWidth}px`;
