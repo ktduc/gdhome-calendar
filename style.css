@@ -1940,12 +1940,13 @@ body {
   width: 100%;
   min-height: 360px;
   border-bottom: 1px solid #cbd5e1;
+  position: relative;
 }
 
 .msp-table-pane {
-  width: 680px;
-  min-width: 680px;
-  border-right: 2px solid #94a3b8;
+  --msp-grid-cols: 42px 280px 64px 86px 86px 60px 48px;
+  width: auto;
+  min-width: 240px;
   background: #ffffff;
   display: flex;
   flex-direction: column;
@@ -1953,17 +1954,51 @@ body {
   z-index: 5;
 }
 
+/* Thanh kéo phân cách giữa Bảng WBS và Biểu đồ Gantt (Kiểu Excel / MS Project) */
+.msp-pane-splitter {
+  width: 6px;
+  background: #cbd5e1;
+  cursor: col-resize;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 12;
+  transition: background-color 0.15s;
+}
+
+.msp-pane-splitter:hover,
+.msp-pane-splitter.dragging {
+  background: #107c41;
+}
+
+.msp-pane-splitter::after {
+  content: '⋮';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #475569;
+  font-size: 12px;
+  font-weight: 900;
+  pointer-events: none;
+}
+
+.msp-pane-splitter:hover::after,
+.msp-pane-splitter.dragging::after {
+  color: #ffffff;
+}
+
 .msp-table-header {
   height: 56px;
   background: #f1f5f9;
   border-bottom: 2px solid #cbd5e1;
   display: grid;
-  grid-template-columns: 42px 1fr 72px 110px 110px 64px 52px;
+  grid-template-columns: var(--msp-grid-cols);
   align-items: center;
   font-size: 11px;
   font-weight: 800;
   color: #1e293b;
   text-transform: uppercase;
+  user-select: none;
 }
 
 .msp-th {
@@ -1971,7 +2006,34 @@ body {
   height: 100%;
   display: flex;
   align-items: center;
-  border-right: 1px solid #e2e8f0;
+  border-right: 1px solid #cbd5e1;
+  position: relative;
+  overflow: visible;
+}
+
+.msp-th > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Nút nắm kéo chỉnh độ rộng từng cột kiểu Excel */
+.msp-col-resizer {
+  position: absolute;
+  top: 0;
+  right: -4px;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  z-index: 20;
+  background: transparent;
+  transition: background-color 0.12s;
+}
+
+.msp-col-resizer:hover,
+.msp-col-resizer.resizing {
+  background: rgba(16, 124, 65, 0.45);
+  border-right: 2px solid #107c41;
 }
 
 .msp-th.col-wbs,
@@ -1991,7 +2053,7 @@ body {
 .msp-tr {
   height: 42px;
   display: grid;
-  grid-template-columns: 42px 1fr 72px 110px 110px 64px 52px;
+  grid-template-columns: var(--msp-grid-cols);
   align-items: center;
   border-bottom: 1px solid #e2e8f0;
   font-size: 12px;
@@ -2023,6 +2085,7 @@ body {
   border-right: 1px solid #f1f5f9;
   overflow: hidden;
   white-space: nowrap;
+  position: relative;
 }
 
 .msp-td.col-wbs {
@@ -2038,22 +2101,24 @@ body {
 }
 
 .msp-tr.task-row .msp-td.col-name {
-  padding-left: 14px;
+  padding-left: 12px;
 }
 
 /* Các ô Input chỉnh sửa trực tiếp ngay trên bảng WBS (Inline Edit) */
 .msp-inline-project-input {
   flex: 1;
-  min-width: 80px;
+  min-width: 60px;
+  width: 100%;
   border: 1px solid transparent;
   background: transparent;
   font-size: 12.5px;
   font-weight: 800;
   color: #0f172a;
-  padding: 3px 6px;
+  padding: 3px 5px;
   border-radius: 4px;
   text-transform: uppercase;
   font-family: inherit;
+  text-overflow: ellipsis;
 }
 
 .msp-inline-project-input:hover {
@@ -2070,15 +2135,17 @@ body {
 
 .msp-inline-title-input {
   flex: 1;
-  min-width: 80px;
+  min-width: 60px;
+  width: 100%;
   border: 1px solid transparent;
   background: transparent;
   font-size: 12px;
   font-weight: 600;
   color: #1e293b;
-  padding: 4px 6px;
+  padding: 4px 5px;
   border-radius: 4px;
   font-family: inherit;
+  text-overflow: ellipsis;
 }
 
 .msp-inline-title-input:hover {
@@ -2102,8 +2169,8 @@ body {
 }
 
 .msp-inline-dur-input {
-  width: 42px;
-  padding: 3px 2px;
+  width: 38px;
+  padding: 2px 2px;
   border: 1px solid #cbd5e1;
   border-radius: 4px;
   font-size: 12px;
@@ -2112,6 +2179,13 @@ body {
   text-align: center;
   background: #f8fafc;
   font-family: inherit;
+  -moz-appearance: textfield;
+}
+
+.msp-inline-dur-input::-webkit-outer-spin-button,
+.msp-inline-dur-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .msp-inline-dur-input:focus {
@@ -2126,28 +2200,53 @@ body {
   font-weight: 600;
 }
 
-.msp-inline-date-input {
+/* Ô Ngày Bắt đầu & Kết thúc: BỎ ICON LỊCH, ấn trực tiếp vào chữ ngày là bật bảng chọn lịch */
+.msp-date-cell-wrap {
+  position: relative;
   width: 100%;
-  padding: 3px 3px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid transparent;
   border-radius: 4px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #334155;
-  background: transparent;
-  font-family: inherit;
   cursor: pointer;
+  transition: background-color 0.12s, border-color 0.12s;
 }
 
-.msp-inline-date-input:hover {
-  border-color: #cbd5e1;
-  background: #f8fafc;
+.msp-date-cell-wrap:hover {
+  background: #eff6ff;
+  border-color: #93c5fd;
 }
 
-.msp-inline-date-input:focus {
-  border-color: #107c41;
-  background: #ffffff;
-  outline: none;
+.msp-date-display-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #1e293b;
+  pointer-events: none;
+  letter-spacing: -0.1px;
+}
+
+.msp-date-cell-wrap:hover .msp-date-display-text {
+  color: #1d4ed8;
+  font-weight: 700;
+}
+
+.msp-clean-date-picker {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  margin: 0;
+  padding: 0;
+}
+
+.msp-clean-date-picker::-webkit-calendar-picker-indicator {
+  display: none !important;
+  -webkit-appearance: none;
 }
 
 .msp-progress-select {
@@ -2160,12 +2259,178 @@ body {
   color: #334155;
   background: #f8fafc;
   cursor: pointer;
+  text-align: center;
 }
 
 .msp-progress-select.is-done {
   background: #dcfce7;
   color: #15803d;
   border-color: #86efac;
+}
+
+/* Nút Mở / Xuất file MS Project trên thanh Header */
+.btn-msp-io {
+  border-color: #107c41 !important;
+  color: #0f5132 !important;
+  background: #f0fdf4 !important;
+  font-weight: 600 !important;
+}
+
+.btn-msp-io:hover {
+  background: #dcfce7 !important;
+}
+
+/* MỤC "ĐỀ MỤC & TÙY CHỈNH BẢNG" BÊN TRÁI (Theo đúng ghi chú màu cam của người dùng) */
+.demuc-section {
+  background: #fffbf5;
+  border: 1.5px solid #fdba74;
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 2px;
+}
+
+.demuc-header-badge {
+  color: #c2410c !important;
+  font-weight: 800 !important;
+  font-size: 11.5px !important;
+}
+
+.demuc-helper-note {
+  font-size: 10.5px;
+  color: #7c2d12;
+  background: #ffedd5;
+  padding: 5px 7px;
+  border-radius: 5px;
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+
+.demuc-group-title {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: #9a3412;
+  margin-bottom: 4px;
+  letter-spacing: 0.2px;
+}
+
+.demuc-mini-link {
+  background: none;
+  border: none;
+  color: #ea580c;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.demuc-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.demuc-check-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: background-color 0.12s;
+}
+
+.demuc-check-item:hover {
+  background: #ffedd5;
+}
+
+.demuc-check-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #ea580c;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.demuc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.demuc-tasks-container {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.demuc-task-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e293b;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  cursor: pointer;
+}
+
+.demuc-task-item.is-unchecked {
+  background: #f8fafc;
+  border-style: dashed;
+  border-color: #cbd5e1;
+  color: #64748b;
+}
+
+.demuc-task-item input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: #107c41;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.demuc-task-item .dt-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demuc-task-item .dt-days {
+  font-size: 10px;
+  font-weight: 700;
+  color: #0f5132;
+  background: #dcfce7;
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+/* Chế độ Bản Sao Xuất Ảnh (Đảm bảo KHÔNG BAO GIỜ BỊ CẮT CHỮ khi chụp PNG / Copy) */
+.msp-export-clone .msp-td,
+.msp-export-clone .msp-th {
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+.msp-export-clone .msp-export-static-text {
+  display: inline-block;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.3;
 }
 
 .msp-td.col-act {

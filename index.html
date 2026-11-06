@@ -45,6 +45,13 @@
     </div>
 
     <div class="header-right">
+      <input type="file" id="input-import-msproject" accept=".xml,.mspdi,.csv,.json" style="display: none;">
+      <button class="btn btn-outline btn-msp-io" id="btn-import-msproject" title="Mở file định dạng Microsoft Project (.xml, .csv, .json) từ máy tính">
+        <i data-lucide="folder-open"></i> Mở file MS Project
+      </button>
+      <button class="btn btn-outline btn-msp-io" id="btn-export-msproject" title="Xuất ra file chuẩn Microsoft Project (.xml) để mở trực tiếp trong phần mềm MS Project">
+        <i data-lucide="file-spreadsheet"></i> Xuất file MS Project
+      </button>
       <button class="btn btn-outline btn-crop" id="btn-start-crop-export" title="Quét chọn vùng nhìn trực tiếp trên lịch để tải hoặc copy ảnh">
         <i data-lucide="crop"></i> Chọn vùng xuất
       </button>
@@ -179,6 +186,73 @@
           <span class="cal-item-name">Ngày lễ ở Việt Nam</span>
         </label>
       </div>
+
+      <!-- ĐỀ MỤC & TÙY CHỈNH SÂU TRÊN BẢNG (Tick thì nhảy lên bảng, bỏ tick vẫn lưu ở đây) -->
+      <div class="sidebar-section demuc-section" id="sidebar-demuc-section">
+        <div class="sidebar-section-header demuc-header-badge">
+          <span>📋 ĐỀ MỤC & TÙY CHỈNH BẢNG</span>
+          <button type="button" class="icon-btn btn-sm-icon" id="btn-Autofit-msp-cols" title="Tự động căn vừa khít độ rộng các cột (Auto-fit như Excel)">
+            <i data-lucide="columns"></i>
+          </button>
+        </div>
+        <div class="demuc-helper-note">
+          Tick chọn để đưa mục lên bảng chính. Bỏ tick mục vẫn giữ tại đây để bật lại bất cứ lúc nào:
+        </div>
+
+        <!-- Nhóm 1: Các Cột & Khối trên Bảng Timeline -->
+        <div class="demuc-group-title">1. CÁC MỤC & CỘT TRÊN BẢNG:</div>
+        <div class="demuc-checklist" id="demuc-columns-checklist">
+          <label class="demuc-check-item" title="Ẩn/hiện toàn bộ khung Tổng quan lộ trình (Overview) phía trên">
+            <input type="checkbox" data-demuc-col="overviewStrip" checked>
+            <span class="demuc-dot" style="background:#f57c00;"></span>
+            <span>Khung Tổng quan lộ trình (Trên cùng)</span>
+          </label>
+          <label class="demuc-check-item" title="Ẩn/hiện các thẻ đề mục nhỏ nằm phía trên thanh Overview">
+            <input type="checkbox" data-demuc-col="overviewCallouts" checked>
+            <span class="demuc-dot" style="background:#fb8c00;"></span>
+            <span>Thẻ Đề mục trên khung Overview</span>
+          </label>
+          <label class="demuc-check-item" title="Ẩn/hiện cột Tiến độ (%) trên bảng WBS">
+            <input type="checkbox" data-demuc-col="colProg" checked>
+            <span class="demuc-dot" style="background:#107c41;"></span>
+            <span>Cột Tiến độ (%)</span>
+          </label>
+          <label class="demuc-check-item" title="Ẩn/hiện cột Mã WBS (1, 1.1, 1.2...)">
+            <input type="checkbox" data-demuc-col="colWbs" checked>
+            <span class="demuc-dot" style="background:#475569;"></span>
+            <span>Cột Mã phân cấp WBS</span>
+          </label>
+          <label class="demuc-check-item" title="Ẩn/hiện cột Số ngày làm việc">
+            <input type="checkbox" data-demuc-col="colDur" checked>
+            <span class="demuc-dot" style="background:#0288d1;"></span>
+            <span>Cột Số ngày làm việc</span>
+          </label>
+          <label class="demuc-check-item" title="Ẩn/hiện 2 cột Ngày Bắt đầu & Kết thúc">
+            <input type="checkbox" data-demuc-col="colDate" checked>
+            <span class="demuc-dot" style="background:#3949ab;"></span>
+            <span>Cột Ngày Bắt đầu & Kết thúc</span>
+          </label>
+          <label class="demuc-check-item" title="Ẩn/hiện cột nút Tác vụ (+ Việc / Sửa / Xóa)">
+            <input type="checkbox" data-demuc-col="colAct" checked>
+            <span class="demuc-dot" style="background:#64748b;"></span>
+            <span>Cột Nút Tác vụ (Sửa / Xóa)</span>
+          </label>
+          <label class="demuc-check-item" title="Ẩn/hiện mũi tên nối kết các giai đoạn trên biểu đồ Gantt">
+            <input type="checkbox" data-demuc-col="ganttArrows" checked>
+            <span class="demuc-dot" style="background:#7b1fa2;"></span>
+            <span>Mũi tên nối việc (Gantt)</span>
+          </label>
+        </div>
+
+        <!-- Nhóm 2: Danh sách từng Hạng mục công việc (Bỏ tick vẫn giữ ở đây, tick vào lại nhảy lên bảng) -->
+        <div class="demuc-group-title" style="margin-top: 8px; display:flex; justify-content:space-between; align-items:center;">
+          <span>2. ĐỀ MỤC HẠNG MỤC CÔNG VIỆC:</span>
+          <button type="button" class="demuc-mini-link" id="btn-demuc-check-all" title="Đưa tất cả hạng mục lên bảng">Hiện tất cả</button>
+        </div>
+        <div class="demuc-tasks-container" id="demuc-tasks-container">
+          <!-- Render danh sách các hạng mục công việc bằng JS -->
+        </div>
+      </div>
     </aside>
 
     <!-- Main Work Area -->
@@ -289,16 +363,36 @@
 
             <!-- Khung Chia Đôi: Bảng WBS bên trái + Biểu đồ Gantt bên phải -->
             <div class="msp-split-workspace" id="msp-split-workspace">
-              <!-- Cột Bảng WBS (Task Grid - Cho phép chỉnh sửa trực tiếp từng ô) -->
+              <!-- Cột Bảng WBS (Task Grid - Cho phép chỉnh sửa trực tiếp từng ô & kéo giãn cột như Excel) -->
               <div class="msp-table-pane" id="msp-table-pane">
-                <div class="msp-table-header">
-                  <div class="msp-th col-wbs">WBS</div>
-                  <div class="msp-th col-name">Hạng mục / Công việc (Sửa trực tiếp)</div>
-                  <div class="msp-th col-dur" title="Số ngày làm việc (đã trừ Chủ Nhật) - Gõ số ngày để tự tính ngày kết thúc">Số ngày</div>
-                  <div class="msp-th col-date">Bắt đầu</div>
-                  <div class="msp-th col-date">Kết thúc</div>
-                  <div class="msp-th col-prog">Tiến độ</div>
-                  <div class="msp-th col-act">Tác vụ</div>
+                <div class="msp-table-header" id="msp-table-header">
+                  <div class="msp-th col-wbs" data-col-key="wbs">
+                    <span>WBS</span>
+                    <div class="msp-col-resizer" data-resize-col="wbs" title="Kéo để chỉnh độ rộng cột WBS (Nháy đúp để tự căn vừa khít)"></div>
+                  </div>
+                  <div class="msp-th col-name" data-col-key="name">
+                    <span>Hạng mục / Công việc</span>
+                    <div class="msp-col-resizer" data-resize-col="name" title="Kéo để chỉnh độ rộng cột Tên công việc (Nháy đúp để tự giãn vừa khít chữ dài nhất)"></div>
+                  </div>
+                  <div class="msp-th col-dur" data-col-key="dur" title="Số ngày làm việc (đã trừ Chủ Nhật) - Gõ số ngày để tự tính ngày kết thúc">
+                    <span>Số ngày</span>
+                    <div class="msp-col-resizer" data-resize-col="dur" title="Kéo để chỉnh độ rộng cột Số ngày"></div>
+                  </div>
+                  <div class="msp-th col-date col-start" data-col-key="start">
+                    <span>Bắt đầu</span>
+                    <div class="msp-col-resizer" data-resize-col="start" title="Kéo để chỉnh độ rộng cột Bắt đầu"></div>
+                  </div>
+                  <div class="msp-th col-date col-end" data-col-key="end">
+                    <span>Kết thúc</span>
+                    <div class="msp-col-resizer" data-resize-col="end" title="Kéo để chỉnh độ rộng cột Kết thúc"></div>
+                  </div>
+                  <div class="msp-th col-prog" data-col-key="prog">
+                    <span>Tiến độ</span>
+                    <div class="msp-col-resizer" data-resize-col="prog" title="Kéo để chỉnh độ rộng cột Tiến độ"></div>
+                  </div>
+                  <div class="msp-th col-act" data-col-key="act">
+                    <span>Tác vụ</span>
+                  </div>
                 </div>
                 <div class="msp-table-body" id="msp-table-body">
                   <!-- Render các dòng WBS có thể chỉnh sửa trực tiếp bằng JS -->
@@ -312,6 +406,9 @@
                   <button type="button" class="msp-qt-btn qt-custom" id="btn-msp-add-custom">+ Tuỳ chỉnh...</button>
                 </div>
               </div>
+
+              <!-- Thanh kéo phân cách giữa Bảng WBS và Biểu đồ Gantt -->
+              <div class="msp-pane-splitter" id="msp-pane-splitter" title="Kéo sang trái/phải để mở rộng bảng công việc hoặc biểu đồ Gantt (Nháy đúp để tự động giãn khít chữ)"></div>
 
               <!-- Cột Biểu đồ Thanh Ngang (Gantt Timeline Chart) -->
               <div class="msp-gantt-pane" id="msp-gantt-pane">
