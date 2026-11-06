@@ -30,9 +30,18 @@ const AppState = {
   extraWeeksBottom: 1, // Mặc định luôn có tối thiểu 1 hàng tuần trống bên dưới
   showVnHolidays: true,
   showLunarDates: true, // Mặc định hiển thị ngày Âm lịch bên phải ngày Dương
+  daysOffConfig: {
+    holidays: true, // Ngày lễ ở Việt Nam
+    saturday: false, // Thứ 7
+    sunday: true // Chủ nhật
+  },
+  projectOwners: [
+    { id: 'owner-1', name: 'GD HOME', collapsed: false }
+  ],
   calendars: [
     {
       id: 'cal-1',
+      ownerId: 'owner-1',
       name: 'A DŨNG VŨ YÊN - HẢI PHÒNG',
       customerName: 'A DŨNG VŨ YÊN - HẢI PHÒNG',
       color: '#cc0000',
@@ -40,6 +49,7 @@ const AppState = {
     },
     {
       id: 'cal-2',
+      ownerId: 'owner-1',
       name: 'Lịch Công Việc Chung',
       customerName: '',
       color: '#2e7d32',
@@ -106,8 +116,35 @@ const AppState = {
   ],
   companyName: 'GD HOME',
   companyLogo: null,
-  footerNote: 'Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế'
+  footerNote: 'Ngày làm việc không bao gồm Ngày lễ ở Việt Nam, Chủ nhật'
 };
+
+// Tự động tạo nội dung Ghi chú dựa theo 3 tùy chọn Ngày nghỉ (Ngày lễ ở Việt Nam, Thứ 7, Chủ nhật)
+function buildAutoFooterNoteFromDaysOff() {
+  const cfg = AppState.daysOffConfig || {
+    holidays: AppState.showVnHolidays !== false,
+    saturday: false,
+    sunday: true
+  };
+  const offParts = [];
+  if (cfg.holidays) offParts.push('Ngày lễ ở Việt Nam');
+  if (cfg.saturday) offParts.push('Thứ 7');
+  if (cfg.sunday) offParts.push('Chủ nhật');
+  if (offParts.length === 0) {
+    return 'Ngày làm việc tính tất cả các ngày trong tuần (không trừ ngày nghỉ)';
+  }
+  return `Ngày làm việc không bao gồm ${offParts.join(', ')}`;
+}
+
+function syncFooterNoteWithDaysOff() {
+  AppState.footerNote = buildAutoFooterNoteFromDaysOff();
+  const calNote = document.getElementById('footer-note-text');
+  if (calNote) calNote.textContent = AppState.footerNote;
+  const mspNote = document.getElementById('msp-footer-note-text');
+  if (mspNote) mspNote.textContent = AppState.footerNote;
+  const settingNote = document.getElementById('setting-note-text');
+  if (settingNote) settingNote.value = AppState.footerNote;
+}
 
 // Bộ chuyển đổi Dương lịch -> Âm lịch chuẩn
 const lunarFormatter = new Intl.DateTimeFormat('vi-VN-u-ca-chinese', {
@@ -151,13 +188,31 @@ function showToast(message) {
 
 // Chuẩn hóa dữ liệu
 function normalizeAppState() {
+  if (!AppState.daysOffConfig || typeof AppState.daysOffConfig !== 'object') {
+    AppState.daysOffConfig = {
+      holidays: AppState.showVnHolidays !== false,
+      saturday: false,
+      sunday: true
+    };
+  }
+  if (!Array.isArray(AppState.projectOwners) || AppState.projectOwners.length === 0) {
+    AppState.projectOwners = [
+      { id: 'owner-1', name: 'GD HOME', collapsed: false }
+    ];
+  }
+  const defaultOwnerId = AppState.projectOwners[0].id;
+  const validOwnerIds = new Set(AppState.projectOwners.map(o => o.id));
+
   if (!Array.isArray(AppState.calendars) || AppState.calendars.length === 0) {
     AppState.calendars = [
-      { id: 'cal-1', name: 'A DŨNG VŨ YÊN - HẢI PHÒNG', customerName: 'A DŨNG VŨ YÊN - HẢI PHÒNG', color: '#cc0000', visible: true },
-      { id: 'cal-2', name: 'LỊCH CÔNG VIỆC CHUNG', customerName: 'LỊCH CÔNG VIỆC CHUNG', color: '#2e7d32', visible: true }
+      { id: 'cal-1', ownerId: defaultOwnerId, name: 'A DŨNG VŨ YÊN - HẢI PHÒNG', customerName: 'A DŨNG VŨ YÊN - HẢI PHÒNG', color: '#cc0000', visible: true },
+      { id: 'cal-2', ownerId: defaultOwnerId, name: 'LỊCH CÔNG VIỆC CHUNG', customerName: 'LỊCH CÔNG VIỆC CHUNG', color: '#2e7d32', visible: true }
     ];
   }
   AppState.calendars.forEach(c => {
+    if (!c.ownerId || !validOwnerIds.has(c.ownerId)) {
+      c.ownerId = defaultOwnerId;
+    }
     if (!c.name || !c.name.trim()) {
       c.name = 'CHƯA ĐẶT TÊN KHÁCH HÀNG';
       c.customerName = '';
@@ -167,6 +222,9 @@ function normalizeAppState() {
       c.customerName = c.name.trim();
     }
   });
+  if (!AppState.footerNote || AppState.footerNote === 'Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế' || AppState.footerNote.startsWith('Ngày làm việc')) {
+    AppState.footerNote = buildAutoFooterNoteFromDaysOff();
+  }
   if (!AppState.activeCalendarId || !AppState.calendars.some(c => c.id === AppState.activeCalendarId)) {
     AppState.activeCalendarId = AppState.calendars[0].id;
   }
@@ -246,6 +304,7 @@ function getScheduleMonthText() {
 
 // Đồng bộ & Lưu trữ
 async function syncWithBackend() {
+  loadFromStorage(); // Nạp cấu hình cục bộ trước (như nhóm Dự án của..., cấu hình ngày nghỉ, độ rộng cột)
   try {
     const res = await fetch('/api/schedule');
     if (res.ok) {
@@ -256,6 +315,8 @@ async function syncWithBackend() {
         if (result.data.scheduleMonth) AppState.scheduleMonth = result.data.scheduleMonth;
         if (result.data.extraWeeksTop !== undefined) AppState.extraWeeksTop = result.data.extraWeeksTop;
         if (result.data.extraWeeksBottom !== undefined) AppState.extraWeeksBottom = result.data.extraWeeksBottom;
+        if (result.data.projectOwners) AppState.projectOwners = result.data.projectOwners;
+        if (result.data.daysOffConfig) AppState.daysOffConfig = Object.assign(AppState.daysOffConfig, result.data.daysOffConfig);
         if (result.data.calendars) AppState.calendars = result.data.calendars;
         if (result.data.activeCalendarId) AppState.activeCalendarId = result.data.activeCalendarId;
         if (result.data.tasks) AppState.tasks = result.data.tasks;
@@ -272,7 +333,6 @@ async function syncWithBackend() {
   } catch (err) {
     // Offline fallback
   }
-  loadFromStorage();
   normalizeAppState();
   updateUIElements();
 }
@@ -289,6 +349,8 @@ async function saveToBackend() {
         scheduleMonth: AppState.scheduleMonth,
         extraWeeksTop: AppState.extraWeeksTop,
         extraWeeksBottom: AppState.extraWeeksBottom,
+        projectOwners: AppState.projectOwners,
+        daysOffConfig: AppState.daysOffConfig,
         calendars: AppState.calendars,
         activeCalendarId: AppState.activeCalendarId,
         tasks: AppState.tasks,
@@ -307,8 +369,13 @@ async function saveToBackend() {
 function updateUIElements() {
   document.getElementById('start-month-input').value = AppState.startMonth;
   document.getElementById('end-month-input').value = AppState.endMonth;
+  const cfg = AppState.daysOffConfig || { holidays: true, saturday: false, sunday: true };
   const holToggle = document.getElementById('toggle-vn-holidays');
-  if (holToggle) holToggle.checked = AppState.showVnHolidays !== false;
+  if (holToggle) holToggle.checked = cfg.holidays !== false;
+  const satToggle = document.getElementById('toggle-off-saturday');
+  if (satToggle) satToggle.checked = !!cfg.saturday;
+  const sunToggle = document.getElementById('toggle-off-sunday');
+  if (sunToggle) sunToggle.checked = cfg.sunday !== false;
   const lunarToggle = document.getElementById('toggle-lunar-dates');
   if (lunarToggle) lunarToggle.checked = AppState.showLunarDates !== false;
 
@@ -347,6 +414,8 @@ function saveToStorage() {
     scheduleMonth: AppState.scheduleMonth,
     extraWeeksTop: AppState.extraWeeksTop,
     extraWeeksBottom: AppState.extraWeeksBottom,
+    projectOwners: AppState.projectOwners,
+    daysOffConfig: AppState.daysOffConfig,
     calendars: AppState.calendars,
     activeCalendarId: AppState.activeCalendarId,
     tasks: AppState.tasks,
@@ -370,6 +439,8 @@ function loadFromStorage() {
       if (parsed.scheduleMonth) AppState.scheduleMonth = parsed.scheduleMonth;
       if (parsed.extraWeeksTop !== undefined) AppState.extraWeeksTop = parsed.extraWeeksTop;
       if (parsed.extraWeeksBottom !== undefined) AppState.extraWeeksBottom = parsed.extraWeeksBottom;
+      if (parsed.projectOwners) AppState.projectOwners = parsed.projectOwners;
+      if (parsed.daysOffConfig) AppState.daysOffConfig = Object.assign(AppState.daysOffConfig || {}, parsed.daysOffConfig);
       if (parsed.calendars) AppState.calendars = parsed.calendars;
       if (parsed.activeCalendarId) AppState.activeCalendarId = parsed.activeCalendarId;
       if (parsed.tasks) AppState.tasks = parsed.tasks;
@@ -387,7 +458,7 @@ function loadFromStorage() {
 }
 
 // =========================================================================
-// SIDEBAR DANH SÁCH LỊCH BÊN TRÁI & ĐỒNG BỘ TÊN KHÁCH HÀNG
+// SIDEBAR DANH SÁCH "DỰ ÁN CỦA ..." (NHIỀU NGƯỜI DÙNG, SỔ RA & THU GỌN)
 // =========================================================================
 function renderCalendarSidebar() {
   normalizeAppState();
@@ -401,88 +472,210 @@ function renderCalendarSidebar() {
   if (activeNameEl) activeNameEl.textContent = activeCal.name;
   if (activeDotEl) activeDotEl.style.backgroundColor = activeCal.color;
 
-  AppState.calendars.forEach(cal => {
-    const item = document.createElement('div');
-    item.className = `calendar-list-item ${cal.id === AppState.activeCalendarId ? 'active-selected' : ''}`;
-    item.title = `Bấm để chọn lịch "${cal.name}"`;
+  AppState.projectOwners.forEach(owner => {
+    const ownerCalendars = AppState.calendars.filter(c => c.ownerId === owner.id);
+    const groupEl = document.createElement('div');
+    groupEl.className = `project-owner-group ${owner.collapsed ? 'is-collapsed' : ''}`;
 
-    const leftDiv = document.createElement('div');
-    leftDiv.className = 'cal-item-left';
+    const headerEl = document.createElement('div');
+    headerEl.className = 'project-owner-header';
+    headerEl.title = `Bấm để sổ ra / thu gọn danh sách "Dự án của ${owner.name}"`;
 
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'cal-visibility-check';
-    checkbox.checked = cal.visible !== false;
-    checkbox.style.accentColor = cal.color;
-    checkbox.title = 'Ẩn / Hiện các công việc của lịch này';
-    checkbox.addEventListener('click', (e) => {
+    const leftHeader = document.createElement('div');
+    leftHeader.className = 'project-owner-left';
+
+    const ownerCheck = document.createElement('input');
+    ownerCheck.type = 'checkbox';
+    ownerCheck.checked = ownerCalendars.length > 0 && ownerCalendars.some(c => c.visible !== false);
+    ownerCheck.style.cssText = 'width:13px; height:13px; accent-color:#b91c1c; cursor:pointer; flex-shrink:0;';
+    ownerCheck.title = `Bật / Tắt toàn bộ các lịch trong "Dự án của ${owner.name}"`;
+    ownerCheck.addEventListener('click', (e) => {
       e.stopPropagation();
-      cal.visible = checkbox.checked;
-      saveToBackend();
-      renderCalendar();
-    });
-
-    const colorBox = document.createElement('span');
-    colorBox.className = 'cal-color-box';
-    colorBox.style.backgroundColor = cal.color;
-
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'cal-item-name';
-    const taskCount = AppState.tasks.filter(t => t.calendarId === cal.id).length;
-    nameSpan.textContent = `${cal.name} (${taskCount})`;
-
-    leftDiv.appendChild(checkbox);
-    leftDiv.appendChild(colorBox);
-    leftDiv.appendChild(nameSpan);
-
-    item.addEventListener('click', () => {
-      AppState.activeCalendarId = cal.id;
-      cal.visible = true;
-      popoverColor = cal.color;
-      syncCustomerInputWithActiveCalendar();
+      const targetVis = ownerCheck.checked;
+      ownerCalendars.forEach(c => { c.visible = targetVis; });
       saveToBackend();
       renderCalendarSidebar();
       renderCalendar();
     });
 
-    const actionsDiv = document.createElement('div');
-    actionsDiv.className = 'cal-item-actions';
+    const arrowSpan = document.createElement('span');
+    arrowSpan.className = 'project-owner-arrow';
+    arrowSpan.textContent = owner.collapsed ? '▶' : '▼';
 
-    const editBtn = document.createElement('button');
-    editBtn.type = 'button';
-    editBtn.className = 'cal-action-btn';
-    editBtn.title = 'Đổi tên khách hàng hoặc màu lịch';
-    editBtn.innerHTML = '<i data-lucide="edit-2"></i>';
-    editBtn.addEventListener('click', (e) => {
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'project-owner-title';
+    titleSpan.innerHTML = `Dự án của <em>${owner.name}</em>`;
+
+    const countSpan = document.createElement('span');
+    countSpan.className = 'project-owner-count';
+    countSpan.textContent = String(ownerCalendars.length);
+
+    leftHeader.appendChild(ownerCheck);
+    leftHeader.appendChild(arrowSpan);
+    leftHeader.appendChild(titleSpan);
+    leftHeader.appendChild(countSpan);
+
+    const actionsHeader = document.createElement('div');
+    actionsHeader.className = 'project-owner-actions';
+
+    const addCalBtn = document.createElement('button');
+    addCalBtn.type = 'button';
+    addCalBtn.className = 'owner-mini-btn';
+    addCalBtn.title = `Thêm dự án mới vào mục "Dự án của ${owner.name}"`;
+    addCalBtn.textContent = '+';
+    addCalBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      openCalendarCategoryModal(cal);
+      owner.collapsed = false;
+      openCalendarCategoryModal(null, owner.id);
     });
-    actionsDiv.appendChild(editBtn);
+    actionsHeader.appendChild(addCalBtn);
 
-    if (AppState.calendars.length > 1) {
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'cal-action-btn';
-      delBtn.title = 'Xóa danh mục lịch này';
-      delBtn.innerHTML = '<i data-lucide="trash-2"></i>';
-      delBtn.addEventListener('click', (e) => {
+    const renameOwnerBtn = document.createElement('button');
+    renameOwnerBtn.type = 'button';
+    renameOwnerBtn.className = 'owner-mini-btn';
+    renameOwnerBtn.title = `Đổi tên mục "Dự án của ${owner.name}"`;
+    renameOwnerBtn.textContent = '✎';
+    renameOwnerBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const newOwnerName = prompt('Nhập tên người dùng / phụ trách (Hiển thị: "Dự án của ..."):', owner.name);
+      if (newOwnerName && newOwnerName.trim()) {
+        owner.name = newOwnerName.trim();
+        saveToBackend();
+        renderCalendarSidebar();
+        showToast(`Đã đổi thành "Dự án của ${owner.name}"!`);
+      }
+    });
+    actionsHeader.appendChild(renameOwnerBtn);
+
+    if (AppState.projectOwners.length > 1) {
+      const delOwnerBtn = document.createElement('button');
+      delOwnerBtn.type = 'button';
+      delOwnerBtn.className = 'owner-mini-btn del';
+      delOwnerBtn.title = `Xóa mục "Dự án của ${owner.name}"`;
+      delOwnerBtn.textContent = '×';
+      delOwnerBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (confirm(`Bạn có chắc muốn xóa hẳn danh mục lịch "${cal.name}" và toàn bộ các công việc bên trong không?`)) {
-          AppState.tasks = AppState.tasks.filter(t => t.calendarId !== cal.id);
-          AppState.calendars = AppState.calendars.filter(c => c.id !== cal.id);
-          normalizeAppState();
-          syncCustomerInputWithActiveCalendar();
+        if (confirm(`Xóa nhóm "Dự án của ${owner.name}"? (Các lịch dự án bên trong sẽ được chuyển sang nhóm đầu tiên)`)) {
+          const fallbackOwner = AppState.projectOwners.find(o => o.id !== owner.id);
+          if (fallbackOwner) {
+            AppState.calendars.forEach(c => {
+              if (c.ownerId === owner.id) c.ownerId = fallbackOwner.id;
+            });
+          }
+          AppState.projectOwners = AppState.projectOwners.filter(o => o.id !== owner.id);
           saveToBackend();
           renderCalendarSidebar();
-          renderCalendar();
         }
       });
-      actionsDiv.appendChild(delBtn);
+      actionsHeader.appendChild(delOwnerBtn);
     }
 
-    item.appendChild(leftDiv);
-    item.appendChild(actionsDiv);
-    container.appendChild(item);
+    headerEl.addEventListener('click', () => {
+      owner.collapsed = !owner.collapsed;
+      saveToStorage();
+      renderCalendarSidebar();
+    });
+
+    headerEl.appendChild(leftHeader);
+    headerEl.appendChild(actionsHeader);
+    groupEl.appendChild(headerEl);
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'project-owner-body';
+
+    if (ownerCalendars.length === 0) {
+      const emptyNote = document.createElement('div');
+      emptyNote.style.cssText = 'font-size:10.5px; color:#94a3b8; padding:4px 6px;';
+      emptyNote.textContent = 'Chưa có dự án nào (Bấm + để thêm)';
+      bodyEl.appendChild(emptyNote);
+    }
+
+    ownerCalendars.forEach(cal => {
+      const item = document.createElement('div');
+      item.className = `calendar-list-item ${cal.id === AppState.activeCalendarId ? 'active-selected' : ''}`;
+      item.title = `Bấm để chọn lịch "${cal.name}" (Dự án của ${owner.name})`;
+
+      const leftDiv = document.createElement('div');
+      leftDiv.className = 'cal-item-left';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'cal-visibility-check';
+      checkbox.checked = cal.visible !== false;
+      checkbox.style.accentColor = cal.color;
+      checkbox.title = 'Ẩn / Hiện các công việc của lịch này';
+      checkbox.addEventListener('click', (e) => {
+        e.stopPropagation();
+        cal.visible = checkbox.checked;
+        saveToBackend();
+        renderCalendar();
+      });
+
+      const colorBox = document.createElement('span');
+      colorBox.className = 'cal-color-box';
+      colorBox.style.backgroundColor = cal.color;
+
+      const nameSpan = document.createElement('span');
+      nameSpan.className = 'cal-item-name';
+      const taskCount = AppState.tasks.filter(t => t.calendarId === cal.id).length;
+      nameSpan.textContent = `${cal.name} (${taskCount})`;
+
+      leftDiv.appendChild(checkbox);
+      leftDiv.appendChild(colorBox);
+      leftDiv.appendChild(nameSpan);
+
+      item.addEventListener('click', () => {
+        AppState.activeCalendarId = cal.id;
+        cal.visible = true;
+        popoverColor = cal.color;
+        syncCustomerInputWithActiveCalendar();
+        saveToBackend();
+        renderCalendarSidebar();
+        renderCalendar();
+      });
+
+      const actionsDiv = document.createElement('div');
+      actionsDiv.className = 'cal-item-actions';
+
+      const editBtn = document.createElement('button');
+      editBtn.type = 'button';
+      editBtn.className = 'cal-action-btn';
+      editBtn.title = 'Đổi tên khách hàng, người phụ trách hoặc màu lịch';
+      editBtn.innerHTML = '<i data-lucide="edit-2"></i>';
+      editBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openCalendarCategoryModal(cal, cal.ownerId);
+      });
+      actionsDiv.appendChild(editBtn);
+
+      if (AppState.calendars.length > 1) {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'cal-action-btn';
+        delBtn.title = 'Xóa danh mục lịch này';
+        delBtn.innerHTML = '<i data-lucide="trash-2"></i>';
+        delBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          if (confirm(`Bạn có chắc muốn xóa hẳn danh mục lịch "${cal.name}" và toàn bộ các công việc bên trong không?`)) {
+            AppState.tasks = AppState.tasks.filter(t => t.calendarId !== cal.id);
+            AppState.calendars = AppState.calendars.filter(c => c.id !== cal.id);
+            normalizeAppState();
+            syncCustomerInputWithActiveCalendar();
+            saveToBackend();
+            renderCalendarSidebar();
+            renderCalendar();
+          }
+        });
+        actionsDiv.appendChild(delBtn);
+      }
+
+      item.appendChild(leftDiv);
+      item.appendChild(actionsDiv);
+      bodyEl.appendChild(item);
+    });
+
+    groupEl.appendChild(bodyEl);
+    container.appendChild(groupEl);
   });
 
   if (typeof renderDemucSidebar === 'function') {
@@ -496,11 +689,20 @@ function renderCalendarSidebar() {
 
 let selectedCalCatColor = '#cc0000';
 
-function openCalendarCategoryModal(cal = null) {
+function openCalendarCategoryModal(cal = null, presetOwnerId = null) {
+  normalizeAppState();
   const modal = document.getElementById('calendar-category-modal');
   const titleEl = document.getElementById('modal-cal-cat-title');
   const idInput = document.getElementById('cal-cat-id');
   const nameInput = document.getElementById('cal-cat-name');
+  const ownerSelect = document.getElementById('cal-cat-owner');
+
+  const targetOwnerId = (cal && cal.ownerId) || presetOwnerId || AppState.projectOwners[0].id;
+  if (ownerSelect) {
+    ownerSelect.innerHTML = AppState.projectOwners.map(o =>
+      `<option value="${o.id}" ${o.id === targetOwnerId ? 'selected' : ''}>Dự án của ${o.name}</option>`
+    ).join('');
+  }
 
   if (cal) {
     titleEl.textContent = 'Chỉnh sửa Tên Khách Hàng / Lịch';
@@ -536,6 +738,24 @@ function setupSidebarEvents() {
   if (toggleBtn && sidebar) {
     toggleBtn.addEventListener('click', () => {
       sidebar.classList.toggle('collapsed');
+    });
+  }
+
+  const addOwnerBtn = document.getElementById('btn-add-project-owner');
+  if (addOwnerBtn) {
+    addOwnerBtn.addEventListener('click', () => {
+      const ownerName = prompt('Nhập tên người phụ trách cho mục "Dự án của ..." mới (VD: KTS. Đức, KTS. Minh, Nhóm 2...):');
+      if (ownerName && ownerName.trim()) {
+        const newOwner = {
+          id: 'owner_' + Date.now(),
+          name: ownerName.trim(),
+          collapsed: false
+        };
+        AppState.projectOwners.push(newOwner);
+        saveToBackend();
+        renderCalendarSidebar();
+        showToast(`Đã thêm mục "Dự án của ${newOwner.name}"!`);
+      }
     });
   }
 
@@ -586,6 +806,8 @@ function setupSidebarEvents() {
     e.preventDefault();
     const id = document.getElementById('cal-cat-id').value;
     const name = document.getElementById('cal-cat-name').value.trim().toUpperCase();
+    const ownerSelect = document.getElementById('cal-cat-owner');
+    const chosenOwnerId = (ownerSelect && ownerSelect.value) || AppState.projectOwners[0].id;
     if (!name) return;
 
     if (id) {
@@ -593,10 +815,12 @@ function setupSidebarEvents() {
       if (cal) {
         renameCalendarAndSyncTasks(cal, name);
         cal.color = selectedCalCatColor;
+        cal.ownerId = chosenOwnerId;
       }
     } else {
       const newCal = {
         id: 'cal_' + Date.now(),
+        ownerId: chosenOwnerId,
         name,
         customerName: name,
         color: selectedCalCatColor,
@@ -643,6 +867,30 @@ function parseDateStr(str) {
   return new Date(y, m - 1, d);
 }
 
+// Kiểm tra 1 ngày có nằm trong 3 tùy chọn Ngày nghỉ (Ngày lễ ở Việt Nam, Thứ 7, Chủ nhật) hay không
+function isDateDayOff(dateOrStr, respectSkip = true) {
+  if (!respectSkip) return { isOff: false, reason: null, type: null };
+  const d = typeof dateOrStr === 'string' ? parseDateStr(dateOrStr) : dateOrStr;
+  const dStr = typeof dateOrStr === 'string' ? dateOrStr : formatDateStr(d);
+  const dow = d.getDay();
+  const cfg = AppState.daysOffConfig || {
+    holidays: AppState.showVnHolidays !== false,
+    saturday: false,
+    sunday: true
+  };
+
+  if (cfg.holidays && typeof getHolidayName === 'function' && getHolidayName(dStr)) {
+    return { isOff: true, reason: `Nghỉ lễ: ${getHolidayName(dStr)}`, type: 'holiday' };
+  }
+  if (cfg.sunday && dow === 0) {
+    return { isOff: true, reason: 'Nghỉ Chủ nhật', type: 'sunday' };
+  }
+  if (cfg.saturday && dow === 6) {
+    return { isOff: true, reason: 'Nghỉ Thứ 7', type: 'saturday' };
+  }
+  return { isOff: false, reason: null, type: null };
+}
+
 function calculateTaskDays(startDateStr, endDateStr, skipSundays = true) {
   if (!startDateStr || !endDateStr || startDateStr > endDateStr) {
     return { workDays: 0, totalDays: 0 };
@@ -654,10 +902,7 @@ function calculateTaskDays(startDateStr, endDateStr, skipSundays = true) {
 
   while (curr <= end) {
     totalDays++;
-    const dayOfWeek = curr.getDay();
-    if (skipSundays) {
-      if (dayOfWeek !== 0) workDays++;
-    } else {
+    if (!isDateDayOff(curr, skipSundays !== false).isOff) {
       workDays++;
     }
     curr.setDate(curr.getDate() + 1);
@@ -881,7 +1126,8 @@ function renderCalendar(targetWeeks = null, customContainer = null) {
       dayCell.dataset.date = dayStr;
       dayCell.dataset.weekIndex = weekIndex;
 
-      if (dayIdx === 6) {
+      const dayOffInfo = isDateDayOff(dayDate, true);
+      if (dayOffInfo.type === 'sunday' || dayOffInfo.type === 'saturday') {
         dayCell.classList.add('sunday-cell');
       }
 
@@ -952,14 +1198,19 @@ function renderCalendar(targetWeeks = null, customContainer = null) {
           isOverallEnd: task.endDate <= weekEndStr && rawSegEnd === week.findIndex(d => formatDateStr(d) === task.endDate)
         });
       } else {
-        if (rawSegStart <= 5) {
-          const partEnd = Math.min(rawSegEnd, 5);
+        let c = rawSegStart;
+        while (c <= rawSegEnd) {
+          while (c <= rawSegEnd && isDateDayOff(week[c], true).isOff) c++;
+          if (c > rawSegEnd) break;
+          const partStart = c;
+          while (c <= rawSegEnd && !isDateDayOff(week[c], true).isOff) c++;
+          const partEnd = c - 1;
           weekSegments.push({
             task,
-            colStart: rawSegStart,
+            colStart: partStart,
             colEnd: partEnd,
-            isOverallStart: task.startDate >= weekStartStr && rawSegStart === week.findIndex(d => formatDateStr(d) === task.startDate),
-            isOverallEnd: task.endDate <= weekEndStr && rawSegEnd <= 5
+            isOverallStart: task.startDate >= weekStartStr && partStart === rawSegStart,
+            isOverallEnd: task.endDate <= weekEndStr && partEnd === rawSegEnd
           });
         }
       }
@@ -1954,7 +2205,32 @@ function setupEvents() {
   const toggleHolidays = document.getElementById('toggle-vn-holidays');
   if (toggleHolidays) {
     toggleHolidays.addEventListener('change', (e) => {
+      if (!AppState.daysOffConfig) AppState.daysOffConfig = { holidays: true, saturday: false, sunday: true };
+      AppState.daysOffConfig.holidays = e.target.checked;
       AppState.showVnHolidays = e.target.checked;
+      syncFooterNoteWithDaysOff();
+      saveToBackend();
+      renderCalendar();
+    });
+  }
+
+  const toggleOffSat = document.getElementById('toggle-off-saturday');
+  if (toggleOffSat) {
+    toggleOffSat.addEventListener('change', (e) => {
+      if (!AppState.daysOffConfig) AppState.daysOffConfig = { holidays: true, saturday: false, sunday: true };
+      AppState.daysOffConfig.saturday = e.target.checked;
+      syncFooterNoteWithDaysOff();
+      saveToBackend();
+      renderCalendar();
+    });
+  }
+
+  const toggleOffSun = document.getElementById('toggle-off-sunday');
+  if (toggleOffSun) {
+    toggleOffSun.addEventListener('change', (e) => {
+      if (!AppState.daysOffConfig) AppState.daysOffConfig = { holidays: true, saturday: false, sunday: true };
+      AppState.daysOffConfig.sunday = e.target.checked;
+      syncFooterNoteWithDaysOff();
       saveToBackend();
       renderCalendar();
     });
@@ -2148,20 +2424,31 @@ function getMspColWidth() {
   return 34; // normal
 }
 
+// Tạo SVG gạch chéo cho ô ngày nghỉ nằm giữa thanh Gantt (Giúp html2canvas Copy/Xuất ảnh không bao giờ mất gạch chéo)
+function createDayOffHatchSvg(widthPx, heightPx = 24) {
+  const w = Math.max(14, Math.ceil(widthPx));
+  const h = heightPx;
+  let lines = '';
+  for (let x = -h; x < w + h; x += 5) {
+    lines += `<line x1="${x}" y1="${h}" x2="${x + h}" y2="0" stroke="rgba(15,23,42,0.48)" stroke-width="1.6" />`;
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;width:100%;height:100%;pointer-events:none;"><rect width="${w}" height="${h}" fill="rgba(255,255,255,0.62)"/>${lines}</svg>`;
+}
+
 function countWorkingDays(startDateStr, endDateStr, skipSundays = true) {
   return calculateTaskDays(startDateStr, endDateStr, skipSundays !== false).workDays;
 }
 
-// Tính ngày kết thúc dựa trên ngày bắt đầu + số ngày làm việc (tự động nhảy qua Chủ Nhật nếu skipSundays = true)
+// Tính ngày kết thúc dựa trên ngày bắt đầu + số ngày làm việc (tự động nhảy qua Ngày nghỉ đã chọn)
 function computeEndDateByWorkingDays(startDateStr, targetWorkingDays, skipSundays = true) {
   const days = Math.max(1, parseInt(targetWorkingDays, 10) || 1);
   const curr = parseDateStr(startDateStr);
-  if (skipSundays && curr.getDay() === 0) {
+  while (skipSundays && isDateDayOff(curr, true).isOff) {
     curr.setDate(curr.getDate() + 1);
   }
   let counted = 0;
   while (true) {
-    if (!skipSundays || curr.getDay() !== 0) {
+    if (!isDateDayOff(curr, skipSundays !== false).isOff) {
       counted++;
     }
     if (counted >= days) {
@@ -2172,11 +2459,11 @@ function computeEndDateByWorkingDays(startDateStr, targetWorkingDays, skipSunday
   return formatDateStr(curr);
 }
 
-// Tìm ngày làm việc kế tiếp sau 1 ngày (nhảy qua Chủ Nhật)
+// Tìm ngày làm việc kế tiếp sau 1 ngày (nhảy qua các ngày nghỉ đã chọn)
 function getNextWorkingDateStr(dateStr, skipSundays = true) {
   const d = parseDateStr(dateStr);
   d.setDate(d.getDate() + 1);
-  if (skipSundays && d.getDay() === 0) {
+  while (skipSundays && isDateDayOff(d, true).isOff) {
     d.setDate(d.getDate() + 1);
   }
   return formatDateStr(d);
@@ -2875,19 +3162,23 @@ function renderMSProjectView() {
   timelineDates.forEach(d => {
     const dStr = formatDateStr(d);
     const dow = d.getDay();
-    const holidayName = AppState.showVnHolidays !== false ? getHolidayName(dStr) : null;
+    const offInfo = isDateDayOff(d, true);
+    const lunarInfo = AppState.showLunarDates !== false ? getLunarDateDisplay(d) : { text: '', isFirst: false };
 
     const dCell = document.createElement('div');
     dCell.className = 'msp-gantt-day-cell';
-    if (dow === 0) dCell.classList.add('is-sunday');
-    if (holidayName) dCell.classList.add('is-holiday');
+    if (offInfo.type === 'sunday' || offInfo.type === 'saturday') dCell.classList.add('is-sunday');
+    if (offInfo.type === 'holiday') dCell.classList.add('is-holiday');
     if (dStr === todayStr) dCell.classList.add('is-today');
     dCell.style.width = `${colWidth}px`;
-    if (holidayName) dCell.title = `Nghỉ lễ: ${holidayName}`;
+    if (offInfo.isOff && offInfo.reason) dCell.title = offInfo.reason;
 
     dCell.innerHTML = `
-      <span>${String(d.getDate()).padStart(2, '0')}</span>
-      <span style="font-size:8.5px; opacity:0.8;">${dowNames[dow]}</span>
+      <div class="msp-day-top-line">
+        <span class="msp-solar-num">${String(d.getDate()).padStart(2, '0')}</span>
+        ${lunarInfo.text ? `<span class="msp-lunar-mini ${lunarInfo.isFirst ? 'is-first' : ''}">${lunarInfo.text}</span>` : ''}
+      </div>
+      <span style="font-size:8px; opacity:0.82;">${dowNames[dow]}</span>
     `;
     ganttDaysRow.appendChild(dCell);
   });
@@ -2907,7 +3198,7 @@ function renderMSProjectView() {
     const startDisp = pg.minStart ? formatShortVNDate(pg.minStart) : '--/--/--';
     const endDisp = pg.maxEnd ? formatShortVNDate(pg.maxEnd) : '--/--/--';
 
-    // --- DÒNG SUMMARY CỦA DỰ ÁN (WBS Cấp 1) ---
+    // --- DÒNG SUMMARY CỦA DỰ ÁN (WBS Cấp 1 - Đếm số ngày làm việc thực tế từ Bắt đầu đến Kết thúc) ---
     const sumRowEl = document.createElement('div');
     sumRowEl.className = 'msp-tr summary-row';
 
@@ -2918,7 +3209,7 @@ function renderMSProjectView() {
         <span class="msp-task-dot" style="background:${pg.cal.color}; border-radius:50%;"></span>
         <input type="text" class="msp-inline-project-input" value="${pg.cal.name.replace(/"/g, '&quot;')}" title="Gõ để đổi tên Khách hàng / Dự án (Đồng bộ với Bảng Lịch)">
       </div>
-      <div class="msp-td col-dur">${pg.totalWorkDays} ngày</div>
+      <div class="msp-td col-dur" title="Số ngày thi công thực tế từ ${startDisp} đến ${endDisp} (đã trừ ngày nghỉ)">${pg.overallWorkDays} ngày</div>
       <div class="msp-td col-date col-start">${startDisp}</div>
       <div class="msp-td col-date col-end">${endDisp}</div>
       <div class="msp-td col-prog">
@@ -2980,11 +3271,11 @@ function renderMSProjectView() {
       sumBar.className = 'msp-summary-bar';
       sumBar.style.left = `${leftPx}px`;
       sumBar.style.width = `${widthPx}px`;
-      sumBar.title = `${pg.cal.name}: ${startDisp} → ${endDisp} (Tổng ${pg.totalWorkDays} ngày làm việc)`;
+      sumBar.title = `${pg.cal.name}: ${startDisp} → ${endDisp} (${pg.overallWorkDays} ngày làm việc)`;
 
       const sumLabel = document.createElement('div');
       sumLabel.className = 'msp-summary-label';
-      sumLabel.textContent = `${pg.cal.name} (${pg.totalWorkDays} ngày làm việc • ${pg.avgProgress}%)`;
+      sumLabel.textContent = `${pg.cal.name} (${pg.overallWorkDays} ngày làm việc • ${pg.avgProgress}%)`;
       sumBar.appendChild(sumLabel);
 
       gRowSum.appendChild(sumBar);
@@ -3169,12 +3460,14 @@ function renderMSProjectView() {
         if (task.skipSundays !== false) {
           const taskDates = getDatesBetween(task.startDate, task.endDate);
           taskDates.forEach((d, dOffset) => {
-            if (d.getDay() === 0) {
+            const offInfo = isDateDayOff(d, true);
+            if (offInfo.isOff) {
               const sunCut = document.createElement('div');
               sunCut.className = 'msp-sunday-cutout';
               sunCut.style.left = `${dOffset * colWidth - 1}px`;
               sunCut.style.width = `${colWidth}px`;
-              sunCut.title = 'Nghỉ Chủ Nhật (Không tính vào số ngày làm việc)';
+              sunCut.title = `${offInfo.reason} (Không tính vào số ngày làm việc)`;
+              sunCut.innerHTML = createDayOffHatchSvg(colWidth, 24);
               taskBar.appendChild(sunCut);
             }
           });
@@ -3231,13 +3524,12 @@ function renderMSProjectView() {
 
   timelineDates.forEach((d, idx) => {
     const dStr = formatDateStr(d);
-    const dow = d.getDay();
-    const holidayName = AppState.showVnHolidays !== false ? getHolidayName(dStr) : null;
+    const offInfo = isDateDayOff(d, true);
 
     const gCol = document.createElement('div');
     gCol.className = 'msp-gantt-bg-col';
-    if (dow === 0) gCol.classList.add('is-sunday');
-    if (holidayName) gCol.classList.add('is-holiday');
+    if (offInfo.type === 'sunday' || offInfo.type === 'saturday') gCol.classList.add('is-sunday');
+    if (offInfo.type === 'holiday') gCol.classList.add('is-holiday');
     gCol.style.width = `${colWidth}px`;
     ganttGridBg.appendChild(gCol);
 
@@ -3826,7 +4118,7 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
       span.style.color = oEl.value === '100' ? '#15803d' : '#1e293b';
     } else if (cEl.id === 'msp-customer-input') {
       span.textContent = oEl.value || '';
-      span.style.color = '#fef08a';
+      span.style.color = '#ffffff';
       span.style.fontSize = '18px';
       span.style.fontWeight = '800';
       span.style.textTransform = 'uppercase';

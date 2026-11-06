@@ -1727,11 +1727,13 @@ body {
 
 /* Header phong cách Microsoft Project */
 .msp-top-header {
+.msp-top-banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 12px 20px;
-  background: linear-gradient(90deg, #0f5132 0%, #107c41 50%, #146c43 100%);
+  background: linear-gradient(90deg, #111827 0%, #1a1a1a 42%, #881313 82%, #b91c1c 100%);
+  border-bottom: 3px solid #cc0000;
   color: #ffffff;
   gap: 14px;
   flex-wrap: wrap;
@@ -1747,7 +1749,9 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: rgba(255, 255, 255, 0.18);
+  background: #cc0000;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #ffffff;
   padding: 5px 10px;
   border-radius: 6px;
   font-size: 11.5px;
@@ -1761,7 +1765,7 @@ body {
 }
 
 .msp-inline-month-input {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.12);
   border: 1px dashed rgba(255, 255, 255, 0.45);
   color: #ffffff;
   font-size: 13px;
@@ -1775,7 +1779,7 @@ body {
 
 .msp-inline-month-input:focus {
   background: #ffffff;
-  color: #0f172a;
+  color: #111827;
   border-style: solid;
 }
 
@@ -1797,9 +1801,9 @@ body {
 }
 
 .msp-inline-customer-input {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px dashed rgba(255, 255, 255, 0.55);
-  color: #fef08a;
+  background: rgba(204, 0, 0, 0.35);
+  border: 1px dashed rgba(255, 255, 255, 0.65);
+  color: #ffffff;
   font-size: 18px;
   font-weight: 800;
   padding: 3px 10px;
@@ -1816,7 +1820,7 @@ body {
 
 .msp-inline-customer-input:focus {
   background: #ffffff;
-  color: #b91d14;
+  color: #b91c1c;
   border-style: solid;
 }
 
@@ -1828,8 +1832,8 @@ body {
 }
 
 .msp-kpi-pill {
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.28);
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 11.5px;
@@ -1841,7 +1845,7 @@ body {
 .msp-kpi-pill strong {
   font-size: 13px;
   font-weight: 800;
-  color: #fef08a;
+  color: #fca5a5;
 }
 
 /* Thanh "Timeline Overview" đặc trưng phía trên của Microsoft Project */
@@ -2669,7 +2673,35 @@ body {
   color: #475569;
   border-right: 1px solid #e2e8f0;
   flex-shrink: 0;
-  line-height: 1.1;
+  line-height: 1.05;
+  padding: 1px 0;
+}
+
+.msp-day-top-line {
+  display: inline-flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 1.5px;
+  line-height: 1;
+}
+
+.msp-solar-num {
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.msp-lunar-mini {
+  font-size: 6.8px;
+  font-weight: 500;
+  color: #64748b;
+  opacity: 0.85;
+  letter-spacing: -0.3px;
+}
+
+.msp-lunar-mini.is-first {
+  color: #dc2626;
+  font-weight: 800;
+  opacity: 1;
 }
 
 .msp-gantt-day-cell.is-sunday {
@@ -2824,21 +2856,137 @@ body {
   pointer-events: none;
 }
 
-/* Đánh dấu ngày Chủ nhật nghỉ nằm giữa thanh Gantt */
+/* Đánh dấu ngày nghỉ (Chủ nhật / Thứ 7 / Ngày lễ) nằm giữa thanh Gantt - Hỗ trợ xuất ảnh sắc nét */
 .msp-sunday-cutout {
   position: absolute;
   top: 0;
   bottom: 0;
   background: repeating-linear-gradient(
     45deg,
-    rgba(255, 255, 255, 0.45),
-    rgba(255, 255, 255, 0.45) 3px,
-    rgba(0, 0, 0, 0.15) 3px,
-    rgba(0, 0, 0, 0.15) 6px
+    rgba(255, 255, 255, 0.55),
+    rgba(255, 255, 255, 0.55) 3px,
+    rgba(15, 23, 42, 0.22) 3px,
+    rgba(15, 23, 42, 0.22) 6px
   );
-  border-left: 1px dashed rgba(255,255,255,0.7);
-  border-right: 1px dashed rgba(255,255,255,0.7);
+  border-left: 1px dashed rgba(255,255,255,0.75);
+  border-right: 1px dashed rgba(255,255,255,0.75);
   pointer-events: none;
+  overflow: hidden;
+  z-index: 1;
+}
+
+/* Nhóm "Dự án của ..." bên thanh Sidebar trái (Sổ ra / Thu gọn cho nhiều người dùng) */
+.project-owner-group {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+  margin-bottom: 6px;
+  overflow: hidden;
+}
+
+.project-owner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: #f1f5f9;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.12s;
+}
+
+.project-owner-header:hover {
+  background: #e2e8f0;
+}
+
+.project-owner-group:not(.is-collapsed) .project-owner-header {
+  border-bottom-color: #e2e8f0;
+}
+
+.project-owner-left {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+}
+
+.project-owner-arrow {
+  font-size: 9.5px;
+  color: #475569;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.project-owner-title {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-owner-title em {
+  font-style: normal;
+  color: #b91c1c;
+}
+
+.project-owner-count {
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  background: #e2e8f0;
+  padding: 1px 5px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.project-owner-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.owner-mini-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: transparent;
+  border-radius: 4px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.owner-mini-btn:hover {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+
+.owner-mini-btn.del:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.project-owner-body {
+  padding: 4px 5px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: #ffffff;
+}
+
+.project-owner-group.is-collapsed .project-owner-body {
+  display: none;
 }
 
 .msp-task-bar-label {

@@ -146,17 +146,22 @@
         </div>
       </div>
 
-      <!-- Danh sách Lịch dự án -->
+      <!-- Danh sách "Dự án của ..." (Hỗ trợ nhiều người dùng, sổ ra & thu gọn) -->
       <div class="sidebar-section">
         <div class="sidebar-section-header">
-          <span>DANH SÁCH LỊCH DỰ ÁN</span>
-          <button class="icon-btn btn-sm-icon" id="btn-open-new-calendar-modal" title="Tạo lịch dự án mới">
-            <i data-lucide="plus"></i>
-          </button>
+          <span>DỰ ÁN CỦA ... (NHIỀU NGƯỜI)</span>
+          <div style="display:flex; align-items:center; gap:4px;">
+            <button type="button" class="icon-btn btn-sm-icon" id="btn-add-project-owner" title="Thêm mục 'Dự án của ...' mới cho người dùng khác">
+              <i data-lucide="folder-plus"></i>
+            </button>
+            <button type="button" class="icon-btn btn-sm-icon" id="btn-open-new-calendar-modal" title="Tạo lịch dự án mới">
+              <i data-lucide="plus"></i>
+            </button>
+          </div>
         </div>
 
         <div class="calendar-list-container" id="calendar-list-container">
-          <!-- Render bằng JS -->
+          <!-- Render các nhóm "Dự án của ..." sổ ra / thu gọn bằng JS -->
         </div>
       </div>
 
@@ -170,20 +175,34 @@
         </button>
       </div>
 
-      <!-- Lịch khác (Ngày lễ VN & Âm lịch) -->
+      <!-- Tùy chọn Ngày nghỉ (3 mục: Ngày lễ ở Việt Nam, Thứ 7, Chủ nhật) & Âm lịch -->
       <div class="sidebar-section">
         <div class="sidebar-section-header">
-          <span>HIỂN THỊ & LỊCH HỆ THỐNG</span>
+          <span>TÙY CHỌN NGÀY NGHỈ (TRỪ NGÀY)</span>
         </div>
-        <label class="sidebar-holiday-item" title="Hiển thị ngày Âm lịch bên phải ngày Dương lịch (nét mảnh 60%)">
+        <div class="demuc-helper-note" style="margin-bottom:4px;">
+          Khi tick chọn, hệ thống tự trừ ngày nghỉ và tự cập nhật dòng Ghi chú cuối bảng:
+        </div>
+        <label class="sidebar-holiday-item" title="Tính Ngày lễ ở Việt Nam là ngày nghỉ và tự cập nhật xuống Ghi chú">
+          <input type="checkbox" id="toggle-vn-holidays" checked>
+          <span class="cal-color-box" style="background:#16a34a;"></span>
+          <span class="cal-item-name">Ngày lễ ở Việt Nam</span>
+        </label>
+        <label class="sidebar-holiday-item" title="Tính Thứ 7 là ngày nghỉ và tự cập nhật xuống Ghi chú">
+          <input type="checkbox" id="toggle-off-saturday">
+          <span class="cal-color-box" style="background:#f59e0b;"></span>
+          <span class="cal-item-name">Thứ 7</span>
+        </label>
+        <label class="sidebar-holiday-item" title="Tính Chủ nhật là ngày nghỉ và tự cập nhật xuống Ghi chú">
+          <input type="checkbox" id="toggle-off-sunday" checked>
+          <span class="cal-color-box" style="background:#dc2626;"></span>
+          <span class="cal-item-name">Chủ nhật</span>
+        </label>
+        <div style="border-top: 1px dashed #e2e8f0; margin: 6px 0 4px;"></div>
+        <label class="sidebar-holiday-item" title="Hiển thị ngày Âm lịch rất nhỏ bên cạnh ngày Dương lịch">
           <input type="checkbox" id="toggle-lunar-dates" checked>
           <span class="cal-color-box" style="background:#64748b;"></span>
-          <span class="cal-item-name">Hiển thị Ngày Âm Lịch</span>
-        </label>
-        <label class="sidebar-holiday-item" title="Bật/tắt thanh Ngày lễ Việt Nam">
-          <input type="checkbox" id="toggle-vn-holidays" checked>
-          <span class="cal-color-box" style="background:#388e3c;"></span>
-          <span class="cal-item-name">Ngày lễ ở Việt Nam</span>
+          <span class="cal-item-name">Hiện ngày Âm nhỏ cạnh ngày Dương</span>
         </label>
       </div>
 
@@ -440,6 +459,10 @@
       <div class="modal-body">
         <form id="calendar-category-form">
           <input type="hidden" id="cal-cat-id">
+          <div class="form-group">
+            <label for="cal-cat-owner">Thuộc nhóm người phụ trách ("Dự án của ...")</label>
+            <select id="cal-cat-owner" class="form-select"></select>
+          </div>
           <div class="form-group">
             <label for="cal-cat-name">Tên khách hàng / Dự án <span class="required">*</span></label>
             <input type="text" id="cal-cat-name" required placeholder="Ví dụ: A DŨNG VŨ YÊN - HẢI PHÒNG">
