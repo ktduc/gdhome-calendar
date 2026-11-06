@@ -129,12 +129,41 @@
             <option value="active-only">Chỉ lịch khách hàng đang chọn</option>
           </select>
           <label class="msp-opt-label" style="margin-top: 6px;">Độ rộng cột ngày (Zoom):</label>
-          <div class="msp-zoom-btns">
+          <div class="msp-zoom-btns" id="msp-col-zoom-btns">
             <button type="button" class="msp-zoom-btn" data-zoom="compact">Thu gọn</button>
             <button type="button" class="msp-zoom-btn active" data-zoom="normal">Chuẩn</button>
             <button type="button" class="msp-zoom-btn" data-zoom="wide">Rộng</button>
           </div>
+          <label class="msp-opt-label" style="margin-top: 6px;">Độ cao dòng / cột:</label>
+          <div class="msp-zoom-btns" id="msp-row-height-btns">
+            <button type="button" class="msp-row-height-btn" data-row-height="compact" title="Độ cao dòng thấp (32px)">Thấp</button>
+            <button type="button" class="msp-row-height-btn active" data-row-height="normal" title="Độ cao dòng chuẩn (42px)">Chuẩn</button>
+            <button type="button" class="msp-row-height-btn" data-row-height="tall" title="Độ cao dòng cao (54px)">Cao</button>
+          </div>
         </div>
+      </div>
+
+      <!-- BẢNG MÀU GIAO DIỆN (PALETTE) & TỰ ĐỘNG DỊCH NGÀY -->
+      <div class="sidebar-section palette-theme-section">
+        <div class="sidebar-section-header">
+          <span>🎨 GIAO DIỆN BẢNG MÀU & LỊCH TRÌNH</span>
+        </div>
+        <label class="msp-opt-label" for="sidebar-palette-select">Chọn Palette màu (Tự nhảy màu theo thứ tự):</label>
+        <select id="sidebar-palette-select" class="form-select msp-mini-select" style="margin-top:3px;">
+          <option value="default">Mặc định GD HOME (20 màu - 2 hàng)</option>
+          <option value="olive">Olive / Rêu Đất (20 màu - 2 hàng)</option>
+          <option value="mauve">Mauve / Khói Tím (20 màu - 2 hàng)</option>
+        </select>
+        <div class="sidebar-palette-preview" id="sidebar-palette-preview" title="Bấm vào màu bất kỳ hoặc bấm nút bên dưới để tự nhảy màu theo thứ tự"></div>
+        <button type="button" class="btn btn-outline btn-sm btn-full" id="btn-apply-palette-sequence" style="margin-top:6px; font-size:11.5px; font-weight:700; justify-content:center;">
+          🎨 Tự nhảy màu các việc theo thứ tự Palette
+        </button>
+        <div style="border-top: 1px dashed #cbd5e1; margin: 8px 0 5px;"></div>
+        <label class="sidebar-holiday-item" title="Khi chỉnh ngày bắt đầu hoặc kết thúc của 1 mục, các mục phía sau sẽ tự động dịch theo và giữ nguyên số ngày làm việc">
+          <input type="checkbox" id="toggle-cascade-shift" checked>
+          <span class="cal-color-box" style="background:#0288d1;"></span>
+          <span class="cal-item-name" style="white-space:normal; line-height:1.25;">Tự động dịch các mục sau khi đổi ngày (giữ nguyên ngày làm việc)</span>
+        </label>
       </div>
 
       <!-- Thông báo Lịch đang chọn để nhập việc -->
@@ -469,8 +498,8 @@
             <small class="helper-text">Tên này sẽ tự động đồng bộ lên tiêu đề và hậu tố các bước (3D, CHỈNH SỬA 3D, HSKT)</small>
           </div>
           <div class="form-group">
-            <label>Màu đại diện (Theo dải màu chuyển sắc)</label>
-            <div class="color-palette" id="cal-cat-color-palette">
+            <label>Màu đại diện (2 hàng 20 màu theo Palette đang chọn)</label>
+            <div class="color-palette two-rows-palette" id="cal-cat-color-palette">
               <button type="button" class="color-swatch active" data-color="#cc0000" style="background-color: #cc0000;" title="Đỏ (3D)"></button>
               <button type="button" class="color-swatch" data-color="#e65100" style="background-color: #e65100;" title="Đỏ cam"></button>
               <button type="button" class="color-swatch" data-color="#f57c00" style="background-color: #f57c00;" title="Cam (CHỈNH SỬA 3D)"></button>
@@ -480,6 +509,17 @@
               <button type="button" class="color-swatch" data-color="#0288d1" style="background-color: #0288d1;" title="Xanh dương"></button>
               <button type="button" class="color-swatch" data-color="#3949ab" style="background-color: #3949ab;" title="Xanh chàm"></button>
               <button type="button" class="color-swatch" data-color="#7b1fa2" style="background-color: #7b1fa2;" title="Tím"></button>
+              <button type="button" class="color-swatch" data-color="#c2185b" style="background-color: #c2185b;" title="Hồng đậm"></button>
+              <button type="button" class="color-swatch" data-color="#991b1b" style="background-color: #991b1b;" title="Đỏ đô"></button>
+              <button type="button" class="color-swatch" data-color="#b45309" style="background-color: #b45309;" title="Nâu hổ phách"></button>
+              <button type="button" class="color-swatch" data-color="#ca8a04" style="background-color: #ca8a04;" title="Vàng nghệ"></button>
+              <button type="button" class="color-swatch" data-color="#4d7c0f" style="background-color: #4d7c0f;" title="Xanh rêu"></button>
+              <button type="button" class="color-swatch" data-color="#0f766e" style="background-color: #0f766e;" title="Xanh cổ vịt"></button>
+              <button type="button" class="color-swatch" data-color="#0369a1" style="background-color: #0369a1;" title="Xanh đại dương"></button>
+              <button type="button" class="color-swatch" data-color="#1d4ed8" style="background-color: #1d4ed8;" title="Xanh coban"></button>
+              <button type="button" class="color-swatch" data-color="#4338ca" style="background-color: #4338ca;" title="Tím chàm"></button>
+              <button type="button" class="color-swatch" data-color="#6d28d9" style="background-color: #6d28d9;" title="Tím hoàng gia"></button>
+              <button type="button" class="color-swatch" data-color="#334155" style="background-color: #334155;" title="Xám than chì"></button>
             </div>
           </div>
           <div class="modal-actions">
@@ -540,8 +580,18 @@
           </div>
 
           <div class="form-group">
-            <label>Màu sắc thanh tiến độ (Theo dải màu chuyển sắc)</label>
-            <div class="color-palette" id="color-palette">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; flex-wrap:wrap;">
+              <label style="margin-bottom:0;">Màu sắc thanh tiến độ (2 hàng • Tự nhảy màu theo Palette)</label>
+              <div style="display:flex; align-items:center; gap:6px;">
+                <select id="modal-palette-select" class="form-select" style="width:auto; padding:3px 8px; font-size:12px; font-weight:600;">
+                  <option value="default">Palette Mặc định (20 màu)</option>
+                  <option value="olive">Palette Olive / Rêu Đất (20 màu)</option>
+                  <option value="mauve">Palette Mauve / Khói Tím (20 màu)</option>
+                </select>
+                <input type="color" id="custom-color-picker" value="#cc0000" title="Chọn màu tùy chỉnh bất kỳ">
+              </div>
+            </div>
+            <div class="color-palette two-rows-palette" id="color-palette">
               <button type="button" class="color-swatch active" data-color="#cc0000" style="background-color: #cc0000;" title="Đỏ (Tag 3D)"></button>
               <button type="button" class="color-swatch" data-color="#e65100" style="background-color: #e65100;" title="Đỏ cam"></button>
               <button type="button" class="color-swatch" data-color="#f57c00" style="background-color: #f57c00;" title="Cam (Tag CHỈNH SỬA 3D)"></button>
@@ -551,7 +601,17 @@
               <button type="button" class="color-swatch" data-color="#0288d1" style="background-color: #0288d1;" title="Xanh dương"></button>
               <button type="button" class="color-swatch" data-color="#3949ab" style="background-color: #3949ab;" title="Xanh chàm"></button>
               <button type="button" class="color-swatch" data-color="#7b1fa2" style="background-color: #7b1fa2;" title="Tím"></button>
-              <input type="color" id="custom-color-picker" value="#cc0000" title="Chọn màu tùy chỉnh">
+              <button type="button" class="color-swatch" data-color="#c2185b" style="background-color: #c2185b;" title="Hồng đậm"></button>
+              <button type="button" class="color-swatch" data-color="#991b1b" style="background-color: #991b1b;" title="Đỏ đô"></button>
+              <button type="button" class="color-swatch" data-color="#b45309" style="background-color: #b45309;" title="Nâu hổ phách"></button>
+              <button type="button" class="color-swatch" data-color="#ca8a04" style="background-color: #ca8a04;" title="Vàng nghệ"></button>
+              <button type="button" class="color-swatch" data-color="#4d7c0f" style="background-color: #4d7c0f;" title="Xanh rêu"></button>
+              <button type="button" class="color-swatch" data-color="#0f766e" style="background-color: #0f766e;" title="Xanh cổ vịt"></button>
+              <button type="button" class="color-swatch" data-color="#0369a1" style="background-color: #0369a1;" title="Xanh đại dương"></button>
+              <button type="button" class="color-swatch" data-color="#1d4ed8" style="background-color: #1d4ed8;" title="Xanh coban"></button>
+              <button type="button" class="color-swatch" data-color="#4338ca" style="background-color: #4338ca;" title="Tím chàm"></button>
+              <button type="button" class="color-swatch" data-color="#6d28d9" style="background-color: #6d28d9;" title="Tím hoàng gia"></button>
+              <button type="button" class="color-swatch" data-color="#334155" style="background-color: #334155;" title="Xám than chì"></button>
             </div>
           </div>
 
@@ -740,9 +800,9 @@
       <div class="popover-count-summary" id="popover-count-summary">
         20 ngày làm việc (đã tự động trừ Chủ nhật)
       </div>
-      <div class="popover-color-row">
-        <span>Dải màu:</span>
-        <div class="popover-swatches" id="popover-swatches">
+      <div class="popover-color-row" style="flex-direction:column; align-items:flex-start; gap:5px;">
+        <span>Dải màu (2 hàng • Tự nhảy theo Palette):</span>
+        <div class="popover-swatches two-rows-popover-swatches" id="popover-swatches">
           <button type="button" class="p-swatch active" data-color="#cc0000" style="background:#cc0000;" title="Đỏ (Tag 3D)"></button>
           <button type="button" class="p-swatch" data-color="#e65100" style="background:#e65100;" title="Đỏ cam"></button>
           <button type="button" class="p-swatch" data-color="#f57c00" style="background:#f57c00;" title="Cam (Tag CHỈNH SỬA 3D)"></button>
@@ -752,6 +812,17 @@
           <button type="button" class="p-swatch" data-color="#0288d1" style="background:#0288d1;" title="Xanh dương"></button>
           <button type="button" class="p-swatch" data-color="#3949ab" style="background:#3949ab;" title="Xanh chàm"></button>
           <button type="button" class="p-swatch" data-color="#7b1fa2" style="background:#7b1fa2;" title="Tím"></button>
+          <button type="button" class="p-swatch" data-color="#c2185b" style="background:#c2185b;" title="Hồng đậm"></button>
+          <button type="button" class="p-swatch" data-color="#991b1b" style="background:#991b1b;" title="Đỏ đô"></button>
+          <button type="button" class="p-swatch" data-color="#b45309" style="background:#b45309;" title="Nâu hổ phách"></button>
+          <button type="button" class="p-swatch" data-color="#ca8a04" style="background:#ca8a04;" title="Vàng nghệ"></button>
+          <button type="button" class="p-swatch" data-color="#4d7c0f" style="background:#4d7c0f;" title="Xanh rêu"></button>
+          <button type="button" class="p-swatch" data-color="#0f766e" style="background:#0f766e;" title="Xanh cổ vịt"></button>
+          <button type="button" class="p-swatch" data-color="#0369a1" style="background:#0369a1;" title="Xanh đại dương"></button>
+          <button type="button" class="p-swatch" data-color="#1d4ed8" style="background:#1d4ed8;" title="Xanh coban"></button>
+          <button type="button" class="p-swatch" data-color="#4338ca" style="background:#4338ca;" title="Tím chàm"></button>
+          <button type="button" class="p-swatch" data-color="#6d28d9" style="background:#6d28d9;" title="Tím hoàng gia"></button>
+          <button type="button" class="p-swatch" data-color="#334155" style="background:#334155;" title="Xám than chì"></button>
         </div>
       </div>
     </div>
@@ -760,6 +831,9 @@
       <button type="button" class="btn btn-primary btn-sm" id="btn-popover-save">Lưu thủ công</button>
     </div>
   </div>
+
+  <!-- Menu Chuột Phải (Nhân đôi công việc / dự án, dịch ngày, đổi màu nhanh) -->
+  <div id="custom-context-menu" class="custom-context-menu" style="display: none;"></div>
 
   <!-- Toast thông báo khi Copy ảnh thành công -->
   <div id="toast-notification" class="toast-notification"></div>
