@@ -108,3 +108,26 @@ test('Xoá liên kết trỏ tới việc đã bị xoá', () => {
   S.cleanupDanglingLinks(tasks);
   assert.deepStrictEqual(tasks[0].predecessors, []);
 });
+
+test('Liên kết SS: việc sau bắt đầu cùng ngày việc trước, dời theo khi việc trước dời', () => {
+  cfg();
+  const A = { id: 'A', startDate: '2026-11-02', endDate: '2026-11-06' };
+  const B = { id: 'B', startDate: '2026-11-02', endDate: '2026-11-03' };
+  const tasks = [A, B];
+  assert.strictEqual(S.addPredecessorLink(B, A, tasks, 'SS'), true);
+  assert.deepStrictEqual(B.predecessors, [{ id: 'A', type: 'SS', lag: 0 }]);
+  A.startDate = '2026-11-04'; A.endDate = '2026-11-09';
+  S.propagateLinkedTasks(['A'], tasks);
+  assert.strictEqual(B.startDate, '2026-11-04');
+  assert.strictEqual(B.endDate, '2026-11-05');
+});
+
+test('Đổi loại liên kết FS -> SS', () => {
+  cfg();
+  const A = { id: 'A', startDate: '2026-11-02', endDate: '2026-11-03' };
+  const B = { id: 'B', startDate: '2026-11-04', endDate: '2026-11-05' };
+  S.addPredecessorLink(B, A, [A, B], 'FS');
+  assert.strictEqual(S.addPredecessorLink(B, A, [A, B], 'SS'), true);
+  assert.strictEqual(B.predecessors[0].type, 'SS');
+  assert.strictEqual(B.predecessors[0].lag, 2);
+});

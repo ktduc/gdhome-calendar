@@ -281,6 +281,22 @@ const COLOR_PALETTES = {
     // Hàng 2: 10 màu bổ sung tông Khói Tím / Xám Đá để đủ 2 hàng 20 màu
     '#3D314A', '#68506E', '#846A8A', '#A6808C', '#D6CFCB',
     '#706677', '#565264', '#7A8B99', '#91A6BC', '#4A5859'
+  ],
+  rust: [
+    // Hàng 1: 10 mã màu Gạch nung / Gỉ sắt (Rosy Granite -> Oxidized Iron) của người dùng
+    '#837A7A', '#87706D', '#8A6864', '#8D605A', '#8F5A53',
+    '#934F45', '#974438', '#9B392A', '#9F2E1D', '#A2230F',
+    // Hàng 2: cùng tông nhưng trầm hơn
+    '#6C605F', '#6E5A56', '#705450', '#724F49', '#744B45',
+    '#77433B', '#793C32', '#7C3429', '#7F2D20', '#812516'
+  ],
+  eagle: [
+    // Hàng 1: tông Lông vũ / Nâu Đá / Xám Xanh (lấy từ ảnh chim ưng, đã giảm tương phản)
+    '#7C8F95', '#584C43', '#373431', '#47423C', '#57493D',
+    '#564133', '#7D7467', '#525D5F', '#B3A48F', '#63767E',
+    // Hàng 2: cùng tông, sáng & dịu hơn
+    '#9BA7A7', '#81776C', '#6A655F', '#756F67', '#817468',
+    '#806F61', '#9C9386', '#7D8381', '#C3B6A3', '#899597'
   ]
 };
 
@@ -420,7 +436,9 @@ function applyPaletteSequenceToTasks(targetCalId = null, silent = false) {
       default: 'Mặc định GD HOME (20 màu)',
       default_soft: 'Mặc định Dịu mắt (20 màu)',
       olive: 'Olive / Rêu Đất (20 màu)',
-      mauve: 'Mauve / Khói Tím (20 màu)'
+      mauve: 'Mauve / Khói Tím (20 màu)',
+      rust: 'Gạch nung / Gỉ sắt (20 màu)',
+      eagle: 'Lông vũ / Nâu Đá (20 màu)'
     };
     showToast(`🎨 Đã tự nhảy màu theo thứ tự bộ "${themeNames[AppState.colorPaletteTheme] || 'Palette'}"!`);
   }
@@ -973,6 +991,7 @@ function saveToStorage() {
     showLunarDates: AppState.showLunarDates,
     mspRowHeight: AppState.mspRowHeight,
     mspZoom: AppState.mspZoom,
+    exportWatermark: AppState.exportWatermark,
     colorPaletteTheme: AppState.colorPaletteTheme,
     autoCascadeShift: AppState.autoCascadeShift,
     mspCustomTitlePrefix: AppState.mspCustomTitlePrefix,
@@ -1009,6 +1028,7 @@ function loadFromStorage() {
       if (parsed.showLunarDates !== undefined) AppState.showLunarDates = parsed.showLunarDates;
       if (parsed.mspRowHeight !== undefined) AppState.mspRowHeight = parsed.mspRowHeight;
       if (parsed.mspZoom !== undefined) AppState.mspZoom = parsed.mspZoom;
+      if (parsed.exportWatermark !== undefined) AppState.exportWatermark = parsed.exportWatermark;
       if (parsed.colorPaletteTheme) AppState.colorPaletteTheme = parsed.colorPaletteTheme;
       if (parsed.autoCascadeShift !== undefined) AppState.autoCascadeShift = parsed.autoCascadeShift;
       if (parsed.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = parsed.mspCustomTitlePrefix;
@@ -1718,7 +1738,7 @@ function renderCalendar(targetWeeks = null, customContainer = null) {
 
       if (dayNum === 1) {
         const monthLabel = document.createElement('span');
-        monthLabel.className = 'day-month-label';
+        monthLabel.className = 'day-month-label is-month-first';
         monthLabel.textContent = `1 thg ${monthNum}`;
         dayHeader.appendChild(monthLabel);
       } else {
@@ -2568,7 +2588,11 @@ function populateCalendarSelectDropdown(selectedCalId) {
   const selectEl = document.getElementById('task-calendar-select');
   if (!selectEl) return;
   selectEl.innerHTML = '';
-  AppState.calendars.forEach(cal => {
+  // Chỉ hiện các dự án thuộc cùng nhóm "Dự án của ..." với dự án đang chọn -> tránh lẫn lộn
+  const refCal = AppState.calendars.find(c => c.id === selectedCalId) || getActiveCalendar();
+  const ownerId = refCal ? refCal.ownerId : null;
+  const list = AppState.calendars.filter(c => !ownerId || c.ownerId === ownerId || c.id === selectedCalId);
+  list.forEach(cal => {
     const opt = document.createElement('option');
     opt.value = cal.id;
     opt.textContent = cal.name;
@@ -2855,7 +2879,41 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
   }, 150);
 }
 
+// Sọc chéo chìm mờ phủ toàn bộ ảnh (chống chỉnh sửa / cắt ghép)
+function applyAntiEditWatermark(canvas) {
+  if (!canvas || canvas.__gdWatermarked) return canvas;
+  if (AppState.exportWatermark === false) return canvas;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+  const unit = Math.max(1, Math.round(w / 1400)); // ảnh 2x -> nét & khoảng cách gấp đôi
+  const gap = 22 * unit;
+  ctx.save();
+  ctx.globalAlpha = 0.07;
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 1 * unit;
+  ctx.beginPath();
+  for (let x = -h; x < w + h; x += gap) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x + h, h);
+  }
+  ctx.stroke();
+  // Thêm 1 lớp sọc mảnh hơn theo chiều ngược lại, rất mờ -> khó xoá bằng công cụ chỉnh ảnh
+  ctx.globalAlpha = 0.035;
+  ctx.beginPath();
+  for (let x = 0; x < w + h; x += gap * 3) {
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x - h, h);
+  }
+  ctx.stroke();
+  ctx.restore();
+  canvas.__gdWatermarked = true;
+  return canvas;
+}
+
 function downloadCanvas(canvas, filename) {
+  applyAntiEditWatermark(canvas);
   const link = document.createElement('a');
   link.download = filename;
   link.href = canvas.toDataURL('image/png');
@@ -2863,6 +2921,7 @@ function downloadCanvas(canvas, filename) {
 }
 
 function copyCanvasToClipboard(canvas) {
+  applyAntiEditWatermark(canvas);
   canvas.toBlob(async (blob) => {
     if (!blob) {
       alert('Không thể tạo dữ liệu ảnh để copy.');
@@ -3360,6 +3419,28 @@ function duplicateProject(cal) {
 // =========================================================================
 // MENU CHUỘT PHẢI (CONTEXT MENU) CHO CÔNG VIỆC & DỰ ÁN
 // =========================================================================
+// Thu gọn / mở rộng từng mục ở thanh bên trái (nhớ trạng thái trên trình duyệt này)
+const SIDEBAR_COLLAPSE_KEY = 'gdhome_sidebar_collapsed';
+const SIDEBAR_DEFAULT_COLLAPSED = { palette: true, demuc: true };
+function setupCollapsibleSidebar() {
+  let state = {};
+  try { state = JSON.parse(localStorage.getItem(SIDEBAR_COLLAPSE_KEY) || '{}') || {}; } catch (e) { state = {}; }
+  document.querySelectorAll('.sb-collapsible[data-sb]').forEach(sec => {
+    const key = sec.dataset.sb;
+    const collapsed = state[key] !== undefined ? state[key] : !!SIDEBAR_DEFAULT_COLLAPSED[key];
+    sec.classList.toggle('is-collapsed', collapsed);
+    const head = sec.querySelector('.sb-head');
+    if (!head) return;
+    head.addEventListener('click', (e) => {
+      if (e.target.closest('button, input, select, a')) return;
+      const now = !sec.classList.contains('is-collapsed');
+      sec.classList.toggle('is-collapsed', now);
+      state[key] = now;
+      try { localStorage.setItem(SIDEBAR_COLLAPSE_KEY, JSON.stringify(state)); } catch (err) { /* bỏ qua */ }
+    });
+  });
+}
+
 // Nhãn hiển thị cho 1 ngày trên dải ngày lễ của Bảng Lịch -> { name, type } | null
 // type: 'off' | 'makeup-work' | 'observance' | 'custom-off'
 function getDayLabelInfo(dateStr) {
@@ -3548,16 +3629,39 @@ function buildLinkMenuItems(task, multiIds) {
   const byId = new Map(AppState.tasks.map(t => [t.id, t]));
 
   if (multiIds && multiIds.length > 1) {
+    const chosen = () => AppState.tasks.filter(t => multiIds.includes(t.id))
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
     items.push({
-      label: `🔗 Nối chuỗi ${multiIds.length} việc đã chọn (theo thứ tự ngày)`,
+      label: `🔗 Liên kết nhóm ${multiIds.length} việc: làm lần lượt • nét đậm • xếp cạnh nhau`,
+      shortcut: 'FS',
+      onClick: () => linkSelectedTasksAsGroup(multiIds, 'FS')
+    });
+    items.push({
+      label: `⇉ Liên kết nhóm ${multiIds.length} việc: bắt đầu cùng • nét đậm • xếp cạnh nhau`,
+      shortcut: 'SS',
+      onClick: () => linkSelectedTasksAsGroup(multiIds, 'SS')
+    });
+    items.push({ divider: true });
+    items.push({
+      label: `🔗 Nối chuỗi ${multiIds.length} việc đã chọn: làm lần lượt (FS)`,
       onClick: () => {
-        const chosen = AppState.tasks.filter(t => multiIds.includes(t.id))
-          .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+        const list = chosen();
         let added = 0;
-        for (let i = 1; i < chosen.length; i++) {
-          if (addPredecessorLink(chosen[i], chosen[i - 1], AppState.tasks)) added++;
+        for (let i = 1; i < list.length; i++) {
+          if (addPredecessorLink(list[i], list[i - 1], AppState.tasks, 'FS')) added++;
         }
-        syncAllFromMSProject(added > 0 ? `Đã nối ${added} liên kết giữa các việc đã chọn!` : 'Các việc đã được nối sẵn (hoặc sẽ tạo vòng lặp).');
+        syncAllFromMSProject(added > 0 ? `Đã nối ${added} liên kết làm lần lượt!` : 'Các việc đã được nối sẵn (hoặc sẽ tạo vòng lặp).');
+      }
+    });
+    items.push({
+      label: `⇉ ${multiIds.length} việc đã chọn bắt đầu CÙNG việc đầu tiên (SS)`,
+      onClick: () => {
+        const list = chosen();
+        let added = 0;
+        for (let i = 1; i < list.length; i++) {
+          if (addPredecessorLink(list[i], list[0], AppState.tasks, 'SS')) added++;
+        }
+        syncAllFromMSProject(added > 0 ? `Đã nối ${added} việc bắt đầu cùng "${list[0].title}"!` : 'Các việc đã được nối sẵn (hoặc sẽ tạo vòng lặp).');
       }
     });
     items.push({
@@ -3577,21 +3681,37 @@ function buildLinkMenuItems(task, multiIds) {
   }
 
   const above = getTaskRowAbove(task);
-  if (above && !preds.some(l => l.id === above.id)) {
-    items.push({
-      label: `🔗 Nối sau việc phía trên: "${truncateLabel(above.title, 28)}"`,
-      shortcut: 'FS',
-      onClick: () => {
-        if (addPredecessorLink(task, above, AppState.tasks)) {
-          syncAllFromMSProject(`Đã nối "${task.title}" làm sau "${above.title}"!`);
-        } else {
-          showToast('Không nối được (sẽ tạo vòng lặp liên kết).');
+  if (above) {
+    const cur = preds.find(l => l.id === above.id);
+    if (!cur || cur.type === 'SS') {
+      items.push({
+        label: `🔗 Làm SAU khi xong: "${truncateLabel(above.title, 26)}"`,
+        shortcut: 'FS',
+        onClick: () => {
+          if (addPredecessorLink(task, above, AppState.tasks, 'FS')) {
+            syncAllFromMSProject(`Đã nối: "${task.title}" làm sau khi xong "${above.title}"`);
+          } else {
+            showToast('Không nối được (sẽ tạo vòng lặp liên kết).');
+          }
         }
-      }
-    });
+      });
+    }
+    if (!cur || cur.type !== 'SS') {
+      items.push({
+        label: `⇉ Bắt đầu CÙNG: "${truncateLabel(above.title, 26)}"`,
+        shortcut: 'SS',
+        onClick: () => {
+          if (addPredecessorLink(task, above, AppState.tasks, 'SS')) {
+            syncAllFromMSProject(`Đã nối: "${task.title}" bắt đầu cùng "${above.title}"`);
+          } else {
+            showToast('Không nối được (sẽ tạo vòng lặp liên kết).');
+          }
+        }
+      });
+    }
   }
   items.push({
-    label: '🔗 Chọn việc làm trước (Liên kết)…',
+    label: '🔗 Chọn việc liên kết phía trước…',
     shortcut: preds.length > 0 ? `${preds.length} liên kết` : '',
     onClick: () => openPredecessorPicker(task)
   });
@@ -3608,33 +3728,90 @@ function buildLinkMenuItems(task, multiIds) {
   return items;
 }
 
+// Liên kết nhóm các việc đang chọn: nối bằng nét đậm + xếp các việc đứng liền nhau
+// (bỏ qua sắp xếp theo thời gian cho dự án đó; bấm "🔃 Theo ngày" để xếp lại theo thời gian)
+function linkSelectedTasksAsGroup(multiIds, type = 'FS') {
+  const chosen = AppState.tasks.filter(t => multiIds.includes(t.id))
+    .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+  const byCal = new Map();
+  chosen.forEach(t => {
+    if (!byCal.has(t.calendarId)) byCal.set(t.calendarId, []);
+    byCal.get(t.calendarId).push(t);
+  });
+
+  let linked = 0;
+  let skipped = 0;
+  byCal.forEach((list, calId) => {
+    // 1. Nối liên kết + đánh dấu nét đậm
+    for (let i = 1; i < list.length; i++) {
+      const pred = type === 'SS' ? list[0] : list[i - 1];
+      addPredecessorLink(list[i], pred, AppState.tasks, type);
+      const link = (list[i].predecessors || []).find(l => l.id === pred.id && (l.type === 'SS' ? 'SS' : 'FS') === type);
+      if (link) {
+        link.emphasis = true;
+        linked++;
+      } else {
+        skipped++;
+      }
+    }
+
+    // 2. Xếp các việc trong nhóm đứng liền nhau, tại vị trí của việc đầu tiên trong nhóm
+    if (list.length > 1) {
+      const calTasks = AppState.tasks.filter(t => t.calendarId === calId);
+      const groupSet = new Set(list);
+      const firstIdx = calTasks.findIndex(t => groupSet.has(t));
+      const others = calTasks.filter(t => !groupSet.has(t));
+      const newOrder = [...others.slice(0, firstIdx), ...list, ...others.slice(firstIdx)];
+      let k = 0;
+      AppState.tasks = AppState.tasks.map(t => (t.calendarId === calId ? newOrder[k++] : t));
+      const cal = AppState.calendars.find(c => c.id === calId);
+      if (cal) cal.hasManualTaskOrder = true;
+    }
+  });
+
+  const kind = type === 'SS' ? 'bắt đầu cùng' : 'làm lần lượt';
+  syncAllFromMSProject(
+    linked > 0
+      ? `Đã liên kết nhóm ${chosen.length} việc (${kind}, nét đậm) và xếp cạnh nhau!${skipped ? ` • Bỏ qua ${skipped} liên kết vì tạo vòng lặp` : ''}`
+      : 'Không nối được (sẽ tạo vòng lặp liên kết).'
+  );
+}
+
 function truncateLabel(text, max) {
   const t = String(text || '');
   return t.length > max ? t.slice(0, max - 1) + '…' : t;
 }
 
-// Danh sách việc trong cùng dự án để bật/tắt liên kết "làm trước"
+// Danh sách việc trong cùng dự án: bấm để đổi lần lượt  Không nối -> Làm sau (FS) -> Bắt đầu cùng (SS) -> Không nối
 function openPredecessorPicker(task) {
   const preds = Array.isArray(task.predecessors) ? task.predecessors : [];
   const candidates = AppState.tasks.filter(t =>
     t.calendarId === task.calendarId && t.id !== task.id && t.visibleOnBoard !== false
   );
   const items = candidates.map(c => {
-    const linked = preds.some(l => l.id === c.id);
-    const wouldCycle = !linked && dependsOn(c.id, task.id, AppState.tasks);
+    const link = preds.find(l => l.id === c.id);
+    const state = link ? (link.type === 'SS' ? 'SS' : 'FS') : null;
+    const wouldCycle = !link && dependsOn(c.id, task.id, AppState.tasks);
+    const mark = state === 'FS' ? '🔗' : state === 'SS' ? '⇉' : '☐';
     return {
-      label: `${linked ? '☑' : '☐'} ${truncateLabel(c.title, 38)} (${formatShortVNDate(c.startDate)} → ${formatShortVNDate(c.endDate)})`,
-      shortcut: wouldCycle ? 'vòng lặp' : '',
+      label: `${mark} ${truncateLabel(c.title, 36)} (${formatShortVNDate(c.startDate)} → ${formatShortVNDate(c.endDate)})`,
+      shortcut: wouldCycle ? 'vòng lặp' : (state === 'FS' ? 'Làm sau' : state === 'SS' ? 'Cùng bắt đầu' : ''),
       onClick: () => {
-        if (linked) {
+        if (wouldCycle) {
+          showToast('Không thể nối: việc này đang phụ thuộc vào việc bạn chọn (tạo vòng lặp).');
+          return;
+        }
+        if (!state) {
+          addPredecessorLink(task, c, AppState.tasks, 'FS');
+          syncAllFromMSProject(`🔗 "${task.title}" làm SAU khi xong "${c.title}" (bấm lần nữa để đổi sang Bắt đầu cùng)`);
+        } else if (state === 'FS') {
+          addPredecessorLink(task, c, AppState.tasks, 'SS');
+          syncAllFromMSProject(`⇉ "${task.title}" bắt đầu CÙNG "${c.title}" (bấm lần nữa để bỏ nối)`);
+        } else {
           removePredecessorLink(task, c.id);
           syncAllFromMSProject(`Đã bỏ liên kết "${c.title}" → "${task.title}"`);
-        } else if (wouldCycle) {
-          showToast('Không thể nối: việc này đang phụ thuộc vào việc bạn chọn (tạo vòng lặp).');
-        } else {
-          addPredecessorLink(task, c, AppState.tasks);
-          syncAllFromMSProject(`Đã nối "${task.title}" làm sau "${c.title}"`);
         }
+        setTimeout(() => openPredecessorPicker(task), 60);
       }
     };
   });
@@ -3642,8 +3819,9 @@ function openPredecessorPicker(task) {
     showToast('Dự án này chưa có việc nào khác để liên kết.');
     return;
   }
-  const rect = { x: Math.round(window.innerWidth / 2 - 160), y: 120 };
-  showCustomContextMenu(rect.x, rect.y, `🔗 "${truncateLabel(task.title, 30)}" làm SAU các việc được tick:`, items);
+  const rect = { x: Math.round(window.innerWidth / 2 - 180), y: 110 };
+  items.unshift({ label: 'ℹ️ Bấm từng việc để đổi: ☐ không nối → 🔗 làm sau khi xong → ⇉ bắt đầu cùng', onClick: () => setTimeout(() => openPredecessorPicker(task), 60) }, { divider: true });
+  showCustomContextMenu(rect.x, rect.y, `🔗 Liên kết cho: "${truncateLabel(task.title, 30)}"`, items);
 }
 
 function openProjectContextMenu(e, cal) {
@@ -4166,8 +4344,7 @@ function setupMSProjectEvents() {
   if (btnSortByDate) {
     btnSortByDate.addEventListener('click', (e) => {
       e.stopPropagation();
-      snapshotState();
-      sortAllTasksChronologically();
+      sortAllTasksChronologically(true); // bỏ cả thứ tự tự xếp (nhóm liên kết) -> xếp lại theo ngày
       syncAllFromMSProject('Đã sắp xếp toàn bộ công việc theo thứ tự ngày bắt đầu!');
     });
   }
@@ -4558,6 +4735,7 @@ function renderMSProjectView() {
       if (!lastTaskEnd || t.endDate > lastTaskEnd) lastTaskEnd = t.endDate;
     });
     const spanWorkDays = (firstTaskStart && lastTaskEnd) ? countWorkingDays(firstTaskStart, lastTaskEnd, true) : 0;
+    const spanActualDays = (firstTaskStart && lastTaskEnd) ? diffDaysInclusive(firstTaskStart, lastTaskEnd) : 0;
 
     kpiSummary.innerHTML = `
       <div class="msp-kpi-pill">
@@ -4568,9 +4746,11 @@ function renderMSProjectView() {
         <span>Hạng mục:</span>
         <strong>${totalTasksCount} việc</strong>
       </div>
-      <div class="msp-kpi-pill">
-        <span>Tổng công:</span>
-        <strong>${spanWorkDays} ngày</strong>
+      <div class="msp-kpi-pill" title="Ngày làm việc (LV) = ngày thực tế (TT) trừ ngày nghỉ, tính từ ngày bắt đầu sớm nhất đến ngày kết thúc muộn nhất">
+        <span>Tổng:</span>
+        <strong>${spanWorkDays} ngày LV</strong>
+        <span class="msp-kpi-sep">•</span>
+        <strong class="msp-kpi-sub">${spanActualDays} ngày TT</strong>
       </div>
       ${firstTaskStart && lastTaskEnd ? `
       <div class="msp-kpi-pill">
@@ -4614,6 +4794,7 @@ function renderMSProjectView() {
 
     const dCell = document.createElement('div');
     dCell.className = 'msp-gantt-day-cell';
+    if (d.getDate() === 1) dCell.classList.add('is-month-first');
     if (offInfo.type === 'sunday' || offInfo.type === 'saturday') dCell.classList.add('is-sunday');
     if (offInfo.type === 'saturday-half') dCell.classList.add('is-saturday-half');
     if (offInfo.type === 'holiday') dCell.classList.add('is-holiday');
@@ -5381,53 +5562,76 @@ function renderMSProjectView() {
         <marker id="msp-arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
           <path d="M 1 2 L 7 5 L 1 8 z" fill="#0284c7" />
         </marker>
+        <marker id="msp-arrow-bold" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="4" markerHeight="4" orient="auto-start-reverse">
+          <path d="M 1 1.5 L 8 5 L 1 8.5 z" fill="#0b4f8a" />
+        </marker>
       </defs>
     `;
     let svgPaths = '';
-    const r = 4; // Bán kính bo góc cong mềm mại kiểu MS Project
-
     const rowByTaskId = new Map(rowRecords.map(rr => [rr.task.id, rr]));
-    const linkPairs = [];
-    rowRecords.forEach(rr => {
-      (rr.task.predecessors || []).forEach(link => {
-        const predRow = rowByTaskId.get(link.id);
-        if (predRow) linkPairs.push([predRow, rr]);
-      });
-    });
-    {
-      for (let i = 0; i < linkPairs.length; i++) {
-        const prev = linkPairs[i][0];
-        const next = linkPairs[i][1];
+    const barH = ROW_HEIGHT <= 28 ? Math.max(14, ROW_HEIGHT - 6) : Math.max(18, Math.min(38, ROW_HEIGHT - 16));
 
-        const x1 = prev.rightPx;
-        const y1 = prev.centerY;
-        const x2 = next.leftPx;
-        const y2 = next.centerY;
-
-        let dPath = '';
-        if (x2 >= x1 + 14) {
-          // Đi thẳng sang phải rồi rẽ xuống hoặc lên tới việc tiếp theo
-          const midX = Math.round((x1 + x2) / 2);
-          if (y2 > y1) {
-            dPath = `M ${x1} ${y1} L ${midX - r} ${y1} Q ${midX} ${y1} ${midX} ${y1 + r} L ${midX} ${y2 - r} Q ${midX} ${y2} ${midX + r} ${y2} L ${x2 - 1} ${y2}`;
-          } else {
-            dPath = `M ${x1} ${y1} L ${midX - r} ${y1} Q ${midX} ${y1} ${midX} ${y1 - r} L ${midX} ${y2 + r} Q ${midX} ${y2} ${midX + r} ${y2} L ${x2 - 1} ${y2}`;
-          }
+    // Vẽ đường gấp khúc vuông góc, bo tròn các góc (kiểu MS Project)
+    const orthoPath = (pts, rad = 4) => {
+      const clean = pts.filter((pt, i) => i === 0 || pt[0] !== pts[i - 1][0] || pt[1] !== pts[i - 1][1]);
+      if (clean.length < 2) return '';
+      let d = `M ${clean[0][0]} ${clean[0][1]}`;
+      for (let i = 1; i < clean.length; i++) {
+        const [x, y] = clean[i];
+        if (i < clean.length - 1) {
+          const [px, py] = clean[i - 1];
+          const [nx, ny] = clean[i + 1];
+          const inLen = Math.abs(x - px) + Math.abs(y - py);
+          const outLen = Math.abs(nx - x) + Math.abs(ny - y);
+          const rr = Math.min(rad, inLen / 2, outLen / 2);
+          const bx = x - Math.sign(x - px) * rr;
+          const by = y - Math.sign(y - py) * rr;
+          const ax = x + Math.sign(nx - x) * rr;
+          const ay = y + Math.sign(ny - y) * rr;
+          d += ` L ${bx} ${by} Q ${x} ${y} ${ax} ${ay}`;
         } else {
-          // Việc tiếp theo bắt đầu sớm hơn hoặc bằng ngày việc trước -> vòng ra ngoài và đi xuống
-          const outX = x1 + 10;
-          const dropY = Math.round((y1 + y2) / 2);
-          const backX = Math.max(4, x2 - 12);
-          if (y2 > y1) {
-            dPath = `M ${x1} ${y1} L ${outX - r} ${y1} Q ${outX} ${y1} ${outX} ${y1 + r} L ${outX} ${dropY - r} Q ${outX} ${dropY} ${outX - r} ${dropY} L ${backX + r} ${dropY} Q ${backX} ${dropY} ${backX} ${dropY + r} L ${backX} ${y2 - r} Q ${backX} ${y2} ${backX + r} ${y2} L ${x2 - 1} ${y2}`;
+          d += ` L ${x} ${y}`;
+        }
+      }
+      return d;
+    };
+
+    rowRecords.forEach(succ => {
+      (succ.task.predecessors || []).forEach(link => {
+        const pred = rowByTaskId.get(link.id);
+        if (!pred) return;
+        const isSS = link.type === 'SS';
+        const y1 = pred.centerY;
+        const y2 = succ.centerY;
+        const down = y2 >= y1;
+        const xs = succ.leftPx;
+        let pts;
+        if (isSS) {
+          // SS: đi ra từ ĐẦU thanh việc trước, chạy dọc xuống rồi vào đầu thanh việc sau
+          const xp = pred.leftPx;
+          const trunkX = Math.max(2, Math.min(xp, xs) - 8);
+          pts = [[xp, y1], [trunkX, y1], [trunkX, y2], [xs - 1, y2]];
+        } else {
+          // FS: đi ra từ ĐÁY cuối thanh việc trước (không đè lên nhãn ngày bên phải thanh),
+          // chạy theo khe giữa 2 dòng rồi cắm vào đầu thanh việc sau (kiểu MS Project)
+          const sx = Math.max(pred.leftPx + 4, pred.rightPx - 6);
+          const sy = down ? y1 + barH / 2 : y1 - barH / 2;
+          const laneY = down ? y1 + ROW_HEIGHT / 2 : y1 - ROW_HEIGHT / 2;
+          if (xs >= sx + 6) {
+            const entryX = Math.round(xs + Math.min(8, Math.max(4, (succ.rightPx - xs) / 3)));
+            pts = [[sx, sy], [sx, laneY], [entryX, laneY], [entryX, down ? y2 - barH / 2 - 1 : y2 + barH / 2 + 1]];
           } else {
-            dPath = `M ${x1} ${y1} L ${outX} ${y1} L ${outX} ${y2} L ${x2 - 1} ${y2}`;
+            const backX = Math.max(2, xs - 8);
+            pts = [[sx, sy], [sx, laneY], [backX, laneY], [backX, y2], [xs - 1, y2]];
           }
         }
-
-        svgPaths += `<path d="${dPath}" fill="none" stroke="#0284c7" stroke-width="1.15" marker-end="url(#msp-arrow)" opacity="0.85" />`;
-      }
-    }
+        if (link.emphasis) {
+          svgPaths += `<path class="msp-link-path is-bold ${isSS ? 'is-ss' : 'is-fs'}" d="${orthoPath(pts, 5)}" fill="none" stroke="#0b4f8a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#msp-arrow-bold)" opacity="0.95" />`;
+        } else {
+          svgPaths += `<path class="msp-link-path ${isSS ? 'is-ss' : 'is-fs'}" d="${orthoPath(pts)}" fill="none" stroke="#0284c7" stroke-width="1.15" marker-end="url(#msp-arrow)" opacity="0.85" />`;
+        }
+      });
+    });
 
     ganttSvg.innerHTML = svgDefs + svgPaths;
   }
@@ -5701,7 +5905,7 @@ function exportMSProjectXMLFile() {
         .map(l => `
       <PredecessorLink>
         <PredecessorUID>${taskUidMap.get(l.id)}</PredecessorUID>
-        <Type>1</Type>
+        <Type>${l.type === 'SS' ? 3 : 1}</Type>
         <CrossProject>0</CrossProject>
         <LinkLag>${Math.round((Number(l.lag) || 0) * 4800)}</LinkLag>
         <LagFormat>7</LagFormat>
@@ -5883,7 +6087,7 @@ function importMSProjectFile(file) {
             uid: getTagText(pl, 'PredecessorUID'),
             type: getTagText(pl, 'Type') || '1',
             lag: Math.round((parseInt(getTagText(pl, 'LinkLag') || '0', 10) || 0) / 4800)
-          })).filter(pl => pl.uid && pl.type === '1'); // Chỉ hỗ trợ Finish-to-Start
+          })).filter(pl => pl.uid && (pl.type === '1' || pl.type === '3')); // 1 = FS, 3 = SS
           importedTasks.push({
             _uid: uid,
             _predLinks: predLinks,
@@ -5912,7 +6116,7 @@ function importMSProjectFile(file) {
       importedTasks.forEach(t => {
         t.predecessors = (t._predLinks || [])
           .filter(pl => uidToId.has(pl.uid))
-          .map(pl => ({ id: uidToId.get(pl.uid), type: 'FS', lag: pl.lag }));
+          .map(pl => ({ id: uidToId.get(pl.uid), type: pl.type === '3' ? 'SS' : 'FS', lag: pl.lag }));
         delete t._uid;
         delete t._predLinks;
       });
@@ -6172,6 +6376,15 @@ window.addEventListener('DOMContentLoaded', () => {
   setupMSProjectEvents();
   setupGanttRangeSelection();
   setupEvents();
+  setupCollapsibleSidebar();
+  const wmChk = document.getElementById('export-watermark');
+  if (wmChk) {
+    wmChk.checked = AppState.exportWatermark !== false;
+    wmChk.addEventListener('change', () => {
+      AppState.exportWatermark = wmChk.checked;
+      saveToStorage();
+    });
+  }
   let _resizeTimer = null;
   window.addEventListener('resize', () => {
     clearTimeout(_resizeTimer);

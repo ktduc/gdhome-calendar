@@ -185,11 +185,12 @@ function getNextWorkingDateStr(dateStr, skipSundays = true) {
 }
 
 // =========================================================================
-// LIÊN KẾT TIẾN ĐỘ (PREDECESSORS) - Finish-to-Start (FS) + độ trễ (lag)
-// task.predecessors = [{ id: 'task_xxx', type: 'FS', lag: <số ngày làm việc> }]
-//  - lag = 0  : việc sau bắt đầu ngay ngày làm việc kế tiếp sau khi việc trước xong
-//  - lag > 0  : cách thêm N ngày làm việc
-//  - lag < 0  : làm gối đầu (bắt đầu sớm hơn N ngày trước khi việc trước xong)
+// LIÊN KẾT TIẾN ĐỘ (PREDECESSORS) + độ trễ (lag, tính bằng ngày làm việc)
+// task.predecessors = [{ id: 'task_xxx', type: 'FS' | 'SS', lag: <số ngày làm việc> }]
+//  - FS (Finish-to-Start): việc sau bắt đầu SAU KHI việc trước XONG
+//      lag = 0 -> bắt đầu ngay ngày làm việc kế tiếp; lag > 0 -> cách thêm N ngày; lag < 0 -> gối đầu
+//  - SS (Start-to-Start): việc sau BẮT ĐẦU CÙNG / SAU khi việc trước BẮT ĐẦU
+//      lag = 0 -> bắt đầu cùng ngày; lag = 2 -> bắt đầu sau việc trước 2 ngày làm việc
 // =========================================================================
 
 function _schedTasks(tasks) {
@@ -198,16 +199,26 @@ function _schedTasks(tasks) {
 }
 
 // Ngày bắt đầu sớm nhất của 1 việc theo 1 liên kết
+function getLinkTypeOf(link) {
+  return link && link.type === 'SS' ? 'SS' : 'FS';
+}
+
+// Mốc gốc của liên kết: FS = ngày làm việc kế tiếp sau khi việc trước xong; SS = ngày bắt đầu của việc trước
+function getLinkBaseDate(predTask, type, skipSundays = true) {
+  if (type === 'SS') return shiftDateByWorkingDays(predTask.startDate, 0, skipSundays);
+  return getNextWorkingDateStr(predTask.endDate, skipSundays);
+}
+
 function getLinkedStartDate(predTask, link, skipSundays = true) {
-  const base = getNextWorkingDateStr(predTask.endDate, skipSundays);
+  const base = getLinkBaseDate(predTask, getLinkTypeOf(link), skipSundays);
   const lag = Math.round(Number(link.lag) || 0);
   return lag === 0 ? base : shiftDateByWorkingDays(base, lag, skipSundays);
 }
 
 // Tính lại độ trễ (lag) của 1 liên kết theo vị trí hiện tại của 2 việc
-function computeLinkLag(predTask, succTask) {
+function computeLinkLag(predTask, succTask, type = 'FS') {
   const skip = succTask.skipSundays !== false;
-  const base = getNextWorkingDateStr(predTask.endDate, skip);
+  const base = getLinkBaseDate(predTask, type === 'SS' ? 'SS' : 'FS', skip);
   return getSignedWorkingDaysGap(base, succTask.startDate, skip);
 }
 
@@ -219,7 +230,7 @@ function refreshAllLinkLags(tasks) {
     if (!Array.isArray(t.predecessors)) return;
     t.predecessors.forEach(link => {
       const pred = byId.get(link.id);
-      if (pred) link.lag = computeLinkLag(pred, t);
+      if (pred) link.lag = computeLinkLag(pred, t, getLinkTypeOf(link));
     });
   });
 }
@@ -241,12 +252,19 @@ function dependsOn(taskId, ancestorId, tasks) {
   return false;
 }
 
-function addPredecessorLink(succTask, predTask, tasks) {
+function addPredecessorLink(succTask, predTask, tasks, type = 'FS') {
   if (!succTask || !predTask || succTask.id === predTask.id) return false;
   if (dependsOn(predTask.id, succTask.id, tasks)) return false; // tạo vòng lặp
   if (!Array.isArray(succTask.predecessors)) succTask.predecessors = [];
-  if (succTask.predecessors.some(l => l.id === predTask.id)) return false;
-  succTask.predecessors.push({ id: predTask.id, type: 'FS', lag: computeLinkLag(predTask, succTask) });
+  const t = type === 'SS' ? 'SS' : 'FS';
+  const existing = succTask.predecessors.find(l => l.id === predTask.id);
+  if (existing) {
+    if (getLinkTypeOf(existing) === t) return false;
+    existing.type = t; // đổi loại liên kết
+    existing.lag = computeLinkLag(predTask, succTask, t);
+    return true;
+  }
+  succTask.predecessors.push({ id: predTask.id, type: t, lag: computeLinkLag(predTask, succTask, t) });
   return true;
 }
 
@@ -336,7 +354,7 @@ if (typeof module !== 'undefined' && module.exports) {
     DEFAULT_DAYS_OFF_CONFIG, getDaysOffConfig, formatDateStr, parseDateStr, getHolidayInfo, getHolidayName,
     getDayOverride, isDateDayOff, calculateTaskDays, countWorkingDays, shiftDateByWorkingDays,
     getSignedWorkingDaysGap, computeEndDateByWorkingDays, getNextWorkingDateStr,
-    getLinkedStartDate, computeLinkLag, refreshAllLinkLags, dependsOn, addPredecessorLink,
+    getLinkTypeOf, getLinkBaseDate, getLinkedStartDate, computeLinkLag, refreshAllLinkLags, dependsOn, addPredecessorLink,
     removePredecessorLink, propagateLinkedTasks, inferMissingPredecessors, cleanupDanglingLinks
   };
 }

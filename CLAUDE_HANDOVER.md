@@ -68,6 +68,19 @@
 - Giao diện responsive: header tự ẩn chữ nút theo độ rộng màn hình (1024 → 3440px), cột tên tự giới hạn trên màn hình nhỏ, trục ngày Gantt kéo dài kín màn hình siêu rộng, Bảng Lịch nở rộng trên màn hình ≥2000px. Ảnh xuất KHÔNG phụ thuộc kích thước màn hình (`_mspExportRendering`).
 - `Mo-Web-Lich-Tien-Do.bat` tự tắt server cũ ở cổng 3000 trước khi chạy.
 
+## 3d. Cập nhật 07/11/2026 - lần 3
+- Liên kết có 2 loại: FS (làm sau khi xong) và SS (bắt đầu cùng). Mũi tên kiểu MS Project: FS ra từ cuối thanh rồi cắm xuống đầu thanh sau; SS ra từ đầu thanh, chạy dọc xuống rồi vào đầu thanh sau. Xuất/nhập XML: Type 1 = FS, Type 3 = SS.
+- Chọn dự án trong bảng "Thêm công việc" chỉ hiện các dự án cùng nhóm "Dự án của ..." với dự án đang chọn.
+- Ngày mùng 1 đầu tháng: số đỏ, to hơn (Bảng Lịch + Gantt có vạch đỏ đầu tháng).
+- Thanh bên trái gọn lại: 5 mục thu gọn được (Dự án / Hiển thị Timeline / Ngày nghỉ / Bảng màu / Cột & đề mục), nhớ trạng thái mở-đóng.
+- Bỏ nhãn đỏ "MS PROJECT"; hàng tiêu đề cột cao 68px (+20%); KPI "Tổng: x ngày LV • y ngày TT".
+- Ảnh xuất / Copy ảnh có sọc chéo chìm mờ chống chỉnh sửa (`applyAntiEditWatermark`), tắt được trong hộp "Xuất ảnh".
+- Thêm 2 bảng màu: "Gạch nung / Gỉ sắt" (rust) và "Lông vũ / Nâu Đá" (eagle, đã giảm tương phản).
+
+## 3e. Liên kết nhóm (nét đậm)
+- Chọn nhiều việc -> chuột phải -> "Liên kết nhóm ... (làm lần lượt / bắt đầu cùng)": nối FS/SS, đánh dấu `link.emphasis = true` (vẽ nét đậm #0b4f8a 2.4px) và xếp các việc đứng liền nhau (`calendar.hasManualTaskOrder = true`, không tự sắp theo ngày nữa). Nút "🔃 Theo ngày" xếp lại theo thời gian. Code: `linkSelectedTasksAsGroup()`.
+- Mũi tên FS đi ra từ đáy cuối thanh, chạy theo khe giữa 2 dòng -> không đè lên nhãn ngày.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

@@ -97,213 +97,157 @@
   <div class="app-body-layout">
     
     <!-- Sidebar Danh sách lịch bên trái -->
-    <aside class="app-sidebar" id="app-sidebar">
-      <div class="sidebar-top-action">
-        <button class="btn-google-create" id="btn-sidebar-create-task">
+    <aside class="app-sidebar sidebar-compact" id="app-sidebar">
+      <!-- NÚT TẠO VIỆC + CHUYỂN CHẾ ĐỘ XEM -->
+      <div class="sb-top">
+        <button class="btn-google-create" id="btn-sidebar-create-task" title="Tạo công việc mới">
           <i data-lucide="plus"></i>
-          <span>Tạo công việc</span>
+          <span>Tạo việc</span>
         </button>
-      </div>
-
-      <!-- CHUYỂN ĐỔI CHẾ ĐỘ XEM: LỊCH GOOGLE vs MICROSOFT PROJECT TIMELINE -->
-      <div class="sidebar-section view-mode-section">
-        <div class="sidebar-section-header">
-          <span>CHẾ ĐỘ XEM TIẾN ĐỘ</span>
-        </div>
-        <div class="view-mode-switcher">
-          <button type="button" class="view-mode-btn active" id="btn-view-calendar" data-view="calendar">
+        <div class="view-mode-switcher sb-seg">
+          <button type="button" class="view-mode-btn active" id="btn-view-calendar" data-view="calendar" title="Bảng Lịch nhiều tháng (kiểu Google Lịch)">
             <i data-lucide="calendar-days"></i>
-            <div class="vm-text">
-              <strong>Bảng Lịch (Tháng)</strong>
-              <span>Dàn nhiều tháng kiểu Google Lịch</span>
-            </div>
+            <div class="vm-text"><strong>Lịch</strong></div>
           </button>
-          <button type="button" class="view-mode-btn" id="btn-view-msproject" data-view="msproject">
+          <button type="button" class="view-mode-btn" id="btn-view-msproject" data-view="msproject" title="Timeline Gantt & WBS (kiểu MS Project)">
             <i data-lucide="gantt-chart-square"></i>
-            <div class="vm-text">
-              <strong>Timeline (MS Project)</strong>
-              <span>Biểu đồ Gantt & WBS các dự án</span>
-            </div>
+            <div class="vm-text"><strong>Timeline</strong></div>
           </button>
         </div>
-
-        <!-- Tùy chọn nhanh khi đang ở chế độ MS Project -->
-        <div class="msp-sidebar-options" id="msp-sidebar-options" style="display: none;">
-          <label class="msp-opt-label">Phạm vi dự án trên Timeline:</label>
-          <select id="msp-scope-select" class="form-select msp-mini-select">
-            <option value="all-visible">Tất cả lịch dự án đang bật</option>
-            <option value="active-only">Chỉ lịch khách hàng đang chọn</option>
-          </select>
-          <label class="msp-opt-label" style="margin-top: 6px;">Độ rộng cột ngày (Zoom):</label>
-          <div class="msp-zoom-btns msp-zoom-btns-5" id="msp-col-zoom-btns">
-            <button type="button" class="msp-zoom-btn" data-zoom="compact" title="24px / ngày">Thu gọn</button>
-            <button type="button" class="msp-zoom-btn active" data-zoom="normal" title="34px / ngày">Chuẩn</button>
-            <button type="button" class="msp-zoom-btn" data-zoom="wide" title="46px / ngày">Rộng</button>
-            <button type="button" class="msp-zoom-btn" data-zoom="xwide" title="62px / ngày">Rất rộng</button>
-            <button type="button" class="msp-zoom-btn" data-zoom="xxwide" title="84px / ngày">Cực rộng</button>
-          </div>
-          <label class="msp-opt-label" style="margin-top: 6px;">Độ cao dòng / cột:</label>
-          <div class="msp-zoom-btns msp-zoom-btns-4" id="msp-row-height-btns">
-            <button type="button" class="msp-row-height-btn" data-row-height="mini" title="Độ cao dòng rất thấp (24px)">Rất thấp</button>
-            <button type="button" class="msp-row-height-btn" data-row-height="compact" title="Độ cao dòng thấp (32px)">Thấp</button>
-            <button type="button" class="msp-row-height-btn active" data-row-height="normal" title="Độ cao dòng chuẩn (42px)">Chuẩn</button>
-            <button type="button" class="msp-row-height-btn" data-row-height="tall" title="Độ cao dòng cao (54px)">Cao</button>
-          </div>
-        </div>
       </div>
 
-      <!-- BẢNG MÀU GIAO DIỆN (PALETTE) & TỰ ĐỘNG DỊCH NGÀY -->
-      <div class="sidebar-section palette-theme-section">
-        <div class="sidebar-section-header">
-          <span>🎨 GIAO DIỆN BẢNG MÀU & LỊCH TRÌNH</span>
-        </div>
-        <label class="msp-opt-label" for="sidebar-palette-select">Chọn Palette màu (Tự nhảy màu theo thứ tự):</label>
-        <select id="sidebar-palette-select" class="form-select msp-mini-select" style="margin-top:3px;">
-          <option value="default">Mặc định GD HOME (20 màu - 2 hàng)</option>
-          <option value="default_soft">Mặc định Dịu mắt (Giảm độ rực - 20 màu)</option>
-          <option value="olive">Olive / Rêu Đất (20 màu - 2 hàng)</option>
-          <option value="mauve">Mauve / Khói Tím (20 màu - 2 hàng)</option>
-        </select>
-        <div class="sidebar-palette-preview" id="sidebar-palette-preview" title="Bấm vào màu bất kỳ hoặc bấm nút bên dưới để tự nhảy màu theo thứ tự"></div>
-        <button type="button" class="btn btn-outline btn-sm btn-full" id="btn-apply-palette-sequence" style="margin-top:6px; font-size:11.5px; font-weight:700; justify-content:center;">
-          🎨 Tự nhảy màu các việc theo thứ tự Palette
-        </button>
-        <div style="border-top: 1px dashed #cbd5e1; margin: 8px 0 5px;"></div>
-        <label class="sidebar-holiday-item" title="Khi chỉnh ngày bắt đầu hoặc kết thúc của 1 mục, các mục phía sau sẽ tự động dịch theo và giữ nguyên số ngày làm việc">
-          <input type="checkbox" id="toggle-cascade-shift" checked>
-          <span class="cal-color-box" style="background:#0288d1;"></span>
-          <span class="cal-item-name" style="white-space:normal; line-height:1.25;">Tự động dịch các mục sau khi đổi ngày (giữ nguyên ngày làm việc)</span>
-        </label>
-      </div>
-
-      <!-- Thông báo Lịch đang chọn để nhập việc -->
-      <div class="active-calendar-indicator">
-        <span class="indicator-label">Đang chọn nhập vào lịch:</span>
-        <div class="active-cal-badge" id="active-cal-badge">
-          <span class="cal-dot" id="active-cal-dot" style="background:#cc0000;"></span>
-          <strong id="active-cal-name">A DŨNG VŨ YÊN - HẢI PHÒNG</strong>
-        </div>
-      </div>
-
-      <!-- Danh sách "Dự án của ..." (Hỗ trợ nhiều người dùng, sổ ra & thu gọn) -->
-      <div class="sidebar-section">
-        <div class="sidebar-section-header">
-          <span>DỰ ÁN CỦA ... (NHIỀU NGƯỜI)</span>
-          <div style="display:flex; align-items:center; gap:4px;">
-            <button type="button" class="icon-btn btn-sm-icon" id="btn-add-project-owner" title="Thêm mục 'Dự án của ...' mới cho người dùng khác">
+      <!-- 1. DỰ ÁN -->
+      <div class="sidebar-section sb-collapsible" data-sb="projects">
+        <div class="sidebar-section-header sb-head">
+          <span class="sb-title">📁 Dự án</span>
+          <div class="sb-head-actions">
+            <button type="button" class="icon-btn btn-sm-icon" id="btn-add-project-owner" title="Thêm nhóm 'Dự án của ...' cho người khác">
               <i data-lucide="folder-plus"></i>
             </button>
-            <button type="button" class="icon-btn btn-sm-icon" id="btn-open-new-calendar-modal" title="Tạo lịch dự án mới">
+            <button type="button" class="icon-btn btn-sm-icon" id="btn-open-new-calendar-modal" title="Tạo dự án mới">
               <i data-lucide="plus"></i>
             </button>
           </div>
         </div>
-
-        <div class="calendar-list-container" id="calendar-list-container">
-          <!-- Render các nhóm "Dự án của ..." sổ ra / thu gọn bằng JS -->
-        </div>
-      </div>
-
-      <!-- Tác vụ nhanh với Lịch đang chọn -->
-      <div class="sidebar-section sidebar-actions-box">
-        <div class="sidebar-section-header">
-          <span>THAO TÁC DANH MỤC ĐANG CHỌN</span>
-        </div>
-        <button class="btn btn-danger-outline btn-full" id="btn-clear-active-calendar" title="Xóa toàn bộ các thanh công việc thuộc lịch đang chọn bên trái">
-          <i data-lucide="eraser"></i> Xóa toàn bộ việc của lịch này
-        </button>
-      </div>
-
-      <!-- Tùy chọn Ngày nghỉ (3 mục: Ngày lễ ở Việt Nam, Thứ 7, Chủ nhật) & Âm lịch -->
-      <div class="sidebar-section">
-        <div class="sidebar-section-header">
-          <span>TÙY CHỌN NGÀY NGHỈ (TRỪ NGÀY)</span>
-        </div>
-        <div class="demuc-helper-note" style="margin-bottom:4px;">
-          Khi tick chọn, hệ thống tự trừ ngày nghỉ và tự cập nhật dòng Ghi chú cuối bảng:
-        </div>
-        <label class="sidebar-holiday-item" title="Tính Ngày lễ ở Việt Nam là ngày nghỉ và tự cập nhật xuống Ghi chú">
-          <input type="checkbox" id="toggle-vn-holidays" checked>
-          <span class="cal-color-box" style="background:#16a34a;"></span>
-          <span class="cal-item-name">Ngày lễ ở Việt Nam</span>
-        </label>
-        <label class="sidebar-holiday-item" title="Nghỉ chiều Thứ 7 (Tính Thứ 7 làm 0.5 ngày sáng, nghỉ 0.5 ngày chiều) và tự cập nhật xuống Ghi chú">
-          <input type="checkbox" id="toggle-off-saturday-half">
-          <span class="cal-color-box" style="background:#fb923c;"></span>
-          <span class="cal-item-name">Nghỉ chiều Thứ 7 (0.5 ngày)</span>
-        </label>
-        <label class="sidebar-holiday-item" title="Tính Thứ 7 nghỉ cả ngày và tự cập nhật xuống Ghi chú">
-          <input type="checkbox" id="toggle-off-saturday">
-          <span class="cal-color-box" style="background:#f59e0b;"></span>
-          <span class="cal-item-name">Thứ 7 (Nghỉ cả ngày)</span>
-        </label>
-        <label class="sidebar-holiday-item" title="Tính Chủ nhật là ngày nghỉ và tự cập nhật xuống Ghi chú">
-          <input type="checkbox" id="toggle-off-sunday" checked>
-          <span class="cal-color-box" style="background:#dc2626;"></span>
-          <span class="cal-item-name">Chủ nhật</span>
-        </label>
-        <div style="border-top: 1px dashed #e2e8f0; margin: 6px 0 4px;"></div>
-        <label class="sidebar-holiday-item" title="Hiển thị ngày Âm lịch rất nhỏ bên cạnh ngày Dương lịch">
-          <input type="checkbox" id="toggle-lunar-dates" checked>
-          <span class="cal-color-box" style="background:#64748b;"></span>
-          <span class="cal-item-name">Hiện ngày Âm nhỏ cạnh ngày Dương</span>
-        </label>
-      </div>
-
-      <!-- ĐỀ MỤC & TÙY CHỈNH SÂU TRÊN BẢNG (Tick thì nhảy lên bảng, bỏ tick vẫn lưu ở đây) -->
-      <div class="sidebar-section demuc-section" id="sidebar-demuc-section">
-        <div class="sidebar-section-header demuc-header-badge">
-          <span>📋 ĐỀ MỤC & TÙY CHỈNH BẢNG</span>
-          <button type="button" class="icon-btn btn-sm-icon" id="btn-Autofit-msp-cols" title="Tự động căn vừa khít độ rộng các cột (Auto-fit như Excel)">
-            <i data-lucide="columns"></i>
+        <div class="sb-body">
+          <div class="active-calendar-indicator" title="Việc mới sẽ được thêm vào dự án này">
+            <span class="indicator-label">Đang nhập vào:</span>
+            <div class="active-cal-badge" id="active-cal-badge">
+              <span class="cal-dot" id="active-cal-dot" style="background:#cc0000;"></span>
+              <strong id="active-cal-name">—</strong>
+            </div>
+          </div>
+          <div class="calendar-list-container" id="calendar-list-container"></div>
+          <button class="sb-danger-link" id="btn-clear-active-calendar" title="Xóa toàn bộ các thanh công việc thuộc dự án đang chọn">
+            <i data-lucide="eraser"></i> Xóa hết việc của dự án đang chọn
           </button>
         </div>
-        <div class="demuc-helper-note">
-          Tick chọn để đưa mục lên bảng chính. Bỏ tick mục vẫn giữ tại đây để bật lại bất cứ lúc nào:
-        </div>
+      </div>
 
-        <!-- Nhóm 1: Các Cột & Khối trên Bảng Timeline -->
-        <div class="demuc-group-title">1. CÁC CỘT TRÊN BẢNG:</div>
-        <div class="demuc-checklist" id="demuc-columns-checklist">
-          <label class="demuc-check-item" title="Ẩn/hiện cột Tiến độ (%) trên bảng WBS">
-            <input type="checkbox" data-demuc-col="colProg" checked>
-            <span class="demuc-dot" style="background:#107c41;"></span>
-            <span>Cột Tiến độ (%)</span>
-          </label>
-          <label class="demuc-check-item" title="Ẩn/hiện cột Mã WBS (1, 1.1, 1.2...)">
-            <input type="checkbox" data-demuc-col="colWbs" checked>
-            <span class="demuc-dot" style="background:#475569;"></span>
-            <span>Cột Mã phân cấp WBS</span>
-          </label>
-          <label class="demuc-check-item" title="Ẩn/hiện cột Số ngày làm việc">
-            <input type="checkbox" data-demuc-col="colDur" checked>
-            <span class="demuc-dot" style="background:#0288d1;"></span>
-            <span>Cột Số ngày làm việc</span>
-          </label>
-          <label class="demuc-check-item" title="Ẩn/hiện 2 cột Ngày Bắt đầu & Kết thúc">
-            <input type="checkbox" data-demuc-col="colDate" checked>
-            <span class="demuc-dot" style="background:#3949ab;"></span>
-            <span>Cột Ngày Bắt đầu & Kết thúc</span>
-          </label>
-          <label class="demuc-check-item" title="Ẩn/hiện cột nút Tác vụ (+ Việc / Sửa / Xóa)">
-            <input type="checkbox" data-demuc-col="colAct" checked>
-            <span class="demuc-dot" style="background:#64748b;"></span>
-            <span>Cột Nút Tác vụ (Sửa / Xóa)</span>
-          </label>
-          <label class="demuc-check-item" title="Ẩn/hiện mũi tên nối kết các giai đoạn trên biểu đồ Gantt">
-            <input type="checkbox" data-demuc-col="ganttArrows" checked>
-            <span class="demuc-dot" style="background:#7b1fa2;"></span>
-            <span>Mũi tên nối việc (Gantt)</span>
-          </label>
+      <!-- 2. HIỂN THỊ TIMELINE (chỉ hiện ở chế độ Timeline) -->
+      <div class="sidebar-section sb-collapsible msp-sidebar-options" data-sb="timeline" id="msp-sidebar-options" style="display: none;">
+        <div class="sidebar-section-header sb-head">
+          <span class="sb-title">📊 Hiển thị Timeline</span>
         </div>
+        <div class="sb-body">
+          <select id="msp-scope-select" class="form-select msp-mini-select" title="Phạm vi dự án trên Timeline">
+            <option value="all-visible">Tất cả dự án đang bật</option>
+            <option value="active-only">Chỉ dự án đang chọn</option>
+          </select>
+          <div class="sb-row-label">Rộng cột ngày</div>
+          <div class="msp-zoom-btns sb-seg-btns" id="msp-col-zoom-btns">
+            <button type="button" class="msp-zoom-btn" data-zoom="compact" title="Thu gọn - 24px / ngày">XS</button>
+            <button type="button" class="msp-zoom-btn active" data-zoom="normal" title="Chuẩn - 34px / ngày">S</button>
+            <button type="button" class="msp-zoom-btn" data-zoom="wide" title="Rộng - 46px / ngày">M</button>
+            <button type="button" class="msp-zoom-btn" data-zoom="xwide" title="Rất rộng - 62px / ngày">L</button>
+            <button type="button" class="msp-zoom-btn" data-zoom="xxwide" title="Cực rộng - 84px / ngày">XL</button>
+          </div>
+          <div class="sb-row-label">Cao dòng</div>
+          <div class="msp-zoom-btns sb-seg-btns" id="msp-row-height-btns">
+            <button type="button" class="msp-row-height-btn" data-row-height="mini" title="Rất thấp (24px)">XS</button>
+            <button type="button" class="msp-row-height-btn" data-row-height="compact" title="Thấp (32px)">S</button>
+            <button type="button" class="msp-row-height-btn active" data-row-height="normal" title="Chuẩn (42px)">M</button>
+            <button type="button" class="msp-row-height-btn" data-row-height="tall" title="Cao (54px)">L</button>
+          </div>
+        </div>
+      </div>
 
-        <!-- Nhóm 2: Danh sách từng Hạng mục công việc (Bỏ tick vẫn giữ ở đây, tick vào lại nhảy lên bảng) -->
-        <div class="demuc-group-title" style="margin-top: 8px; display:flex; justify-content:space-between; align-items:center;">
-          <span>2. ĐỀ MỤC HẠNG MỤC CÔNG VIỆC:</span>
-          <button type="button" class="demuc-mini-link" id="btn-demuc-check-all" title="Đưa tất cả hạng mục lên bảng">Hiện tất cả</button>
+      <!-- 3. NGÀY NGHỈ & TỰ DỊCH -->
+      <div class="sidebar-section sb-collapsible" data-sb="daysoff">
+        <div class="sidebar-section-header sb-head">
+          <span class="sb-title">📅 Ngày nghỉ (trừ ngày)</span>
         </div>
-        <div class="demuc-tasks-container" id="demuc-tasks-container">
-          <!-- Render danh sách các hạng mục công việc bằng JS -->
+        <div class="sb-body">
+          <div class="sb-chip-grid" title="Tick = tính là ngày nghỉ. Chuột phải vào 1 ô ngày để đánh dấu riêng ngày nghỉ / ngày đi làm.">
+            <label class="sb-chip" title="Ngày lễ chính thức ở Việt Nam (ngày làm bù tự tính là ngày đi làm)">
+              <input type="checkbox" id="toggle-vn-holidays" checked><span>Lễ VN</span>
+            </label>
+            <label class="sb-chip" title="Nghỉ chiều Thứ 7 (Thứ 7 tính 0.5 ngày)">
+              <input type="checkbox" id="toggle-off-saturday-half"><span>Chiều T7</span>
+            </label>
+            <label class="sb-chip" title="Nghỉ cả ngày Thứ 7">
+              <input type="checkbox" id="toggle-off-saturday"><span>Cả T7</span>
+            </label>
+            <label class="sb-chip" title="Nghỉ Chủ nhật">
+              <input type="checkbox" id="toggle-off-sunday" checked><span>Chủ nhật</span>
+            </label>
+          </div>
+          <label class="sb-switch" title="Khi đổi ngày 1 việc, các việc được nối phía sau tự dịch theo (giữ nguyên số ngày làm việc)">
+            <input type="checkbox" id="toggle-cascade-shift" checked>
+            <span>Tự dịch việc nối phía sau</span>
+          </label>
+          <label class="sb-switch" title="Hiện ngày Âm lịch nhỏ cạnh ngày Dương lịch">
+            <input type="checkbox" id="toggle-lunar-dates" checked>
+            <span>Hiện ngày Âm lịch</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- 4. BẢNG MÀU -->
+      <div class="sidebar-section sb-collapsible" data-sb="palette">
+        <div class="sidebar-section-header sb-head">
+          <span class="sb-title">🎨 Bảng màu</span>
+        </div>
+        <div class="sb-body">
+          <select id="sidebar-palette-select" class="form-select msp-mini-select" title="Chọn bộ màu (20 màu - 2 hàng)">
+            <option value="default">Mặc định GD HOME</option>
+            <option value="default_soft">Mặc định Dịu mắt</option>
+            <option value="olive">Olive / Rêu Đất</option>
+            <option value="mauve">Mauve / Khói Tím</option>
+            <option value="rust">Gạch nung / Gỉ sắt</option>
+            <option value="eagle">Lông vũ / Nâu Đá</option>
+          </select>
+          <div class="sidebar-palette-preview" id="sidebar-palette-preview" title="Bấm vào màu bất kỳ hoặc bấm nút bên dưới để tự nhảy màu theo thứ tự"></div>
+          <button type="button" class="btn btn-outline btn-sm btn-full" id="btn-apply-palette-sequence" title="Tô lại màu các việc lần lượt theo thứ tự bảng màu">
+            Tự nhảy màu theo thứ tự
+          </button>
+        </div>
+      </div>
+
+      <!-- 5. CỘT & ĐỀ MỤC TRÊN BẢNG -->
+      <div class="sidebar-section sb-collapsible demuc-section" data-sb="demuc" id="sidebar-demuc-section">
+        <div class="sidebar-section-header sb-head">
+          <span class="sb-title">📋 Cột & đề mục</span>
+          <div class="sb-head-actions">
+            <button type="button" class="icon-btn btn-sm-icon" id="btn-Autofit-msp-cols" title="Tự căn vừa khít độ rộng các cột (Auto-fit như Excel)">
+              <i data-lucide="columns"></i>
+            </button>
+          </div>
+        </div>
+        <div class="sb-body">
+          <div class="demuc-checklist sb-chip-grid" id="demuc-columns-checklist">
+            <label class="sb-chip" title="Ẩn/hiện cột Tiến độ (%)"><input type="checkbox" data-demuc-col="colProg" checked><span>Tiến độ %</span></label>
+            <label class="sb-chip" title="Ẩn/hiện cột Mã WBS"><input type="checkbox" data-demuc-col="colWbs" checked><span>Mã WBS</span></label>
+            <label class="sb-chip" title="Ẩn/hiện cột Số ngày"><input type="checkbox" data-demuc-col="colDur" checked><span>Số ngày</span></label>
+            <label class="sb-chip" title="Ẩn/hiện 2 cột Bắt đầu & Kết thúc"><input type="checkbox" data-demuc-col="colDate" checked><span>Ngày BĐ/KT</span></label>
+            <label class="sb-chip" title="Ẩn/hiện cột nút Tác vụ"><input type="checkbox" data-demuc-col="colAct" checked><span>Tác vụ</span></label>
+            <label class="sb-chip" title="Ẩn/hiện mũi tên nối việc trên Gantt"><input type="checkbox" data-demuc-col="ganttArrows" checked><span>Mũi tên nối</span></label>
+          </div>
+          <div class="sb-row-label sb-row-split">
+            <span>Hạng mục trên bảng (bỏ tick = tạm cất)</span>
+            <button type="button" class="demuc-mini-link" id="btn-demuc-check-all" title="Đưa tất cả hạng mục lên bảng">Hiện tất cả</button>
+          </div>
+          <div class="demuc-tasks-container" id="demuc-tasks-container"></div>
         </div>
       </div>
     </aside>
@@ -397,7 +341,6 @@
             <!-- Thanh Công Cụ & Tiêu đề kiểu MS Project (Cho phép tự gõ toàn bộ tiêu đề & đồng bộ 2 chiều) -->
             <div class="msp-top-header">
               <div class="msp-header-left">
-                <span class="msp-badge-icon"><i data-lucide="gantt-chart-square"></i> MS PROJECT</span>
                 <input type="text" id="msp-month-input" class="msp-inline-month-input" value="Tháng 9, 2026" title="Bấm vào để sửa Tháng lập bảng (đồng bộ với Bảng Lịch)">
               </div>
               <div class="msp-header-center">
@@ -617,6 +560,8 @@
                   <option value="default_soft">Palette Mặc định Dịu mắt (20 màu)</option>
                   <option value="olive">Palette Olive / Rêu Đất (20 màu)</option>
                   <option value="mauve">Palette Mauve / Khói Tím (20 màu)</option>
+                  <option value="rust">Palette Gạch nung / Gỉ sắt (20 màu)</option>
+                  <option value="eagle">Palette Lông vũ / Nâu Đá (20 màu)</option>
                 </select>
                 <input type="color" id="custom-color-picker" value="#cc0000" title="Chọn màu tùy chỉnh bất kỳ">
               </div>
@@ -767,6 +712,10 @@
           <label class="checkbox-label">
             <input type="checkbox" id="export-include-footer" checked>
             <span>Kèm Tiêu đề trên cùng & Logo chân trang (GD HOME)</span>
+          </label>
+          <label class="checkbox-label" style="margin-top: 6px;">
+            <input type="checkbox" id="export-watermark" checked>
+            <span>Chèn sọc chéo chìm mờ chống chỉnh sửa (cả khi Copy ảnh)</span>
           </label>
           <label class="checkbox-label" style="margin-top: 6px;">
             <input type="checkbox" id="export-high-res" checked>

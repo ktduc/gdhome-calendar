@@ -2062,7 +2062,7 @@ body {
 }
 
 .msp-table-header {
-  height: 56px;
+  height: 68px;
   background: #f1f5f9;
   border-bottom: 2px solid #cbd5e1;
   display: grid;
@@ -2725,7 +2725,7 @@ body {
 }
 
 .msp-gantt-header {
-  height: 56px;
+  height: 68px;
   background: #f1f5f9;
   border-bottom: 2px solid #cbd5e1;
   display: flex;
@@ -2734,7 +2734,7 @@ body {
 }
 
 .msp-gantt-months-row {
-  height: 28px;
+  height: 30px;
   display: flex;
   border-bottom: 1px solid #cbd5e1;
 }
@@ -2756,7 +2756,7 @@ body {
 }
 
 .msp-gantt-days-row {
-  height: 28px;
+  height: 38px;
   display: flex;
 }
 
@@ -3534,3 +3534,79 @@ body {
 @media (min-width: 3200px) {
   .workspace-wrapper, .schedule-sheet { max-width: 2400px; }
 }
+
+/* ===== Ngày mùng 1 đầu tháng dương: số đỏ & to hơn ===== */
+.day-month-label.is-month-first { color: #dc2626 !important; font-size: 17px; font-weight: 800; }
+.msp-gantt-day-cell.is-month-first { box-shadow: inset 2px 0 0 #dc2626; }
+.msp-gantt-day-cell.is-month-first .msp-solar-num { color: #dc2626 !important; font-size: 13px; font-weight: 900; }
+.msp-gantt-day-cell .msp-solar-num { font-size: 11px; }
+
+/* ===== KPI tiêu đề Timeline ===== */
+.msp-kpi-sep { opacity: 0.55; margin: 0 2px; }
+.msp-kpi-pill .msp-kpi-sub { opacity: 0.85; font-weight: 700; }
+
+/* =====================================================================
+   THANH BÊN TRÁI GỌN GÀNG (sidebar-compact)
+   ===================================================================== */
+.app-sidebar.sidebar-compact { width: 248px; min-width: 248px; padding: 12px 10px 60px; gap: 10px; }
+.sidebar-compact .sb-top { display: flex; flex-direction: column; gap: 8px; }
+.sidebar-compact .btn-google-create { padding: 8px 16px; font-size: 13.5px; gap: 8px; border-radius: 22px; align-self: flex-start; }
+.sidebar-compact .btn-google-create svg { width: 18px; height: 18px; }
+.sidebar-compact .sb-seg { display: grid !important; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
+.sidebar-compact .sb-seg .view-mode-btn { border: none; border-radius: 0; padding: 7px 8px; justify-content: center; gap: 6px; box-shadow: none; margin: 0; }
+.sidebar-compact .sb-seg .view-mode-btn + .view-mode-btn { border-left: 1px solid #cbd5e1; }
+.sidebar-compact .sb-seg .view-mode-btn svg { width: 16px; height: 16px; }
+.sidebar-compact .sb-seg .vm-text strong { font-size: 12.5px; }
+.sidebar-compact .sb-seg .vm-text span { display: none; }
+
+.sidebar-compact .sidebar-section { border: 1px solid #e5e7eb; border-radius: 9px; background: #fff; gap: 0; padding: 0; }
+.sidebar-compact .msp-sidebar-options { flex-direction: column; }
+.sidebar-compact .sb-head { padding: 7px 8px 7px 10px; cursor: pointer; user-select: none; border-radius: 9px; font-size: 11.5px; letter-spacing: 0.2px; color: #334155; text-transform: uppercase; }
+.sidebar-compact .sb-head:hover { background: #f8fafc; }
+.sidebar-compact .sb-title::before { content: '▾'; display: inline-block; width: 12px; color: #94a3b8; transition: transform 0.15s; }
+.sidebar-compact .is-collapsed .sb-title::before { transform: rotate(-90deg); }
+.sidebar-compact .sb-head-actions { display: flex; align-items: center; gap: 2px; }
+.sidebar-compact .sb-body { display: flex; flex-direction: column; gap: 6px; padding: 2px 8px 9px; }
+.sidebar-compact .is-collapsed .sb-body { display: none; }
+.sidebar-compact .sb-row-label { font-size: 10.5px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px; margin-top: 2px; }
+.sidebar-compact .sb-row-split { display: flex; justify-content: space-between; align-items: center; gap: 6px; text-transform: none; }
+.sidebar-compact .sb-seg-btns { display: grid; grid-template-columns: repeat(5, 1fr); gap: 3px; }
+.sidebar-compact #msp-row-height-btns { grid-template-columns: repeat(4, 1fr); }
+.sidebar-compact .sb-seg-btns button { padding: 4px 0; font-size: 11px; }
+
+.sidebar-compact .active-calendar-indicator { display: flex; align-items: center; gap: 6px; padding: 5px 8px; margin: 0; border-radius: 7px; background: #eff6ff; border: 1px solid #dbeafe; font-size: 11px; }
+.sidebar-compact .active-calendar-indicator .indicator-label { font-size: 10.5px; color: #64748b; white-space: nowrap; text-transform: none; margin: 0; }
+.sidebar-compact .active-cal-badge { min-width: 0; padding: 0; background: none; border: none; font-size: 11.5px; }
+.sidebar-compact .active-cal-badge strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sidebar-compact .project-owner-group { margin-bottom: 4px; }
+.sidebar-compact .project-owner-header { padding: 5px 6px; }
+.sidebar-compact .calendar-list-item { padding: 4px 6px; min-height: 0; margin: 1px 0; }
+.sidebar-compact .calendar-list-item .cal-item-name { font-size: 12px; }
+
+.sidebar-compact .sb-danger-link { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; border: none; background: none; color: #b91c1c; font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 2px; opacity: 0.8; }
+.sidebar-compact .sb-danger-link:hover { opacity: 1; text-decoration: underline; }
+.sidebar-compact .sb-danger-link svg { width: 13px; height: 13px; }
+
+.sidebar-compact .sb-chip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+.sidebar-compact .sb-chip { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11.5px; font-weight: 600; color: #334155; cursor: pointer; background: #fff; white-space: nowrap; overflow: hidden; }
+.sidebar-compact .sb-chip:has(input:checked) { background: #f1f5f9; border-color: #94a3b8; }
+.sidebar-compact .sb-chip input { margin: 0; width: 13px; height: 13px; flex-shrink: 0; }
+.sidebar-compact .sb-switch { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #334155; cursor: pointer; padding: 1px 2px; }
+.sidebar-compact .sb-switch input { margin: 0; width: 13px; height: 13px; }
+.sidebar-compact .msp-mini-select { padding: 5px 8px; font-size: 12px; }
+.sidebar-compact #btn-apply-palette-sequence { font-size: 11.5px; font-weight: 700; justify-content: center; padding: 5px 8px; }
+.sidebar-compact .demuc-tasks-container { max-height: 260px; overflow-y: auto; }
+.sidebar-compact .active-calendar-indicator { flex-direction: row; }
+.app-sidebar.sidebar-compact { width: 262px; min-width: 262px; }
+.sidebar-compact .calendar-list-item { padding: 3px 6px; position: relative; }
+.sidebar-compact .cal-item-left { min-width: 0; flex: 1; }
+.sidebar-compact .cal-item-actions { display: none; }
+.sidebar-compact .calendar-list-item:hover .cal-item-actions,
+.sidebar-compact .calendar-list-item.active-selected .cal-item-actions { display: flex; }
+.sidebar-compact .cal-action-btn { width: 20px; height: 20px; }
+.sidebar-compact .project-owner-title { font-size: 11.5px; }
+.sidebar-compact .project-owner-actions { gap: 0; }
+.sidebar-compact .owner-mini-btn { width: 18px; height: 18px; }
+.sidebar-compact .project-owner-actions { display: none; }
+.sidebar-compact .project-owner-header:hover .project-owner-actions { display: flex; }
