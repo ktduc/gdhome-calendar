@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261107f">
+  <link rel="stylesheet" href="style.css?v=20261107h">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -796,12 +796,12 @@
           <summary>⚙ Kết nối Notion: <span id="notion-conn-status">đang kiểm tra…</span></summary>
           <div class="int-settings-body">
             <ol class="int-steps">
-              <li>Mở <a href="https://www.notion.so/profile/integrations" target="_blank" rel="noopener">notion.so/profile/integrations</a> → <b>New integration</b> → đặt tên <i>GD HOME Lich</i>, chọn workspace, Type <b>Internal</b> → Save → copy <b>Internal Integration Secret</b> (ntn_…).</li>
-              <li>Trong Notion tạo 1 trang, gõ <code>/database</code> → <b>Database – Full page</b>, đặt tên vd <i>TIẾN ĐỘ GD HOME</i> (đây là "dự án lớn" chứa mọi lịch). Thêm 1 cột kiểu <b>Date</b> tên <i>Ngày</i>.</li>
-              <li>Ở database bấm <b>•••</b> (góc phải trên) → <b>Connections</b> → chọn <i>GD HOME Lich</i> → Confirm.</li>
-              <li><b>Share → Copy link</b> của database, dán vào ô bên dưới.</li>
+              <li>Mở <a href="https://app.notion.com/developers" target="_blank" rel="noopener">Notion → Developer tools</a> → tab <b>Personal access tokens</b> → <b>New token</b> → đặt tên <i>GD HOME</i>, tick <b>Notion API</b>, hạn <b>1 year</b> → <b>Create token</b> → copy mã (chỉ hiện 1 lần).</li>
+              <li>Mở bảng lịch có sẵn trên Notion (vd <i>DEADLINE</i>) – bảng chỉ cần có 1 cột kiểu <b>Date</b>.</li>
+              <li>Ở database bấm <b>Share → Copy link</b>, dán vào ô bên dưới cùng mã ở bước 1 → <b>Lưu & kiểm tra</b>.</li>
+              <li><i>Cách khác:</i> tab <b>Connections</b> → tạo <b>Internal connection</b> → tab Configuration copy <b>API token</b>; khi đó phải vào database → <b>•••</b> → <b>Connections</b> → <b>+ Add connection</b> chọn kết nối vừa tạo.</li>
             </ol>
-            <div class="form-group"><label for="notion-token">Internal Integration Secret</label><input type="password" id="notion-token" autocomplete="off" placeholder="ntn_…"></div>
+            <div class="form-group"><label for="notion-token">Mã Notion (Personal access token hoặc API token)</label><input type="password" id="notion-token" autocomplete="off" placeholder="Dán mã Notion vào đây"></div>
             <div class="form-group"><label for="notion-db">Link database Notion</label><input type="text" id="notion-db" autocomplete="off" placeholder="https://www.notion.so/…"></div>
             <div class="int-actions">
               <button type="button" class="btn btn-primary btn-sm" id="btn-notion-save-conn">Lưu & kiểm tra</button>
@@ -811,23 +811,18 @@
             <div class="ai-msg" id="notion-conn-msg"></div>
           </div>
         </details>
-        <div class="form-group">
-          <label for="notion-scope">Phạm vi</label>
-          <select id="notion-scope" class="form-select">
-            <option value="visible">Các dự án đang bật trên Timeline</option>
-            <option value="active-project">Chỉ dự án đang chọn</option>
-            <option value="all">Toàn bộ công việc</option>
-          </select>
+        <div class="form-group" id="notion-date-wrap" style="display:none">
+          <label for="notion-date-prop">Lấy ngày từ cột <span id="notion-db-title" class="notion-db-title"></span></label>
+          <select id="notion-date-prop" class="form-select"></select>
         </div>
         <div class="notion-actions">
-          <button type="button" class="btn btn-primary" id="btn-notion-sync2"><i data-lucide="refresh-cw"></i> Đồng bộ 2 chiều</button>
-          <button type="button" class="btn btn-outline" id="btn-notion-push"><i data-lucide="upload"></i> Chỉ đẩy lên Notion</button>
-          <button type="button" class="btn btn-outline" id="btn-notion-pull"><i data-lucide="download"></i> Chỉ lấy từ Notion về</button>
+          <button type="button" class="btn btn-primary" id="btn-notion-pull"><i data-lucide="download"></i> Lấy lịch Notion về</button>
+          <button type="button" class="btn btn-outline" id="btn-notion-sync2"><i data-lucide="refresh-cw"></i> Đồng bộ 2 chiều</button>
         </div>
         <p class="notion-help">
-          • <b>Đẩy lên</b>: mỗi công việc thành 1 dòng trong database Notion (Tên, Ngày bắt đầu → kết thúc, Dự án, Giai đoạn, Tiến độ).<br>
-          • <b>Lấy về</b>: dòng nào sửa trên Notion sau lần đồng bộ trước sẽ cập nhật ngày / tên / tiến độ vào app; dòng mới tạo trên Notion được thêm vào giai đoạn cùng tên (hoặc giai đoạn đang chọn).<br>
-          • <b>2 chiều</b> = lấy về trước, rồi đẩy lên.
+          • Chỉ lấy <b>Tên</b> + <b>1 cột ngày</b> bạn chọn, không thêm hay sửa cột nào khác trên Notion.<br>
+          • Lịch Notion được đưa vào <b>dự án riêng "NOTION"</b> (giai đoạn = tên bảng Notion), không trộn vào dự án đang chọn. Dòng xoá / bỏ trống ngày trên Notion sẽ tự bỏ khỏi app.<br>
+          • <b>Đồng bộ 2 chiều</b>: việc trong dự án NOTION mà bạn kéo / sửa ngày, sửa tên trong app sẽ được ghi ngược lên Notion, rồi lấy bản mới về.
         </p>
         <div class="notion-log" id="notion-log"></div>
       </div>
@@ -1048,8 +1043,8 @@
   </div>
 
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
-  <script src="holidays-data.js?v=20261107f"></script>
-  <script src="scheduler.js?v=20261107f"></script>
-  <script src="app.js?v=20261107f"></script>
+  <script src="holidays-data.js?v=20261107h"></script>
+  <script src="scheduler.js?v=20261107h"></script>
+  <script src="app.js?v=20261107h"></script>
 </body>
 </html>

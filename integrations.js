@@ -26,9 +26,15 @@ const PROVIDER_LABEL = { gemini: 'Google Gemini', openai: 'ChatGPT (OpenAI)', an
 
 // Chấp nhận cả link Notion lẫn ID 32 ký tự
 function parseNotionId(raw) {
-  const str = String(raw || '').split('?')[0];
-  const all = str.replace(/-/g, '').match(/[0-9a-f]{32}/gi);
-  return all ? all[all.length - 1] : '';
+  // Link Notion dạng .../Ten-Bang-<32 ký tự hex>?v=... : lấy 32 ký tự hex ở CUỐI đoạn đường dẫn
+  // (không dò giữa tên vì chữ trong tên như "DEADLINE" cũng có ký tự a-f)
+  const str = String(raw || '').trim().split(/[?#]/)[0];
+  let found = '';
+  str.split('/').forEach(seg => {
+    const m = seg.replace(/-/g, '').match(/([0-9a-f]{32})$/i);
+    if (m) found = m[1];
+  });
+  return found.toLowerCase();
 }
 
 function envAiProvider() {
@@ -79,8 +85,8 @@ async function saveUserCfg(store, dataKey, cfg) {
 }
 
 function resolveNotion(cfg) {
-  if (cfg.notionToken && cfg.notionDb) return { token: cfg.notionToken, dbId: parseNotionId(cfg.notionDb), source: 'user' };
-  if (ENV.notionToken && parseNotionId(ENV.notionDb)) return { token: ENV.notionToken, dbId: parseNotionId(ENV.notionDb), source: 'env' };
+  if (cfg.notionToken && cfg.notionDb) return { token: cfg.notionToken, dbId: cfg.notionDbId || parseNotionId(cfg.notionDb), dateProp: cfg.notionDateProp || '', source: 'user' };
+  if (ENV.notionToken && parseNotionId(ENV.notionDb)) return { token: ENV.notionToken, dbId: parseNotionId(ENV.notionDb), dateProp: (process.env.NOTION_DATE_PROP || '').trim(), source: 'env' };
   return null;
 }
 function resolveAi(cfg) {
@@ -92,7 +98,8 @@ function resolveAi(cfg) {
 const mask = k => (k ? '••••' + String(k).slice(-4) : '');
 
 // -------------------------------------------------------------------------
-// NOTION
+// NOTION: CHỈ đọc/ghi Tên + 1 cột NGÀY do người dùng chọn. Không thêm cột nào vào database.
+// Lịch Notion được đưa vào 1 DỰ ÁN RIÊNG trong app (không trộn vào dự án đang chọn).
 // -------------------------------------------------------------------------
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -109,129 +116,102 @@ async function notionApi(nc, method, apiPath, body) {
       let msg = json.message || `Notion lỗi ${res.status}`;
       if (res.status === 401) msg = 'Mã Notion không đúng, đã hết hạn hoặc đã bị thu hồi';
       if (res.status === 404) msg = 'Không thấy database Notion. Kiểm tra link (phải là link của BẢNG database). Nếu dùng mã Internal connection thì phải vào database → ••• → Connections → + Add connection';
-      if (res.status === 400 && /is a page, not a database/i.test(msg)) msg = 'Link đang là 1 TRANG Notion, không phải database. Hãy tạo bảng (database) rồi copy link của bảng.';
-      throw httpError(400, msg);
+      throw Object.assign(httpError(400, msg), { notionStatus: res.status, notionMessage: json.message || '' });
     }
     return json;
   }
   throw httpError(503, 'Notion đang giới hạn tốc độ, thử lại sau ít phút');
 }
 
-// Tìm (hoặc tự tạo) các cột cần thiết trong database Notion.
-// Dự án / Giai đoạn là cột Select để trên Notion nhóm (Group by) như 1 dự án lớn.
-const NOTION_FIELDS = {
-  date: { names: ['Ngày', 'Thời gian', 'Date', 'Dates'], type: 'date' },
-  project: { names: ['Dự án', 'Project'], type: 'select' },
-  stage: { names: ['Giai đoạn', 'Stage', 'Hạng mục'], type: 'select' },
-  progress: { names: ['Tiến độ', 'Progress', '%'], type: 'number' },
-  gdId: { names: ['GDHomeID', 'GD ID'], type: 'rich_text' }
-};
+const plain = arr => (Array.isArray(arr) ? arr.map(t => t.plain_text || '').join('') : '');
+
+// Link dán vào có thể là TRANG chứa bảng (inline database) -> tự tìm bảng đầu tiên trong trang
+async function resolveDatabaseId(token, rawId) {
+  const nc = { token, dbId: rawId };
+  try {
+    await notionApi(nc, 'GET', `/databases/${rawId}`);
+    return rawId;
+  } catch (e) {
+    if (!/is a page, not a database|Could not find database/i.test(e.notionMessage || '') && e.notionStatus !== 404 && e.notionStatus !== 400) throw e;
+    let children;
+    try { children = await notionApi(nc, 'GET', `/blocks/${rawId}/children?page_size=100`); } catch (e2) { throw e; }
+    const dbBlock = (children.results || []).find(b => b.type === 'child_database');
+    if (!dbBlock) throw httpError(400, 'Trang này không có bảng (database) nào. Hãy mở đúng bảng lịch rồi copy link.');
+    return dbBlock.id.replace(/-/g, '');
+  }
+}
+
 const _schemaCache = new Map();
 async function getNotionSchema(nc) {
-  const hit = _schemaCache.get(nc.dbId);
+  const ck = nc.dbId + '|' + (nc.dateProp || '');
+  const hit = _schemaCache.get(ck);
   if (hit && Date.now() - hit.at < 5 * 60 * 1000) return hit.map;
   const db = await notionApi(nc, 'GET', `/databases/${nc.dbId}`);
   const entries = Object.entries(db.properties || {});
-  const map = { dbTitle: plain(db.title), dbUrl: db.url };
   const titleEntry = entries.find(([, p]) => p.type === 'title');
-  map.title = titleEntry ? titleEntry[0] : 'Name';
-  const toAdd = {};
-  Object.entries(NOTION_FIELDS).forEach(([key, def]) => {
-    const okTypes = def.type === 'number' || def.type === 'date' ? [def.type] : ['select', 'rich_text', 'multi_select'];
-    let found = entries.find(([n, p]) => def.names.some(x => x.toLowerCase() === n.toLowerCase()) && okTypes.includes(p.type));
-    if (!found && key === 'date') found = entries.find(([, p]) => p.type === 'date');
-    if (found) map[key] = { name: found[0], type: found[1].type };
-    else {
-      const name = def.names[0];
-      toAdd[name] = { [def.type]: def.type === 'number' ? { format: 'percent' } : {} };
-      map[key] = { name, type: def.type };
-    }
-  });
-  if (Object.keys(toAdd).length) await notionApi(nc, 'PATCH', `/databases/${nc.dbId}`, { properties: toAdd });
-  _schemaCache.set(nc.dbId, { at: Date.now(), map });
+  const dateProps = entries.filter(([, p]) => p.type === 'date').map(([n]) => n);
+  const map = {
+    dbTitle: plain(db.title) || 'Notion',
+    dbUrl: db.url,
+    title: titleEntry ? titleEntry[0] : 'Name',
+    dateProps,
+    date: dateProps.includes(nc.dateProp) ? nc.dateProp
+      : (dateProps.find(n => /deadline|hạn|ngày|date|lịch/i.test(n) && !/tạo|created|sửa|edited/i.test(n)) || dateProps[0] || null)
+  };
+  _schemaCache.set(ck, { at: Date.now(), map });
   return map;
 }
 
-const plain = arr => (Array.isArray(arr) ? arr.map(t => t.plain_text || '').join('') : '');
-function readProp(page, field) {
-  if (!field) return null;
-  const p = (page.properties || {})[field.name];
-  if (!p) return null;
-  if (p.type === 'rich_text') return plain(p.rich_text);
-  if (p.type === 'title') return plain(p.title);
-  if (p.type === 'select') return p.select ? p.select.name : '';
-  if (p.type === 'multi_select') return (p.multi_select || []).map(x => x.name).join(', ');
-  if (p.type === 'number') return p.number;
-  if (p.type === 'date') return p.date;
-  return null;
-}
-function writeProp(field, value) {
-  const v = value == null ? '' : String(value);
-  if (field.type === 'number') return { number: value == null ? null : value };
-  if (field.type === 'select') return { select: v ? { name: v.slice(0, 95).replace(/,/g, ' ') } : null };
-  if (field.type === 'multi_select') return { multi_select: v ? [{ name: v.slice(0, 95).replace(/,/g, ' ') }] : [] };
-  if (field.type === 'date') return { date: value };
-  return { rich_text: v ? [{ text: { content: v.slice(0, 1900) } }] : [] };
-}
-
 function pageToItem(page, schema) {
-  const date = readProp(page, schema.date) || {};
-  const prog = readProp(page, schema.progress);
+  const props = page.properties || {};
+  const d = (props[schema.date] || {}).date || {};
   return {
-    pageId: page.id,
+    pageId: page.id.replace(/-/g, ''),
     url: page.url,
-    name: plain(((page.properties || {})[schema.title] || {}).title),
-    start: date.start ? String(date.start).slice(0, 10) : null,
-    end: date.end ? String(date.end).slice(0, 10) : (date.start ? String(date.start).slice(0, 10) : null),
-    project: readProp(page, schema.project) || '',
-    stage: readProp(page, schema.stage) || '',
-    progress: typeof prog === 'number' ? Math.round(prog * 100) : null,
-    gdId: readProp(page, schema.gdId) || '',
+    name: plain((props[schema.title] || {}).title) || '(Không tên)',
+    start: d.start ? String(d.start).slice(0, 10) : null,
+    end: d.end ? String(d.end).slice(0, 10) : (d.start ? String(d.start).slice(0, 10) : null),
     lastEdited: page.last_edited_time
   };
 }
 
 async function notionPull(nc) {
   const schema = await getNotionSchema(nc);
+  if (!schema.date) throw httpError(400, 'Bảng Notion này chưa có cột kiểu Ngày (Date).');
   const items = [];
   let cursor;
   for (let i = 0; i < 20; i++) {
-    const q = await notionApi(nc, 'POST', `/databases/${nc.dbId}/query`, Object.assign({ page_size: 100 }, cursor ? { start_cursor: cursor } : {}));
+    const q = await notionApi(nc, 'POST', `/databases/${nc.dbId}/query`, Object.assign({
+      page_size: 100,
+      filter: { property: schema.date, date: { is_not_empty: true } }
+    }, cursor ? { start_cursor: cursor } : {}));
     (q.results || []).forEach(pg => { if (!pg.archived && !pg.in_trash) items.push(pageToItem(pg, schema)); });
     if (!q.has_more) break;
     cursor = q.next_cursor;
   }
-  return items;
+  return { items, dbId: nc.dbId, dbTitle: schema.dbTitle, dbUrl: schema.dbUrl, dateProp: schema.date };
 }
 
+// Chỉ ghi lại TÊN + NGÀY cho các dòng đã có trên Notion (sửa trong app -> cập nhật Notion)
 async function notionPush(nc, list) {
   const schema = await getNotionSchema(nc);
-  const existing = await notionPull(nc); // tìm trang đã có theo GDHomeID để không tạo trùng
-  const byGd = new Map(existing.filter(x => x.gdId).map(x => [x.gdId, x]));
-  const byPage = new Map(existing.map(x => [x.pageId.replace(/-/g, ''), x]));
+  if (!schema.date) throw httpError(400, 'Bảng Notion này chưa có cột kiểu Ngày (Date).');
   const results = [];
-  for (const it of list.slice(0, 400)) {
-    if (!it || !it.gdId || !it.start) continue;
+  for (const it of list.slice(0, 300)) {
+    if (!it || !it.pageId || !it.start) continue;
     const properties = {
       [schema.title]: { title: [{ text: { content: String(it.name || '(Không tên)').slice(0, 1900) } }] },
-      [schema.date.name]: { date: { start: it.start, end: it.end && it.end !== it.start ? it.end : null } },
-      [schema.project.name]: writeProp(schema.project, it.project || ''),
-      [schema.stage.name]: writeProp(schema.stage, it.stage || ''),
-      [schema.progress.name]: writeProp(schema.progress, typeof it.progress === 'number' ? it.progress / 100 : null),
-      [schema.gdId.name]: writeProp(schema.gdId, it.gdId)
+      [schema.date]: { date: { start: it.start, end: it.end && it.end !== it.start ? it.end : null } }
     };
-    const known = (it.notionPageId && byPage.get(String(it.notionPageId).replace(/-/g, ''))) || byGd.get(it.gdId);
     try {
-      const page = known
-        ? await notionApi(nc, 'PATCH', `/pages/${known.pageId}`, { properties })
-        : await notionApi(nc, 'POST', '/pages', { parent: { database_id: nc.dbId }, properties });
-      results.push({ gdId: it.gdId, pageId: page.id, lastEdited: page.last_edited_time, created: !known });
+      const page = await notionApi(nc, 'PATCH', `/pages/${it.pageId}`, { properties });
+      results.push({ pageId: it.pageId, lastEdited: page.last_edited_time });
     } catch (e) {
-      results.push({ gdId: it.gdId, error: e.message });
+      results.push({ pageId: it.pageId, error: e.message });
     }
-    await sleep(340); // Notion giới hạn ~3 lượt/giây
+    await sleep(340);
   }
-  return { results, dbUrl: schema.dbUrl };
+  return { results };
 }
 
 // -------------------------------------------------------------------------
@@ -408,7 +388,11 @@ function settingsView(cfg) {
   const nc = resolveNotion(cfg);
   const ai = resolveAi(cfg);
   return {
-    notion: nc ? { configured: true, source: nc.source, tokenMasked: nc.source === 'user' ? mask(cfg.notionToken) : '', db: nc.source === 'user' ? cfg.notionDb : '(dùng chung của server)', dbUrl: cfg.notionDbUrl || '' } : { configured: false },
+    notion: nc ? {
+      configured: true, source: nc.source, tokenMasked: nc.source === 'user' ? mask(cfg.notionToken) : '',
+      db: nc.source === 'user' ? cfg.notionDb : '(dùng chung của server)', dbUrl: cfg.notionDbUrl || '',
+      dbTitle: cfg.notionDbTitle || '', dateProps: cfg.notionDateProps || [], dateProp: cfg.notionDateProp || ''
+    } : { configured: false },
     ai: ai ? { configured: true, source: ai.source, provider: ai.provider, providerLabel: PROVIDER_LABEL[ai.provider], keyMasked: ai.source === 'user' ? mask(cfg.aiKey) : '', model: ai.model || '' } : { configured: false },
     providers: PROVIDERS.map(id => ({ id, label: PROVIDER_LABEL[id] }))
   };
@@ -416,17 +400,23 @@ function settingsView(cfg) {
 
 async function updateSettings(store, dataKey, body) {
   const cfg = await loadUserCfg(store, dataKey);
-  if (body.clear === 'notion') { delete cfg.notionToken; delete cfg.notionDb; delete cfg.notionDbUrl; }
+  if (body.clear === 'notion') ['notionToken', 'notionDb', 'notionDbId', 'notionDbUrl', 'notionDbTitle', 'notionDateProps', 'notionDateProp'].forEach(k => delete cfg[k]);
+  if (body.notionDateProp !== undefined && body.notionToken === undefined && body.notionDb === undefined) {
+    if (!(cfg.notionDateProps || []).includes(body.notionDateProp)) throw httpError(400, 'Cột ngày không có trong bảng Notion');
+    cfg.notionDateProp = body.notionDateProp;
+  }
   if (body.clear === 'ai') { delete cfg.aiProvider; delete cfg.aiKey; delete cfg.aiModel; }
   if (body.notionToken !== undefined || body.notionDb !== undefined) {
     const token = String(body.notionToken || '').trim() || cfg.notionToken;
     const dbRaw = String(body.notionDb || '').trim() || cfg.notionDb;
     if (!token) throw httpError(400, 'Dán mã Notion (Personal access token hoặc API token)');
-    const dbId = parseNotionId(dbRaw);
-    if (!dbId) throw httpError(400, 'Link database Notion không đúng (cần link của BẢNG database, có chuỗi 32 ký tự)');
-    _schemaCache.delete(dbId);
-    const schema = await getNotionSchema({ token, dbId }); // kiểm tra thật trước khi lưu
-    Object.assign(cfg, { notionToken: token, notionDb: dbRaw, notionDbUrl: schema.dbUrl || '' });
+    const rawId = parseNotionId(dbRaw);
+    if (!rawId) throw httpError(400, 'Link Notion không đúng (cần link của bảng lịch, có chuỗi 32 ký tự)');
+    const dbId = await resolveDatabaseId(token, rawId); // kiểm tra thật trước khi lưu
+    _schemaCache.clear();
+    const schema = await getNotionSchema({ token, dbId, dateProp: body.notionDateProp || '' });
+    if (!schema.dateProps.length) throw httpError(400, `Bảng "${schema.dbTitle}" chưa có cột kiểu Ngày (Date). Thêm 1 cột Date rồi thử lại.`);
+    Object.assign(cfg, { notionToken: token, notionDb: dbRaw, notionDbId: dbId, notionDbUrl: schema.dbUrl || '', notionDbTitle: schema.dbTitle, notionDateProps: schema.dateProps, notionDateProp: schema.date });
   }
   if (body.aiProvider !== undefined || body.aiKey !== undefined) {
     const provider = PROVIDERS.includes(body.aiProvider) ? body.aiProvider : cfg.aiProvider;
@@ -463,7 +453,7 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     return nc;
   };
   if (urlPath === '/api/notion/pull' && req.method === 'GET') {
-    sendJson(res, 200, { success: true, items: await notionPull(await needNotion()) });
+    sendJson(res, 200, { success: true, ...(await notionPull(await needNotion())) });
     return true;
   }
   if (urlPath === '/api/notion/push' && req.method === 'POST') {

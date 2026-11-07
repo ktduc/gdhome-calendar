@@ -8030,6 +8030,17 @@ function renderIntegrationStatus() {
     ntEl.textContent = nt.configured ? `✅ đã kết nối${nt.source === 'user' ? ` (mã ${nt.tokenMasked})` : ' (dùng chung của server)'}` : '❌ chưa kết nối – bấm để cài';
     ntEl.className = nt.configured ? 'is-ok' : 'is-warn';
   }
+  const dpWrap = document.getElementById('notion-date-wrap');
+  const dpSel = document.getElementById('notion-date-prop');
+  if (dpWrap && dpSel) {
+    const props = nt.dateProps || [];
+    dpWrap.style.display = nt.configured && props.length ? '' : 'none';
+    dpSel.innerHTML = '';
+    props.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; dpSel.appendChild(o); });
+    if (nt.dateProp) dpSel.value = nt.dateProp;
+    const t = document.getElementById('notion-db-title');
+    if (t) t.textContent = nt.dbTitle ? `Bảng Notion: ${nt.dbTitle}` : '';
+  }
   const dbInp = document.getElementById('notion-db');
   if (dbInp && nt.source === 'user' && nt.db && !dbInp.value) dbInp.value = nt.db;
   const openDb = document.getElementById('notion-open-db');
@@ -8412,17 +8423,6 @@ function notionLog(text, cls = '') {
   el.prepend(d);
 }
 
-function getNotionScopeTasks() {
-  const scope = (document.getElementById('notion-scope') || {}).value || 'visible';
-  let cals = AppState.calendars;
-  if (scope === 'visible') cals = cals.filter(c => c.visible !== false);
-  if (scope === 'active-project') {
-    const ac = getActiveCalendar();
-    cals = cals.filter(c => ac && c.ownerId === ac.ownerId);
-  }
-  const ids = new Set(cals.map(c => c.id));
-  return AppState.tasks.filter(t => ids.has(t.calendarId) && t.startDate);
-}
 
 function openNotionSync() {
   const reason = integrationBlockedReason();
@@ -8439,90 +8439,107 @@ function openNotionSync() {
   }
 }
 
-async function notionPushTasks() {
-  const tasks = getNotionScopeTasks();
-  const items = tasks.map(t => {
-    const cal = AppState.calendars.find(c => c.id === t.calendarId);
-    const proj = getProjectOfCalendar(cal);
-    return { gdId: t.id, notionPageId: t.notionPageId || null, name: t.title, start: t.startDate, end: t.endDate, project: proj ? proj.name : '', stage: cal ? cal.name : '', progress: typeof t.progress === 'number' ? t.progress : 0 };
-  });
-  notionLog(`Đang đẩy ${items.length} công việc lên Notion…`);
-  const res = await apiFetch('/api/notion/push', { method: 'POST', body: JSON.stringify({ items }) });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
-  if (json.dbUrl && _intSettings && _intSettings.notion) { _intSettings.notion.dbUrl = json.dbUrl; renderIntegrationStatus(); }
-  let ok = 0, created = 0, failed = 0;
-  json.results.forEach(r => {
-    const t = AppState.tasks.find(x => x.id === r.gdId);
-    if (r.error || !t) { failed++; return; }
-    t.notionPageId = r.pageId;
-    t.notionSyncedAt = r.lastEdited;
-    ok++; if (r.created) created++;
-  });
-  saveToBackend();
-  notionLog(`Đã đẩy ${ok} việc (${created} mới)${failed ? `, lỗi ${failed}` : ''}.`, failed ? 'is-warn' : 'is-ok');
+
+// Dự án & giai đoạn RIÊNG cho lịch Notion (không trộn vào dự án đang chọn)
+const NOTION_OWNER_ID = 'owner_notion';
+function ensureNotionStage(dbId, dbTitle) {
+  if (!Array.isArray(AppState.projectOwners)) AppState.projectOwners = [];
+  let owner = AppState.projectOwners.find(o => o.id === NOTION_OWNER_ID);
+  if (!owner) {
+    owner = { id: NOTION_OWNER_ID, name: 'NOTION', collapsed: false };
+    AppState.projectOwners.push(owner);
+  }
+  const calId = 'cal_notion_' + dbId;
+  let cal = AppState.calendars.find(c => c.id === calId);
+  const name = (dbTitle || 'Lịch Notion').toUpperCase();
+  if (!cal) {
+    cal = { id: calId, ownerId: NOTION_OWNER_ID, name, customerName: name, color: '#64748b', visible: true, isNotion: true };
+    AppState.calendars.push(cal);
+  } else if (cal.name !== name) {
+    cal.name = name;
+    cal.customerName = name;
+  }
+  return cal;
 }
 
+function notionSnap(t) { return [t.title, t.startDate, t.endDate].join('|'); }
+
 async function notionPullTasks() {
-  notionLog('Đang lấy dữ liệu từ Notion…');
+  notionLog('Đang lấy lịch từ Notion…');
   const res = await apiFetch('/api/notion/pull');
   const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
+  const cal = ensureNotionStage(json.dbId, json.dbTitle);
+  const seen = new Set();
   let updated = 0, added = 0;
-  const movedRoots = [];
-  json.items.forEach(it => {
+  json.items.forEach((it, idx) => {
     if (!it.start) return;
-    const pid = String(it.pageId).replace(/-/g, '');
-    let t = AppState.tasks.find(x => (it.gdId && x.id === it.gdId) || (x.notionPageId && String(x.notionPageId).replace(/-/g, '') === pid));
+    seen.add(it.pageId);
+    const end = it.end && it.end >= it.start ? it.end : it.start;
+    let t = AppState.tasks.find(x => x.calendarId === cal.id && x.notionPageId === it.pageId);
     if (t) {
-      const editedAfterSync = !t.notionSyncedAt || it.lastEdited > t.notionSyncedAt;
-      if (!editedAfterSync) return;
-      let changed = false;
-      if (it.name && it.name !== t.title) { t.title = it.name; changed = true; }
-      const end = it.end && it.end >= it.start ? it.end : it.start;
-      if (it.start !== t.startDate || end !== t.endDate) { t.startDate = it.start; t.endDate = end; movedRoots.push(t.id); changed = true; }
-      if (typeof it.progress === 'number' && it.progress !== (t.progress || 0)) { t.progress = Math.max(0, Math.min(100, it.progress)); changed = true; }
-      t.notionPageId = it.pageId;
-      t.notionSyncedAt = it.lastEdited;
-      if (changed) updated++;
-      return;
+      if (t.notionSyncedAt && it.lastEdited <= t.notionSyncedAt) return; // Notion chưa sửa từ lần trước
+      if (t.title !== it.name || t.startDate !== it.start || t.endDate !== end) updated++;
+      t.title = it.name; t.startDate = it.start; t.endDate = end;
+    } else {
+      t = {
+        id: `task_nt_${Date.now()}_${idx}`,
+        calendarId: cal.id,
+        title: it.name,
+        startDate: it.start,
+        endDate: end,
+        color: getNextSequentialPaletteColor(cal.id) || cal.color,
+        skipSundays: false, // giữ đúng ngày như trên Notion (tính theo ngày thực tế)
+        showCount: true,
+        note: '',
+        progress: 0,
+        predecessors: [],
+        notionPageId: it.pageId
+      };
+      AppState.tasks.push(t);
+      added++;
     }
-    if (it.gdId) return; // việc đã xoá trong app -> bỏ qua
-    // Dòng mới tạo trên Notion -> thêm vào giai đoạn cùng tên (ưu tiên đúng dự án)
-    const projName = (it.project || '').trim().toLowerCase();
-    const stageName = (it.stage || '').trim().toLowerCase();
-    let cal = AppState.calendars.find(c => stageName && c.name.trim().toLowerCase() === stageName && (!projName || ((getProjectOfCalendar(c) || {}).name || '').trim().toLowerCase() === projName))
-      || AppState.calendars.find(c => stageName && c.name.trim().toLowerCase() === stageName)
-      || getActiveCalendar();
-    if (!cal) return;
-    AppState.tasks.push({
-      id: 'task_nt_' + Date.now() + '_' + added,
-      calendarId: cal.id,
-      title: it.name || '(Từ Notion)',
-      startDate: it.start,
-      endDate: it.end && it.end >= it.start ? it.end : it.start,
-      color: getNextSequentialPaletteColor(cal.id) || cal.color,
-      skipSundays: true,
-      showCount: true,
-      note: '',
-      progress: typeof it.progress === 'number' ? it.progress : 0,
-      predecessors: [],
-      notionPageId: it.pageId,
-      notionSyncedAt: it.lastEdited
-    });
-    added++;
+    t.notionSyncedAt = it.lastEdited;
+    t.notionSnap = notionSnap(t);
   });
-  if (movedRoots.length && AppState.autoCascadeShift !== false) propagateLinkedTasks(movedRoots, AppState.tasks);
+  // Dòng đã xoá trên Notion (hoặc bỏ trống ngày) -> bỏ khỏi dự án NOTION
+  const before = AppState.tasks.length;
+  AppState.tasks = AppState.tasks.filter(t => t.calendarId !== cal.id || !t.notionPageId || seen.has(t.notionPageId));
+  const removed = before - AppState.tasks.length;
+  cal.visible = true;
   syncAllFromMSProject();
-  notionLog(`Lấy về xong: cập nhật ${updated} việc, thêm mới ${added} việc.`, 'is-ok');
+  notionLog(`Lấy về "${json.dbTitle}" (cột ngày "${json.dateProp}"): thêm ${added}, cập nhật ${updated}${removed ? `, bỏ ${removed}` : ''} việc → dự án NOTION.`, 'is-ok');
+  return cal;
 }
+
+// Đẩy lại các việc trong dự án NOTION đã sửa tên/ngày trong app
+async function notionPushLocalEdits() {
+  const changed = AppState.tasks.filter(t => t.notionPageId && String(t.calendarId || '').startsWith('cal_notion_') && t.notionSnap && t.notionSnap !== notionSnap(t));
+  if (!changed.length) { notionLog('Không có việc nào sửa trong app cần gửi lên Notion.'); return; }
+  notionLog(`Đang gửi ${changed.length} việc đã sửa lên Notion…`);
+  const items = changed.map(t => ({ pageId: t.notionPageId, name: t.title, start: t.startDate, end: t.endDate }));
+  const res = await apiFetch('/api/notion/push', { method: 'POST', body: JSON.stringify({ items }) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
+  let ok = 0, failed = 0;
+  json.results.forEach(r => {
+    const t = AppState.tasks.find(x => x.notionPageId === r.pageId);
+    if (r.error || !t) { failed++; return; }
+    t.notionSyncedAt = r.lastEdited;
+    t.notionSnap = notionSnap(t);
+    ok++;
+  });
+  saveToBackend();
+  notionLog(`Đã cập nhật ${ok} việc lên Notion${failed ? `, lỗi ${failed}` : ''}.`, failed ? 'is-warn' : 'is-ok');
+}
+
 
 async function runNotionAction(kind) {
   const btns = document.querySelectorAll('#notion-sync-modal .notion-actions button');
   btns.forEach(b => { b.disabled = true; });
   try {
-    if (kind === 'pull' || kind === 'both') await notionPullTasks();
-    if (kind === 'push' || kind === 'both') await notionPushTasks();
+    if (kind === 'both') await notionPushLocalEdits();
+    await notionPullTasks();
     showToast('Đồng bộ Notion xong');
   } catch (err) {
     notionLog('⚠ ' + err.message, 'is-warn');
@@ -8565,7 +8582,6 @@ function setupIntegrationsUI() {
   on('btn-ai-fit', fitAiRowsToTarget);
   on('btn-ai-apply', applyAiPlan);
   on('btn-notion-sync2', () => runNotionAction('both'));
-  on('btn-notion-push', () => runNotionAction('push'));
   on('btn-notion-pull', () => runNotionAction('pull'));
   const prov = document.getElementById('ai-provider');
   if (prov) prov.addEventListener('change', updateAiKeyHelp);
@@ -8587,5 +8603,7 @@ function setupIntegrationsUI() {
     if (ok) document.getElementById('notion-token').value = '';
   });
   on('btn-notion-clear-conn', () => saveIntegrationSettings({ clear: 'notion' }, 'notion-conn-msg'));
+  const dpSel = document.getElementById('notion-date-prop');
+  if (dpSel) dpSel.addEventListener('change', () => saveIntegrationSettings({ notionDateProp: dpSel.value }, 'notion-conn-msg'));
 }
 window.addEventListener('DOMContentLoaded', setupIntegrationsUI);
