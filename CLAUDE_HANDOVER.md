@@ -109,6 +109,8 @@
 - Tháng lập bảng tự theo tháng hiện tại (`getAutoScheduleMonth`); tự gõ tháng khác chỉ giữ trong tháng đó (`scheduleMonthManualFor`). Chọn khoảng tháng xem KHÔNG còn đổi tháng lập bảng.
 - Cache file tĩnh: `?v=20261107b`.
 
+- Copy/xuất ảnh Bảng Lịch (nút Copy ảnh & phạm vi "Toàn bộ"): chỉ giữ các tuần có công việc, bỏ tuần trống (`getWeeksWithTasks`). Chọn vùng / theo ngày tuỳ chọn vẫn giữ nguyên. Cache `?v=20261107c`.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

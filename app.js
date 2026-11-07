@@ -3625,7 +3625,7 @@ function setupExportModal() {
       if (AppState.viewMode === 'msproject') {
         exportMSProjectSheet(2, 'clipboard');
       } else {
-        executeExportWeeksSlice(currentRenderedWeeks, true, 2, 'clipboard');
+        executeExportWeeksSlice(getWeeksWithTasks(currentRenderedWeeks), true, 2, 'clipboard');
       }
     });
   }
@@ -3689,7 +3689,7 @@ function setupExportModal() {
     }
 
     if (scope === 'all') {
-      executeExportWeeksSlice(currentRenderedWeeks, incFooter, scale, mode);
+      executeExportWeeksSlice(getWeeksWithTasks(currentRenderedWeeks), incFooter, scale, mode);
     } else if (scope === 'custom-date') {
       const sD = document.getElementById('export-start-date').value;
       const eD = document.getElementById('export-end-date').value;
@@ -3706,6 +3706,19 @@ function setupExportModal() {
   if (btnCopyModal) {
     btnCopyModal.addEventListener('click', () => handleModalExportAction('clipboard'));
   }
+}
+
+// Copy / xuất ảnh Bảng Lịch: chỉ giữ các tuần có công việc, bỏ qua các tuần trống (cả đầu, cuối và ở giữa)
+function getWeeksWithTasks(weeks) {
+  if (!Array.isArray(weeks) || weeks.length === 0) return weeks;
+  const tasks = getVisibleTasks();
+  if (tasks.length === 0) return weeks;
+  const kept = weeks.filter(week => {
+    const wStart = formatDateStr(week[0]);
+    const wEnd = formatDateStr(week[week.length - 1]);
+    return tasks.some(t => t.startDate <= wEnd && t.endDate >= wStart);
+  });
+  return kept.length > 0 ? kept : weeks;
 }
 
 function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, mode = 'download') {
