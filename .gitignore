@@ -5,3 +5,4 @@ backups/
 *.tmp
 user-*.json
 _backup*/
+assets/

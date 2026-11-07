@@ -21,6 +21,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const integrations = require('./integrations');
+const { handleMaterials } = require('./materials');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -53,7 +54,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_DENY = new Set(['server.js', 'integrations.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'tools.css', 'tools.js', 'chot-ma.html']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -362,6 +363,8 @@ function readJsonBody(req) {
 function serveStatic(req, res, urlPath) {
   let rel = decodeURIComponent(urlPath.split('?')[0]);
   if (rel === '/' || rel === '') rel = '/index.html';
+  if (rel === '/tools') rel = '/tools.html';
+  if (rel === '/chot-ma') rel = '/chot-ma.html';
   const filePath = path.normalize(path.join(ROOT_DIR, rel));
   const relFromRoot = path.relative(ROOT_DIR, filePath);
   const ext = path.extname(filePath).toLowerCase();
@@ -370,7 +373,7 @@ function serveStatic(req, res, urlPath) {
     relFromRoot.startsWith('..') ||
     path.isAbsolute(relFromRoot) ||
     parts.some(p => p.startsWith('.') || p.startsWith('_') || p === 'node_modules' || p === 'backups' || p === 'tests') ||
-    STATIC_DENY.has(relFromRoot) ||
+    !STATIC_FILES.has(relFromRoot) ||
     !STATIC_MIME[ext];
   if (blocked) {
     res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
@@ -434,6 +437,10 @@ async function handleApi(req, res, urlPath) {
   if (!dataKey) {
     sendJson(res, 401, { success: false, message: AUTH_MODE === 'google' ? 'Cần đăng nhập Google' : 'Cần mật khẩu', authMode: AUTH_MODE });
     return;
+  }
+
+  if (urlPath === '/api/materials' || urlPath.startsWith('/api/materials/')) {
+    return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson });
   }
 
   // Người mới đăng nhập: chép dữ liệu chung cũ (data.json) vào tài khoản của mình

@@ -1,0 +1,16 @@
+.gd-tools-menu{position:relative;flex:none;color:#941b21;font:600 13px system-ui,sans-serif}
+.gd-tools-menu summary{cursor:pointer;padding:7px;border:1px solid #d5dce5;border-radius:6px;background:#fff}
+.gd-tools-menu nav{position:absolute;top:100%;left:0;z-index:80;width:170px;background:#fff;border:1px solid #d5dce5;border-radius:6px;box-shadow:0 6px 16px #22334422}
+.gd-tools-menu a{display:block;padding:9px;color:#263244;text-decoration:none}
+.gd-tools-menu a:hover{background:#f6e8e9}
+body:has(>main){margin:0;background:#eef1f5;color:#253142;font:15px/1.5 system-ui,sans-serif}
+body>header:has(+main){display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:#fff;border-bottom:1px solid #d5dce5}
+body>main{max-width:1500px;margin:auto;padding:18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px}
+article,.panel{background:#fff;border:1px solid #d5dce5;border-radius:8px;padding:14px;margin:8px 0}
+button,.button,input,select,textarea{font:inherit}
+button,.button{display:inline-block;padding:6px 10px;color:#273245;border:1px solid #c7ced9;background:#fff;border-radius:5px;text-decoration:none;cursor:pointer}
+button.primary,.button.primary{background:#a41d24;border-color:#a41d24;color:#fff}
+[role=status]{white-space:pre-wrap;color:#7d2025}
+label{cursor:pointer}
+[hidden]{display:none!important}
