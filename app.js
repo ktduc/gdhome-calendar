@@ -8179,6 +8179,7 @@ function fillAiStageSelect() {
 }
 
 function openAiPlanner() {
+  if (AIPlanner.running) { showAiBgPanel('running', 'AI vẫn đang lập tiến độ… xong sẽ báo ở đây.'); return; }
   const msg = document.getElementById('ai-input-msg');
   const reason = integrationBlockedReason();
   if (msg) { msg.textContent = reason; msg.className = 'ai-msg' + (reason ? ' is-warn' : ''); }
@@ -8224,6 +8225,8 @@ async function runAiPlanner() {
   if (document.getElementById('ai-limit-mode').value !== 'auto' && !getAiTargetWorkDays()) {
     msg.textContent = 'Nhập số ngày hoặc ngày kết thúc (sau ngày bắt đầu).'; msg.className = 'ai-msg is-warn'; return;
   }
+  if (AIPlanner.running) { msg.textContent = 'AI đang chạy yêu cầu trước, đợi xong đã nhé.'; msg.className = 'ai-msg is-warn'; return; }
+  AIPlanner.running = true;
   btn.disabled = true;
   msg.className = 'ai-msg is-busy';
   msg.textContent = '⏳ Đang đọc file…';
@@ -8242,7 +8245,11 @@ async function runAiPlanner() {
     const ownerId = target.startsWith('new:') ? target.slice(4) : (AppState.calendars.find(c => c.id === target) || {}).ownerId;
     const owner = (AppState.projectOwners || []).find(o => o.id === ownerId);
     payload.projectName = owner ? owner.name : '';
-    msg.textContent = '🤖 AI đang lọc hạng mục và lập tiến độ (khoảng 20–60 giây)…';
+    msg.textContent = '';
+    msg.className = 'ai-msg';
+    // Chạy nền: ẩn cửa sổ AI, hiện thông báo nhỏ góc màn hình để làm việc khác
+    document.getElementById('ai-planner-modal').classList.remove('active');
+    showAiBgPanel('running', 'AI đang đọc file và lập tiến độ… (thường 20–60 giây)<br><small>Anh cứ làm việc khác, xong sẽ báo ở đây.</small>');
     const res = await apiFetch('/api/ai/schedule', { method: 'POST', body: JSON.stringify(payload) });
     const json = await res.json().catch(() => ({}));
     if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
@@ -8250,15 +8257,76 @@ async function runAiPlanner() {
     AIPlanner.startDate = payload.startDate;
     AIPlanner.targetWorkDays = payload.targetWorkDays;
     AIPlanner.rows = json.plan.tasks.map((t, i) => ({ ...t, include: true, idx: i }));
-    msg.textContent = '';
-    msg.className = 'ai-msg';
     showAiReview();
+    if (!AIPlanner.rows.length) {
+      showAiBgPanel('error', 'AI không tìm thấy hạng mục công việc nào trong file.', 'Mở lại');
+    } else {
+      showAiBgPanel('done', `✨ AI đã đề xuất <b>${AIPlanner.rows.length}</b> công việc.`, 'Xem & thêm vào lịch');
+    }
   } catch (err) {
+    const modalOpen = document.getElementById('ai-planner-modal').classList.contains('active');
     msg.textContent = '⚠ ' + err.message;
     msg.className = 'ai-msg is-warn';
+    if (!modalOpen) showAiBgPanel('error', escapeHtmlAi(err.message), 'Mở lại');
   } finally {
     btn.disabled = false;
+    AIPlanner.running = false;
   }
+}
+
+function escapeHtmlAi(t) {
+  return String(t || '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// Ô thông báo nhỏ góc phải dưới khi AI chạy nền
+function showAiBgPanel(state, html, actionLabel) {
+  let el = document.getElementById('ai-bg-panel');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'ai-bg-panel';
+    el.className = 'ai-bg-panel';
+    document.body.appendChild(el);
+  }
+  el.className = 'ai-bg-panel is-' + state;
+  el.innerHTML = '';
+  const icon = document.createElement('div');
+  icon.className = 'ai-bg-icon';
+  icon.textContent = state === 'running' ? '' : state === 'done' ? '✅' : '⚠';
+  if (state === 'running') icon.innerHTML = '<span class="ai-spinner"></span>';
+  const body = document.createElement('div');
+  body.className = 'ai-bg-body';
+  const text = document.createElement('div');
+  text.innerHTML = html;
+  body.appendChild(text);
+  if (actionLabel) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-primary btn-sm';
+    btn.textContent = actionLabel;
+    btn.addEventListener('click', () => {
+      hideAiBgPanel();
+      openModalById('ai-planner-modal');
+      const review = state === 'done';
+      document.getElementById('ai-step-input').style.display = review ? 'none' : '';
+      document.getElementById('ai-step-review').style.display = review ? '' : 'none';
+    });
+    body.appendChild(btn);
+  }
+  const close = document.createElement('button');
+  close.type = 'button';
+  close.className = 'ai-bg-close';
+  close.title = state === 'running' ? 'Ẩn (AI vẫn chạy tiếp)' : 'Đóng';
+  close.textContent = '×';
+  close.addEventListener('click', hideAiBgPanel);
+  el.appendChild(icon);
+  el.appendChild(body);
+  el.appendChild(close);
+  el.style.display = 'flex';
+}
+
+function hideAiBgPanel() {
+  const el = document.getElementById('ai-bg-panel');
+  if (el) el.style.display = 'none';
 }
 
 // Tính ngày cho từng việc theo lịch làm việc (bỏ ngày nghỉ / lễ) + liên kết FS/SS
@@ -8408,6 +8476,7 @@ function applyAiPlan() {
     });
   });
   AppState.activeCalendarId = cal.id;
+  hideAiBgPanel();
   document.getElementById('ai-planner-modal').classList.remove('active');
   AIPlanner.files = []; renderAiFileList();
   syncAllFromMSProject(`✨ Đã thêm ${created.length} công việc AI đề xuất vào "${cal.name}"`);

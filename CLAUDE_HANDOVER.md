@@ -127,6 +127,8 @@
 
 - **Notion đổi cách làm (theo yêu cầu)**: CHỈ đọc/ghi Tên + 1 cột Date do người dùng chọn (`notionDateProp`, ô "Lấy ngày từ cột"), KHÔNG tạo/sửa cột trên Notion. Link trang chứa inline database tự dò `child_database`. `parseNotionId` lấy 32 hex ở CUỐI đoạn link. Lịch vào dự án riêng `owner_notion` "NOTION", giai đoạn `cal_notion_<dbId>` = tên bảng; task có `notionPageId`, `notionSyncedAt`, `notionSnap` (title|start|end lúc đồng bộ). "Đồng bộ 2 chiều" = đẩy việc sửa trong app (snap khác) rồi kéo về; dòng xoá/bỏ ngày trên Notion bị bỏ khỏi app. Task Notion `skipSundays:false`. Cache `?v=20261107h`.
 
+- **AI chạy nền**: bấm "Đề xuất tiến độ" → đọc file xong thì ẩn cửa sổ AI, hiện ô `#ai-bg-panel` góc phải dưới (đang chạy / ✅ xong → "Xem & thêm vào lịch" / ⚠ lỗi → "Mở lại"). Server `callWithFallback`: lỗi quá tải (503 high demand, 429, 5xx) → thử lại 2 lần rồi tự đổi model nhẹ hơn cùng hãng (Gemini: các bản flash / flash-lite khác), chỉ khi người dùng để trống ô Model. Cache `?v=20261107i`.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

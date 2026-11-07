@@ -314,7 +314,7 @@ async function callAnthropic(ai, model, images, pdfs, text) {
     body: JSON.stringify({ model, max_tokens: 8000, system: AI_SYSTEM, messages: [{ role: 'user', content }] })
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw httpError(502, res.status === 401 ? 'API key Claude không đúng' : ((json.error && json.error.message) || `Claude lỗi ${res.status}`));
+  if (!res.ok) throw Object.assign(httpError(502, res.status === 401 ? 'API key Claude không đúng' : ((json.error && json.error.message) || `Claude lỗi ${res.status}`)), { retryable: [429, 500, 502, 503, 529].includes(res.status) });
   return (json.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
 }
 
@@ -328,7 +328,7 @@ async function callOpenAI(ai, model, images, pdfs, text) {
     body: JSON.stringify({ model, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: AI_SYSTEM }, { role: 'user', content }] })
   });
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw httpError(502, res.status === 401 ? 'API key OpenAI không đúng' : ((json.error && json.error.message) || `OpenAI lỗi ${res.status}`));
+  if (!res.ok) throw Object.assign(httpError(502, res.status === 401 ? 'API key OpenAI không đúng' : ((json.error && json.error.message) || `OpenAI lỗi ${res.status}`)), { retryable: [429, 500, 502, 503].includes(res.status) && !/quota/i.test(JSON.stringify(json)) });
   return ((json.choices || [])[0] || {}).message ? json.choices[0].message.content : '';
 }
 
@@ -350,10 +350,47 @@ async function callGemini(ai, model, images, pdfs, text) {
   if (!res.ok) {
     let msg = (json.error && json.error.message) || `Gemini lỗi ${res.status}`;
     if (res.status === 429) msg = 'Gemini báo hết hạn mức miễn phí (thử lại sau ít phút, hoặc bật thanh toán trong Google AI Studio)';
-    throw httpError(502, msg);
+    if (res.status === 503 || /high demand|overloaded|unavailable/i.test(msg)) msg = 'Máy chủ Gemini đang quá tải';
+    throw Object.assign(httpError(502, msg), { retryable: [429, 500, 502, 503, 504].includes(res.status) });
   }
   const cand = (json.candidates || [])[0] || {};
   return ((cand.content || {}).parts || []).map(p => p.text || '').join('\n');
+}
+
+// Model quá tải (503 "high demand") -> chờ rồi thử lại, sau đó tự đổi sang model nhẹ hơn cùng hãng
+async function fallbackModels(ai, first) {
+  if (ai.model) return [first]; // người dùng tự chọn model -> giữ nguyên
+  let ids = [];
+  try { ids = await listModels(ai); } catch (e) { /* bỏ qua */ }
+  const list = [first];
+  if (ai.provider === 'gemini') {
+    const flash = ids.filter(id => /^gemini-\d+(\.\d+)?-flash(-lite)?$/.test(id))
+      .sort((a, b) => verNum(b.match(/(\d+(?:\.\d+)?)/)[1]) - verNum(a.match(/(\d+(?:\.\d+)?)/)[1]) || (a.includes('lite') ? 1 : -1));
+    flash.forEach(id => { if (!list.includes(id)) list.push(id); });
+    if (!ids.length) ['gemini-2.5-flash', 'gemini-2.5-flash-lite'].forEach(id => { if (!list.includes(id)) list.push(id); });
+  } else if (ai.provider === 'openai') {
+    ['gpt-4.1', 'gpt-4o'].forEach(id => { if (ids.includes(id) && !list.includes(id)) list.push(id); });
+  } else {
+    ids.filter(id => /sonnet|haiku/i.test(id)).forEach(id => { if (!list.includes(id)) list.push(id); });
+  }
+  return list.slice(0, 4);
+}
+
+async function callWithFallback(ai, model, call, images, pdfs, text) {
+  const models = await fallbackModels(ai, model);
+  let lastErr;
+  for (const m of models) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return { raw: await call(ai, m, images, pdfs, text), usedModel: m };
+      } catch (e) {
+        lastErr = e;
+        if (!e.retryable && !/quá tải|overloaded|high demand|unavailable/i.test(e.message)) throw e;
+        await sleep(attempt === 0 ? 2500 : 5000);
+      }
+    }
+  }
+  throw httpError(503, (lastErr ? lastErr.message : 'AI quá tải') + '. Đã thử lại nhiều lần và đổi model khác nhưng vẫn bận – thử lại sau vài phút.');
 }
 
 async function aiSchedule(ai, body, userKey) {
@@ -366,7 +403,8 @@ async function aiSchedule(ai, body, userKey) {
   const text = buildPrompt(body);
   const model = await resolveModel(ai);
   const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
-  const plan = extractJson(await call(ai, model, images, pdfs, text));
+  const { raw, usedModel } = await callWithFallback(ai, model, call, images, pdfs, text);
+  const plan = extractJson(raw);
   if (!Array.isArray(plan.tasks)) plan.tasks = [];
   plan.tasks = plan.tasks.slice(0, 120).map(t => ({
     name: String(t.name || '').slice(0, 120),
@@ -377,7 +415,7 @@ async function aiSchedule(ai, body, userKey) {
     note: String(t.note || '').slice(0, 300)
   })).filter(t => t.name);
   plan.questions = Array.isArray(plan.questions) ? plan.questions.slice(0, 6).map(String) : [];
-  plan.model = `${PROVIDER_LABEL[ai.provider]} · ${model}`;
+  plan.model = `${PROVIDER_LABEL[ai.provider]} · ${usedModel}`;
   return plan;
 }
 

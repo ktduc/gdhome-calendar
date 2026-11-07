@@ -3889,3 +3889,15 @@ body {
 .int-settings input[type=password], .int-settings input[type=text] { width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: #fff; box-sizing: border-box; }
 .notion-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 .notion-db-title { font-weight: 400; color: #64748b; margin-left: 6px; }
+
+/* Thông báo AI chạy nền */
+.ai-bg-panel { position: fixed; right: 18px; bottom: 18px; z-index: 9000; display: none; align-items: flex-start; gap: 10px; width: 340px; max-width: calc(100vw - 36px); background: #fff; border: 1px solid #ddd6fe; border-left: 4px solid #7c3aed; border-radius: 10px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.18); padding: 12px 34px 12px 12px; font-size: 13px; color: #1e293b; line-height: 1.45; }
+.ai-bg-panel.is-done { border-left-color: #16a34a; border-color: #bbf7d0; }
+.ai-bg-panel.is-error { border-left-color: #d97706; border-color: #fde68a; }
+.ai-bg-panel small { color: #64748b; }
+.ai-bg-icon { font-size: 18px; line-height: 1; padding-top: 1px; }
+.ai-bg-body { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; word-break: break-word; }
+.ai-bg-close { position: absolute; top: 6px; right: 8px; border: none; background: transparent; font-size: 18px; color: #94a3b8; cursor: pointer; line-height: 1; }
+.ai-bg-close:hover { color: #334155; }
+.ai-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd6fe; border-top-color: #7c3aed; border-radius: 50%; animation: ai-spin 0.8s linear infinite; }
+@keyframes ai-spin { to { transform: rotate(360deg); } }
