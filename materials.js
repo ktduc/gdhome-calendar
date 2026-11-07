@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const { MaterialAssets, r2 } = require('./material-assets');
+const { cleanSheet, handleInternalReview } = require('./material-review');
 
 function fail(status, message) {
   throw Object.assign(new Error(message), { status });
@@ -10,9 +11,9 @@ const blank = () => ({ _version: 0, sheets: [], presets: {}, library: [], settin
 const queues = new Map();
 
 class MaterialStore {
-  constructor(store, account) {
+  constructor(store, account, explicitKey) {
     this.store = store;
-    this.key = 'mat-v1-' + crypto.createHash('sha256').update(account).digest('hex');
+    this.key = explicitKey || 'mat-v1-' + crypto.createHash('sha256').update(account).digest('hex');
   }
 
   async get() {
@@ -49,7 +50,7 @@ class MaterialStore {
   }
 }
 
-async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res, dataDir }) {
+async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res, dataDir, secret }) {
   const materials = new MaterialStore(store, dataKey);
   const assets = new MaterialAssets(dataDir, materials.key);
   if (url === '/api/materials/assets' && req.method === 'POST') {
@@ -58,6 +59,11 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   }
   if (url.startsWith('/api/materials/assets/') && req.method === 'GET') {
     return assets.send(res, url.split('/').at(-1));
+  }
+  if (url.includes('/review') || url === '/api/materials/settings') {
+    const result = await handleInternalReview(req,url,{ res,repo:materials,account:dataKey,readJsonBody,sendJson,secret });
+    if (result === false) fail(404, 'Không tìm thấy API duyệt.');
+    return;
   }
   const schedule = await store.get(dataKey) || {};
   const projects = (schedule.projectOwners || []).map(({ id, name }) => ({ id, name }));
@@ -74,7 +80,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
       const index = sheet.id ? data.sheets.findIndex(s => s.id === sheet.id) : -1;
       if (sheet.id && index < 0) fail(404, 'Không tìm thấy bảng.');
       if (!projects.some(p => p.id === sheet.projectId) && data.sheets[index]?.projectId !== sheet.projectId) fail(400, 'Chọn dự án Tiến độ trước.');
-      const updated = { id: sheet.id || id(), projectId: sheet.projectId, title: sheet.title.trim().slice(0, 200), groups: sheet.groups, meta: sheet.meta || {} };
+      const updated = { id: sheet.id || id(), projectId: sheet.projectId, title: sheet.title.trim().slice(0, 200), ...cleanSheet(sheet) };
       for (const [key, values] of Object.entries(sheet.presets || {})) {
         if (!['room','unit','size','finish','color','supplier'].includes(key) || !Array.isArray(values)) continue;
         const merged = new Map((data.presets[key] || []).map(v => [v.toLocaleLowerCase(),v]));

@@ -21,7 +21,8 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const integrations = require('./integrations');
-const { handleMaterials } = require('./materials');
+const { handleMaterials, MaterialStore } = require('./materials');
+const { handlePublicReview } = require('./material-review');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -54,7 +55,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-editor.js', 'material-image-ui.js', 'material-import.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-editor.js', 'material-image-ui.js', 'material-import.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -365,6 +366,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === '/' || rel === '') rel = '/index.html';
   if (rel === '/tools') rel = '/tools.html';
   if (rel === '/chot-ma') rel = '/chot-ma.html';
+  if (rel.startsWith('/duyet/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(7))) rel = '/duyet.html';
   const filePath = path.normalize(path.join(ROOT_DIR, rel));
   const relFromRoot = path.relative(ROOT_DIR, filePath);
   const ext = path.extname(filePath).toLowerCase();
@@ -388,7 +390,8 @@ function serveStatic(req, res, urlPath) {
     }
     res.writeHead(200, {
       'Content-Type': STATIC_MIME[ext],
-      'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=60'
+      'Cache-Control': rel === '/duyet.html' ? 'no-store' : ext === '.html' ? 'no-cache' : 'public, max-age=60',
+      'Referrer-Policy': 'no-referrer'
     });
     res.end(buf);
   });
@@ -433,6 +436,10 @@ async function handleApi(req, res, urlPath) {
     return;
   }
 
+  if (urlPath.startsWith('/api/review/')) {
+    return handlePublicReview(req,urlPath,{ res,store,MaterialStore,readJsonBody,sendJson,dataDir:DATA_DIR,secret:SESSION_SECRET });
+  }
+
   const dataKey = resolveDataKey(req);
   if (!dataKey) {
     sendJson(res, 401, { success: false, message: AUTH_MODE === 'google' ? 'Cần đăng nhập Google' : 'Cần mật khẩu', authMode: AUTH_MODE });
@@ -440,7 +447,7 @@ async function handleApi(req, res, urlPath) {
   }
 
   if (urlPath === '/api/materials' || urlPath.startsWith('/api/materials/')) {
-    return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR });
+    return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET });
   }
 
   // Người mới đăng nhập: chép dữ liệu chung cũ (data.json) vào tài khoản của mình
