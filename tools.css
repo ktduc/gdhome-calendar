@@ -1,8 +1,4 @@
-.gd-tools-menu{position:relative;flex:none;color:#941b21;font:600 13px system-ui,sans-serif}
-.gd-tools-menu summary{cursor:pointer;padding:7px;border:1px solid #d5dce5;border-radius:6px;background:#fff}
-.gd-tools-menu nav{position:absolute;top:100%;left:0;z-index:80;width:170px;background:#fff;border:1px solid #d5dce5;border-radius:6px;box-shadow:0 6px 16px #22334422}
-.gd-tools-menu a{display:block;padding:9px;color:#263244;text-decoration:none}
-.gd-tools-menu a:hover{background:#f6e8e9}
+@import url('/tools-menu.css');
 body:has(>main){margin:0;background:#eef1f5;color:#253142;font:15px/1.5 system-ui,sans-serif}
 body>header:has(+main){display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:#fff;border-bottom:1px solid #d5dce5}
 body>main{max-width:1500px;margin:auto;padding:18px}
@@ -49,4 +45,5 @@ dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px)}dial
   body.printing-material > :not(#print-preview),.print-actions{display:none!important}
   #print-preview{position:static;overflow:visible;background:white}#print-sheet{width:auto;margin:0;padding:0;border:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .print-table thead{display:table-header-group}.print-table tr,.print-signatures{break-inside:avoid}.print-terms{break-before:page}
-}
+}.deadline{display:inline-block;background:#fff;color:#273245;border-radius:4px;padding:4px;margin:2px}.deadline.late,.deadline.missing{background:#ffe0e0;color:#921d28}.deadline.soon{background:#fff0c4;color:#694600}
+.sheet-grid .group input[data-field=leadDays]{width:68px}

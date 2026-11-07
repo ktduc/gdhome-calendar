@@ -6348,6 +6348,7 @@ function renderMSProjectView() {
           </div>
         `;
 
+        if (typeof decorateMaterialBadge === 'function') decorateMaterialBadge(taskRowEl);
         attachRowHeightResizer(taskRowEl);
 
         taskRowEl.querySelectorAll('input, button, select').forEach(inp => {
@@ -8002,7 +8003,7 @@ window.addEventListener('DOMContentLoaded', () => {
       if (!isOfflineFileMode()) flushSaveToBackend();
     });
   }
-  bootstrapAuthAndData();
+  bootstrapAuthAndData().finally(() => { if (typeof refreshMaterialBadges === 'function') refreshMaterialBadges(); });
 });
 
 // =========================================================================

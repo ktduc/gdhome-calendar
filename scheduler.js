@@ -52,12 +52,12 @@ function getDayOverride(dateStr) {
 
 // Kiểm tra 1 ngày có phải ngày nghỉ không.
 // Thứ tự ưu tiên: Ngày tự đánh dấu > Ngày lễ / Làm bù > Chủ nhật > Thứ 7 > Chiều Thứ 7
-function isDateDayOff(dateOrStr, respectSkip = true) {
+function isDateDayOff(dateOrStr, respectSkip = true, cfg = getDaysOffConfig(), holidayInfo = getHolidayInfo) {
   if (!respectSkip) return { isOff: false, isHalfOff: false, workWeight: 1, reason: null, type: null };
   const d = typeof dateOrStr === 'string' ? parseDateStr(dateOrStr) : dateOrStr;
   const dStr = typeof dateOrStr === 'string' ? dateOrStr : formatDateStr(d);
   const dow = d.getDay();
-  const cfg = getDaysOffConfig();
+
 
   const ov = cfg.overrides ? cfg.overrides[dStr] : null;
   if (ov === 'off') {
@@ -68,7 +68,7 @@ function isDateDayOff(dateOrStr, respectSkip = true) {
   }
 
   if (cfg.holidays) {
-    const hol = getHolidayInfo(dStr);
+    const hol = holidayInfo(dStr);
     if (hol && hol.type === 'off') {
       return { isOff: true, isHalfOff: false, workWeight: 0, reason: `Nghỉ lễ: ${hol.name}`, type: 'holiday' };
     }
@@ -132,6 +132,18 @@ function shiftDateByWorkingDays(dateStr, deltaWorkingDays, skipSundays = true) {
     curr.setDate(curr.getDate() + 1);
   }
   return formatDateStr(curr);
+}
+
+function materialDueDate(start, days, mode, config, holidayInfo) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start || '')) return '';
+  const date = parseDateStr(start);
+  if (formatDateStr(date) !== start) return '';
+  let remaining = Math.min(365, Math.max(0, Number(days) || 0));
+  while (remaining > 0) {
+    date.setDate(date.getDate() - 1);
+    remaining -= mode === 'actual' ? 1 : isDateDayOff(date, true, config, holidayInfo).workWeight;
+  }
+  return formatDateStr(date);
 }
 
 // Khoảng cách số ngày làm việc có dấu từ dateA sang dateB
@@ -403,7 +415,7 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     DEFAULT_DAYS_OFF_CONFIG, getDaysOffConfig, formatDateStr, parseDateStr, getHolidayInfo, getHolidayName,
     getDayOverride, isDateDayOff, calculateTaskDays, countWorkingDays, shiftDateByWorkingDays,
-    getSignedWorkingDaysGap, computeEndDateByWorkingDays, getNextWorkingDateStr,
+    materialDueDate, getSignedWorkingDaysGap, computeEndDateByWorkingDays, getNextWorkingDateStr,
     getLinkTypeOf, getLinkBaseDate, getLinkedStartDate, computeLinkLag, refreshAllLinkLags, dependsOn, addPredecessorLink,
     removePredecessorLink, propagateLinkedTasks, inferMissingPredecessors, cleanupDanglingLinks, autoLinkTask, autoLinkStage
   };

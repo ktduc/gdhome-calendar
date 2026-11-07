@@ -1,0 +1,7 @@
+.gd-tools-menu{position:relative;flex:none;color:#941b21;font:600 13px system-ui,sans-serif}
+.gd-tools-menu summary{cursor:pointer;padding:7px;border:1px solid #d5dce5;border-radius:6px;background:#fff}
+.gd-tools-menu nav{position:absolute;top:100%;left:0;z-index:80;width:170px;background:#fff;border:1px solid #d5dce5;border-radius:6px;box-shadow:0 6px 16px #22334422}
+.gd-tools-menu a{display:block;padding:9px;color:#263244;text-decoration:none}
+.gd-tools-menu a:hover{background:#f6e8e9}
+.msp-material-badge{flex:none;font:700 13px/1 system-ui,sans-serif;text-decoration:none;background:#fff0c4;color:#694600;padding:3px;border-radius:4px}
+.msp-material-badge.done{background:#dff2e5;color:#175938}

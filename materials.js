@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { scheduleInfo, tasksFor } = require('./material-schedule');
 const { MaterialAssets, r2 } = require('./material-assets');
 const { cleanSheet, handleInternalReview } = require('./material-review');
 
@@ -67,9 +68,14 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   }
   const schedule = await store.get(dataKey) || {};
   const projects = (schedule.projectOwners || []).map(({ id, name }) => ({ id, name }));
+  if (url === '/api/materials/timeline' && req.method === 'GET') {
+    const data = await materials.get();
+    return sendJson(res,200,{ badges:scheduleInfo(data,schedule).badges });
+  }
   if (url === '/api/materials' && req.method === 'GET') {
-    const { _version, sheets, presets, library, settings } = await materials.get();
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2 });
+    const data = await materials.get();
+    const { _version, sheets, presets, library, settings } = data;
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);
@@ -86,6 +92,13 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
         const merged = new Map((data.presets[key] || []).map(v => [v.toLocaleLowerCase(),v]));
         for (const value of values) if (typeof value === 'string' && value.trim()) merged.set(value.trim().toLocaleLowerCase(), value.trim().slice(0,200));
         data.presets[key] = [...merged.values()].slice(-250);
+      }
+      const tasks = new Map(tasksFor(schedule).map(task => [task.id,task]));
+      for (const group of updated.groups) {
+        if (!group.taskId) { group.calendarId = ''; continue; }
+        const task = tasks.get(group.taskId);
+        if (task?.projectId === updated.projectId) group.calendarId = task.calendarId;
+        else if (!data.sheets[index]?.groups.some(old => old.id === group.id && old.taskId === group.taskId)) fail(400,'Công việc không thuộc dự án.');
       }
       if (index < 0) data.sheets.push(updated);
       else data.sheets[index] = updated;

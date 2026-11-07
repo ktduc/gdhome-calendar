@@ -6,9 +6,9 @@
 | 2 | ✅ | 2.1 Bảng nhập, mẫu, thao tác bàn phím · 2.2 Ảnh và preset |
 | 3 | ✅ | 3.1 Thư viện và nhập bảng tính |
 | 4 | ✅ | 4.1 Phát hành, duyệt, ký, yêu cầu đổi · 4.2 Xuất và in |
-| 5 | ⏳ | 5.1 Hạn và chỉ báo Timeline |
+| 5 | ✅ | 5.1 Hạn và chỉ báo Timeline |
 
-Bước tiếp theo: GĐ5 · Gắn nhóm với công việc và hiện hạn/chỉ báo Timeline. GĐ4 thêm material-review.js, material-release.js, material-print.js, material-customer.js, duyet.html và test tích hợp. 19/19 test đạt; kiểm tra xuất PDF bằng hộp In A4.
+Bước tiếp theo: rà soát tổng thể, cập nhật bàn giao và kiểm thử bàn giao. GĐ5 thêm material-schedule.js, material-deadlines.js, material-timeline.js; 21/21 test đạt.
 
 ## Câu hỏi cho anh Đức
 
