@@ -193,9 +193,11 @@
         </div>
         <div class="sb-body">
           <select id="msp-scope-select" class="form-select msp-mini-select" title="Phạm vi dự án trên Timeline">
+            <option value="all-visible" selected>Tất cả dự án đang bật</option>
             <option value="active-project">Chỉ dự án đang chọn</option>
-            <option value="all-visible">Tất cả dự án đang bật</option>
             <option value="active-only">Chỉ giai đoạn đang chọn</option>
+            <option value="next-1-week">Công việc 1 tuần tới</option>
+            <option value="next-2-weeks">Công việc 2 tuần tới</option>
           </select>
           <div class="sb-row-label">Rộng cột ngày</div>
           <div class="msp-zoom-btns sb-seg-btns" id="msp-col-zoom-btns">
@@ -207,9 +209,9 @@
           </div>
           <div class="sb-row-label">Cao dòng</div>
           <div class="msp-zoom-btns sb-seg-btns" id="msp-row-height-btns">
-            <button type="button" class="msp-row-height-btn" data-row-height="mini" title="Rất thấp (24px)">XS</button>
+            <button type="button" class="msp-row-height-btn active" data-row-height="mini" title="Rất thấp (24px)">XS</button>
             <button type="button" class="msp-row-height-btn" data-row-height="compact" title="Thấp (32px)">S</button>
-            <button type="button" class="msp-row-height-btn active" data-row-height="normal" title="Chuẩn (42px)">M</button>
+            <button type="button" class="msp-row-height-btn" data-row-height="normal" title="Chuẩn (42px)">M</button>
             <button type="button" class="msp-row-height-btn" data-row-height="tall" title="Cao (54px)">L</button>
           </div>
         </div>
@@ -223,20 +225,20 @@
         <div class="sb-body">
           <div class="sb-chip-grid" title="Tick = tính là ngày nghỉ. Chuột phải vào 1 ô ngày để đánh dấu riêng ngày nghỉ / ngày đi làm.">
             <label class="sb-chip" title="Ngày lễ chính thức ở Việt Nam (ngày làm bù tự tính là ngày đi làm)">
-              <input type="checkbox" id="toggle-vn-holidays" checked><span>Lễ VN</span>
+              <input type="checkbox" id="toggle-vn-holidays"><span>Lễ VN</span>
             </label>
             <label class="sb-chip" title="Nghỉ chiều Thứ 7 (Thứ 7 tính 0.5 ngày)">
               <input type="checkbox" id="toggle-off-saturday-half"><span>Chiều T7</span>
             </label>
             <label class="sb-chip" title="Nghỉ cả ngày Thứ 7">
-              <input type="checkbox" id="toggle-off-saturday"><span>Cả T7</span>
+              <input type="checkbox" id="toggle-off-saturday" checked><span>Cả T7</span>
             </label>
             <label class="sb-chip" title="Nghỉ Chủ nhật">
               <input type="checkbox" id="toggle-off-sunday" checked><span>Chủ nhật</span>
             </label>
           </div>
           <label class="sb-switch" title="Khi đổi ngày 1 việc, các việc được nối phía sau tự dịch theo (giữ nguyên số ngày làm việc)">
-            <input type="checkbox" id="toggle-cascade-shift" checked>
+            <input type="checkbox" id="toggle-cascade-shift">
             <span>Tự dịch việc nối phía sau</span>
           </label>
           <label class="sb-switch" title="Hiện ngày Âm lịch nhỏ cạnh ngày Dương lịch">
@@ -247,7 +249,7 @@
       </div>
 
       <!-- 4. BẢNG MÀU -->
-      <div class="sidebar-section sb-collapsible" data-sb="palette">
+      <div class="sidebar-section sb-collapsible is-collapsed" data-sb="palette">
         <div class="sidebar-section-header sb-head">
           <span class="sb-title">🎨 Bảng màu</span>
         </div>
@@ -279,11 +281,11 @@
         </div>
         <div class="sb-body">
           <div class="demuc-checklist sb-chip-grid" id="demuc-columns-checklist">
-            <label class="sb-chip" title="Ẩn/hiện cột Tiến độ (%)"><input type="checkbox" data-demuc-col="colProg" checked><span>Tiến độ %</span></label>
+            <label class="sb-chip" title="Ẩn/hiện cột Tiến độ (%)"><input type="checkbox" data-demuc-col="colProg"><span>Tiến độ %</span></label>
             <label class="sb-chip" title="Ẩn/hiện cột Mã WBS"><input type="checkbox" data-demuc-col="colWbs" checked><span>Mã WBS</span></label>
             <label class="sb-chip" title="Ẩn/hiện cột Số ngày"><input type="checkbox" data-demuc-col="colDur" checked><span>Số ngày</span></label>
             <label class="sb-chip" title="Ẩn/hiện 2 cột Bắt đầu & Kết thúc"><input type="checkbox" data-demuc-col="colDate" checked><span>Ngày BĐ/KT</span></label>
-            <label class="sb-chip" title="Ẩn/hiện cột nút Tác vụ"><input type="checkbox" data-demuc-col="colAct" checked><span>Tác vụ</span></label>
+            <label class="sb-chip" title="Ẩn/hiện cột nút Tác vụ"><input type="checkbox" data-demuc-col="colAct"><span>Tác vụ</span></label>
             <label class="sb-chip" title="Ẩn/hiện mũi tên nối việc trên Gantt"><input type="checkbox" data-demuc-col="ganttArrows" checked><span>Mũi tên nối</span></label>
           </div>
           <div class="sb-row-label sb-row-split">
@@ -387,8 +389,8 @@
                 <input type="text" id="msp-month-input" class="msp-inline-month-input" value="Tháng 9, 2026" title="Bấm vào để sửa Tháng lập bảng (đồng bộ với Bảng Lịch)">
               </div>
               <div class="msp-header-center">
-                <input type="text" id="msp-title-prefix-input" class="msp-inline-title-prefix-input" value="TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - THI CÔNG HOÀN THIỆN NỘI THẤT" placeholder="Tự gõ tiêu đề tiến độ..." title="Bấm vào để tự gõ tiêu đề bất kỳ cho bảng Timeline (Độc lập, không bị ghi đè)">
-                <input type="hidden" id="msp-customer-input" value="">
+                <input type="text" id="msp-title-prefix-input" class="msp-inline-title-prefix-input" value="TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -" placeholder="Tự gõ tiêu đề tiến độ..." title="Bấm vào để tự gõ tiêu đề tiến độ trên bảng Timeline">
+                <input type="text" id="msp-customer-input" class="msp-inline-customer-input" value="" placeholder="NHẬP TÊN DỰ ÁN..." title="Tên dự án (đồng bộ 2 chiều với tiêu đề Bảng Lịch & Dự án bên trái)">
               </div>
               <div class="msp-header-right" id="msp-kpi-summary">
                 <!-- Render KPI badges bằng JS -->
