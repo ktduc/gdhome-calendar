@@ -113,6 +113,15 @@
 
 - Sọc chìm ảnh xuất: nét 1px, cách 3px*unit (≈9% khoảng cách cũ), alpha 0.035. Sidebar nền xám nhạt #eef1f5, các khối trắng. Lọc Timeline "1/2 tuần tới": nhãn vàng `#msp-scope-badge` sau tên dự án trên tiêu đề (có cả trong ảnh xuất). Cache `?v=20261107d`.
 
+## 3j. Đợt 07/11/2026 (Claude): Esc, tiêu đề cố định, độ đậm chữ, Notion, AI
+- **Esc** (`handleEscapeKey`): đóng lần lượt lớp trên cùng – menu chuột phải → menu thả header → bảng tạo nhanh → hộp thoại (`.modal-overlay.active`, trừ đăng nhập) → chế độ cắt vùng → vùng quét chọn → bỏ focus ô nhập → bỏ chọn nhiều việc.
+- **Tiêu đề ngày/thứ cố định khi cuộn** (Timeline): `updateStickyHeaders` dùng `translateY` cho `.msp-table-header` + `.msp-gantt-header` (khung Gantt có overflow-x nên CSS sticky không ăn); gọi cuối `renderMSProjectView` + sự kiện scroll (capture). Ảnh xuất reset transform. Bảng Lịch đã có `.sheet-sticky-top` sẵn.
+- **Độ đậm chữ** Timeline: `AppState.mspFontWeight` (light/normal/bold/heavy), nút `#msp-font-weight-btns`, class `msp-fw-*` trên `.msp-split-workspace`; đậm dùng `-webkit-text-stroke` để giữ thứ bậc chữ.
+- **Sọc chìm**: cách `3.45*unit` (+15%), nét `1.2px` (+20%).
+- **Notion** (`integrations.js`, env `NOTION_TOKEN`, `NOTION_DATABASE_ID`): `/api/notion/push`, `/api/notion/pull`; tự thêm cột Dự án/Giai đoạn/Tiến độ/GDHomeID; task lưu `notionPageId`, `notionSyncedAt`. UI: File ▾ → Đồng bộ Notion… (`#notion-sync-modal`).
+- **AI lập tiến độ** (env `ANTHROPIC_API_KEY`, tuỳ chọn `AI_MODEL`, `AI_DAILY_LIMIT`, `AI_ALLOWED_EMAILS`): `/api/ai/schedule` nhận ảnh (thu nhỏ 1568px), PDF, text Excel (SheetJS 0.18.5 cdnjs nạp khi cần) → AI trả JSON `{stageName, tasks:[{name, workDays, dependsOn:[{index,type,lag}]}], questions}`; client tự tính ngày theo lịch nghỉ, bảng duyệt, "Co giãn cho vừa hạn", tạo việc + liên kết FS/SS. UI: nút ✨ AI (`#ai-planner-modal`).
+- `/api/config` và `/api/health` trả `features: {notion, ai}`. `integrations.js` đã thêm vào `Cap-Nhat-Web-Len-Mang.bat` (BẮT BUỘC đẩy lên, thiếu là server lỗi). Hướng dẫn: `HUONG-DAN-NOTION-AI.md`. Cache `?v=20261107e`.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

@@ -96,6 +96,7 @@ function getDefaultLeftSidebarSettings() {
     mspScope: 'all-visible', // 'all-visible' (Tất cả dự án đang bật) | 'active-project' | 'active-only' | 'next-1-week' | 'next-2-weeks'
     mspZoom: 'normal', // 'compact' (XS) | 'normal' (S) | 'wide' (M) | 'xwide' (L) | 'xxwide' (XL)
     mspRowHeight: 'mini', // 'mini' (XS - 24px) | 'compact' (S - 32px) | 'normal' (M - 42px) | 'tall' (L - 54px)
+    mspFontWeight: 'normal', // 'light' | 'normal' | 'bold' | 'heavy' — độ đậm chữ trong bảng Timeline
     exportWatermark: true,
     colorPaletteTheme: 'default',
     autoCascadeShift: false,
@@ -147,6 +148,7 @@ const AppState = {
   mspScope: _initDefaults.mspScope,
   mspZoom: _initDefaults.mspZoom,
   mspRowHeight: _initDefaults.mspRowHeight,
+  mspFontWeight: _initDefaults.mspFontWeight,
   exportWatermark: _initDefaults.exportWatermark,
   colorPaletteTheme: _initDefaults.colorPaletteTheme,
   autoCascadeShift: _initDefaults.autoCascadeShift,
@@ -556,6 +558,7 @@ function normalizeAppState() {
   if (!AppState.mspScope) AppState.mspScope = defSettings.mspScope;
   if (!AppState.mspZoom) AppState.mspZoom = defSettings.mspZoom;
   if (!AppState.mspRowHeight) AppState.mspRowHeight = defSettings.mspRowHeight;
+  if (!AppState.mspFontWeight) AppState.mspFontWeight = defSettings.mspFontWeight;
   if (!Array.isArray(AppState.selectedTaskIds)) {
     AppState.selectedTaskIds = [];
   }
@@ -841,6 +844,7 @@ function resetStateToEmptyGuest() {
   AppState.mspScope = def.mspScope;
   AppState.mspZoom = def.mspZoom;
   AppState.mspRowHeight = def.mspRowHeight;
+  AppState.mspFontWeight = def.mspFontWeight;
   AppState.exportWatermark = def.exportWatermark;
   AppState.colorPaletteTheme = def.colorPaletteTheme;
   AppState.autoCascadeShift = def.autoCascadeShift;
@@ -1182,6 +1186,7 @@ function buildServerPayload() {
     mspScope: AppState.mspScope,
     mspZoom: AppState.mspZoom,
     mspRowHeight: AppState.mspRowHeight,
+    mspFontWeight: AppState.mspFontWeight,
     exportWatermark: AppState.exportWatermark,
     colorPaletteTheme: AppState.colorPaletteTheme,
     autoCascadeShift: AppState.autoCascadeShift,
@@ -1219,6 +1224,7 @@ function applyServerData(data) {
   if (data.mspScope) AppState.mspScope = data.mspScope;
   if (data.mspZoom !== undefined) AppState.mspZoom = data.mspZoom;
   if (data.mspRowHeight !== undefined) AppState.mspRowHeight = data.mspRowHeight;
+  if (data.mspFontWeight) AppState.mspFontWeight = data.mspFontWeight;
   if (data.exportWatermark !== undefined) AppState.exportWatermark = data.exportWatermark;
   if (data.colorPaletteTheme) AppState.colorPaletteTheme = data.colorPaletteTheme;
   if (data.autoCascadeShift !== undefined) AppState.autoCascadeShift = data.autoCascadeShift;
@@ -1515,6 +1521,9 @@ function updateUIElements() {
   document.querySelectorAll('.msp-row-height-btn[data-row-height]').forEach(b => {
     b.classList.toggle('active', b.dataset.rowHeight === String(AppState.mspRowHeight || def.mspRowHeight));
   });
+  document.querySelectorAll('.msp-font-weight-btn[data-font-weight]').forEach(b => {
+    b.classList.toggle('active', b.dataset.fontWeight === String(AppState.mspFontWeight || 'normal'));
+  });
   const colChecklist = document.getElementById('demuc-columns-checklist');
   if (colChecklist && AppState.mspVisibility) {
     colChecklist.querySelectorAll('input[type="checkbox"][data-demuc-col]').forEach(chk => {
@@ -1600,6 +1609,7 @@ function saveToStorage() {
     showVnHolidays: AppState.showVnHolidays,
     showLunarDates: AppState.showLunarDates,
     mspRowHeight: AppState.mspRowHeight,
+    mspFontWeight: AppState.mspFontWeight,
     mspZoom: AppState.mspZoom,
     customTaskTitles: AppState.customTaskTitles,
     mspScope: AppState.mspScope,
@@ -1645,6 +1655,7 @@ function loadFromStorage() {
       if (parsed.showVnHolidays !== undefined) AppState.showVnHolidays = parsed.showVnHolidays;
       if (parsed.showLunarDates !== undefined) AppState.showLunarDates = parsed.showLunarDates;
       if (parsed.mspRowHeight !== undefined) AppState.mspRowHeight = parsed.mspRowHeight;
+      if (parsed.mspFontWeight) AppState.mspFontWeight = parsed.mspFontWeight;
       if (parsed.mspZoom !== undefined) AppState.mspZoom = parsed.mspZoom;
       if (parsed.mspScope) AppState.mspScope = parsed.mspScope;
       if (Array.isArray(parsed.customTaskTitles)) AppState.customTaskTitles = parsed.customTaskTitles;
@@ -3851,9 +3862,9 @@ function applyAntiEditWatermark(canvas) {
   // Nét mảnh nhất có thể (1px), xếp rất dày (cách ~3px) và rất mờ -> như lớp vân chìm phủ toàn ảnh.
   ctx.globalAlpha = 0.035;
   ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.2; // dày hơn ~20%
   ctx.lineCap = 'butt';
-  const gap = 3 * unit;
+  const gap = 3.45 * unit; // thưa hơn 15%
   ctx.beginPath();
   for (let x = 0; x < w + h + gap; x += gap) {
     ctx.moveTo(x, 0);
@@ -4251,6 +4262,16 @@ function getMspRowHeightPx() {
   return MSP_ROW_HEIGHT_PRESETS[AppState.mspRowHeight] || MSP_ROW_HEIGHT_PRESETS.normal;
 }
 
+const MSP_FONT_WEIGHT_CLASSES = ['msp-fw-light', 'msp-fw-bold', 'msp-fw-heavy'];
+function applyMspFontWeight(targetContainer = null) {
+  const fw = AppState.mspFontWeight || 'normal';
+  const roots = targetContainer ? [targetContainer] : document.querySelectorAll('.msp-split-workspace');
+  roots.forEach(rootEl => {
+    rootEl.classList.remove(...MSP_FONT_WEIGHT_CLASSES);
+    if (fw !== 'normal') rootEl.classList.add('msp-fw-' + fw);
+  });
+}
+
 function applyMspRowHeightStyles(targetContainer = null) {
   const rowH = getMspRowHeightPx();
   const barH = rowH <= 28 ? Math.max(14, rowH - 6) : Math.max(18, Math.min(38, rowH - 16));
@@ -4475,6 +4496,73 @@ function openDayOverrideContextMenu(e, dateStr) {
   const status = info.isOff ? 'Đang: Nghỉ' : (info.isHalfOff ? 'Đang: Làm 0.5 ngày' : 'Đang: Đi làm');
   showCustomContextMenu(e.clientX, e.clientY, `📅 Ngày ${dLabel} • ${status}${info.reason ? ' • ' + info.reason : ''}`, items);
 }
+
+function handleEscapeKey() {
+  const menu = document.getElementById('custom-context-menu');
+  if (menu && menu.style.display !== 'none' && menu.offsetParent !== null) { hideCustomContextMenu(); return true; }
+  const openDd = document.querySelectorAll('.hdr-dropdown.open');
+  if (openDd.length) { openDd.forEach(d => d.classList.remove('open')); return true; }
+  const pop = document.getElementById('quick-create-popover');
+  if (pop && pop.classList.contains('active')) { closeQuickPopover(); return true; }
+  // Hộp thoại (bỏ qua màn hình đăng nhập)
+  const modals = Array.from(document.querySelectorAll('.modal-overlay.active, .ai-panel-overlay.active')).filter(m => m.id !== 'login-overlay');
+  if (modals.length) {
+    const top = modals[modals.length - 1];
+    if (top.id === 'task-modal') closeTaskModal(); else top.classList.remove('active');
+    return true;
+  }
+  if (typeof isCropMode !== 'undefined' && isCropMode) { exitInteractiveCropMode(); return true; }
+  if (document.querySelector('.msp-range-select-highlight')) { closeQuickPopover(); return true; }
+  const ae = document.activeElement;
+  if (ae && ['INPUT', 'TEXTAREA', 'SELECT'].includes(ae.tagName) && !ae.closest('.app-sidebar')) { ae.blur(); return true; }
+  if (Array.isArray(AppState.selectedTaskIds) && AppState.selectedTaskIds.length) {
+    AppState.selectedTaskIds = [];
+    if (typeof renderMSProjectView === 'function') renderMSProjectView();
+    if (typeof renderCalendar === 'function') try { renderCalendar(); } catch (_) {}
+    return true;
+  }
+  return false;
+}
+
+// =========================================================================
+// TIÊU ĐỀ NGÀY / THỨ CỐ ĐỊNH KHI CUỘN (Timeline + Bảng lịch)
+// Dùng translateY vì khung Gantt có overflow-x (CSS sticky không ăn).
+// =========================================================================
+const STICKY_HEADER_SELECTORS = ['.msp-table-header', '.msp-gantt-header'];
+function getVerticalScrollParent(el) {
+  let p = el.parentElement;
+  while (p && p !== document.body) {
+    const oy = getComputedStyle(p).overflowY;
+    if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) return p;
+    p = p.parentElement;
+  }
+  return null;
+}
+function updateStickyHeaders() {
+  document.querySelectorAll(STICKY_HEADER_SELECTORS.join(',')).forEach(el => {
+    if (el.closest('.msp-export-clone') || !el.offsetParent) return;
+    const container = el.parentElement;
+    const cur = el._stickyY || 0;
+    const rect = el.getBoundingClientRect();
+    const naturalTop = rect.top - cur;
+    const scroller = getVerticalScrollParent(el);
+    const limitTop = scroller ? scroller.getBoundingClientRect().top : 0;
+    const maxY = Math.max(0, container.getBoundingClientRect().bottom - naturalTop - rect.height);
+    const y = Math.round(Math.max(0, Math.min(limitTop - naturalTop, maxY)));
+    if (y !== cur) {
+      el._stickyY = y;
+      el.style.transform = y ? `translateY(${y}px)` : '';
+      el.classList.toggle('is-stuck', y > 0);
+    }
+  });
+}
+let _stickyRaf = 0;
+function scheduleStickyHeaders() {
+  if (_stickyRaf) return;
+  _stickyRaf = requestAnimationFrame(() => { _stickyRaf = 0; updateStickyHeaders(); });
+}
+document.addEventListener('scroll', scheduleStickyHeaders, true);
+window.addEventListener('resize', scheduleStickyHeaders);
 
 function hideCustomContextMenu() {
   const menu = document.getElementById('custom-context-menu');
@@ -5339,6 +5427,17 @@ function setupMSProjectEvents() {
     });
   });
 
+  // Độ đậm chữ toàn bảng Timeline (Nhạt | Thường | Đậm | Rất đậm)
+  document.querySelectorAll('.msp-font-weight-btn[data-font-weight]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.msp-font-weight-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      AppState.mspFontWeight = btn.dataset.fontWeight || 'normal';
+      saveToBackend();
+      applyMspFontWeight();
+    });
+  });
+
   // Sự kiện tick/bỏ tick các mục/cột trong phần "ĐỀ MỤC & TÙY CHỈNH BẢNG" bên trái
   document.querySelectorAll('#demuc-columns-checklist input[type="checkbox"][data-demuc-col]').forEach(chk => {
     chk.addEventListener('change', () => {
@@ -5448,6 +5547,12 @@ function setupMSProjectEvents() {
       e.preventDefault();
       redoLastAction();
     }
+  });
+
+  // Phím Esc: đóng lần lượt lớp nổi trên cùng (menu chuột phải → menu thả → bảng tạo nhanh → hộp thoại → chế độ cắt) rồi bỏ chọn công việc
+  window.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' && e.key !== 'Esc') return;
+    if (handleEscapeKey()) e.preventDefault();
   });
 
   // Checkbox Chọn / Bỏ chọn tất cả công việc trên bảng WBS
@@ -6565,7 +6670,8 @@ function renderMSProjectView() {
 
   if (window.lucide) {
     window.lucide.createIcons();
-  }
+  }  applyMspFontWeight();
+  scheduleStickyHeaders();
 }
 
 function renderMspKpiSummary(kpiSummary, allVisibleTasks, projectGroups) {
@@ -7689,6 +7795,7 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
   // 2. Tạo bản sao (Clone) chuyên biệt để chụp ảnh sắc nét, không làm giật màn hình
   const cloneSheet = mspSheet.cloneNode(true);
   cloneSheet.classList.add('msp-export-clone');
+  cloneSheet.querySelectorAll('.msp-table-header, .msp-gantt-header').forEach(h => { h.style.transform = ''; h.classList.remove('is-stuck'); });
   cloneSheet.style.position = 'fixed';
   cloneSheet.style.left = '-19999px';
   cloneSheet.style.top = '0';
@@ -7865,3 +7972,503 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   bootstrapAuthAndData();
 });
+
+// =========================================================================
+// AI LẬP TIẾN ĐỘ (ảnh / Excel / PDF -> danh sách việc + liên kết) & ĐỒNG BỘ NOTION
+// Server giữ khoá (ANTHROPIC_API_KEY, NOTION_TOKEN) – trình duyệt chỉ gọi /api/ai, /api/notion
+// =========================================================================
+const AIPlanner = { files: [], plan: null, rows: [] };
+
+function featureEnabled(name) {
+  return !!(_appConfig && _appConfig.features && _appConfig.features[name]);
+}
+
+function integrationBlockedReason(name) {
+  if (isOfflineFileMode && isOfflineFileMode()) return 'Tính năng này cần mở web qua server (localhost hoặc Render), không dùng được khi mở file trực tiếp.';
+  if (_guestMode) return 'Chế độ khách không dùng được tính năng này. Hãy đăng nhập Gmail.';
+  if (!featureEnabled(name)) {
+    return name === 'ai'
+      ? 'Server chưa bật AI. Thêm biến ANTHROPIC_API_KEY trên Render (xem HUONG-DAN-NOTION-AI.md).'
+      : 'Server chưa bật Notion. Thêm NOTION_TOKEN và NOTION_DATABASE_ID trên Render (xem HUONG-DAN-NOTION-AI.md).';
+  }
+  return '';
+}
+
+function openModalById(id) {
+  const m = document.getElementById(id);
+  if (m) m.classList.add('active');
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Không tải được thư viện ' + src));
+    document.head.appendChild(s);
+  });
+}
+
+function readFileAs(file, how) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(r.result);
+    r.onerror = () => reject(r.error);
+    if (how === 'buffer') r.readAsArrayBuffer(file); else r.readAsDataURL(file);
+  });
+}
+
+// Thu nhỏ ảnh (cạnh dài ≤ 1568px) để gửi AI nhanh & rẻ
+async function imageFileToPayload(file) {
+  const dataUrl = await readFileAs(file, 'dataurl');
+  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
+  const maxSide = 1568;
+  const k = Math.min(1, maxSide / Math.max(img.width, img.height));
+  const c = document.createElement('canvas');
+  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+  ctx.drawImage(img, 0, 0, c.width, c.height);
+  return { mediaType: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] };
+}
+
+async function sheetFileToText(file) {
+  if (/\.csv$/i.test(file.name)) return await file.text();
+  await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
+  const wb = window.XLSX.read(await readFileAs(file, 'buffer'), { type: 'array' });
+  return wb.SheetNames.map(n => `### Sheet: ${n}\n` + window.XLSX.utils.sheet_to_csv(wb.Sheets[n], { blankrows: false })).join('\n\n');
+}
+
+function renderAiFileList() {
+  const el = document.getElementById('ai-file-list');
+  if (!el) return;
+  el.innerHTML = '';
+  AIPlanner.files.forEach((f, i) => {
+    const chip = document.createElement('span');
+    chip.className = 'ai-file-chip';
+    chip.textContent = f.name;
+    const x = document.createElement('button');
+    x.type = 'button'; x.textContent = '×'; x.title = 'Bỏ file này';
+    x.addEventListener('click', () => { AIPlanner.files.splice(i, 1); renderAiFileList(); });
+    chip.appendChild(x);
+    el.appendChild(chip);
+  });
+}
+
+function addAiFiles(list) {
+  Array.from(list || []).forEach(f => {
+    if (/^image\//.test(f.type) || /\.(xlsx|xls|csv|pdf)$/i.test(f.name)) AIPlanner.files.push(f);
+  });
+  AIPlanner.files = AIPlanner.files.slice(0, 8);
+  renderAiFileList();
+}
+
+function fillAiStageSelect() {
+  const sel = document.getElementById('ai-target-stage');
+  if (!sel) return;
+  sel.innerHTML = '';
+  const activeCal = getActiveCalendar();
+  (AppState.projectOwners || []).forEach(o => {
+    const g = document.createElement('optgroup');
+    g.label = `Dự án: ${o.name || '(chưa đặt tên)'}`;
+    const optNew = document.createElement('option');
+    optNew.value = 'new:' + o.id;
+    optNew.textContent = '＋ Giai đoạn mới (tên do AI đặt)';
+    g.appendChild(optNew);
+    AppState.calendars.filter(c => c.ownerId === o.id).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name;
+      g.appendChild(opt);
+    });
+    sel.appendChild(g);
+  });
+  const orphan = AppState.calendars.filter(c => !(AppState.projectOwners || []).some(o => o.id === c.ownerId));
+  orphan.forEach(c => { const opt = document.createElement('option'); opt.value = c.id; opt.textContent = c.name; sel.appendChild(opt); });
+  if (activeCal) sel.value = 'new:' + activeCal.ownerId;
+  if (!sel.value && sel.options.length) sel.selectedIndex = 0;
+}
+
+function openAiPlanner() {
+  const msg = document.getElementById('ai-input-msg');
+  const reason = integrationBlockedReason('ai');
+  if (msg) { msg.textContent = reason; msg.className = 'ai-msg' + (reason ? ' is-warn' : ''); }
+  const sd = document.getElementById('ai-start-date');
+  if (sd && !sd.value) sd.value = formatDateStr(new Date());
+  fillAiStageSelect();
+  document.getElementById('ai-step-input').style.display = '';
+  document.getElementById('ai-step-review').style.display = 'none';
+  openModalById('ai-planner-modal');
+}
+
+function getAiTargetWorkDays() {
+  const mode = document.getElementById('ai-limit-mode').value;
+  const start = document.getElementById('ai-start-date').value || formatDateStr(new Date());
+  if (mode === 'days') return Math.max(1, parseInt(document.getElementById('ai-target-days').value, 10) || 0) || null;
+  if (mode === 'end') {
+    const end = document.getElementById('ai-end-date').value;
+    if (!end || end < start) return null;
+    return Math.max(1, Math.round(countWorkingDays(start, end, true)));
+  }
+  return null;
+}
+
+async function runAiPlanner() {
+  const msg = document.getElementById('ai-input-msg');
+  const btn = document.getElementById('btn-ai-run');
+  const reason = integrationBlockedReason('ai');
+  if (reason) { msg.textContent = reason; msg.className = 'ai-msg is-warn'; return; }
+  const notes = document.getElementById('ai-notes').value.trim();
+  if (!AIPlanner.files.length && !notes) { msg.textContent = 'Hãy chọn ít nhất 1 ảnh / file hoặc nhập mô tả.'; msg.className = 'ai-msg is-warn'; return; }
+  if (document.getElementById('ai-limit-mode').value !== 'auto' && !getAiTargetWorkDays()) {
+    msg.textContent = 'Nhập số ngày hoặc ngày kết thúc (sau ngày bắt đầu).'; msg.className = 'ai-msg is-warn'; return;
+  }
+  btn.disabled = true;
+  msg.className = 'ai-msg is-busy';
+  msg.textContent = '⏳ Đang đọc file…';
+  try {
+    const payload = { images: [], pdfs: [], sheetText: '', notes };
+    for (const f of AIPlanner.files) {
+      if (/^image\//.test(f.type)) payload.images.push(await imageFileToPayload(f));
+      else if (/\.pdf$/i.test(f.name)) {
+        if (f.size > 7 * 1024 * 1024) throw new Error(`File PDF "${f.name}" quá lớn (> 7MB)`);
+        payload.pdfs.push({ data: (await readFileAs(f, 'dataurl')).split(',')[1] });
+      } else payload.sheetText += `\n\n## File: ${f.name}\n` + (await sheetFileToText(f));
+    }
+    payload.startDate = document.getElementById('ai-start-date').value || formatDateStr(new Date());
+    payload.targetWorkDays = getAiTargetWorkDays();
+    const target = document.getElementById('ai-target-stage').value;
+    const ownerId = target.startsWith('new:') ? target.slice(4) : (AppState.calendars.find(c => c.id === target) || {}).ownerId;
+    const owner = (AppState.projectOwners || []).find(o => o.id === ownerId);
+    payload.projectName = owner ? owner.name : '';
+    msg.textContent = '🤖 AI đang lọc hạng mục và lập tiến độ (khoảng 20–60 giây)…';
+    const res = await apiFetch('/api/ai/schedule', { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
+    AIPlanner.plan = json.plan;
+    AIPlanner.startDate = payload.startDate;
+    AIPlanner.targetWorkDays = payload.targetWorkDays;
+    AIPlanner.rows = json.plan.tasks.map((t, i) => ({ ...t, include: true, idx: i }));
+    msg.textContent = '';
+    msg.className = 'ai-msg';
+    showAiReview();
+  } catch (err) {
+    msg.textContent = '⚠ ' + err.message;
+    msg.className = 'ai-msg is-warn';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// Tính ngày cho từng việc theo lịch làm việc (bỏ ngày nghỉ / lễ) + liên kết FS/SS
+function computeAiRowDates() {
+  const start0 = shiftDateByWorkingDays(AIPlanner.startDate, 0, true);
+  const rows = AIPlanner.rows;
+  rows.forEach((r, i) => {
+    let s = null;
+    (r.dependsOn || []).forEach(d => {
+      const p = rows[d.index];
+      if (!p || d.index >= i || !p.include || !p.start) return;
+      const cand = getLinkedStartDate({ startDate: p.start, endDate: p.end }, { type: d.type, lag: d.lag }, true);
+      if (!s || cand > s) s = cand;
+    });
+    r.start = s || start0;
+    r.end = computeEndDateByWorkingDays(r.start, r.workDays, true);
+  });
+  const inc = rows.filter(r => r.include);
+  const maxEnd = inc.reduce((m, r) => (r.end > m ? r.end : m), start0);
+  return { start: start0, end: maxEnd, workDays: inc.length ? countWorkingDays(start0, maxEnd, true) : 0, calDays: inc.length ? Math.round((parseDateStr(maxEnd) - parseDateStr(start0)) / 86400000) + 1 : 0 };
+}
+
+function fmtVnDate(str) {
+  if (!str) return '';
+  const [y, m, d] = str.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+
+function showAiReview() {
+  document.getElementById('ai-step-input').style.display = 'none';
+  document.getElementById('ai-step-review').style.display = '';
+  const plan = AIPlanner.plan || {};
+  const sum = document.getElementById('ai-summary');
+  sum.innerHTML = '';
+  const nameLbl = document.createElement('label');
+  nameLbl.textContent = 'Tên giai đoạn: ';
+  const nameInp = document.createElement('input');
+  nameInp.type = 'text'; nameInp.id = 'ai-stage-name'; nameInp.value = plan.stageName || 'Tiến độ AI đề xuất';
+  nameLbl.appendChild(nameInp);
+  const p = document.createElement('div');
+  p.className = 'ai-summary-text';
+  p.textContent = plan.summary || '';
+  sum.appendChild(nameLbl); sum.appendChild(p);
+  const target = document.getElementById('ai-target-stage').value;
+  nameLbl.style.display = target.startsWith('new:') ? '' : 'none';
+  const q = document.getElementById('ai-questions');
+  q.innerHTML = '';
+  if (plan.questions && plan.questions.length) {
+    const t = document.createElement('div'); t.className = 'ai-q-title'; t.textContent = 'AI cần anh/chị xác nhận thêm:'; q.appendChild(t);
+    plan.questions.forEach(x => { const li = document.createElement('div'); li.textContent = '• ' + x; q.appendChild(li); });
+  }
+  renderAiReviewTable();
+}
+
+function renderAiReviewTable() {
+  const info = computeAiRowDates();
+  const tb = document.getElementById('ai-review-body');
+  tb.innerHTML = '';
+  AIPlanner.rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    if (!r.include) tr.className = 'is-off';
+    const c0 = document.createElement('td');
+    const chk = document.createElement('input'); chk.type = 'checkbox'; chk.checked = r.include;
+    chk.addEventListener('change', () => { r.include = chk.checked; renderAiReviewTable(); });
+    c0.appendChild(chk);
+    const c1 = document.createElement('td'); c1.textContent = i + 1;
+    const c2 = document.createElement('td');
+    const nm = document.createElement('input'); nm.type = 'text'; nm.value = r.name; nm.title = r.note || '';
+    nm.addEventListener('change', () => { r.name = nm.value.trim() || r.name; });
+    c2.appendChild(nm);
+    const c3 = document.createElement('td');
+    const wd = document.createElement('input'); wd.type = 'number'; wd.min = '0.5'; wd.step = '0.5'; wd.value = r.workDays; wd.className = 'ai-num';
+    wd.addEventListener('change', () => { r.workDays = Math.max(0.5, Math.round((parseFloat(wd.value) || 1) * 2) / 2); renderAiReviewTable(); });
+    c3.appendChild(wd);
+    const c4 = document.createElement('td');
+    c4.textContent = (r.dependsOn || []).filter(d => d.index < i).map(d => `${d.index + 1}${d.type === 'SS' ? ' (SS)' : ''}`).join(', ');
+    const c5 = document.createElement('td'); c5.textContent = r.include ? fmtVnDate(r.start) : '';
+    const c6 = document.createElement('td'); c6.textContent = r.include ? fmtVnDate(r.end) : '';
+    [c0, c1, c2, c3, c4, c5, c6].forEach(c => tr.appendChild(c));
+    tb.appendChild(tr);
+  });
+  const tot = document.getElementById('ai-total');
+  const over = AIPlanner.targetWorkDays && info.workDays > AIPlanner.targetWorkDays;
+  tot.innerHTML = '';
+  tot.textContent = `Tổng: ${fmtVnDate(info.start)} → ${fmtVnDate(info.end)} · ${info.workDays} ngày làm việc · ${info.calDays} ngày thực tế`
+    + (AIPlanner.targetWorkDays ? ` (mục tiêu ${AIPlanner.targetWorkDays} ngày làm việc)` : '');
+  tot.classList.toggle('is-over', !!over);
+  document.getElementById('btn-ai-fit').style.display = AIPlanner.targetWorkDays && info.workDays !== AIPlanner.targetWorkDays ? '' : 'none';
+}
+
+// Co giãn thời lượng các việc để tổng vừa đúng số ngày mục tiêu
+function fitAiRowsToTarget() {
+  const target = AIPlanner.targetWorkDays;
+  if (!target) return;
+  for (let k = 0; k < 4; k++) {
+    const info = computeAiRowDates();
+    if (!info.workDays || info.workDays === target) break;
+    const f = target / info.workDays;
+    AIPlanner.rows.forEach(r => { r.workDays = Math.max(0.5, Math.round(r.workDays * f * 2) / 2); });
+  }
+  renderAiReviewTable();
+}
+
+function applyAiPlan() {
+  const rows = AIPlanner.rows.filter(r => r.include);
+  if (!rows.length) { showToast('Chưa chọn công việc nào'); return; }
+  computeAiRowDates();
+  const target = document.getElementById('ai-target-stage').value;
+  let cal;
+  if (target.startsWith('new:')) {
+    const ownerId = target.slice(4);
+    const name = (document.getElementById('ai-stage-name') || {}).value || 'Tiến độ AI đề xuất';
+    cal = { id: 'cal_' + Date.now(), ownerId, name: name.trim(), customerName: name.trim(), color: getActiveCalendar() ? getActiveCalendar().color : '#3b82f6', visible: true };
+    AppState.calendars.push(cal);
+  } else {
+    cal = AppState.calendars.find(c => c.id === target);
+  }
+  if (!cal) { showToast('Không tìm thấy giai đoạn đích'); return; }
+  cal.visible = true;
+  const idMap = new Map();
+  const stamp = Date.now();
+  AIPlanner.rows.forEach((r, i) => { if (r.include) idMap.set(i, `task_ai_${stamp}_${i}`); });
+  const created = [];
+  AIPlanner.rows.forEach((r, i) => {
+    if (!r.include) return;
+    const t = {
+      id: idMap.get(i),
+      calendarId: cal.id,
+      title: r.name,
+      startDate: r.start,
+      endDate: r.end,
+      color: getNextSequentialPaletteColor(cal.id) || cal.color,
+      skipSundays: true,
+      showCount: true,
+      note: r.note || '',
+      progress: 0,
+      predecessors: []
+    };
+    AppState.tasks.push(t);
+    created.push({ t, r, i });
+  });
+  created.forEach(({ t, r, i }) => {
+    (r.dependsOn || []).forEach(d => {
+      if (d.index >= i || !idMap.has(d.index)) return;
+      const pred = AppState.tasks.find(x => x.id === idMap.get(d.index));
+      if (pred) addPredecessorLink(t, pred, AppState.tasks, d.type);
+    });
+  });
+  AppState.activeCalendarId = cal.id;
+  document.getElementById('ai-planner-modal').classList.remove('active');
+  AIPlanner.files = []; renderAiFileList();
+  syncAllFromMSProject(`✨ Đã thêm ${created.length} công việc AI đề xuất vào "${cal.name}"`);
+}
+
+// ---------------------------- NOTION ----------------------------
+function notionLog(text, cls = '') {
+  const el = document.getElementById('notion-log');
+  if (!el) return;
+  const d = document.createElement('div');
+  d.className = cls;
+  d.textContent = `${new Date().toLocaleTimeString('vi-VN')} – ${text}`;
+  el.prepend(d);
+}
+
+function getNotionScopeTasks() {
+  const scope = (document.getElementById('notion-scope') || {}).value || 'visible';
+  let cals = AppState.calendars;
+  if (scope === 'visible') cals = cals.filter(c => c.visible !== false);
+  if (scope === 'active-project') {
+    const ac = getActiveCalendar();
+    cals = cals.filter(c => ac && c.ownerId === ac.ownerId);
+  }
+  const ids = new Set(cals.map(c => c.id));
+  return AppState.tasks.filter(t => ids.has(t.calendarId) && t.startDate);
+}
+
+function openNotionSync() {
+  const reason = integrationBlockedReason('notion');
+  const st = document.getElementById('notion-status-msg');
+  st.textContent = reason || 'Đã kết nối server với Notion. Chọn phạm vi rồi bấm đồng bộ.';
+  st.className = 'ai-msg' + (reason ? ' is-warn' : ' is-ok');
+  document.querySelectorAll('#notion-sync-modal .notion-actions button').forEach(b => { b.disabled = !!reason; });
+  openModalById('notion-sync-modal');
+}
+
+async function notionPushTasks() {
+  const tasks = getNotionScopeTasks();
+  const items = tasks.map(t => {
+    const cal = AppState.calendars.find(c => c.id === t.calendarId);
+    const proj = getProjectOfCalendar(cal);
+    return { gdId: t.id, notionPageId: t.notionPageId || null, name: t.title, start: t.startDate, end: t.endDate, project: proj ? proj.name : '', stage: cal ? cal.name : '', progress: typeof t.progress === 'number' ? t.progress : 0 };
+  });
+  notionLog(`Đang đẩy ${items.length} công việc lên Notion…`);
+  const res = await apiFetch('/api/notion/push', { method: 'POST', body: JSON.stringify({ items }) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
+  let ok = 0, created = 0, failed = 0;
+  json.results.forEach(r => {
+    const t = AppState.tasks.find(x => x.id === r.gdId);
+    if (r.error || !t) { failed++; return; }
+    t.notionPageId = r.pageId;
+    t.notionSyncedAt = r.lastEdited;
+    ok++; if (r.created) created++;
+  });
+  saveToBackend();
+  notionLog(`Đã đẩy ${ok} việc (${created} mới)${failed ? `, lỗi ${failed}` : ''}.`, failed ? 'is-warn' : 'is-ok');
+}
+
+async function notionPullTasks() {
+  notionLog('Đang lấy dữ liệu từ Notion…');
+  const res = await apiFetch('/api/notion/pull');
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
+  let updated = 0, added = 0;
+  const movedRoots = [];
+  json.items.forEach(it => {
+    if (!it.start) return;
+    const pid = String(it.pageId).replace(/-/g, '');
+    let t = AppState.tasks.find(x => (it.gdId && x.id === it.gdId) || (x.notionPageId && String(x.notionPageId).replace(/-/g, '') === pid));
+    if (t) {
+      const editedAfterSync = !t.notionSyncedAt || it.lastEdited > t.notionSyncedAt;
+      if (!editedAfterSync) return;
+      let changed = false;
+      if (it.name && it.name !== t.title) { t.title = it.name; changed = true; }
+      const end = it.end && it.end >= it.start ? it.end : it.start;
+      if (it.start !== t.startDate || end !== t.endDate) { t.startDate = it.start; t.endDate = end; movedRoots.push(t.id); changed = true; }
+      if (typeof it.progress === 'number' && it.progress !== (t.progress || 0)) { t.progress = Math.max(0, Math.min(100, it.progress)); changed = true; }
+      t.notionPageId = it.pageId;
+      t.notionSyncedAt = it.lastEdited;
+      if (changed) updated++;
+      return;
+    }
+    if (it.gdId) return; // việc đã xoá trong app -> bỏ qua
+    // Dòng mới tạo trên Notion -> thêm vào giai đoạn cùng tên (ưu tiên đúng dự án)
+    const projName = (it.project || '').trim().toLowerCase();
+    const stageName = (it.stage || '').trim().toLowerCase();
+    let cal = AppState.calendars.find(c => stageName && c.name.trim().toLowerCase() === stageName && (!projName || ((getProjectOfCalendar(c) || {}).name || '').trim().toLowerCase() === projName))
+      || AppState.calendars.find(c => stageName && c.name.trim().toLowerCase() === stageName)
+      || getActiveCalendar();
+    if (!cal) return;
+    AppState.tasks.push({
+      id: 'task_nt_' + Date.now() + '_' + added,
+      calendarId: cal.id,
+      title: it.name || '(Từ Notion)',
+      startDate: it.start,
+      endDate: it.end && it.end >= it.start ? it.end : it.start,
+      color: getNextSequentialPaletteColor(cal.id) || cal.color,
+      skipSundays: true,
+      showCount: true,
+      note: '',
+      progress: typeof it.progress === 'number' ? it.progress : 0,
+      predecessors: [],
+      notionPageId: it.pageId,
+      notionSyncedAt: it.lastEdited
+    });
+    added++;
+  });
+  if (movedRoots.length && AppState.autoCascadeShift !== false) propagateLinkedTasks(movedRoots, AppState.tasks);
+  syncAllFromMSProject();
+  notionLog(`Lấy về xong: cập nhật ${updated} việc, thêm mới ${added} việc.`, 'is-ok');
+}
+
+async function runNotionAction(kind) {
+  const btns = document.querySelectorAll('#notion-sync-modal .notion-actions button');
+  btns.forEach(b => { b.disabled = true; });
+  try {
+    if (kind === 'pull' || kind === 'both') await notionPullTasks();
+    if (kind === 'push' || kind === 'both') await notionPushTasks();
+    showToast('Đồng bộ Notion xong');
+  } catch (err) {
+    notionLog('⚠ ' + err.message, 'is-warn');
+  } finally {
+    btns.forEach(b => { b.disabled = false; });
+  }
+}
+
+function setupIntegrationsUI() {
+  document.querySelectorAll('[data-close-modal]').forEach(b => b.addEventListener('click', () => {
+    const m = document.getElementById(b.dataset.closeModal);
+    if (m) m.classList.remove('active');
+  }));
+  const openAi = () => { document.querySelectorAll('.hdr-dropdown.open').forEach(d => d.classList.remove('open')); openAiPlanner(); };
+  ['btn-open-ai-planner', 'btn-open-ai-planner-menu'].forEach(id => { const b = document.getElementById(id); if (b) b.addEventListener('click', openAi); });
+  const nb = document.getElementById('btn-open-notion-sync');
+  if (nb) nb.addEventListener('click', () => { document.querySelectorAll('.hdr-dropdown.open').forEach(d => d.classList.remove('open')); openNotionSync(); });
+  const fi = document.getElementById('ai-file-input');
+  if (fi) fi.addEventListener('change', () => { addAiFiles(fi.files); fi.value = ''; });
+  const dz = document.getElementById('ai-drop-zone');
+  if (dz) {
+    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-over'); });
+    dz.addEventListener('dragleave', () => dz.classList.remove('is-over'));
+    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('is-over'); addAiFiles(e.dataTransfer.files); });
+  }
+  document.addEventListener('paste', e => {
+    const m = document.getElementById('ai-planner-modal');
+    if (!m || !m.classList.contains('active')) return;
+    const files = Array.from(e.clipboardData ? e.clipboardData.files : []);
+    if (files.length) { e.preventDefault(); addAiFiles(files); }
+  });
+  const lm = document.getElementById('ai-limit-mode');
+  if (lm) lm.addEventListener('change', () => {
+    document.getElementById('ai-days-wrap').style.display = lm.value === 'days' ? '' : 'none';
+    document.getElementById('ai-end-wrap').style.display = lm.value === 'end' ? '' : 'none';
+  });
+  const on = (id, fn) => { const el = document.getElementById(id); if (el) el.addEventListener('click', fn); };
+  on('btn-ai-run', runAiPlanner);
+  on('btn-ai-back', () => { document.getElementById('ai-step-input').style.display = ''; document.getElementById('ai-step-review').style.display = 'none'; });
+  on('btn-ai-fit', fitAiRowsToTarget);
+  on('btn-ai-apply', applyAiPlan);
+  on('btn-notion-sync2', () => runNotionAction('both'));
+  on('btn-notion-push', () => runNotionAction('push'));
+  on('btn-notion-pull', () => runNotionAction('pull'));
+}
+window.addEventListener('DOMContentLoaded', setupIntegrationsUI);

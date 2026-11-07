@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const integrations = require('./integrations');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -51,7 +52,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_DENY = new Set(['server.js']);
+const STATIC_DENY = new Set(['server.js', 'integrations.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -394,7 +395,7 @@ function serveStatic(req, res, urlPath) {
 // -------------------------------------------------------------------------
 async function handleApi(req, res, urlPath) {
   if (urlPath === '/api/health') {
-    sendJson(res, 200, { ok: true, auth: AUTH_MODE, ...(store ? store.info() : {}) });
+    sendJson(res, 200, { ok: true, auth: AUTH_MODE, ...(store ? store.info() : {}), features: integrations.features() });
     return;
   }
 
@@ -403,7 +404,8 @@ async function handleApi(req, res, urlPath) {
     sendJson(res, 200, {
       authMode: AUTH_MODE,
       googleClientId: GOOGLE_CLIENT_ID || null,
-      storage: store ? store.kind : 'file'
+      storage: store ? store.kind : 'file',
+      features: integrations.features()
     });
     return;
   }
@@ -449,6 +451,11 @@ async function handleApi(req, res, urlPath) {
     await store.put(dataKey, copy);
     sendJson(res, 200, { success: true, version: copy._version });
     return;
+  }
+
+  // Notion + AI (chỉ cho người đã đăng nhập)
+  if (urlPath.startsWith('/api/notion/') || urlPath.startsWith('/api/ai/')) {
+    if (await integrations.handleIntegrations(req, res, urlPath, { sendJson, readJsonBody, dataKey })) return;
   }
 
   if (urlPath === '/api/schedule' && req.method === 'GET') {

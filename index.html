@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261107d">
+  <link rel="stylesheet" href="style.css?v=20261107e">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -71,8 +71,18 @@
           <button type="button" class="hdr-menu-item" id="btn-export-json-backup" title="Tải về file JSON sao lưu toàn bộ tiến độ">
             <i data-lucide="download"></i><span>Xuất JSON sao lưu</span>
           </button>
+          <button type="button" class="hdr-menu-item" id="btn-open-notion-sync" title="Đồng bộ lịch với database Notion (xem / sửa 2 chiều)">
+            <i data-lucide="refresh-cw"></i><span>Đồng bộ Notion…</span>
+          </button>
+          <button type="button" class="hdr-menu-item" id="btn-open-ai-planner-menu" title="Gửi ảnh / Excel để AI lọc hạng mục và đề xuất tiến độ">
+            <i data-lucide="sparkles"></i><span>AI lập tiến độ…</span>
+          </button>
         </div>
       </div>
+
+      <button type="button" class="btn btn-outline hdr-ai-btn" id="btn-open-ai-planner" title="AI lập tiến độ từ ảnh / file Excel">
+        <i data-lucide="sparkles"></i><span class="btn-label">AI</span>
+      </button>
 
       <!-- 2. Nhóm Ảnh: nút chính "Copy ảnh" + mũi tên "▾" -->
       <div class="hdr-dropdown hdr-split-group" id="hdr-image-dropdown">
@@ -213,6 +223,13 @@
             <button type="button" class="msp-row-height-btn" data-row-height="compact" title="Thấp (32px)">S</button>
             <button type="button" class="msp-row-height-btn" data-row-height="normal" title="Chuẩn (42px)">M</button>
             <button type="button" class="msp-row-height-btn" data-row-height="tall" title="Cao (54px)">L</button>
+          </div>
+          <div class="sb-row-label">Độ đậm chữ</div>
+          <div class="msp-zoom-btns sb-seg-btns" id="msp-font-weight-btns">
+            <button type="button" class="msp-font-weight-btn" data-font-weight="light" title="Chữ mảnh" style="font-weight:400">Mảnh</button>
+            <button type="button" class="msp-font-weight-btn active" data-font-weight="normal" title="Chữ thường (mặc định)" style="font-weight:600">Thường</button>
+            <button type="button" class="msp-font-weight-btn" data-font-weight="bold" title="Chữ đậm" style="font-weight:800">Đậm</button>
+            <button type="button" class="msp-font-weight-btn" data-font-weight="heavy" title="Chữ rất đậm" style="font-weight:900">Rất đậm</button>
           </div>
         </div>
       </div>
@@ -682,6 +699,100 @@
     </div>
   </div>
 
+  <!-- Modal AI lập tiến độ -->
+  <div class="modal-overlay" id="ai-planner-modal">
+    <div class="modal-card ai-modal-card">
+      <div class="modal-header">
+        <h3>✨ AI lập tiến độ từ ảnh / Excel</h3>
+        <button class="icon-btn close-modal" data-close-modal="ai-planner-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="ai-step" id="ai-step-input">
+          <label class="ai-drop" id="ai-drop-zone">
+            <input type="file" id="ai-file-input" multiple accept="image/*,.xlsx,.xls,.csv,.pdf" hidden>
+            <i data-lucide="upload-cloud"></i>
+            <b>Bấm hoặc kéo thả</b> ảnh báo giá / bảng khối lượng / bản vẽ, file Excel (.xlsx, .csv) hoặc PDF
+            <small>Có thể dán ảnh bằng Ctrl+V</small>
+          </label>
+          <div class="ai-file-list" id="ai-file-list"></div>
+          <div class="form-group">
+            <label for="ai-notes">Mô tả thêm (tuỳ chọn)</label>
+            <textarea id="ai-notes" rows="2" placeholder="VD: Căn hộ 80m², cải tạo bếp + 2 WC, làm trần thạch cao, sơn lại toàn bộ…"></textarea>
+          </div>
+          <div class="ai-grid">
+            <div class="form-group"><label for="ai-start-date">Ngày bắt đầu</label><input type="date" id="ai-start-date"></div>
+            <div class="form-group"><label for="ai-limit-mode">Thời hạn</label>
+              <select id="ai-limit-mode" class="form-select">
+                <option value="auto">Để AI tự đề xuất</option>
+                <option value="days">Trong khoảng … ngày làm việc</option>
+                <option value="end">Xong trước ngày …</option>
+              </select>
+            </div>
+            <div class="form-group" id="ai-days-wrap" style="display:none"><label for="ai-target-days">Số ngày làm việc</label><input type="number" id="ai-target-days" min="1" max="400" value="30"></div>
+            <div class="form-group" id="ai-end-wrap" style="display:none"><label for="ai-end-date">Ngày kết thúc</label><input type="date" id="ai-end-date"></div>
+          </div>
+          <div class="form-group">
+            <label for="ai-target-stage">Thêm vào</label>
+            <select id="ai-target-stage" class="form-select"></select>
+          </div>
+          <div class="ai-msg" id="ai-input-msg"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" data-close-modal="ai-planner-modal">Huỷ</button>
+            <button type="button" class="btn btn-primary" id="btn-ai-run"><i data-lucide="sparkles"></i> Đề xuất tiến độ</button>
+          </div>
+        </div>
+        <div class="ai-step" id="ai-step-review" style="display:none">
+          <div class="ai-summary" id="ai-summary"></div>
+          <div class="ai-questions" id="ai-questions"></div>
+          <div class="ai-review-wrap">
+            <table class="ai-review-table">
+              <thead><tr><th></th><th>#</th><th>Công việc</th><th>Ngày LV</th><th>Sau việc</th><th>Bắt đầu</th><th>Kết thúc</th></tr></thead>
+              <tbody id="ai-review-body"></tbody>
+            </table>
+          </div>
+          <div class="ai-total" id="ai-total"></div>
+          <div class="modal-actions">
+            <button type="button" class="btn btn-outline" id="btn-ai-back">← Sửa yêu cầu</button>
+            <button type="button" class="btn btn-outline" id="btn-ai-fit" style="display:none">Co giãn cho vừa hạn</button>
+            <button type="button" class="btn btn-primary" id="btn-ai-apply">Thêm vào lịch</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Đồng bộ Notion -->
+  <div class="modal-overlay" id="notion-sync-modal">
+    <div class="modal-card ai-modal-card">
+      <div class="modal-header">
+        <h3>🔗 Đồng bộ lịch với Notion</h3>
+        <button class="icon-btn close-modal" data-close-modal="notion-sync-modal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="ai-msg" id="notion-status-msg"></div>
+        <div class="form-group">
+          <label for="notion-scope">Phạm vi</label>
+          <select id="notion-scope" class="form-select">
+            <option value="visible">Các dự án đang bật trên Timeline</option>
+            <option value="active-project">Chỉ dự án đang chọn</option>
+            <option value="all">Toàn bộ công việc</option>
+          </select>
+        </div>
+        <div class="notion-actions">
+          <button type="button" class="btn btn-primary" id="btn-notion-sync2"><i data-lucide="refresh-cw"></i> Đồng bộ 2 chiều</button>
+          <button type="button" class="btn btn-outline" id="btn-notion-push"><i data-lucide="upload"></i> Chỉ đẩy lên Notion</button>
+          <button type="button" class="btn btn-outline" id="btn-notion-pull"><i data-lucide="download"></i> Chỉ lấy từ Notion về</button>
+        </div>
+        <p class="notion-help">
+          • <b>Đẩy lên</b>: mỗi công việc thành 1 dòng trong database Notion (Tên, Ngày bắt đầu → kết thúc, Dự án, Giai đoạn, Tiến độ).<br>
+          • <b>Lấy về</b>: dòng nào sửa trên Notion sau lần đồng bộ trước sẽ cập nhật ngày / tên / tiến độ vào app; dòng mới tạo trên Notion được thêm vào giai đoạn cùng tên (hoặc giai đoạn đang chọn).<br>
+          • <b>2 chiều</b> = lấy về trước, rồi đẩy lên.
+        </p>
+        <div class="notion-log" id="notion-log"></div>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal Cài đặt Dự Án & Thông tin Footer -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-card">
@@ -896,8 +1007,8 @@
   </div>
 
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
-  <script src="holidays-data.js?v=20261107d"></script>
-  <script src="scheduler.js?v=20261107d"></script>
-  <script src="app.js?v=20261107d"></script>
+  <script src="holidays-data.js?v=20261107e"></script>
+  <script src="scheduler.js?v=20261107e"></script>
+  <script src="app.js?v=20261107e"></script>
 </body>
 </html>
