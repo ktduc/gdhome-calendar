@@ -130,6 +130,8 @@ async function flushSave() {
   try {
     const result = await post('/api/materials', { _version:materials._version, sheet });
     materials._version = result._version;
+    materials.library = result.library || materials.library;
+    materials.presets = result.presets || materials.presets;
     if (!sheet.id) sheet.id = result.sheet.id;
     const index = materials.sheets.findIndex(s => s.id === sheet.id);
     if (index < 0) materials.sheets.push(result.sheet);
@@ -190,7 +192,9 @@ function dialog(markup) {
   return element;
 }
 
+let activeDetail;
 function editDetail(row, slot) {
+  activeDetail = { row,slot };
   const pa = slot === 'render' ? null : row.options[Number(slot)];
   const list = pa?.images || row.render;
   const element = dialog('<h2>' + html(row.name) + ' · ' + (pa ? 'PA' + (Number(slot)+1) : 'Phối cảnh 3D') + '</h2><div data-slot="' + slot +

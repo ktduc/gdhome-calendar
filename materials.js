@@ -83,7 +83,16 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
       }
       if (index < 0) data.sheets.push(updated);
       else data.sheets[index] = updated;
-      return { sheet: updated };
+      for (const group of updated.groups) for (const row of group.rows) {
+        if (row.decision !== 'chosen' || !row.options[row.chosen]?.code) continue;
+        const pa = row.options[row.chosen];
+        const signature = [pa.brand,pa.code,pa.color,pa.size,pa.finish].map(v => String(v || '').trim().toLocaleLowerCase()).join('|');
+        const entry = { ...pa, name:row.name, group:group.name, signature };
+        const existing = data.library.findIndex(item => item.signature === signature);
+        if (existing < 0) data.library.push(entry);
+        else data.library[existing] = entry;
+      }
+      return { sheet: updated, library: data.library, presets: data.presets };
     });
     return sendJson(res, 200, saved);
   }
