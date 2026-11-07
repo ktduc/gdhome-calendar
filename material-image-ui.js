@@ -1,7 +1,11 @@
 async function encodeImage(source, maxSide, targetBytes, crop = null) {
   const image = await createImageBitmap(source);
   try {
-    const [x,y,w,h] = crop ? crop.map((n,i) => Math.round(n * (i%2 ? image.height : image.width))) : [0,0,image.width,image.height];
+    const [left,top,right,bottom] = crop || [0,0,1,1];
+    const x = Math.min(image.width-1,Math.floor(left*image.width));
+    const y = Math.min(image.height-1,Math.floor(top*image.height));
+    const w = Math.ceil(right*image.width)-x;
+    const h = Math.ceil(bottom*image.height)-y;
     const canvas = document.createElement('canvas');
     let scale = Math.min(1,maxSide/Math.max(w,h));
     for (let attempt = 0; attempt < 10; attempt++) {
@@ -36,19 +40,111 @@ async function attachImages(row, slot, files, render = false) {
 }
 
 async function cropImage(row, slot, i, element) {
+  const source = sheet;
   const list = slot === 'render' ? row.render : row.options[Number(slot)].images;
   const item = list[i];
   const response = await fetch('/api/materials/assets/' + (item.full || item),{ headers:authHeaders() });
-  if (!response.ok) throw new Error('Không mở được ảnh để crop.');
+  if (!response.ok) throw new Error('Không mở được ảnh để cắt.');
   const file = await response.blob();
-  const values = prompt('Crop theo %: trái, trên, rộng, cao','10,10,80,80')?.split(',').map(n => Number(n.trim())/100);
-  if (!values) return;
-  if (values.length !== 4 || values.some(n => !Number.isFinite(n) || n < 0) || values[2] < .01 || values[3] < .01 ||
-      values[0] + values[2] > 1 || values[1] + values[3] > 1) throw new Error('Vùng crop nằm ngoài ảnh.');
-  const image = await uploadImage(file,values);
-  modify(() => { list[i] = image; },false);
-  element.close();
-  editDetail(row,slot);
+  if (!element.open || sheet !== source || list[i] !== item) return;
+
+  const crop = document.createElement('dialog');
+  crop.className = 'crop-dialog';
+  crop.setAttribute('aria-labelledby','crop-title');
+  crop.innerHTML = '<h2 id="crop-title">Cắt ảnh</h2><p>Kéo bốn góc để chọn vùng giữ lại. Kéo trong vùng sáng để di chuyển.</p>' +
+    '<div class="crop-stage"><img alt="Ảnh gốc" draggable="false"><div class="crop-selection">' +
+    [['lt','trên trái'],['rt','trên phải'],['lb','dưới trái'],['rb','dưới phải']].map(([key,label]) =>
+      '<button type="button" class="crop-handle" data-corner="' + key + '" aria-label="Góc ' + label + '"></button>').join('') +
+    '</div></div><p class="crop-status" role="status"></p><div class="toolbar">' +
+    '<button type="button" data-crop="cancel">Huỷ</button><button type="button" class="primary" data-crop="save">Lưu ảnh cắt</button></div>';
+  const image = crop.querySelector('img');
+  const url = URL.createObjectURL(file);
+  try {
+    image.src = url;
+    await image.decode();
+    if (!element.open || sheet !== source || list[i] !== item) {
+      URL.revokeObjectURL(url);
+      return;
+    }
+    document.body.append(crop);
+    crop.showModal();
+  } catch (error) {
+    URL.revokeObjectURL(url);
+    crop.remove();
+    throw error;
+  }
+  crop.addEventListener('close', () => { URL.revokeObjectURL(url); crop.remove(); }, { once:true });
+  const stage = crop.querySelector('.crop-stage');
+  const selection = crop.querySelector('.crop-selection');
+  const save = crop.querySelector('[data-crop="save"]');
+  const cancel = crop.querySelector('[data-crop="cancel"]');
+  let bounds = [0.08,0.08,0.92,0.92];
+  const minSize = 0.02;
+  const clamp = (value, low, high) => Math.min(high,Math.max(low,value));
+
+  function paint() {
+    const [left,top,right,bottom] = bounds;
+    Object.assign(selection.style,{ left:left*100+'%',top:top*100+'%',width:(right-left)*100+'%',height:(bottom-top)*100+'%' });
+  }
+
+  function resize(start, corner, dx, dy) {
+    const [left,top,right,bottom] = start;
+    if (!corner) {
+      const x = clamp(dx,-left,1-right);
+      const y = clamp(dy,-top,1-bottom);
+      return [left+x,top+y,right+x,bottom+y];
+    }
+    return [
+      corner[0] === 'l' ? clamp(left+dx,0,right-minSize) : left,
+      corner[1] === 't' ? clamp(top+dy,0,bottom-minSize) : top,
+      corner[0] === 'r' ? clamp(right+dx,left+minSize,1) : right,
+      corner[1] === 'b' ? clamp(bottom+dy,top+minSize,1) : bottom
+    ];
+  }
+
+  let drag;
+  selection.onpointerdown = event => {
+    if (event.button !== 0 || drag) return;
+    event.preventDefault();
+    const rect = stage.getBoundingClientRect();
+    drag = { id:event.pointerId, corner:event.target.dataset.corner, x:event.clientX, y:event.clientY, rect, start:bounds };
+    selection.setPointerCapture(event.pointerId);
+  };
+  selection.onpointermove = event => {
+    if (!drag || drag.id !== event.pointerId) return;
+    bounds = resize(drag.start,drag.corner,(event.clientX-drag.x)/drag.rect.width,(event.clientY-drag.y)/drag.rect.height);
+    paint();
+  };
+  selection.onlostpointercapture = () => { drag = null; };
+  selection.onkeydown = event => {
+    const shift = { ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1] }[event.key];
+    const corner = event.target.dataset.corner;
+    if (!shift || !corner) return;
+    event.preventDefault();
+    bounds = resize(bounds,corner,shift[0]*0.01,shift[1]*0.01);
+    paint();
+  };
+
+  cancel.onclick = () => crop.close();
+  crop.oncancel = event => { if (save.disabled) event.preventDefault(); };
+  save.onclick = async () => {
+    save.disabled = cancel.disabled = true;
+    const status = crop.querySelector('.crop-status');
+    status.textContent = 'Đang lưu ảnh cắt…';
+    try {
+      const updated = await uploadImage(file,bounds);
+      if (sheet === source && list[i] === item) modify(() => { list[i] = updated; },false);
+      crop.close();
+      if (element.open && sheet === source) {
+        element.close();
+        editDetail(row,slot);
+      }
+    } catch (error) {
+      status.textContent = error.message;
+      save.disabled = cancel.disabled = false;
+    }
+  };
+  paint();
 }
 
 document.addEventListener('paste', event => {

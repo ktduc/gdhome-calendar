@@ -38,9 +38,9 @@ function setupSignature(prefix) {
 }
 function signatureMark(record) {
   if (!record) return '<p>Chờ ký</p>';
-  return '<svg viewBox="0 0 1000 1000" preserveAspectRatio="none" role="img" aria-label="Chữ ký" class="signature-mark">' +
-    (record.strokes || []).map(stroke => '<polyline fill="none" stroke="#222" stroke-width="11" stroke-linecap="round" stroke-linejoin="round" points="' +
-      stroke.map(point => point.map(Number).join(',')).join(' ') + '"/>').join('') + '</svg><strong>' + html(record.name) + '</strong><br><small>' + html(vnDate(record.at)) + '</small>';
+  return '<svg viewBox="0 0 600 190" role="img" aria-label="Chữ ký" class="signature-mark">' +
+    (record.strokes || []).map(stroke => '<polyline fill="none" stroke="#222" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="' +
+      stroke.map(point => (Number(point[0])*0.6) + ',' + (Number(point[1])*0.19)).join(' ') + '"/>').join('') + '</svg><strong>' + html(record.name) + '</strong><br><small>' + html(vnDate(record.at)) + '</small>';
 }
 function printImages(items, base, large = false) {
   return (items || []).map(image => {

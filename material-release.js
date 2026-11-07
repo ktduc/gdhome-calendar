@@ -54,7 +54,9 @@ async function historyDialog() {
   const element = dialog('<h2>Biên bản và lịch sử</h2><button id="refresh-material">Tải lại bảng từ máy chủ</button>' +
     [...result.revisions].reverse().map((view,i) => '<article><strong>Bản ' + (result.revisions.length-i) + ' · ' + html(vnDate(view.publishedAt)) +
       '</strong><p>' + (view.revoked?'Đã thu hồi · ':'') + (view.customer?'A đã ký':'Chờ A ký') + ' · ' + (view.company?'B đã ký':'Chờ B ký') +
-      '</p><button data-print-revision="' + view.id + '">Biên bản A4</button> ' +
+      '</p>' + (view.customer || view.company ? '<div class="print-signatures history-signatures"><div><strong>Bên A</strong>' + signatureMark(view.customer) +
+        '</div><div><strong>Bên B</strong>' + signatureMark(view.company) + '</div></div>' : '') +
+      '<button data-print-revision="' + view.id + '">Biên bản A4</button> ' +
       (view.customer && !view.company ? '<button data-company="' + view.id + '">Bên B xác nhận</button> ' : '') +
       (view.revoked ? '' : '<button data-revoke="' + view.id + '">Thu hồi link</button>') + '</article>').join('') +
     '<ol>' + [...result.audit].reverse().map(entry => '<li>' + html(vnDate(entry.at) + ' · ' + entry.actor + ' · ' +
