@@ -107,8 +107,8 @@ async function notionApi(nc, method, apiPath, body) {
     const json = await res.json().catch(() => ({}));
     if (!res.ok) {
       let msg = json.message || `Notion lỗi ${res.status}`;
-      if (res.status === 401) msg = 'Mã Notion (Internal Integration Secret) không đúng hoặc đã bị thu hồi';
-      if (res.status === 404) msg = 'Không thấy database Notion. Kiểm tra link database và đã vào database → ••• → Connections → thêm integration chưa';
+      if (res.status === 401) msg = 'Mã Notion không đúng, đã hết hạn hoặc đã bị thu hồi';
+      if (res.status === 404) msg = 'Không thấy database Notion. Kiểm tra link (phải là link của BẢNG database). Nếu dùng mã Internal connection thì phải vào database → ••• → Connections → + Add connection';
       if (res.status === 400 && /is a page, not a database/i.test(msg)) msg = 'Link đang là 1 TRANG Notion, không phải database. Hãy tạo bảng (database) rồi copy link của bảng.';
       throw httpError(400, msg);
     }
@@ -421,7 +421,7 @@ async function updateSettings(store, dataKey, body) {
   if (body.notionToken !== undefined || body.notionDb !== undefined) {
     const token = String(body.notionToken || '').trim() || cfg.notionToken;
     const dbRaw = String(body.notionDb || '').trim() || cfg.notionDb;
-    if (!token) throw httpError(400, 'Dán mã Notion (Internal Integration Secret, dạng ntn_…)');
+    if (!token) throw httpError(400, 'Dán mã Notion (Personal access token hoặc API token)');
     const dbId = parseNotionId(dbRaw);
     if (!dbId) throw httpError(400, 'Link database Notion không đúng (cần link của BẢNG database, có chuỗi 32 ký tự)');
     _schemaCache.delete(dbId);

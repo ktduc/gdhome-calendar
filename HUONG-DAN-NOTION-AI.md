@@ -9,11 +9,11 @@ Khoá được **mã hoá** rồi lưu trên server (Gist bí mật), trình duy
 
 Mở app → **File ▾ → Đồng bộ Notion…** → mục **⚙ Kết nối Notion**:
 
-1. Mở https://www.notion.so/profile/integrations → **New integration** → tên `GD HOME Lich`, chọn workspace, Type **Internal** → **Save** → copy **Internal Integration Secret** (dạng `ntn_...`).
+1. Mở https://app.notion.com/developers (Developer tools) → tab **Personal access tokens** → **New token** → tên `GD HOME`, tick **Notion API**, hạn **1 year** → **Create token** → copy mã (chỉ hiện 1 lần). Mã này dùng quyền của chính anh nên **không cần** bước thêm Connections.
 2. Trong Notion tạo 1 trang mới → gõ `/database` → **Database – Full page**, đặt tên vd **TIẾN ĐỘ GD HOME**. Thêm 1 cột kiểu **Date** tên `Ngày`.
-3. Ở database bấm **•••** (góc phải trên) → **Connections** → chọn `GD HOME Lich` → **Confirm** (bắt buộc).
-4. **Share → Copy link** của database.
-5. Dán mã `ntn_...` và link vào app → **Lưu & kiểm tra**. App tự tạo thêm các cột **Dự án**, **Giai đoạn** (kiểu Select), **Tiến độ**, **GDHomeID** (đừng xoá cột này).
+3. Ở database bấm **Share → Copy link**.
+4. *(Cách khác nếu không có tab Personal access tokens)*: tab **Connections** → **Internal connections → Create a new connection** → tab **Configuration** copy **API token**; rồi vào database → **•••** → **Connections** → **+ Add connection** → chọn kết nối đó.
+5. Dán mã và link vào app → **Lưu & kiểm tra**. App tự tạo thêm các cột **Dự án**, **Giai đoạn** (kiểu Select), **Tiến độ**, **GDHomeID** (đừng xoá cột này).
 
 Trên Notion, thêm view **Timeline** hoặc **Calendar** theo cột `Ngày`, rồi **Group by → Dự án** (hoặc Giai đoạn) để xem như 1 dự án lớn chia nhóm.
 
@@ -46,3 +46,5 @@ Cách dùng AI: thả ảnh báo giá / bảng khối lượng / bản vẽ (Ctr
 
 ## (Tuỳ chọn) Khoá dùng chung cho mọi người qua Render
 Render → service → **Environment**: `NOTION_TOKEN` + `NOTION_DATABASE_ID`, hoặc 1 trong `GEMINI_API_KEY` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` (+ `AI_ALLOWED_EMAILS`, `AI_DAILY_LIMIT`, `AI_MODEL`). Ai đã tự dán khoá trong app thì ưu tiên khoá riêng.
+
+> Personal access token hết hạn sau thời gian đã chọn (tối đa 1 năm): khi app báo "Mã Notion không đúng, đã hết hạn" thì tạo mã mới và dán lại.
