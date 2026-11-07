@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,300&display=swap" rel="stylesheet">
   <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@latest"></script>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link rel="stylesheet" href="style.css">
@@ -25,7 +25,7 @@
         <img src="gdhome-icon.png" alt="GD HOME" class="header-logo-img">
         <span>Lịch Tiến Độ</span>
       </div>
-      <button class="btn btn-outline btn-sm" id="btn-today">Hôm nay</button>
+      <button class="btn btn-outline btn-sm" id="btn-today" title="Về hôm nay">Hôm nay</button>
       <div class="nav-controls">
         <button class="icon-btn" id="btn-prev" title="Lùi lại 1 tháng"><i data-lucide="chevron-left"></i></button>
         <button class="icon-btn" id="btn-next" title="Tiến tới 1 tháng"><i data-lucide="chevron-right"></i></button>
@@ -36,9 +36,9 @@
     <!-- Filter & Khoảng thời gian mong muốn -->
     <div class="header-center">
       <div class="range-selector-box">
-        <label for="start-month-input">Từ:</label>
+        <label for="start-month-input" class="range-lbl">Từ:</label>
         <input type="month" id="start-month-input" value="2026-06">
-        <label for="end-month-input">Đến:</label>
+        <label for="end-month-input" class="range-lbl">Đến:</label>
         <input type="month" id="end-month-input" value="2026-09">
         <button class="btn btn-primary btn-sm" id="btn-apply-range">Áp dụng</button>
       </div>
@@ -46,32 +46,32 @@
 
     <div class="header-right">
       <input type="file" id="input-import-msproject" accept=".xml,.mspdi,.csv,.json" style="display: none;">
-      <button class="btn btn-outline btn-msp-io" id="btn-import-msproject" title="Mở file định dạng Microsoft Project (.xml, .csv, .json) từ máy tính">
-        <i data-lucide="folder-open"></i> Mở file MS Project
+      <button class="btn hdr-p1 btn-outline btn-msp-io" id="btn-import-msproject" title="Mở file định dạng Microsoft Project (.xml, .csv, .json) từ máy tính">
+        <i data-lucide="folder-open"></i><span class="btn-label">Mở file MS Project</span>
       </button>
-      <button class="btn btn-outline btn-msp-io" id="btn-export-msproject" title="Xuất ra file chuẩn Microsoft Project (.xml) để mở trực tiếp trong phần mềm MS Project">
-        <i data-lucide="file-spreadsheet"></i> Xuất file MS Project
+      <button class="btn hdr-p1 btn-outline btn-msp-io" id="btn-export-msproject" title="Xuất ra file chuẩn Microsoft Project (.xml) để mở trực tiếp trong phần mềm MS Project">
+        <i data-lucide="file-spreadsheet"></i><span class="btn-label">Xuất file MS Project</span>
       </button>
-      <button class="btn btn-outline btn-crop" id="btn-start-crop-export" title="Quét chọn vùng nhìn trực tiếp trên lịch để tải hoặc copy ảnh">
-        <i data-lucide="crop"></i> Chọn vùng xuất
+      <button class="btn hdr-p1 btn-outline btn-crop" id="btn-start-crop-export" title="Quét chọn vùng nhìn trực tiếp trên lịch để tải hoặc copy ảnh">
+        <i data-lucide="crop"></i><span class="btn-label">Chọn vùng xuất</span>
       </button>
-      <button class="btn btn-success" id="btn-quick-copy-clipboard" title="Copy ngay bảng tiến độ vào Clipboard để Ctrl+V dán vào Zalo / Word / Photoshop">
-        <i data-lucide="copy"></i> Copy ảnh
+      <button class="btn hdr-p2 btn-success" id="btn-quick-copy-clipboard" title="Copy ngay bảng tiến độ vào Clipboard để Ctrl+V dán vào Zalo / Word / Photoshop">
+        <i data-lucide="copy"></i><span class="btn-label">Copy ảnh</span>
       </button>
-      <button class="btn btn-primary" id="btn-open-export-modal" title="Tùy chọn vùng nhìn, Tải ảnh & Copy Clipboard">
-        <i data-lucide="camera"></i> Xuất ảnh
+      <button class="btn hdr-p2 btn-primary" id="btn-open-export-modal" title="Tùy chọn vùng nhìn, Tải ảnh & Copy Clipboard">
+        <i data-lucide="camera"></i><span class="btn-label">Xuất ảnh</span>
       </button>
-      <button class="btn btn-outline" id="btn-undo-action" title="Hoàn tác (Undo - Ctrl+Z)">
-        <i data-lucide="undo-2"></i> Hoàn tác
+      <button class="btn hdr-p2 btn-outline" id="btn-undo-action" title="Hoàn tác (Undo - Ctrl+Z)">
+        <i data-lucide="undo-2"></i><span class="btn-label">Hoàn tác</span>
       </button>
       <button class="btn btn-outline" id="btn-redo-action" title="Làm lại (Redo - Ctrl+Y)" style="display: none;">
-        <i data-lucide="redo-2"></i>
+        <i data-lucide="redo-2"></i><span class="btn-label"></span>
       </button>
-      <button class="btn btn-outline" id="btn-add-task">
-        <i data-lucide="plus"></i> Thêm việc
+      <button title="Thêm việc" class="btn hdr-p3 btn-outline" id="btn-add-task">
+        <i data-lucide="plus"></i><span class="btn-label">Thêm việc</span>
       </button>
       <button class="btn btn-outline icon-only-btn" id="btn-project-settings" title="Cài đặt dự án & Logo">
-        <i data-lucide="settings"></i>
+        <i data-lucide="settings"></i><span class="btn-label"></span>
       </button>
     </div>
   </header>
@@ -135,13 +135,16 @@
             <option value="active-only">Chỉ lịch khách hàng đang chọn</option>
           </select>
           <label class="msp-opt-label" style="margin-top: 6px;">Độ rộng cột ngày (Zoom):</label>
-          <div class="msp-zoom-btns" id="msp-col-zoom-btns">
-            <button type="button" class="msp-zoom-btn" data-zoom="compact">Thu gọn</button>
-            <button type="button" class="msp-zoom-btn active" data-zoom="normal">Chuẩn</button>
-            <button type="button" class="msp-zoom-btn" data-zoom="wide">Rộng</button>
+          <div class="msp-zoom-btns msp-zoom-btns-5" id="msp-col-zoom-btns">
+            <button type="button" class="msp-zoom-btn" data-zoom="compact" title="24px / ngày">Thu gọn</button>
+            <button type="button" class="msp-zoom-btn active" data-zoom="normal" title="34px / ngày">Chuẩn</button>
+            <button type="button" class="msp-zoom-btn" data-zoom="wide" title="46px / ngày">Rộng</button>
+            <button type="button" class="msp-zoom-btn" data-zoom="xwide" title="62px / ngày">Rất rộng</button>
+            <button type="button" class="msp-zoom-btn" data-zoom="xxwide" title="84px / ngày">Cực rộng</button>
           </div>
           <label class="msp-opt-label" style="margin-top: 6px;">Độ cao dòng / cột:</label>
-          <div class="msp-zoom-btns" id="msp-row-height-btns">
+          <div class="msp-zoom-btns msp-zoom-btns-4" id="msp-row-height-btns">
+            <button type="button" class="msp-row-height-btn" data-row-height="mini" title="Độ cao dòng rất thấp (24px)">Rất thấp</button>
             <button type="button" class="msp-row-height-btn" data-row-height="compact" title="Độ cao dòng thấp (32px)">Thấp</button>
             <button type="button" class="msp-row-height-btn active" data-row-height="normal" title="Độ cao dòng chuẩn (42px)">Chuẩn</button>
             <button type="button" class="msp-row-height-btn" data-row-height="tall" title="Độ cao dòng cao (54px)">Cao</button>
@@ -875,7 +878,9 @@
   <!-- Tooltip nổi hiển thị khi đang kéo 2 đầu mút hoặc quét ngày -->
   <div id="floating-action-tooltip" class="floating-action-tooltip"></div>
 
+  <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
   <script src="holidays-data.js"></script>
+  <script src="scheduler.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

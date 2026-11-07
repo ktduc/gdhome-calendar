@@ -13,6 +13,8 @@ function snapshotState() {
       activeCalendarId: AppState.activeCalendarId,
       mspCustomTitlePrefix: AppState.mspCustomTitlePrefix,
       daysOffConfig: AppState.daysOffConfig,
+      projectOwners: AppState.projectOwners,
+      footerNote: AppState.footerNote,
       startMonth: AppState.startMonth,
       endMonth: AppState.endMonth
     });
@@ -58,11 +60,13 @@ function applyRestoredSnapshot(jsonStr, toastMsg) {
     if (data.activeCalendarId) AppState.activeCalendarId = data.activeCalendarId;
     if (data.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = data.mspCustomTitlePrefix;
     if (data.daysOffConfig) AppState.daysOffConfig = data.daysOffConfig;
+    if (data.projectOwners) AppState.projectOwners = data.projectOwners;
+    if (data.footerNote !== undefined) AppState.footerNote = data.footerNote;
     if (data.startMonth) AppState.startMonth = data.startMonth;
     if (data.endMonth) AppState.endMonth = data.endMonth;
     normalizeAppState();
     updateUIElements();
-    saveToStorage();
+    saveToBackend(); // Lưu cả lên server (trước đây chỉ lưu trình duyệt -> F5 thì server vẫn là bản cũ)
     renderCalendarSidebar();
     renderCalendar();
     showToast(toastMsg || 'Đã khôi phục dữ liệu!');
@@ -544,6 +548,13 @@ function normalizeAppState() {
     }
   });
   sortAllTasksChronologically(false);
+  if (!AppState.daysOffConfig.overrides || typeof AppState.daysOffConfig.overrides !== 'object') {
+    AppState.daysOffConfig.overrides = {};
+  }
+  if (typeof cleanupDanglingLinks === 'function') {
+    cleanupDanglingLinks(AppState.tasks);
+    inferMissingPredecessors(AppState.tasks);
+  }
 }
 
 function getActiveCalendar() {
@@ -609,69 +620,288 @@ function getScheduleMonthText() {
 }
 
 // Đồng bộ & Lưu trữ
+// =========================================================================
+// ĐỒNG BỘ & LƯU TRỮ (an toàn hơn)
+//  - Lưu localStorage ngay lập tức, gửi lên server sau 0.6s (gom nhiều thao tác liên tiếp)
+//  - Có số phiên bản (_version) để phát hiện 2 máy cùng sửa -> hỏi trước khi ghi đè
+//  - Hiện trạng thái "Đã lưu / Đang lưu / Lỗi lưu" trên thanh header
+//  - Hỗ trợ mật khẩu (nếu server đặt biến môi trường APP_PASSWORD)
+// =========================================================================
+const SAVE_DEBOUNCE_MS = 600;
+const APP_KEY_STORAGE = 'gdhome_app_key';
+let _serverVersion = null;      // Phiên bản dữ liệu server mà máy này đang dựa vào
+let _pendingSync = false;       // Còn thay đổi chưa gửi lên server
+let _saveTimer = null;
+let _saveInFlight = false;
+let _saveAgainAfterFlight = false;
+let _conflictDialogOpen = false;
+
+function isOfflineFileMode() {
+  return typeof location !== 'undefined' && location.protocol === 'file:';
+}
+
+function getAppKey() {
+  try { return localStorage.getItem(APP_KEY_STORAGE) || ''; } catch (e) { return ''; }
+}
+
+// fetch có kèm mật khẩu; nếu server báo 401 thì hỏi mật khẩu 1 lần rồi thử lại
+async function apiFetch(url, options = {}, allowPrompt = true) {
+  const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
+  const key = getAppKey();
+  if (key) headers['x-app-key'] = key;
+  const res = await fetch(url, Object.assign({}, options, { headers }));
+  if (res.status === 401 && allowPrompt) {
+    const entered = prompt('Trang này đã được đặt mật khẩu. Nhập mật khẩu để xem & lưu tiến độ:');
+    if (entered) {
+      try { localStorage.setItem(APP_KEY_STORAGE, entered.trim()); } catch (e) { /* bỏ qua */ }
+      return apiFetch(url, options, false);
+    }
+  }
+  return res;
+}
+
+function setSaveStatus(state, detail) {
+  const el = document.getElementById('save-status-indicator');
+  if (!el) return;
+  const map = {
+    saved: { text: '✓ Đã lưu', cls: 'is-saved' },
+    pending: { text: '● Chưa lưu…', cls: 'is-pending' },
+    saving: { text: '⟳ Đang lưu…', cls: 'is-saving' },
+    error: { text: '⚠ Lỗi lưu server', cls: 'is-error' },
+    offline: { text: '💾 Chỉ lưu trên máy này', cls: 'is-offline' },
+    conflict: { text: '⚠ Xung đột dữ liệu', cls: 'is-error' }
+  };
+  const m = map[state] || map.saved;
+  el.textContent = m.text;
+  el.className = `save-status ${m.cls}`;
+  el.title = detail || ({
+    saved: 'Dữ liệu đã được lưu lên server',
+    pending: 'Đang chờ gửi thay đổi lên server',
+    saving: 'Đang gửi thay đổi lên server',
+    error: 'Không gửi được lên server. Dữ liệu vẫn được giữ trên trình duyệt này và sẽ tự gửi lại ở lần lưu sau. Bấm để thử lại ngay.',
+    offline: 'Đang mở file trực tiếp (không có server) - dữ liệu chỉ lưu trong trình duyệt này',
+    conflict: 'Dữ liệu trên server đã bị sửa từ máy khác'
+  }[state] || '');
+}
+
+function buildServerPayload() {
+  return {
+    startMonth: AppState.startMonth,
+    endMonth: AppState.endMonth,
+    scheduleMonth: AppState.scheduleMonth,
+    extraWeeksTop: AppState.extraWeeksTop,
+    extraWeeksBottom: AppState.extraWeeksBottom,
+    projectOwners: AppState.projectOwners,
+    daysOffConfig: AppState.daysOffConfig,
+    calendars: AppState.calendars,
+    activeCalendarId: AppState.activeCalendarId,
+    tasks: AppState.tasks,
+    companyName: AppState.companyName,
+    companyLogo: AppState.companyLogo,
+    footerNote: AppState.footerNote,
+    showVnHolidays: AppState.showVnHolidays,
+    showLunarDates: AppState.showLunarDates
+  };
+}
+
+// Nạp dữ liệu nhận từ server vào AppState
+function applyServerData(data) {
+  if (!data) return;
+  if (data.startMonth) AppState.startMonth = data.startMonth;
+  if (data.endMonth) AppState.endMonth = data.endMonth;
+  if (data.scheduleMonth) AppState.scheduleMonth = data.scheduleMonth;
+  if (data.extraWeeksTop !== undefined) AppState.extraWeeksTop = data.extraWeeksTop;
+  if (data.extraWeeksBottom !== undefined) AppState.extraWeeksBottom = data.extraWeeksBottom;
+  if (data.projectOwners) AppState.projectOwners = data.projectOwners;
+  if (data.daysOffConfig) AppState.daysOffConfig = Object.assign({}, AppState.daysOffConfig, data.daysOffConfig);
+  if (data.calendars) AppState.calendars = data.calendars;
+  if (data.activeCalendarId) AppState.activeCalendarId = data.activeCalendarId;
+  if (data.tasks) AppState.tasks = data.tasks;
+  if (data.companyName) AppState.companyName = data.companyName;
+  if (data.companyLogo !== undefined) AppState.companyLogo = data.companyLogo;
+  if (data.footerNote) AppState.footerNote = data.footerNote;
+  if (data.showVnHolidays !== undefined) AppState.showVnHolidays = data.showVnHolidays;
+  if (data.showLunarDates !== undefined) AppState.showLunarDates = data.showLunarDates;
+}
+
 async function syncWithBackend() {
-  loadFromStorage(); // Nạp cấu hình cục bộ trước (như nhóm Dự án của..., cấu hình ngày nghỉ, độ rộng cột)
+  // 1. Nạp bản lưu trên trình duyệt trước (gồm cả cấu hình cột, palette...)
+  loadFromStorage();
+  const localHadPending = _pendingSync;
+  const localBaseVersion = _serverVersion;
+
+  if (isOfflineFileMode()) {
+    normalizeAppState();
+    updateUIElements();
+    snapshotState();
+    setSaveStatus('offline');
+    return;
+  }
+
   try {
-    const res = await fetch('/api/schedule');
+    const res = await apiFetch('/api/schedule');
     if (res.ok) {
       const result = await res.json();
-      if (result.data) {
-        if (result.data.startMonth) AppState.startMonth = result.data.startMonth;
-        if (result.data.endMonth) AppState.endMonth = result.data.endMonth;
-        if (result.data.scheduleMonth) AppState.scheduleMonth = result.data.scheduleMonth;
-        if (result.data.extraWeeksTop !== undefined) AppState.extraWeeksTop = result.data.extraWeeksTop;
-        if (result.data.extraWeeksBottom !== undefined) AppState.extraWeeksBottom = result.data.extraWeeksBottom;
-        if (result.data.projectOwners) AppState.projectOwners = result.data.projectOwners;
-        if (result.data.daysOffConfig) AppState.daysOffConfig = Object.assign(AppState.daysOffConfig, result.data.daysOffConfig);
-        if (result.data.calendars) AppState.calendars = result.data.calendars;
-        if (result.data.activeCalendarId) AppState.activeCalendarId = result.data.activeCalendarId;
-        if (result.data.tasks) AppState.tasks = result.data.tasks;
-        if (result.data.companyName) AppState.companyName = result.data.companyName;
-        if (result.data.companyLogo !== undefined) AppState.companyLogo = result.data.companyLogo;
-        if (result.data.footerNote) AppState.footerNote = result.data.footerNote;
-        if (result.data.showVnHolidays !== undefined) AppState.showVnHolidays = result.data.showVnHolidays;
-        if (result.data.showLunarDates !== undefined) AppState.showLunarDates = result.data.showLunarDates;
+      const serverVersion = typeof result.version === 'number' ? result.version : 0;
+
+      if (localHadPending && localBaseVersion === serverVersion) {
+        // Máy này có thay đổi chưa kịp gửi (mất mạng / tắt trình duyệt) và server chưa đổi -> giữ bản máy này & gửi lên
+        _serverVersion = serverVersion;
         normalizeAppState();
         updateUIElements();
+        snapshotState();
+        flushSaveToBackend();
         return;
       }
+
+      if (localHadPending && localBaseVersion !== serverVersion) {
+        const keepServer = confirm(
+          'Trình duyệt này có thay đổi CHƯA LƯU lên server, nhưng dữ liệu trên server cũng đã được sửa từ máy khác.\n\n' +
+          '• [OK] = Dùng bản trên SERVER (bỏ thay đổi chưa lưu của máy này)\n' +
+          '• [Cancel / Huỷ] = Dùng bản của MÁY NÀY và ghi đè lên server'
+        );
+        _serverVersion = serverVersion;
+        if (keepServer) {
+          applyServerData(result.data);
+          _pendingSync = false;
+          normalizeAppState();
+          updateUIElements();
+          saveToStorage();
+          snapshotState();
+          setSaveStatus('saved');
+        } else {
+          normalizeAppState();
+          updateUIElements();
+          snapshotState();
+          flushSaveToBackend({ force: true });
+        }
+        return;
+      }
+
+      _serverVersion = serverVersion;
+      if (result.data) applyServerData(result.data);
+      _pendingSync = false;
+      normalizeAppState();
+      updateUIElements();
+      saveToStorage();
+      snapshotState(); // Mốc Undo ban đầu (trước đây bị thiếu khi có server -> thao tác đầu tiên không Undo được)
+      setSaveStatus('saved');
+      return;
+    }
+    if (res.status === 401) {
+      showToast('⚠ Sai mật khẩu - đang hiển thị dữ liệu lưu trên trình duyệt này');
     }
   } catch (err) {
-    // Offline fallback
+    // Mất mạng -> dùng dữ liệu trên trình duyệt
   }
   normalizeAppState();
   updateUIElements();
   snapshotState();
+  setSaveStatus(_pendingSync ? 'error' : 'offline', 'Không kết nối được server - đang dùng dữ liệu lưu trên trình duyệt này');
 }
 
-async function saveToBackend() {
+// Gọi sau MỖI thay đổi dữ liệu: chụp Undo + lưu trình duyệt + hẹn gửi server
+function saveToBackend() {
+  if (typeof refreshAllLinkLags === 'function') refreshAllLinkLags(AppState.tasks);
+  snapshotState();
+  _pendingSync = true;
   saveToStorage();
+  if (isOfflineFileMode()) {
+    setSaveStatus('offline');
+    return Promise.resolve();
+  }
+  setSaveStatus('pending');
+  clearTimeout(_saveTimer);
+  return new Promise(resolve => {
+    _saveTimer = setTimeout(() => {
+      _saveTimer = null;
+      flushSaveToBackend().then(resolve, resolve);
+    }, SAVE_DEBOUNCE_MS);
+  });
+}
+
+async function flushSaveToBackend(opts = {}) {
+  if (isOfflineFileMode()) return;
+  if (_saveInFlight) {
+    _saveAgainAfterFlight = true;
+    return;
+  }
+  _saveInFlight = true;
+  setSaveStatus('saving');
   try {
-    await fetch('/api/schedule', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        startMonth: AppState.startMonth,
-        endMonth: AppState.endMonth,
-        scheduleMonth: AppState.scheduleMonth,
-        extraWeeksTop: AppState.extraWeeksTop,
-        extraWeeksBottom: AppState.extraWeeksBottom,
-        projectOwners: AppState.projectOwners,
-        daysOffConfig: AppState.daysOffConfig,
-        calendars: AppState.calendars,
-        activeCalendarId: AppState.activeCalendarId,
-        tasks: AppState.tasks,
-        companyName: AppState.companyName,
-        companyLogo: AppState.companyLogo,
-        footerNote: AppState.footerNote,
-        showVnHolidays: AppState.showVnHolidays,
-        showLunarDates: AppState.showLunarDates
-      })
+    const body = Object.assign(buildServerPayload(), {
+      _baseVersion: _serverVersion,
+      _force: !!opts.force
     });
+    const res = await apiFetch('/api/schedule', {
+      method: 'POST',
+      body: JSON.stringify(body),
+      keepalive: !!opts.keepalive
+    });
+
+    if (res.status === 409) {
+      const result = await res.json().catch(() => ({}));
+      await handleSaveConflict(result);
+      return;
+    }
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+
+    const result = await res.json();
+    if (typeof result.version === 'number') _serverVersion = result.version;
+    _pendingSync = false;
+    saveToStorage();
+    setSaveStatus('saved');
   } catch (err) {
-    // Silent catch
+    console.warn('Không lưu được lên server:', err);
+    setSaveStatus('error');
+  } finally {
+    _saveInFlight = false;
+    if (_saveAgainAfterFlight) {
+      _saveAgainAfterFlight = false;
+      flushSaveToBackend();
+    }
   }
 }
+
+async function handleSaveConflict(result) {
+  setSaveStatus('conflict');
+  if (_conflictDialogOpen) return;
+  _conflictDialogOpen = true;
+  try {
+    const keepServer = confirm(
+      'Dữ liệu trên server vừa được sửa từ một máy/trình duyệt khác.\n\n' +
+      '• [OK] = Tải bản mới nhất từ SERVER (bỏ thay đổi vừa làm ở máy này)\n' +
+      '• [Cancel / Huỷ] = Giữ bản của MÁY NÀY và ghi đè lên server'
+    );
+    if (keepServer) {
+      if (typeof result.version === 'number') _serverVersion = result.version;
+      applyServerData(result.data);
+      _pendingSync = false;
+      normalizeAppState();
+      updateUIElements();
+      saveToStorage();
+      snapshotState();
+      setSaveStatus('saved');
+      showToast('Đã tải bản mới nhất từ server.');
+    } else {
+      _conflictDialogOpen = false;
+      _saveInFlight = false;
+      await flushSaveToBackend({ force: true });
+    }
+  } finally {
+    _conflictDialogOpen = false;
+  }
+}
+
+// Đóng tab / F5 khi còn thay đổi chưa gửi -> gửi ngay
+window.addEventListener('pagehide', () => {
+  if (_saveTimer) {
+    clearTimeout(_saveTimer);
+    _saveTimer = null;
+    flushSaveToBackend({ keepalive: true });
+  }
+});
+
 
 function updateUIElements() {
   document.getElementById('start-month-input').value = AppState.startMonth;
@@ -724,6 +954,7 @@ function syncCustomerInputWithActiveCalendar() {
 }
 
 function saveToStorage() {
+  try {
   localStorage.setItem('timeline_calendar_state', JSON.stringify({
     startMonth: AppState.startMonth,
     endMonth: AppState.endMonth,
@@ -741,12 +972,19 @@ function saveToStorage() {
     showVnHolidays: AppState.showVnHolidays,
     showLunarDates: AppState.showLunarDates,
     mspRowHeight: AppState.mspRowHeight,
+    mspZoom: AppState.mspZoom,
     colorPaletteTheme: AppState.colorPaletteTheme,
     autoCascadeShift: AppState.autoCascadeShift,
     mspCustomTitlePrefix: AppState.mspCustomTitlePrefix,
     mspColWidths: AppState.mspColWidths,
-    mspVisibility: AppState.mspVisibility
+    mspVisibility: AppState.mspVisibility,
+    _pendingSync: typeof _pendingSync !== 'undefined' ? _pendingSync : false,
+    _serverVersion: typeof _serverVersion !== 'undefined' ? _serverVersion : null,
+    _savedAt: new Date().toISOString()
   }));
+  } catch (err) {
+    console.warn('Không lưu được vào bộ nhớ trình duyệt (có thể do logo quá nặng):', err);
+  }
 }
 
 function loadFromStorage() {
@@ -770,11 +1008,14 @@ function loadFromStorage() {
       if (parsed.showVnHolidays !== undefined) AppState.showVnHolidays = parsed.showVnHolidays;
       if (parsed.showLunarDates !== undefined) AppState.showLunarDates = parsed.showLunarDates;
       if (parsed.mspRowHeight !== undefined) AppState.mspRowHeight = parsed.mspRowHeight;
+      if (parsed.mspZoom !== undefined) AppState.mspZoom = parsed.mspZoom;
       if (parsed.colorPaletteTheme) AppState.colorPaletteTheme = parsed.colorPaletteTheme;
       if (parsed.autoCascadeShift !== undefined) AppState.autoCascadeShift = parsed.autoCascadeShift;
       if (parsed.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = parsed.mspCustomTitlePrefix;
       if (parsed.mspColWidths) AppState.mspColWidths = Object.assign(AppState.mspColWidths, parsed.mspColWidths);
       if (parsed.mspVisibility) AppState.mspVisibility = Object.assign(AppState.mspVisibility, parsed.mspVisibility);
+      _pendingSync = !!parsed._pendingSync;
+      _serverVersion = typeof parsed._serverVersion === 'number' ? parsed._serverVersion : null;
     } catch (e) {
       console.error(e);
     }
@@ -828,7 +1069,7 @@ function renderCalendarSidebar() {
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'project-owner-title';
-    titleSpan.innerHTML = `Dự án của <em>${owner.name}</em>`;
+    titleSpan.innerHTML = `Dự án của <em>${escapeHtml(owner.name)}</em>`;
 
     const countSpan = document.createElement('span');
     countSpan.className = 'project-owner-count';
@@ -1208,66 +1449,10 @@ function setupSidebarEvents() {
 }
 
 // Helpers
-function formatDateStr(date) {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
 
-function parseDateStr(str) {
-  const [y, m, d] = str.split('-').map(Number);
-  return new Date(y, m - 1, d);
-}
 
 // Kiểm tra 1 ngày có nằm trong các tùy chọn Ngày nghỉ (Ngày lễ ở Việt Nam, Thứ 7, Nghỉ chiều Thứ 7, Chủ nhật) hay không
-function isDateDayOff(dateOrStr, respectSkip = true) {
-  if (!respectSkip) return { isOff: false, isHalfOff: false, workWeight: 1, reason: null, type: null };
-  const d = typeof dateOrStr === 'string' ? parseDateStr(dateOrStr) : dateOrStr;
-  const dStr = typeof dateOrStr === 'string' ? dateOrStr : formatDateStr(d);
-  const dow = d.getDay();
-  const cfg = AppState.daysOffConfig || {
-    holidays: AppState.showVnHolidays !== false,
-    saturday: false,
-    saturdayHalf: false,
-    sunday: true
-  };
 
-  if (cfg.holidays && typeof getHolidayName === 'function' && getHolidayName(dStr)) {
-    return { isOff: true, isHalfOff: false, workWeight: 0, reason: `Nghỉ lễ: ${getHolidayName(dStr)}`, type: 'holiday' };
-  }
-  if (cfg.sunday && dow === 0) {
-    return { isOff: true, isHalfOff: false, workWeight: 0, reason: 'Nghỉ Chủ nhật', type: 'sunday' };
-  }
-  if (cfg.saturday && dow === 6) {
-    return { isOff: true, isHalfOff: false, workWeight: 0, reason: 'Nghỉ Thứ 7', type: 'saturday' };
-  }
-  if (cfg.saturdayHalf && dow === 6) {
-    return { isOff: false, isHalfOff: true, workWeight: 0.5, reason: 'Nghỉ chiều Thứ 7 (Làm sáng 0.5 ngày)', type: 'saturday-half' };
-  }
-  return { isOff: false, isHalfOff: false, workWeight: 1, reason: null, type: null };
-}
-
-function calculateTaskDays(startDateStr, endDateStr, skipSundays = true) {
-  if (!startDateStr || !endDateStr || startDateStr > endDateStr) {
-    return { workDays: 0, totalDays: 0 };
-  }
-  let curr = parseDateStr(startDateStr);
-  const end = parseDateStr(endDateStr);
-  let totalDays = 0;
-  let workDays = 0;
-
-  while (curr <= end) {
-    totalDays++;
-    const dayInfo = isDateDayOff(curr, skipSundays !== false);
-    if (!dayInfo.isOff) {
-      workDays += (typeof dayInfo.workWeight === 'number' ? dayInfo.workWeight : 1);
-    }
-    curr.setDate(curr.getDate() + 1);
-  }
-  workDays = Math.round(workDays * 10) / 10;
-  return { workDays, totalDays };
-}
 
 function getVisibleTasks() {
   normalizeAppState();
@@ -1404,12 +1589,6 @@ function generateWeeksBetweenDates(startDateStr, endDateStr) {
   return weeks;
 }
 
-function getHolidayName(dateStr) {
-  if (typeof VIETNAM_HOLIDAYS !== 'undefined' && VIETNAM_HOLIDAYS[dateStr]) {
-    return VIETNAM_HOLIDAYS[dateStr];
-  }
-  return null;
-}
 
 // Trạng thái Tương tác
 let isSelecting = false;
@@ -1516,6 +1695,16 @@ function renderCalendar(targetWeeks = null, customContainer = null) {
       if (dayOffInfo.type === 'sunday' || dayOffInfo.type === 'saturday') {
         dayCell.classList.add('sunday-cell');
       }
+      if (dayOffInfo.isCustom && dayOffInfo.isOff) dayCell.classList.add('is-custom-off');
+      if (dayOffInfo.type === 'makeup-work' || dayOffInfo.type === 'custom-work') {
+        dayCell.classList.add('is-workday-forced');
+        dayCell.title = dayOffInfo.reason;
+      }
+      dayCell.addEventListener('contextmenu', (e) => {
+        if (e.target.closest && e.target.closest('.task-bar-segment')) return;
+        e.preventDefault();
+        openDayOverrideContextMenu(e, dayStr);
+      });
 
       const dayNum = dayDate.getDate();
       const monthNum = dayDate.getMonth() + 1;
@@ -1718,13 +1907,13 @@ function renderCalendar(targetWeeks = null, customContainer = null) {
     });
 
     // LỊCH RIÊNG CHO NGÀY LỄ VIỆT NAM
-    if (AppState.showVnHolidays !== false) {
+    {
       const weekHolidays = [];
       week.forEach((d, cIdx) => {
         const dStr = formatDateStr(d);
-        const hName = getHolidayName(dStr);
-        if (hName) {
-          weekHolidays.push({ col: cIdx, dateStr: dStr, name: hName });
+        const label = getDayLabelInfo(dStr);
+        if (label) {
+          weekHolidays.push({ col: cIdx, dateStr: dStr, name: label.name, type: label.type });
         }
       });
 
@@ -1738,16 +1927,21 @@ function renderCalendar(targetWeeks = null, customContainer = null) {
           const startHol = weekHolidays[i];
           let endCol = startHol.col;
           let j = i + 1;
-          while (j < weekHolidays.length && weekHolidays[j].col === endCol + 1 && weekHolidays[j].name === startHol.name) {
+          while (j < weekHolidays.length && weekHolidays[j].col === endCol + 1 && weekHolidays[j].name === startHol.name && weekHolidays[j].type === startHol.type) {
             endCol = weekHolidays[j].col;
             j++;
           }
 
           const holSeg = document.createElement('div');
-          holSeg.className = 'holiday-bar-segment is-start is-end';
+          holSeg.className = `holiday-bar-segment is-start is-end is-${startHol.type}`;
           holSeg.style.gridColumn = `${startHol.col + 1} / ${endCol + 2}`;
           holSeg.textContent = startHol.name;
-          holSeg.title = `Ngày lễ Việt Nam: ${startHol.name}`;
+          holSeg.title = {
+            'off': `Ngày nghỉ lễ: ${startHol.name}`,
+            'makeup-work': `Ngày ĐI LÀM (làm bù): ${startHol.name}`,
+            'observance': `${startHol.name} - chỉ để biết, KHÔNG tính là ngày nghỉ`,
+            'custom-off': 'Ngày nghỉ riêng do bạn tự đánh dấu (chuột phải vào ô ngày để bỏ)'
+          }[startHol.type] || startHol.name;
           holTrackRow.appendChild(holSeg);
 
           i = j;
@@ -2042,7 +2236,7 @@ function showQuickPopover(startStr, endStr, clientX, clientY) {
   dateText.textContent = `${sDate.getDate()} thg ${sDate.getMonth() + 1} - ${eDate.getDate()} thg ${eDate.getMonth() + 1}, ${eDate.getFullYear()}`;
 
   const calc = calculateTaskDays(minD, maxD, true);
-  countSummary.textContent = `${calc.workDays} ngày làm việc (đã trừ Chủ nhật) • Tổng ${calc.totalDays} ngày`;
+  countSummary.textContent = `${calc.workDays} ngày làm việc (đã trừ ngày nghỉ) • ${calc.totalDays} ngày thực tế`;
 
   const popWidth = 360;
   const popHeight = 320;
@@ -2066,7 +2260,120 @@ function showQuickPopover(startStr, endStr, clientX, clientY) {
   setTimeout(() => titleInput.focus(), 30);
 }
 
+// =========================================================================
+// QUÉT CHỌN VÙNG NGÀY TRÊN TIMELINE (GANTT) ĐỂ TẠO CÔNG VIỆC
+// Giữ chuột trái & kéo ngang trên vùng trống của 1 dòng -> chọn khoảng ngày
+// -> hiện bảng tạo nhanh, việc mới thuộc dự án của dòng đó.
+// Nháy đúp vào vùng trống = tạo việc 1 ngày.
+// =========================================================================
+let _mspTimelineInfo = null;
+let _mspExportRendering = false; // Khi xuất ảnh: không kéo dài trục ngày theo màn hình, không giới hạn cột tên
+
+function mspDateIndexFromClientX(layerEl, clientX) {
+  if (!_mspTimelineInfo) return null;
+  const rect = layerEl.getBoundingClientRect();
+  const idx = Math.floor((clientX - rect.left) / _mspTimelineInfo.colWidth);
+  return Math.max(0, Math.min(_mspTimelineInfo.count - 1, idx));
+}
+
+function mspDateFromIndex(idx) {
+  const d = parseDateStr(_mspTimelineInfo.startDate);
+  d.setDate(d.getDate() + idx);
+  return formatDateStr(d);
+}
+
+function openGanttRangeCreate(calId, startStr, endStr, clientX, clientY) {
+  if (calId && AppState.calendars.some(c => c.id === calId)) {
+    AppState.activeCalendarId = calId;
+    syncCustomerInputWithActiveCalendar();
+  }
+  showQuickPopover(startStr, endStr, clientX, clientY);
+}
+
+function setupGanttRangeSelection() {
+  const layer = document.getElementById('msp-gantt-rows-layer');
+  if (!layer || layer.dataset.rangeSelectReady === '1') return;
+  layer.dataset.rangeSelectReady = '1';
+
+  const isEmptyArea = (target) =>
+    !target.closest('.msp-task-bar, .msp-summary-bar, .msp-bar-handle, button, input, select');
+
+  let sel = null;
+
+  const clearHighlight = () => {
+    layer.querySelectorAll('.msp-range-select-highlight').forEach(el => el.remove());
+  };
+
+  const drawHighlight = () => {
+    if (!sel) return;
+    let hl = sel.rowEl.querySelector('.msp-range-select-highlight');
+    if (!hl) {
+      hl = document.createElement('div');
+      hl.className = 'msp-range-select-highlight';
+      sel.rowEl.appendChild(hl);
+    }
+    const a = Math.min(sel.startIdx, sel.endIdx);
+    const b = Math.max(sel.startIdx, sel.endIdx);
+    const cw = _mspTimelineInfo.colWidth;
+    hl.style.left = `${a * cw}px`;
+    hl.style.width = `${(b - a + 1) * cw}px`;
+    const s = mspDateFromIndex(a);
+    const e = mspDateFromIndex(b);
+    const calc = calculateTaskDays(s, e, true);
+    hl.textContent = cw * (b - a + 1) > 70 ? `${calc.workDays} ngày LV` : '';
+    showFloatingTooltip(`${formatShortVNDate(s)} → ${formatShortVNDate(e)} • ${calc.workDays} ngày làm việc • ${calc.totalDays} ngày thực tế`, sel.lastX, sel.lastY);
+  };
+
+  layer.addEventListener('mousedown', (e) => {
+    if (e.button !== 0 || !_mspTimelineInfo) return;
+    const rowEl = e.target.closest('.msp-gantt-row');
+    if (!rowEl || !isEmptyArea(e.target)) return;
+    const idx = mspDateIndexFromClientX(layer, e.clientX);
+    if (idx === null) return;
+    e.preventDefault();
+    clearHighlight();
+    sel = { rowEl, calId: rowEl.dataset.calId, startIdx: idx, endIdx: idx, downX: e.clientX, lastX: e.clientX, lastY: e.clientY, moved: false };
+    document.body.style.userSelect = 'none';
+
+    const onMove = (ev) => {
+      if (!sel) return;
+      sel.lastX = ev.clientX;
+      sel.lastY = ev.clientY;
+      if (Math.abs(ev.clientX - sel.downX) > 4) sel.moved = true;
+      if (!sel.moved) return;
+      sel.endIdx = mspDateIndexFromClientX(layer, ev.clientX);
+      drawHighlight();
+    };
+    const onUp = (ev) => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.userSelect = '';
+      hideFloatingTooltip();
+      const done = sel;
+      sel = null;
+      if (!done || !done.moved) {
+        clearHighlight();
+        return;
+      }
+      const a = Math.min(done.startIdx, done.endIdx);
+      const b = Math.max(done.startIdx, done.endIdx);
+      openGanttRangeCreate(done.calId, mspDateFromIndex(a), mspDateFromIndex(b), ev.clientX, ev.clientY);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+
+  layer.addEventListener('dblclick', (e) => {
+    const rowEl = e.target.closest('.msp-gantt-row');
+    if (!rowEl || !isEmptyArea(e.target) || !_mspTimelineInfo) return;
+    const idx = mspDateIndexFromClientX(layer, e.clientX);
+    const d = mspDateFromIndex(idx);
+    openGanttRangeCreate(rowEl.dataset.calId, d, d, e.clientX, e.clientY);
+  });
+}
+
 function closeQuickPopover() {
+  document.querySelectorAll('.msp-range-select-highlight').forEach(el => el.remove());
   const pop = document.getElementById('quick-create-popover');
   if (pop) pop.classList.remove('active');
   clearSelectionHighlight();
@@ -2095,7 +2402,8 @@ function setupQuickPopoverEvents() {
         color: tagColor,
         skipSundays: true,
         showCount: true,
-        note: ''
+        note: '',
+        predecessors: []
       });
 
       saveToBackend();
@@ -2125,7 +2433,8 @@ function setupQuickPopoverEvents() {
         color: popoverColor,
         skipSundays: true,
         showCount: true,
-        note: ''
+        note: '',
+        predecessors: []
       });
 
       saveToBackend();
@@ -2159,7 +2468,8 @@ function setupQuickPopoverEvents() {
       color: popoverColor,
       skipSundays: true,
       showCount: true,
-      note: ''
+      note: '',
+      predecessors: []
     });
 
     saveToBackend();
@@ -2487,11 +2797,11 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
     const monthText = getScheduleMonthText();
     topBannerClone.innerHTML = `
       <div class="sheet-banner-left">
-        <span class="schedule-month-display">${monthText}</span>
+        <span class="schedule-month-display">${escapeHtml(monthText)}</span>
       </div>
       <div class="sheet-banner-title">
         <span class="banner-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN${custName ? ' - ' : ''}</span>
-        ${custName ? `<span style="font-size:22px; font-weight:800; color:#b91d14; letter-spacing:0.5px; text-transform:uppercase;">${custName}</span>` : ''}
+        ${custName ? `<span style="font-size:22px; font-weight:800; color:#b91d14; letter-spacing:0.5px; text-transform:uppercase;">${escapeHtml(custName)}</span>` : ''}
       </div>
     `;
     cloneSheet.appendChild(topBannerClone);
@@ -2893,24 +3203,24 @@ function setupEvents() {
 // CHẾ ĐỘ XEM TIMELINE (MICROSOFT PROJECT - WBS & GANTT CHART ĐỒNG BỘ 2 CHIỀU)
 // =========================================================================
 
+const MSP_ZOOM_PRESETS = { compact: 24, normal: 34, wide: 46, xwide: 62, xxwide: 84 };
+const MSP_ROW_HEIGHT_PRESETS = { mini: 24, compact: 32, normal: 42, tall: 54 };
+
 function getMspColWidth() {
-  if (AppState.mspZoom === 'compact' || AppState.mspZoom === 24) return 24;
-  if (AppState.mspZoom === 'wide' || AppState.mspZoom === 46) return 46;
-  return 34; // normal
+  if (typeof AppState.mspZoom === 'number') return Math.max(18, Math.min(120, AppState.mspZoom));
+  return MSP_ZOOM_PRESETS[AppState.mspZoom] || MSP_ZOOM_PRESETS.normal;
 }
 
 function getMspRowHeightPx() {
   if (typeof AppState.mspRowHeight === 'number') {
-    return Math.max(26, Math.min(84, AppState.mspRowHeight));
+    return Math.max(22, Math.min(84, AppState.mspRowHeight));
   }
-  if (AppState.mspRowHeight === 'compact') return 32;
-  if (AppState.mspRowHeight === 'tall') return 54;
-  return 42; // normal
+  return MSP_ROW_HEIGHT_PRESETS[AppState.mspRowHeight] || MSP_ROW_HEIGHT_PRESETS.normal;
 }
 
 function applyMspRowHeightStyles(targetContainer = null) {
   const rowH = getMspRowHeightPx();
-  const barH = Math.max(18, Math.min(38, rowH - 16));
+  const barH = rowH <= 28 ? Math.max(14, rowH - 6) : Math.max(18, Math.min(38, rowH - 16));
   const barTop = Math.floor((rowH - barH) / 2);
   const sumTop = Math.max(8, Math.floor((rowH - 8) / 2) - 4);
   const rootEl = targetContainer || document.querySelector('.msp-split-workspace');
@@ -2919,75 +3229,22 @@ function applyMspRowHeightStyles(targetContainer = null) {
     rootEl.style.setProperty('--msp-bar-height', `${barH}px`);
     rootEl.style.setProperty('--msp-bar-top', `${barTop}px`);
     rootEl.style.setProperty('--msp-summary-top', `${sumTop}px`);
+    rootEl.classList.toggle('msp-rows-mini', rowH <= 28);
+    rootEl.classList.toggle('msp-rows-compact', rowH > 28 && rowH <= 34);
   }
 }
 
 // Dịch chuyển 1 ngày theo số ngày làm việc có dấu (+/- deltaWorkingDays), tự nhảy qua ngày nghỉ
-function shiftDateByWorkingDays(dateStr, deltaWorkingDays, skipSundays = true) {
-  const curr = parseDateStr(dateStr);
-  let remaining = parseInt(deltaWorkingDays, 10) || 0;
-  if (remaining === 0) {
-    while (skipSundays && isDateDayOff(curr, true).isOff) {
-      curr.setDate(curr.getDate() + 1);
-    }
-    return formatDateStr(curr);
-  }
-  const step = remaining > 0 ? 1 : -1;
-  let stepsLeft = Math.abs(remaining);
-  while (stepsLeft > 0) {
-    curr.setDate(curr.getDate() + step);
-    if (!isDateDayOff(curr, skipSundays !== false).isOff) {
-      stepsLeft--;
-    }
-  }
-  while (skipSundays && isDateDayOff(curr, true).isOff) {
-    curr.setDate(curr.getDate() + 1);
-  }
-  return formatDateStr(curr);
-}
 
 // Tính khoảng cách số ngày làm việc có dấu từ dateA sang dateB
-function getSignedWorkingDaysGap(dateAStr, dateBStr, skipSundays = true) {
-  if (!dateAStr || !dateBStr || dateAStr === dateBStr) return 0;
-  const a = parseDateStr(dateAStr);
-  const b = parseDateStr(dateBStr);
-  const sign = b > a ? 1 : -1;
-  const curr = new Date(a);
-  let count = 0;
-  while ((sign > 0 && curr < b) || (sign < 0 && curr > b)) {
-    curr.setDate(curr.getDate() + sign);
-    if (!isDateDayOff(curr, skipSundays !== false).isOff) {
-      count += sign;
-    }
-  }
-  return count;
-}
 
 // Tự động dịch các hạng mục phía sau khi chỉnh Ngày bắt đầu / Ngày kết thúc mà vẫn giữ nguyên số ngày làm việc của từng mục
 function cascadeShiftSubsequentTasks(editedTask, oldStartDate, oldEndDate) {
+  // Dời các việc phía sau THEO LIÊN KẾT (predecessors), không còn dời theo thứ tự dòng.
+  // Các việc chạy song song (không nối) sẽ giữ nguyên.
   if (!editedTask || AppState.autoCascadeShift === false) return 0;
-  const endShiftWorkingDays = getSignedWorkingDaysGap(oldEndDate, editedTask.endDate, editedTask.skipSundays !== false);
-  const startShiftWorkingDays = getSignedWorkingDaysGap(oldStartDate, editedTask.startDate, editedTask.skipSundays !== false);
-  const deltaWorkDays = endShiftWorkingDays !== 0 ? endShiftWorkingDays : startShiftWorkingDays;
-  if (deltaWorkDays === 0) return 0;
-
-  const calTasks = AppState.tasks.filter(t => t.calendarId === editedTask.calendarId && t.visibleOnBoard !== false);
-  const editedIdx = calTasks.findIndex(t => t.id === editedTask.id);
-  let shiftedCount = 0;
-
-  calTasks.forEach((t, idx) => {
-    if (t.id === editedTask.id) return;
-    // Dịch các công việc nằm phía sau trong danh sách dự án hoặc có ngày bắt đầu >= ngày bắt đầu cũ
-    if ((editedIdx !== -1 && idx > editedIdx) || t.startDate > oldStartDate) {
-      const preserveWorkDays = Math.max(1, countWorkingDays(t.startDate, t.endDate, t.skipSundays !== false));
-      const newStart = shiftDateByWorkingDays(t.startDate, deltaWorkDays, t.skipSundays !== false);
-      const newEnd = computeEndDateByWorkingDays(newStart, preserveWorkDays, t.skipSundays !== false);
-      t.startDate = newStart;
-      t.endDate = newEnd;
-      shiftedCount++;
-    }
-  });
-  return shiftedCount;
+  if (oldStartDate === editedTask.startDate && oldEndDate === editedTask.endDate) return 0;
+  return propagateLinkedTasks([editedTask.id], AppState.tasks);
 }
 
 // Dịch toàn bộ các hạng mục trong 1 Dự án tới Ngày bắt đầu mới (giữ nguyên khoảng cách và số ngày làm việc của từng mục)
@@ -3042,7 +3299,10 @@ function duplicateTask(task, shiftNextDate = false) {
     title: `${task.title} (Bản sao)`,
     startDate: newStart,
     endDate: newEnd,
-    color: nextColor || task.color
+    color: nextColor || task.color,
+    predecessors: shiftNextDate
+      ? [{ id: task.id, type: 'FS', lag: 0 }]
+      : (Array.isArray(task.predecessors) ? task.predecessors.map(l => ({ ...l })) : [])
   };
   const origIdx = AppState.tasks.findIndex(t => t.id === task.id);
   if (origIdx !== -1) {
@@ -3074,16 +3334,21 @@ function duplicateProject(cal) {
   }
 
   const sourceTasks = AppState.tasks.filter(t => t.calendarId === cal.id);
+  const idMap = new Map();
   sourceTasks.forEach((t, idx) => {
+    idMap.set(t.id, 'task_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000));
+  });
+  sourceTasks.forEach((t) => {
     let clonedTitle = t.title;
     if (cal.name && clonedTitle.endsWith(` - ${cal.name}`)) {
       clonedTitle = clonedTitle.slice(0, -(` - ${cal.name}`).length) + ` - ${newCal.name}`;
     }
     AppState.tasks.push({
       ...t,
-      id: 'task_' + Date.now() + '_' + idx + '_' + Math.floor(Math.random() * 1000),
+      id: idMap.get(t.id),
       calendarId: newCalId,
-      title: clonedTitle
+      title: clonedTitle,
+      predecessors: (t.predecessors || []).filter(l => idMap.has(l.id)).map(l => ({ ...l, id: idMap.get(l.id) }))
     });
   });
 
@@ -3095,6 +3360,49 @@ function duplicateProject(cal) {
 // =========================================================================
 // MENU CHUỘT PHẢI (CONTEXT MENU) CHO CÔNG VIỆC & DỰ ÁN
 // =========================================================================
+// Nhãn hiển thị cho 1 ngày trên dải ngày lễ của Bảng Lịch -> { name, type } | null
+// type: 'off' | 'makeup-work' | 'observance' | 'custom-off'
+function getDayLabelInfo(dateStr) {
+  const ov = getDayOverride(dateStr);
+  if (ov === 'off') return { name: 'Nghỉ riêng', type: 'custom-off' };
+  if (ov === 'work') return { name: 'Đi làm (tự đánh dấu)', type: 'makeup-work' };
+  if (AppState.showVnHolidays === false) return null;
+  const hol = getHolidayInfo(dateStr);
+  if (!hol) return null;
+  return { name: hol.name, type: hol.type === 'work' ? 'makeup-work' : hol.type };
+}
+
+// Menu chuột phải vào 1 ô ngày: tự đánh dấu ngày nghỉ riêng / ngày đi làm
+function openDayOverrideContextMenu(e, dateStr) {
+  hideFloatingTooltip();
+  const cfg = AppState.daysOffConfig;
+  if (!cfg.overrides || typeof cfg.overrides !== 'object') cfg.overrides = {};
+  const current = cfg.overrides[dateStr] || null;
+  const info = isDateDayOff(dateStr, true);
+  const setOverride = (val, msg) => {
+    if (val) cfg.overrides[dateStr] = val;
+    else delete cfg.overrides[dateStr];
+    saveToBackend();
+    renderCalendarSidebar();
+    renderCalendar();
+    showToast(msg);
+  };
+  const dLabel = formatShortVNDate(dateStr);
+  const items = [];
+  if (current !== 'off') {
+    items.push({ label: '⛔ Đánh dấu là NGÀY NGHỈ riêng', onClick: () => setOverride('off', `Đã đánh dấu ${dLabel} là ngày nghỉ`) });
+  }
+  if (current !== 'work') {
+    items.push({ label: '🛠️ Đánh dấu là NGÀY ĐI LÀM (làm bù / tăng ca)', onClick: () => setOverride('work', `Đã đánh dấu ${dLabel} là ngày đi làm`) });
+  }
+  if (current) {
+    items.push({ divider: true });
+    items.push({ label: '↺ Bỏ đánh dấu (theo cài đặt chung)', onClick: () => setOverride(null, `Đã bỏ đánh dấu ngày ${dLabel}`) });
+  }
+  const status = info.isOff ? 'Đang: Nghỉ' : (info.isHalfOff ? 'Đang: Làm 0.5 ngày' : 'Đang: Đi làm');
+  showCustomContextMenu(e.clientX, e.clientY, `📅 Ngày ${dLabel} • ${status}${info.reason ? ' • ' + info.reason : ''}`, items);
+}
+
 function hideCustomContextMenu() {
   const menu = document.getElementById('custom-context-menu');
   if (menu) menu.style.display = 'none';
@@ -3122,7 +3430,15 @@ function showCustomContextMenu(x, y, headerText, items) {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = `ctx-menu-item ${item.danger ? 'danger' : ''}`;
-    btn.innerHTML = `<span>${item.label}</span>${item.shortcut ? `<span class="ctx-shortcut">${item.shortcut}</span>` : ''}`;
+    const labelSpan = document.createElement('span');
+    labelSpan.textContent = item.label;
+    btn.appendChild(labelSpan);
+    if (item.shortcut) {
+      const sc = document.createElement('span');
+      sc.className = 'ctx-shortcut';
+      sc.textContent = item.shortcut;
+      btn.appendChild(sc);
+    }
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       hideCustomContextMenu();
@@ -3176,6 +3492,8 @@ function openTaskContextMenu(e, task) {
       }
     },
     { divider: true },
+    ...buildLinkMenuItems(task, isPartOfMulti ? selectedIds : null),
+    { divider: true },
     {
       label: '📑 Nhân đôi công việc (Giữ nguyên ngày)',
       shortcut: 'Nhanh',
@@ -3213,6 +3531,119 @@ function openTaskContextMenu(e, task) {
       }
     }
   ]);
+}
+
+// =========================================================================
+// MENU LIÊN KẾT TIẾN ĐỘ (Finish-to-Start)
+// =========================================================================
+function getTaskRowAbove(task) {
+  const list = AppState.tasks.filter(t => t.calendarId === task.calendarId && t.visibleOnBoard !== false);
+  const idx = list.findIndex(t => t.id === task.id);
+  return idx > 0 ? list[idx - 1] : null;
+}
+
+function buildLinkMenuItems(task, multiIds) {
+  const items = [];
+  const preds = Array.isArray(task.predecessors) ? task.predecessors : [];
+  const byId = new Map(AppState.tasks.map(t => [t.id, t]));
+
+  if (multiIds && multiIds.length > 1) {
+    items.push({
+      label: `🔗 Nối chuỗi ${multiIds.length} việc đã chọn (theo thứ tự ngày)`,
+      onClick: () => {
+        const chosen = AppState.tasks.filter(t => multiIds.includes(t.id))
+          .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate));
+        let added = 0;
+        for (let i = 1; i < chosen.length; i++) {
+          if (addPredecessorLink(chosen[i], chosen[i - 1], AppState.tasks)) added++;
+        }
+        syncAllFromMSProject(added > 0 ? `Đã nối ${added} liên kết giữa các việc đã chọn!` : 'Các việc đã được nối sẵn (hoặc sẽ tạo vòng lặp).');
+      }
+    });
+    items.push({
+      label: `✂️ Bỏ liên kết giữa ${multiIds.length} việc đã chọn`,
+      onClick: () => {
+        let removed = 0;
+        AppState.tasks.forEach(t => {
+          if (!multiIds.includes(t.id) || !Array.isArray(t.predecessors)) return;
+          const before = t.predecessors.length;
+          t.predecessors = t.predecessors.filter(l => !multiIds.includes(l.id));
+          removed += before - t.predecessors.length;
+        });
+        syncAllFromMSProject(`Đã bỏ ${removed} liên kết!`);
+      }
+    });
+    return items;
+  }
+
+  const above = getTaskRowAbove(task);
+  if (above && !preds.some(l => l.id === above.id)) {
+    items.push({
+      label: `🔗 Nối sau việc phía trên: "${truncateLabel(above.title, 28)}"`,
+      shortcut: 'FS',
+      onClick: () => {
+        if (addPredecessorLink(task, above, AppState.tasks)) {
+          syncAllFromMSProject(`Đã nối "${task.title}" làm sau "${above.title}"!`);
+        } else {
+          showToast('Không nối được (sẽ tạo vòng lặp liên kết).');
+        }
+      }
+    });
+  }
+  items.push({
+    label: '🔗 Chọn việc làm trước (Liên kết)…',
+    shortcut: preds.length > 0 ? `${preds.length} liên kết` : '',
+    onClick: () => openPredecessorPicker(task)
+  });
+  if (preds.length > 0) {
+    items.push({
+      label: '✂️ Bỏ mọi liên kết phía trước',
+      onClick: () => {
+        const names = preds.map(l => (byId.get(l.id) || {}).title).filter(Boolean).join(', ');
+        task.predecessors = [];
+        syncAllFromMSProject(`Đã bỏ liên kết của "${task.title}"${names ? ` với: ${names}` : ''}`);
+      }
+    });
+  }
+  return items;
+}
+
+function truncateLabel(text, max) {
+  const t = String(text || '');
+  return t.length > max ? t.slice(0, max - 1) + '…' : t;
+}
+
+// Danh sách việc trong cùng dự án để bật/tắt liên kết "làm trước"
+function openPredecessorPicker(task) {
+  const preds = Array.isArray(task.predecessors) ? task.predecessors : [];
+  const candidates = AppState.tasks.filter(t =>
+    t.calendarId === task.calendarId && t.id !== task.id && t.visibleOnBoard !== false
+  );
+  const items = candidates.map(c => {
+    const linked = preds.some(l => l.id === c.id);
+    const wouldCycle = !linked && dependsOn(c.id, task.id, AppState.tasks);
+    return {
+      label: `${linked ? '☑' : '☐'} ${truncateLabel(c.title, 38)} (${formatShortVNDate(c.startDate)} → ${formatShortVNDate(c.endDate)})`,
+      shortcut: wouldCycle ? 'vòng lặp' : '',
+      onClick: () => {
+        if (linked) {
+          removePredecessorLink(task, c.id);
+          syncAllFromMSProject(`Đã bỏ liên kết "${c.title}" → "${task.title}"`);
+        } else if (wouldCycle) {
+          showToast('Không thể nối: việc này đang phụ thuộc vào việc bạn chọn (tạo vòng lặp).');
+        } else {
+          addPredecessorLink(task, c, AppState.tasks);
+          syncAllFromMSProject(`Đã nối "${task.title}" làm sau "${c.title}"`);
+        }
+      }
+    };
+  });
+  if (items.length === 0) {
+    showToast('Dự án này chưa có việc nào khác để liên kết.');
+    return;
+  }
+  const rect = { x: Math.round(window.innerWidth / 2 - 160), y: 120 };
+  showCustomContextMenu(rect.x, rect.y, `🔗 "${truncateLabel(task.title, 30)}" làm SAU các việc được tick:`, items);
 }
 
 function openProjectContextMenu(e, cal) {
@@ -3291,45 +3722,14 @@ function createDayOffHatchSvg(widthPx, heightPx = 24) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;width:100%;height:100%;pointer-events:none;"><rect width="${w}" height="${h}" fill="rgba(255,255,255,0.18)"/>${lines}</svg>`;
 }
 
-function countWorkingDays(startDateStr, endDateStr, skipSundays = true) {
-  return calculateTaskDays(startDateStr, endDateStr, skipSundays !== false).workDays;
-}
 
 // Tính ngày kết thúc dựa trên ngày bắt đầu + số ngày làm việc (tự động nhảy qua Ngày nghỉ đã chọn, hỗ trợ cả 0.5 ngày chiều Thứ 7)
-function computeEndDateByWorkingDays(startDateStr, targetWorkingDays, skipSundays = true) {
-  const days = Math.max(0.5, parseFloat(targetWorkingDays) || 1);
-  const curr = parseDateStr(startDateStr);
-  while (skipSundays && isDateDayOff(curr, true).isOff) {
-    curr.setDate(curr.getDate() + 1);
-  }
-  let counted = 0;
-  while (true) {
-    const dayInfo = isDateDayOff(curr, skipSundays !== false);
-    if (!dayInfo.isOff) {
-      const weight = typeof dayInfo.workWeight === 'number' ? dayInfo.workWeight : 1;
-      counted = Math.round((counted + weight) * 10) / 10;
-    }
-    if (counted >= days) {
-      break;
-    }
-    curr.setDate(curr.getDate() + 1);
-  }
-  return formatDateStr(curr);
-}
 
 // Tìm ngày làm việc kế tiếp sau 1 ngày (nhảy qua các ngày nghỉ đã chọn)
-function getNextWorkingDateStr(dateStr, skipSundays = true) {
-  const d = parseDateStr(dateStr);
-  d.setDate(d.getDate() + 1);
-  while (skipSundays && isDateDayOff(d, true).isOff) {
-    d.setDate(d.getDate() + 1);
-  }
-  return formatDateStr(d);
-}
 
 // Đồng bộ toàn diện từ MS Project ngược về Bảng Lịch & Sidebar & Backend
 function syncAllFromMSProject(toastMsg = null) {
-  snapshotState();
+  // saveToBackend() tự chụp trạng thái Undo (sau khi đã cập nhật độ trễ liên kết)
   syncCustomerInputWithActiveCalendar();
   saveToBackend();
   renderCalendarSidebar();
@@ -3393,7 +3793,9 @@ function computeTightMspNameColWidth() {
     }
   });
 
-  return Math.min(520, Math.max(175, maxTextPx));
+  // Màn hình nhỏ: giới hạn cột tên để còn chỗ cho biểu đồ Gantt (tên dài sẽ hiện "..." + tooltip)
+  const screenCap = _mspExportRendering ? 520 : Math.max(240, Math.min(520, Math.round((window.innerWidth || 1920) * 0.2)));
+  return Math.min(screenCap, Math.max(175, maxTextPx));
 }
 
 // Áp dụng độ rộng các cột kiểu Excel + trạng thái ẩn/hiện cột từ mục "ĐỀ MỤC"
@@ -3410,13 +3812,13 @@ function applyMspGridColumnWidths(targetPane = null, forceExportMode = false, ex
   }
 
   const colDefs = [
-    { key: 'wbs', selector: '.col-wbs', show: vis.colWbs !== false, width: cw.wbs || 44 },
+    { key: 'wbs', selector: '.col-wbs', show: vis.colWbs !== false, width: Math.max(74, cw.wbs || 74) },
     { key: 'name', selector: '.col-name', show: true, width: effectiveNameWidth },
-    { key: 'dur', selector: '.col-dur', show: vis.colDur !== false, width: cw.dur || 64 },
+    { key: 'dur', selector: '.col-dur', show: vis.colDur !== false, width: Math.max(74, cw.dur || 74) },
     { key: 'start', selector: '.col-start', show: vis.colDate !== false, width: cw.start || 86 },
     { key: 'end', selector: '.col-end', show: vis.colDate !== false, width: cw.end || 86 },
     { key: 'prog', selector: '.col-prog', show: vis.colProg !== false, width: cw.prog || 62 },
-    { key: 'act', selector: '.col-act', show: !forceExportMode && vis.colAct !== false, width: cw.act || 50 }
+    { key: 'act', selector: '.col-act', show: !forceExportMode && vis.colAct !== false, width: Math.max(58, cw.act || 58) }
   ];
 
   const activeWidths = colDefs.filter(c => c.show).map(c => `${c.width}px`).join(' ');
@@ -3879,8 +4281,10 @@ function quickAppendStageToCalendar(calId, stagePrefix, stageColor, defaultWorki
 
   const calTasks = AppState.tasks.filter(t => t.calendarId === cal.id && t.visibleOnBoard !== false);
   let startStr = formatDateStr(new Date());
+  let lastTask = null;
   if (calTasks.length > 0) {
-    const maxEnd = calTasks.reduce((m, t) => (t.endDate > m ? t.endDate : m), calTasks[0].endDate);
+    lastTask = calTasks.reduce((m, t) => (t.endDate > m.endDate ? t : m), calTasks[0]);
+    const maxEnd = lastTask.endDate;
     startStr = getNextWorkingDateStr(maxEnd, true);
   } else {
     const [sy, sm] = AppState.startMonth.split('-').map(Number);
@@ -3905,7 +4309,8 @@ function quickAppendStageToCalendar(calId, stagePrefix, stageColor, defaultWorki
     showCount: true,
     visibleOnBoard: true,
     progress: 0,
-    note: ''
+    note: '',
+    predecessors: lastTask ? [{ id: lastTask.id, type: 'FS', lag: 0 }] : []
   });
 
   syncAllFromMSProject(`Đã thêm "${fullTitle}" (${defaultWorkingDays} ngày làm việc) và đồng bộ sang Bảng Lịch!`);
@@ -3998,6 +4403,7 @@ function shiftMultiSelectedTasksByCalendarDays(deltaDays) {
   });
 
   if (count > 0) {
+    if (AppState.autoCascadeShift !== false) propagateLinkedTasks(AppState.selectedTaskIds.slice(), AppState.tasks);
     syncAllFromMSProject(`Đã dịch đồng thời ${count} công việc đã chọn (${delta > 0 ? '+' : ''}${delta} ngày)!`);
   }
 }
@@ -4022,6 +4428,8 @@ function renderMSProjectView() {
   if (!tableBody || !ganttMonthsRow || !ganttDaysRow) return;
 
   applyMspRowHeightStyles();
+  document.querySelectorAll('.msp-zoom-btn[data-zoom]').forEach(b => b.classList.toggle('active', b.dataset.zoom === String(AppState.mspZoom || 'normal')));
+  document.querySelectorAll('.msp-row-height-btn[data-row-height]').forEach(b => b.classList.toggle('active', b.dataset.rowHeight === String(AppState.mspRowHeight || 'normal')));
 
   if (mspMonthInput && document.activeElement !== mspMonthInput) {
     mspMonthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
@@ -4119,8 +4527,24 @@ function renderMSProjectView() {
     globalMaxDate = formatDateStr(padEnd);
   }
 
-  const timelineDates = getDatesBetween(globalMinDate, globalMaxDate);
   const colWidth = getMspColWidth();
+  // Kéo dài trục ngày cho kín bề ngang vùng Gantt (màn hình siêu rộng không bị khoảng trắng,
+  // và luôn có ngày trống phía sau để quét chọn tạo việc mới)
+  {
+    const ganttScrollEl = ganttBody ? (ganttBody.closest('.msp-gantt-scroll, .msp-gantt-pane, .msp-gantt-side') || ganttBody.parentElement) : null;
+    const availW = (ganttScrollEl && !_mspExportRendering) ? ganttScrollEl.clientWidth : 0;
+    if (availW > 0) {
+      const minDays = Math.ceil(availW / colWidth) + 1;
+      const curDays = diffDaysInclusive(globalMinDate, globalMaxDate);
+      if (curDays < minDays) {
+        const padEnd2 = parseDateStr(globalMinDate);
+        padEnd2.setDate(padEnd2.getDate() + minDays - 1);
+        globalMaxDate = formatDateStr(padEnd2);
+      }
+    }
+  }
+  const timelineDates = getDatesBetween(globalMinDate, globalMaxDate);
+  _mspTimelineInfo = { startDate: globalMinDate, count: timelineDates.length, colWidth };
   const totalTimelineWidth = Math.max(colWidth * 5, timelineDates.length * colWidth);
 
   // 4. Render KPI Summary Pills
@@ -4193,9 +4617,14 @@ function renderMSProjectView() {
     if (offInfo.type === 'sunday' || offInfo.type === 'saturday') dCell.classList.add('is-sunday');
     if (offInfo.type === 'saturday-half') dCell.classList.add('is-saturday-half');
     if (offInfo.type === 'holiday') dCell.classList.add('is-holiday');
+    if (offInfo.type === 'makeup-work' || offInfo.type === 'custom-work') dCell.classList.add('is-makeup-work');
     if (dStr === todayStr) dCell.classList.add('is-today');
     dCell.style.width = `${colWidth}px`;
-    if ((offInfo.isOff || offInfo.isHalfOff) && offInfo.reason) dCell.title = offInfo.reason;
+    if (offInfo.reason) dCell.title = offInfo.reason;
+    dCell.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      openDayOverrideContextMenu(e, dStr);
+    });
 
     dCell.innerHTML = `
       <div class="msp-day-top-line">
@@ -4244,7 +4673,7 @@ function renderMSProjectView() {
 
       const onMove = (ev) => {
         const dy = ev.clientY - startY;
-        AppState.mspRowHeight = Math.max(28, Math.min(76, origH + dy));
+        AppState.mspRowHeight = Math.max(22, Math.min(76, origH + dy));
         document.querySelectorAll('.msp-row-height-btn').forEach(b => b.classList.remove('active'));
         applyMspRowHeightStyles();
       };
@@ -4282,13 +4711,12 @@ function renderMSProjectView() {
       </div>
       <div class="msp-td col-name">
         <button type="button" class="msp-project-toggle" title="Thu gọn / Mở rộng dự án">${isCollapsed ? '▶' : '▼'}</button>
-        <span class="msp-task-dot" style="background:${pg.cal.color}; border-radius:50%;"></span>
-        <input type="text" class="msp-inline-project-input" value="${pg.cal.name.replace(/"/g, '&quot;')}" title="Gõ để đổi tên Khách hàng / Dự án (Chuột phải để Nhân đôi dự án)">
+        <span class="msp-task-dot" style="background:${escapeHtml(pg.cal.color)}; border-radius:50%;"></span>
+        <input type="text" class="msp-inline-project-input" value="${escapeHtml(pg.cal.name)}" title="Gõ để đổi tên Khách hàng / Dự án (Chuột phải để Nhân đôi dự án)">
       </div>
-      <div class="msp-td col-dur" title="Số ngày làm việc: ${pg.totalWorkDays} ngày • Số ngày thực tế (gồm cả ngày nghỉ): ${pg.totalActualDays || pg.overallWorkDays} ngày">
-        <span class="msp-summary-dur-work" style="font-weight:800; color:#b91c1c;">${pg.totalWorkDays} ngày LV</span>
-        <span class="msp-summary-dur-sep" style="margin: 0 2px; opacity:0.5;">•</span>
-        <span class="msp-summary-dur-act" style="font-weight:700; color:#475569; font-size:11px;">${pg.totalActualDays} ngày TT</span>
+      <div class="msp-td col-dur msp-summary-dur-cell" title="Từ ${startDisp} đến ${endDisp}:&#10;• ${pg.totalActualDays} ngày thực tế (tính cả ngày nghỉ)&#10;• ${pg.overallWorkDays} ngày làm việc (= ngày thực tế trừ ngày nghỉ)">
+        <span class="msp-summary-dur-work">${pg.overallWorkDays} LV</span>
+        <span class="msp-summary-dur-act">${pg.totalActualDays} TT</span>
       </div>
       <div class="msp-td col-date col-start">
         <div class="msp-date-cell-wrap proj-start-wrap" title="Bấm để đổi Ngày Bắt Đầu của cả Dự án (Tự động dịch toàn bộ các mục theo, giữ nguyên ngày làm việc)">
@@ -4482,6 +4910,7 @@ function renderMSProjectView() {
     // Dòng Gantt bên phải cho Summary Row
     const gRowSum = document.createElement('div');
     gRowSum.className = 'msp-gantt-row summary-row';
+    gRowSum.dataset.calId = pg.cal.id;
     gRowSum.style.width = `${totalTimelineWidth}px`;
     gRowSum.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -4503,7 +4932,7 @@ function renderMSProjectView() {
 
       const sumLabel = document.createElement('div');
       sumLabel.className = 'msp-summary-label';
-      sumLabel.textContent = `${pg.cal.name} (${pg.totalWorkDays} ngày LV • ${pg.totalActualDays} ngày TT • ${pg.avgProgress}%)`;
+      sumLabel.textContent = `${pg.cal.name} (${pg.overallWorkDays} ngày LV • ${pg.totalActualDays} ngày TT • ${pg.avgProgress}%)`;
       sumBar.appendChild(sumLabel);
 
       gRowSum.appendChild(sumBar);
@@ -4537,8 +4966,8 @@ function renderMSProjectView() {
             <span class="msp-drag-grip">⋮⋮</span>${wbsCode}
           </div>
           <div class="msp-td col-name">
-            <span class="msp-task-dot" style="background:${task.color}; cursor:pointer;" title="Bấm để đổi màu hoặc mở chi tiết"></span>
-            <input type="text" class="msp-inline-title-input" value="${task.title.replace(/"/g, '&quot;')}" title="${task.title.replace(/"/g, '&quot;')} (Gõ để sửa • Chuột phải để Nhân đôi / Chuyển Ngày thực tế)">
+            <span class="msp-task-dot" style="background:${escapeHtml(task.color)}; cursor:pointer;" title="Bấm để đổi màu hoặc mở chi tiết"></span>
+            <input type="text" class="msp-inline-title-input" value="${escapeHtml(task.title)}" title="${escapeHtml(task.title)} (Gõ để sửa • Chuột phải để Nhân đôi / Chuyển Ngày thực tế)">
           </div>
           <div class="msp-td col-dur">
             <div class="msp-inline-dur-wrap">
@@ -4808,6 +5237,8 @@ function renderMSProjectView() {
         // --- DÒNG GANTT BÊN PHẢI TƯƠNG ỨNG ---
         const gRowTask = document.createElement('div');
         gRowTask.className = 'msp-gantt-row';
+        gRowTask.dataset.calId = pg.cal.id;
+        gRowTask.dataset.taskId = task.id;
         gRowTask.style.width = `${totalTimelineWidth}px`;
 
         const startIdx = diffDaysFromStart(globalMinDate, task.startDate);
@@ -4955,11 +5386,18 @@ function renderMSProjectView() {
     let svgPaths = '';
     const r = 4; // Bán kính bo góc cong mềm mại kiểu MS Project
 
-    projectGroups.forEach(pg => {
-      const projRows = rowRecords.filter(r => r.calId === pg.cal.id);
-      for (let i = 0; i < projRows.length - 1; i++) {
-        const prev = projRows[i];
-        const next = projRows[i + 1];
+    const rowByTaskId = new Map(rowRecords.map(rr => [rr.task.id, rr]));
+    const linkPairs = [];
+    rowRecords.forEach(rr => {
+      (rr.task.predecessors || []).forEach(link => {
+        const predRow = rowByTaskId.get(link.id);
+        if (predRow) linkPairs.push([predRow, rr]);
+      });
+    });
+    {
+      for (let i = 0; i < linkPairs.length; i++) {
+        const prev = linkPairs[i][0];
+        const next = linkPairs[i][1];
 
         const x1 = prev.rightPx;
         const y1 = prev.centerY;
@@ -4989,7 +5427,7 @@ function renderMSProjectView() {
 
         svgPaths += `<path d="${dPath}" fill="none" stroke="#0284c7" stroke-width="1.15" marker-end="url(#msp-arrow)" opacity="0.85" />`;
       }
-    });
+    }
 
     ganttSvg.innerHTML = svgDefs + svgPaths;
   }
@@ -5122,7 +5560,9 @@ function setupGanttBarDragAndClick(taskBar, handleL, handleR, task, colWidth) {
 
       if (hasMoved) {
         if (multiSnapshot.length > 1) {
-          syncAllFromMSProject(`Đã di chuyển đồng thời ${multiSnapshot.length} công việc đã chọn!`);
+          const shiftedMulti = AppState.autoCascadeShift === false ? 0
+            : propagateLinkedTasks(multiSnapshot.map(m => m.taskRef && m.taskRef.id).filter(Boolean), AppState.tasks);
+          syncAllFromMSProject(`Đã di chuyển đồng thời ${multiSnapshot.length} công việc đã chọn!${shiftedMulti > 0 ? ` • Tự động dịch ${shiftedMulti} mục nối phía sau` : ''}`);
         } else {
           const shifted = cascadeShiftSubsequentTasks(task, origStart, origEnd);
           const wDays = countWorkingDays(task.startDate, task.endDate, task.skipSundays !== false);
@@ -5148,6 +5588,16 @@ function setupGanttBarDragAndClick(taskBar, handleL, handleR, task, colWidth) {
 // =========================================================================
 // MỞ VÀ XUẤT FILE ĐỊNH DẠNG CHUẨN MICROSOFT PROJECT (.XML MSPDI, .CSV, .JSON)
 // =========================================================================
+
+// Chống chèn mã HTML khi đưa tên việc / tên khách hàng vào innerHTML
+function escapeHtml(str) {
+  return String(str === undefined || str === null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
 
 function escapeXml(str) {
   return String(str || '')
@@ -5190,6 +5640,20 @@ function exportMSProjectXMLFile() {
       <Finish>${projEnd}T17:00:00</Finish>
     </Task>`;
 
+  // Cấp UID trước cho mọi việc để xuất liên kết đúng (kể cả liên kết tới việc nằm phía dưới)
+  const taskUidMap = new Map();
+  {
+    let preUid = 1;
+    targetCals.forEach(cal => {
+      preUid++; // dòng dự án
+      AppState.tasks
+        .filter(t => t.calendarId === cal.id && t.visibleOnBoard !== false)
+        .slice()
+        .sort((a, b) => a.startDate.localeCompare(b.startDate) || a.endDate.localeCompare(b.endDate))
+        .forEach(t => taskUidMap.set(t.id, preUid++));
+    });
+  }
+
   targetCals.forEach((cal, cIdx) => {
     const calUid = uidCounter++;
     const calIdNum = idCounter++;
@@ -5224,7 +5688,6 @@ function exportMSProjectXMLFile() {
       </ExtendedAttribute>
     </Task>`;
 
-    let prevChildUid = null;
     calTasks.forEach((t, tIdx) => {
       const tUid = uidCounter++;
       const tIdNum = idCounter++;
@@ -5232,12 +5695,17 @@ function exportMSProjectXMLFile() {
       const wDays = Math.max(1, countWorkingDays(t.startDate, t.endDate, t.skipSundays !== false));
       const prog = typeof t.progress === 'number' ? t.progress : 0;
 
-      const predXml = prevChildUid ? `
+      // MS Project: Type 1 = FS; LinkLag tính bằng 1/10 phút (1 ngày làm việc = 8h = 4800); LagFormat 7 = ngày
+      const predXml = (t.predecessors || [])
+        .filter(l => taskUidMap.has(l.id))
+        .map(l => `
       <PredecessorLink>
-        <PredecessorUID>${prevChildUid}</PredecessorUID>
+        <PredecessorUID>${taskUidMap.get(l.id)}</PredecessorUID>
         <Type>1</Type>
         <CrossProject>0</CrossProject>
-      </PredecessorLink>` : '';
+        <LinkLag>${Math.round((Number(l.lag) || 0) * 4800)}</LinkLag>
+        <LagFormat>7</LagFormat>
+      </PredecessorLink>`).join('');
 
       tasksXml += `
     <Task>
@@ -5262,7 +5730,6 @@ function exportMSProjectXMLFile() {
       </ExtendedAttribute>
     </Task>`;
 
-      prevChildUid = tUid;
     });
   });
 
@@ -5412,7 +5879,14 @@ function importMSProjectFile(file) {
             else taskColor = rainbowPalette[colorIdx++ % rainbowPalette.length];
           }
 
+          const predLinks = Array.from(tNode.getElementsByTagName('PredecessorLink')).map(pl => ({
+            uid: getTagText(pl, 'PredecessorUID'),
+            type: getTagText(pl, 'Type') || '1',
+            lag: Math.round((parseInt(getTagText(pl, 'LinkLag') || '0', 10) || 0) / 4800)
+          })).filter(pl => pl.uid && pl.type === '1'); // Chỉ hỗ trợ Finish-to-Start
           importedTasks.push({
+            _uid: uid,
+            _predLinks: predLinks,
             id: 'task_imp_' + Date.now() + '_' + importedTasks.length,
             calendarId: currentCal.id,
             title: name,
@@ -5432,6 +5906,16 @@ function importMSProjectFile(file) {
         alert('File không có hạng mục công việc con nào để hiển thị!');
         return;
       }
+
+      // Chuyển liên kết theo UID của MS Project sang ID nội bộ
+      const uidToId = new Map(importedTasks.map(t => [t._uid, t.id]));
+      importedTasks.forEach(t => {
+        t.predecessors = (t._predLinks || [])
+          .filter(pl => uidToId.has(pl.uid))
+          .map(pl => ({ id: uidToId.get(pl.uid), type: 'FS', lag: pl.lag }));
+        delete t._uid;
+        delete t._predLinks;
+      });
 
       // Hỏi người dùng muốn Gộp thêm vào dự án hiện tại hay Thay thế bằng dự án vừa mở
       const replaceMode = confirm(
@@ -5533,6 +6017,10 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
     activeBtn.innerHTML = mode === 'clipboard' ? 'Đang copy...' : 'Đang tạo ảnh...';
     activeBtn.disabled = true;
   }
+
+  // Vẽ lại bảng ở chế độ xuất ảnh (trục ngày vừa khít công việc, cột tên đủ dài)
+  _mspExportRendering = true;
+  renderMSProjectView();
 
   // 1. Tính độ rộng vừa khít chính xác (pixel) cho cột "Hạng mục / Công việc" để không dư khoảng trống và không mất chữ
   const exportNameColWidth = computeTightMspNameColWidth();
@@ -5636,6 +6124,10 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
   const fullTableWidth = parseFloat(cloneTablePane.style.width) || 680;
   const targetTotalWidth = fullTableWidth + fullGanttWidth + 2;
 
+  // Trả màn hình về chế độ xem bình thường
+  _mspExportRendering = false;
+  renderMSProjectView();
+
   cloneSheet.style.width = `${targetTotalWidth}px`;
   document.body.appendChild(cloneSheet);
 
@@ -5678,6 +6170,20 @@ window.addEventListener('DOMContentLoaded', () => {
   setupQuickPopoverEvents();
   setupGridMouseInteractions();
   setupMSProjectEvents();
+  setupGanttRangeSelection();
   setupEvents();
+  let _resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(() => {
+      if (AppState.viewMode === 'msproject') renderMSProjectView();
+    }, 250);
+  });
+  const saveStatusEl = document.getElementById('save-status-indicator');
+  if (saveStatusEl) {
+    saveStatusEl.addEventListener('click', () => {
+      if (!isOfflineFileMode()) flushSaveToBackend();
+    });
+  }
   syncWithBackend();
 });

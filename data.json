@@ -12,7 +12,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793938631887",
@@ -24,7 +25,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793938860674",
@@ -36,7 +38,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947748217",
@@ -49,7 +52,8 @@
       "showCount": true,
       "visibleOnBoard": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947373498",
@@ -61,7 +65,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793938916760",
@@ -73,7 +78,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793939031393",
@@ -85,7 +91,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947491983",
@@ -97,7 +104,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793948592897",
@@ -109,7 +117,14 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": [
+        {
+          "id": "task_1793947491983",
+          "type": "FS",
+          "lag": 4
+        }
+      ]
     },
     {
       "id": "task_1793939187939",
@@ -121,7 +136,8 @@
       "skipSundays": false,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947113879",
@@ -133,7 +149,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947216370",
@@ -145,7 +162,8 @@
       "skipSundays": false,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793939434594",
@@ -157,7 +175,8 @@
       "skipSundays": false,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793939103718",
@@ -169,7 +188,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793939253622",
@@ -181,7 +201,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947414024",
@@ -193,7 +214,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947608724",
@@ -206,7 +228,8 @@
       "showCount": true,
       "visibleOnBoard": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793948903445",
@@ -218,7 +241,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947808268",
@@ -230,7 +254,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793948752710",
@@ -242,7 +267,14 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": [
+        {
+          "id": "task_1793947808268",
+          "type": "FS",
+          "lag": 1
+        }
+      ]
     },
     {
       "id": "task_1793939228513",
@@ -254,7 +286,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793939274207",
@@ -266,7 +299,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793952653040",
@@ -278,7 +312,14 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": [
+        {
+          "id": "task_1793939274207",
+          "type": "FS",
+          "lag": 1
+        }
+      ]
     },
     {
       "id": "task_1793939300837",
@@ -290,7 +331,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793939631397",
@@ -302,7 +344,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793939592949",
@@ -314,7 +357,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793948649014",
@@ -326,7 +370,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793947843071",
@@ -338,7 +383,14 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": [
+        {
+          "id": "task_1793948649014",
+          "type": "FS",
+          "lag": 4
+        }
+      ]
     },
     {
       "id": "task_1793952610631",
@@ -350,7 +402,8 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": []
     },
     {
       "id": "task_1793953624365",
@@ -362,12 +415,19 @@
       "skipSundays": true,
       "showCount": true,
       "progress": 0,
-      "note": ""
+      "note": "",
+      "predecessors": [
+        {
+          "id": "task_1793952610631",
+          "type": "FS",
+          "lag": 10
+        }
+      ]
     }
   ],
   "companyName": "GD HOME",
   "companyLogo": null,
-  "footerNote": "Ngày làm việc không bao gồm Thứ 7, Chủ nhật",
+  "footerNote": "Ngày làm việc không bao gồm Chiều thứ 7, Chủ nhật",
   "showVnHolidays": false,
   "extraWeeksTop": 0,
   "extraWeeksBottom": 1,
@@ -409,8 +469,11 @@
   ],
   "daysOffConfig": {
     "holidays": false,
-    "saturdayHalf": false,
-    "saturday": true,
-    "sunday": true
-  }
+    "saturdayHalf": true,
+    "saturday": false,
+    "sunday": true,
+    "overrides": {}
+  },
+  "_version": 2,
+  "_updatedAt": "2026-11-07T07:18:03.205Z"
 }

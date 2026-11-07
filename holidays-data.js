@@ -21,12 +21,12 @@ const VIETNAM_HOLIDAYS = {
   "2024-04-18": "Giỗ tổ Hùng Vương",
   "2024-09-02": "Quốc khánh",
   "2025-01-01": "Tết dương lịch",
-  "2025-04-20": "ch��a nhật phục sinh",
+  "2025-04-20": "Chủ nhật Phục sinh",
   "2025-12-31": "Đêm giao thừa",
   "2026-02-17": "Tết Nguyên Đán",
   "2026-02-18": "Tết Nguyên Đán",
   "2026-02-19": "Tết Nguyên Đán",
-  "2026-04-05": "chủa nhật phục sinh",
+  "2026-04-05": "Chủ nhật Phục sinh",
   "2026-12-25": "Giáng sinh/Nôen",
   "2026-12-31": "Đêm giao thừa",
   "2027-01-01": "Tết dương lịch",
@@ -34,12 +34,12 @@ const VIETNAM_HOLIDAYS = {
   "2027-09-02": "Quốc khánh",
   "2027-12-25": "Giáng sinh/Nôen",
   "2028-01-01": "Tết dương lịch",
-  "2028-04-16": "chủa nhật phục sinh",
+  "2028-04-16": "Chủ nhật Phục sinh",
   "2028-12-31": "Đêm giao thừa",
   "2029-05-01": "Ngày Quốc tế Lao động",
   "2029-09-03": "Quốc khánh quan sát",
   "2021-02-13": "Tết Nguyên Đán",
-  "2021-04-04": "chủa nhật phục sinh",
+  "2021-04-04": "Chủ nhật Phục sinh",
   "2021-12-25": "Giáng sinh/Nôen",
   "2022-04-11": "ngày nghỉ Giỗ tổ Hùng Vương",
   "2022-05-16": "Lễ Phật Đản",
@@ -63,7 +63,7 @@ const VIETNAM_HOLIDAYS = {
   "2026-04-30": "Ngày giải phóng",
   "2027-02-06": "Tết Nguyên Đán",
   "2027-02-07": "Tết Nguyên Đán",
-  "2027-03-28": "chủa nhật phục sinh",
+  "2027-03-28": "Chủ nhật Phục sinh",
   "2027-05-01": "Ngày Quốc tế Lao động",
   "2027-12-24": "Đêm Giáng sinh",
   "2028-04-04": "Giỗ tổ Hùng Vương",
@@ -82,7 +82,7 @@ const VIETNAM_HOLIDAYS = {
   "2022-05-01": "Ngày Quốc tế Lao động",
   "2022-12-31": "Đêm giao thừa",
   "2023-01-23": "Tết Nguyên Đán",
-  "2023-04-09": "chủa nhật phục sinh",
+  "2023-04-09": "Chủ nhật Phục sinh",
   "2023-05-03": "ngày nghỉ Ngày giải phóng",
   "2023-09-04": "Quốc khánh quan sát",
   "2024-01-01": "Tết dương lịch",
@@ -119,7 +119,7 @@ const VIETNAM_HOLIDAYS = {
   "2021-05-26": "Lễ Phật Đản",
   "2021-09-02": "Quốc khánh",
   "2022-02-05": "Tết Nguyên Đán",
-  "2022-04-17": "chủa nhật phục sinh",
+  "2022-04-17": "Chủ nhật Phục sinh",
   "2022-09-02": "Quốc khánh",
   "2022-12-24": "Đêm Giáng sinh",
   "2023-01-20": "Tết",
@@ -132,7 +132,7 @@ const VIETNAM_HOLIDAYS = {
   "2024-02-11": "Tết Nguyên Đán",
   "2024-02-12": "Tết Nguyên Đán",
   "2024-02-14": "Tết Nguyên Đán",
-  "2024-03-31": "chủa nhật phục sinh",
+  "2024-03-31": "Chủ nhật Phục sinh",
   "2024-04-29": "Ngày giải phóng",
   "2024-12-24": "Đêm Giáng sinh",
   "2024-12-25": "Giáng sinh/Nôen",
@@ -151,7 +151,7 @@ const VIETNAM_HOLIDAYS = {
   "2028-12-25": "Giáng sinh/Nôen",
   "2029-02-13": "Tết Nguyên Đán",
   "2029-02-14": "Tết Nguyên Đán",
-  "2029-04-01": "chủa nhật phục sinh",
+  "2029-04-01": "Chủ nhật Phục sinh",
   "2021-02-14": "Tết Nguyên Đán",
   "2022-01-02": "Tết dương lịch",
   "2022-02-01": "Tết Nguyên Đán",
@@ -179,7 +179,7 @@ const VIETNAM_HOLIDAYS = {
   "2030-02-06": "Tết Nguyên Đán",
   "2030-02-07": "Tết Nguyên Đán",
   "2030-04-12": "Giỗ tổ Hùng Vương",
-  "2030-04-21": "chủa nhật phục sinh",
+  "2030-04-21": "Chủ nhật Phục sinh",
   "2030-04-30": "Ngày giải phóng",
   "2030-05-01": "Ngày Quốc tế Lao động",
   "2030-09-02": "Quốc khánh",
@@ -197,7 +197,7 @@ const VIETNAM_HOLIDAYS = {
   "2031-01-26": "Tết Nguyên Đán",
   "2031-01-27": "Tết Nguyên Đán",
   "2031-04-01": "Giỗ tổ Hùng Vương",
-  "2031-04-13": "chủa nhật phục sinh",
+  "2031-04-13": "Chủ nhật Phục sinh",
   "2031-04-30": "Ngày giải phóng",
   "2031-05-01": "Ngày Quốc tế Lao động",
   "2031-09-02": "Quốc khánh",
@@ -217,3 +217,45 @@ const VIETNAM_HOLIDAYS = {
   "2027-02-04": "Tết",
   "2027-09-03": "Quốc khánh (ngày lễ bổ sung)"
 };
+
+// =========================================================================
+// PHÂN LOẠI NGÀY LỄ
+//  - 'off'        : Nghỉ lễ chính thức (trừ khỏi ngày làm việc)
+//  - 'work'       : Ngày làm bù (đi làm cả ngày, kể cả khi rơi vào Thứ 7 / CN)
+//  - 'observance' : Chỉ hiển thị cho biết, KHÔNG tính là ngày nghỉ
+//                   (Giáng sinh, Đêm giao thừa 31/12, Phục sinh...)
+// Nguồn dữ liệu gốc lấy từ Google Calendar "Ngày lễ ở Việt Nam" nên có lẫn
+// ngày kỷ niệm & ngày làm bù -> cần phân loại lại.
+// =========================================================================
+
+// Sửa tay theo lịch nghỉ chính thức đã công bố (ưu tiên cao nhất).
+// Nguồn: thông báo Bộ Nội vụ 2026; Nghị quyết 28/2026/QH16 (24/11 Ngày Văn hoá Việt Nam).
+const VN_HOLIDAY_FIXES = {
+  "2026-01-10": { type: 'work', name: "Làm bù (Tết Dương lịch 02/01)" },
+  "2026-08-22": { type: 'work', name: "Làm bù (Quốc khánh 31/08)" },
+  "2026-08-31": { type: 'off', name: "Quốc khánh (nghỉ hoán đổi)" },
+  "2025-04-26": { type: 'work', name: "Làm bù (30/4 - 1/5)" }
+};
+
+function classifyVnHolidayName(name) {
+  const n = String(name || '').toLowerCase();
+  if (!n) return null;
+  if (n.startsWith('ngày làm việc') || n.startsWith('làm bù')) return 'work';
+  if (n.includes('giáng sinh') || n.includes('nôen') || n.includes('phục sinh')) return 'observance';
+  // "Đêm giao thừa" (31/12 dương lịch) chỉ là ngày kỷ niệm; "Tết đêm giao thừa" (âm lịch) là nghỉ Tết
+  if (n === 'đêm giao thừa') return 'observance';
+  return 'off';
+}
+
+// Trả về { name, type } hoặc null
+function getVnHolidayInfo(dateStr) {
+  if (VN_HOLIDAY_FIXES[dateStr]) return VN_HOLIDAY_FIXES[dateStr];
+  const name = (typeof VIETNAM_HOLIDAYS !== 'undefined') ? VIETNAM_HOLIDAYS[dateStr] : null;
+  if (!name) return null;
+  return { name, type: classifyVnHolidayName(name) };
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { VIETNAM_HOLIDAYS, VN_HOLIDAY_FIXES, classifyVnHolidayName, getVnHolidayInfo };
+}
+

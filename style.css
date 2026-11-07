@@ -3371,3 +3371,166 @@ body {
   margin: 4px 2px;
 }
 
+
+/* ===== Trạng thái lưu dữ liệu (header) ===== */
+.save-status {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 9000;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12);
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+.save-status.is-saved { color: #15803d; opacity: 0.85; }
+.save-status.is-pending, .save-status.is-saving { color: #64748b; }
+.save-status.is-offline { color: #475569; background: #f1f5f9; }
+.save-status.is-error { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+
+/* ===== Ngày lễ: làm bù / kỷ niệm / tự đánh dấu ===== */
+.holiday-bar-segment.is-makeup-work {
+  background: #e0f2fe !important;
+  color: #0369a1 !important;
+  border-color: #7dd3fc !important;
+}
+.holiday-bar-segment.is-observance {
+  background: transparent !important;
+  color: #94a3b8 !important;
+  border: 1px dashed #cbd5e1 !important;
+  font-weight: 500 !important;
+}
+.holiday-bar-segment.is-custom-off {
+  background: #fee2e2 !important;
+  color: #b91c1c !important;
+}
+.day-cell.is-custom-off { background-color: #fff1f2; }
+.day-cell.is-workday-forced .day-header { box-shadow: inset 0 -2px 0 #38bdf8; }
+.msp-gantt-day-cell.is-makeup-work { box-shadow: inset 0 -2px 0 #38bdf8; }
+
+/* ===== Cột Số ngày của dòng Dự án: 2 dòng LV / TT ===== */
+.msp-summary-dur-cell {
+  display: flex !important;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.1;
+  gap: 1px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+.msp-summary-dur-work { font-weight: 900; color: #b91c1c; font-size: 12px; }
+.msp-summary-dur-act { font-weight: 700; color: #475569; font-size: 10.5px; }
+.msp-rows-mini .msp-summary-dur-cell,
+.msp-rows-compact .msp-summary-dur-cell { flex-direction: row; gap: 4px; }
+.msp-rows-mini .msp-summary-dur-work { font-size: 11px; }
+.msp-rows-mini .msp-summary-dur-act { font-size: 10px; }
+
+/* ===== Quét chọn vùng ngày trên Timeline ===== */
+.msp-gantt-rows-layer .msp-gantt-row { cursor: crosshair; }
+.msp-gantt-rows-layer .msp-task-bar,
+.msp-gantt-rows-layer .msp-summary-bar { cursor: grab; }
+.msp-range-select-highlight {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  background: rgba(37, 99, 235, 0.16);
+  border: 1.5px dashed #2563eb;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 3;
+  color: #1d4ed8;
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* ===== Dòng rất thấp (24px) ===== */
+.msp-rows-mini .msp-task-bar { font-size: 10.5px; border-radius: 3px; }
+.msp-rows-mini .msp-td { font-size: 11.5px; }
+.msp-rows-mini .msp-inline-title-input,
+.msp-rows-mini .msp-inline-dur-input,
+.msp-rows-mini .msp-inline-project-input { height: 20px; padding-top: 0; padding-bottom: 0; font-size: 11.5px; }
+.msp-rows-mini .msp-progress-select { height: 20px; padding-top: 0; padding-bottom: 0; font-size: 10.5px; }
+.msp-rows-mini .msp-prog-badge { padding: 0 6px; font-size: 10px; }
+.msp-zoom-btns-5 { grid-template-columns: repeat(3, 1fr); }
+.msp-zoom-btns-4 { grid-template-columns: repeat(2, 1fr); }
+
+/* =====================================================================
+   HEADER RESPONSIVE: tự thu gọn nút theo độ rộng màn hình
+   (chữ của nút ẩn dần, chỉ còn icon + tooltip; không bao giờ tràn ngang)
+   ===================================================================== */
+.app-header { gap: 12px; min-width: 0; }
+.header-left, .header-center, .header-right { min-width: 0; flex-shrink: 1; }
+.header-right { flex-shrink: 0; }
+.app-logo { white-space: nowrap; flex-shrink: 0; }
+.app-logo span { white-space: nowrap; }
+.current-range-title { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.app-header .btn { white-space: nowrap; }
+.app-header .btn svg, .app-header .btn i[data-lucide] { width: 18px; height: 18px; flex-shrink: 0; }
+.app-header .btn .btn-label:empty { display: none; }
+
+@media (max-width: 2400px) {
+  .app-header { padding: 0 16px; }
+  .header-left { gap: 10px; }
+  .header-right { gap: 6px; }
+  .app-header .btn { padding: 7px 11px; font-size: 13.5px; }
+  .range-selector-box { padding: 5px 10px; gap: 6px; }
+}
+@media (max-width: 2100px) {
+  .app-header .hdr-p1 .btn-label { display: none; }
+  .app-header .hdr-p1 { padding: 7px 9px; }
+}
+@media (max-width: 1750px) {
+  .current-range-title { font-size: 15px; max-width: 260px; }
+  .app-header .hdr-p2 .btn-label { display: none; }
+  .app-header .hdr-p2 { padding: 7px 9px; }
+}
+@media (max-width: 1500px) {
+  .current-range-title { display: none; }
+  .range-selector-box .range-lbl { display: none; }
+  .range-selector-box input[type="month"] { width: 132px; }
+  .app-logo span { display: none; }
+}
+@media (max-width: 1250px) {
+  .app-header .hdr-p3 .btn-label { display: none; }
+  .app-header .hdr-p3 { padding: 7px 9px; }
+  .nav-controls { display: none; }
+  .app-header { padding: 0 10px; gap: 8px; }
+}
+@media (max-width: 1050px) {
+  #btn-today { display: none; }
+  .range-selector-box input[type="month"] { width: 118px; }
+}
+.msp-td.col-wbs { justify-content: flex-start; gap: 3px; padding-left: 4px; padding-right: 2px; overflow: hidden; white-space: nowrap; }
+.msp-th.col-act, .msp-th.col-wbs { overflow: hidden; white-space: nowrap; text-overflow: clip; font-size: 10.5px; }
+@media (max-width: 1500px) { .range-selector-box input[type="month"] { width: 152px; } }
+@media (max-width: 1050px) { .range-selector-box input[type="month"] { width: 140px; } }
+.msp-top-header { flex-wrap: wrap; row-gap: 8px; }
+.msp-header-center { flex: 1 1 340px; min-width: 300px; }
+.msp-header-right { flex-wrap: wrap; justify-content: flex-end; row-gap: 6px; }
+.msp-inline-title-input { text-overflow: ellipsis; }
+.msp-rows-mini .msp-summary-dur-cell, .msp-rows-compact .msp-summary-dur-cell { gap: 3px; }
+.msp-rows-mini .msp-summary-dur-work, .msp-rows-compact .msp-summary-dur-work { font-size: 10.5px; }
+.msp-rows-mini .msp-summary-dur-act, .msp-rows-compact .msp-summary-dur-act { font-size: 9.5px; }
+/* Màn hình rộng / siêu rộng: Bảng Lịch nở rộng theo (ảnh xuất vẫn giữ khổ 1200px chuẩn) */
+@media (min-width: 2000px) {
+  .workspace-wrapper, .schedule-sheet { max-width: 1560px; }
+}
+@media (min-width: 2500px) {
+  .workspace-wrapper, .schedule-sheet { max-width: 1960px; }
+}
+@media (min-width: 3200px) {
+  .workspace-wrapper, .schedule-sheet { max-width: 2400px; }
+}

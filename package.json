@@ -1,10 +1,14 @@
 {
   "name": "timeline-calendar-backend",
-  "version": "1.0.0",
-  "description": "Multi-month timeline calendar server",
+  "version": "2.0.0",
+  "description": "GD HOME - Lập tiến độ thi công & MS Project Timeline (server.js không còn dùng express/cors, giữ lại để khớp package-lock.json)",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
   },
   "dependencies": {
     "cors": "^2.8.5",
