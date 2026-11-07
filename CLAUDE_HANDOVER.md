@@ -111,6 +111,8 @@
 
 - Copy/xuất ảnh Bảng Lịch (nút Copy ảnh & phạm vi "Toàn bộ"): chỉ giữ các tuần có công việc, bỏ tuần trống (`getWeeksWithTasks`). Chọn vùng / theo ngày tuỳ chọn vẫn giữ nguyên. Cache `?v=20261107c`.
 
+- Sọc chìm ảnh xuất: nét 1px, cách 3px*unit (≈9% khoảng cách cũ), alpha 0.035. Sidebar nền xám nhạt #eef1f5, các khối trắng. Lọc Timeline "1/2 tuần tới": nhãn vàng `#msp-scope-badge` sau tên dự án trên tiêu đề (có cả trong ảnh xuất). Cache `?v=20261107d`.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

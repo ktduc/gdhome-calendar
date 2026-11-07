@@ -3798,3 +3798,23 @@ body {
 .msp-summary-bar.msp-project-bar::before,
 .msp-summary-bar.msp-project-bar::after { border-top-color: #52637a; top: 5px; }
 .msp-summary-bar.msp-project-bar .msp-summary-label { color: #334155; }
+
+/* ===== Thanh điều khiển bên trái: nền xám nhạt, các khối trắng nổi lên cho dễ nhìn ===== */
+.app-sidebar,
+.app-sidebar.sidebar-compact { background-color: #eef1f5; border-right-color: #dde3ea; }
+.sidebar-compact .sidebar-section { background: #ffffff; border-color: #e2e8f0; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+.sidebar-compact .sb-head:hover { background: #f5f7fa; }
+
+/* ===== Nhãn lọc "1 tuần tới / 2 tuần tới" sau tên dự án trên tiêu đề Timeline ===== */
+.msp-scope-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 6px;
+  background: #fde68a;
+  color: #78350f;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}

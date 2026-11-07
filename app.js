@@ -1562,6 +1562,21 @@ function syncCustomerInputWithActiveCalendar() {
   };
   applyTitle(document.getElementById('customer-name-input'), getTitleProjectName('calendar'));
   applyTitle(document.getElementById('msp-customer-input'), getTitleProjectName('msproject'));
+
+  // Đang lọc "1 tuần tới / 2 tuần tới" -> ghi rõ ngay sau tên dự án trên tiêu đề Timeline
+  const badge = document.getElementById('msp-scope-badge');
+  if (badge) {
+    const win = typeof getMspScopeDateWindow === 'function' ? getMspScopeDateWindow() : null;
+    if (win) {
+      const fmt = (str) => { const [y, m, d] = str.split('-'); return `${d}/${m}`; };
+      badge.textContent = `${win.daysCount === 7 ? '1 TUẦN TỚI' : '2 TUẦN TỚI'} (${fmt(win.startStr)} – ${fmt(win.endStr)})`;
+      badge.title = 'Đang lọc chỉ hiện công việc trong khoảng này, KHÔNG phải toàn bộ tiến độ dự án';
+      badge.style.display = '';
+    } else {
+      badge.textContent = '';
+      badge.style.display = 'none';
+    }
+  }
 }
 
 function saveToStorage() {
@@ -3833,12 +3848,12 @@ function applyAntiEditWatermark(canvas) {
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
   // Sọc chéo 1 chiều duy nhất: từ PHẢI sang TRÁI, trên xuống dưới ( / ).
-  // Nét dày nhưng rất nhạt -> chìm, đủ nhận ra khi ảnh bị chỉnh sửa, không làm khó đọc.
-  ctx.globalAlpha = 0.05;
+  // Nét mảnh nhất có thể (1px), xếp rất dày (cách ~3px) và rất mờ -> như lớp vân chìm phủ toàn ảnh.
+  ctx.globalAlpha = 0.035;
   ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 5 * unit;
+  ctx.lineWidth = 1;
   ctx.lineCap = 'butt';
-  const gap = 34 * unit;
+  const gap = 3 * unit;
   ctx.beginPath();
   for (let x = 0; x < w + h + gap; x += gap) {
     ctx.moveTo(x, 0);
