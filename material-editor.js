@@ -396,6 +396,11 @@ document.addEventListener('change', event => {
   if (!sheet || !key || !field.closest('#materials') || field.closest('dialog')) return;
   const {group,row,slot} = context(field);
   const value = field.value;
+  if (key === 'code' && row?.options[Number(slot)]) {
+    updateInlineCode(field,row.options[Number(slot)]);
+    field.defaultValue = value;
+    return;
+  }
   modify(() => {
     if (row && key === 'decision') {
       if (['ordered','chosen'].includes(value) && row.chosen == null) {
@@ -406,9 +411,6 @@ document.addEventListener('change', event => {
       row.ordered = value === 'ordered';
       row.decision = row.ordered ? 'chosen' : value;
       if (['draft','sent'].includes(value)) row.chosen = null;
-    } else if (row && key === 'code' && row.options[Number(slot)]) {
-      row.options[Number(slot)].code = value;
-      field.defaultValue = value;
     } else if (row && key === 'spec' && row.chosen != null) row.options[row.chosen].finish = value;
     else if (row) { row[key] = value; learnPreset(key,value); }
     else if (group) group[key === 'groupName' ? 'name' : key] = value;
@@ -417,11 +419,30 @@ document.addEventListener('change', event => {
   },!!group && !row && ['taskId','leadDays','dayMode','due'].includes(key));
 });
 
+let editingCode;
+function updateInlineCode(field, pa) {
+  if (pa.code === field.value) return;
+  const apply = () => { pa.code = field.value; };
+  if (editingCode === field) { apply(); queueSave(); }
+  else modify(apply,false);
+  editingCode = field;
+}
+
+document.addEventListener('focusout', event => {
+  if (editingCode === event.target) editingCode = null;
+});
+
 document.addEventListener('focusin', event => {
   if (sheet && event.target.closest('.sheet-grid') && event.target.matches('input')) suggestions(event.target);
 });
 document.addEventListener('input', event => {
-  if (sheet && event.target.closest('.sheet-grid') && event.target.matches('input')) suggestions(event.target);
+  const field = event.target;
+  if (!sheet || !field.closest('.sheet-grid') || !field.matches('input')) return;
+  if (field.dataset.field === 'code') {
+    const {row,slot} = context(field);
+    if (row?.options[Number(slot)]) updateInlineCode(field,row.options[Number(slot)]);
+  }
+  suggestions(field);
 });
 
 document.addEventListener('keydown', event => {
@@ -439,7 +460,11 @@ document.addEventListener('keydown', event => {
   if (target.matches('.image-cell') && event.key === ' ' && slot !== 'render') { event.preventDefault(); pick(row,slot); return; }
   const cell = target.closest('td');
   if (!cell) return;
-  if (event.key === 'Escape') { if (target.tagName === 'INPUT') target.value = target.defaultValue; target.blur(); return; }
+  if (event.key === 'Escape') { if (target.tagName === 'INPUT') {
+      target.value = target.defaultValue;
+      if (target.dataset.field === 'code' && row.options[Number(slot)]) updateInlineCode(target,row.options[Number(slot)]);
+    }
+    target.blur(); return; }
   const rows = [...box().querySelectorAll('tr[data-row]')];
   const index = rows.indexOf(cell.parentElement);
   const col = cell.cellIndex;

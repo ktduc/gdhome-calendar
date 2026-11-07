@@ -8,9 +8,9 @@
 | 4 | ✅ | 4.1 Bản phát hành, duyệt và ký A/B, 48 giờ và lịch sử · 4.2 A4, thống kê ảnh, Excel mua hàng · `f2c0a07` |
 | 5 | ✅ | 5.1 Gắn nhóm với công việc, tính hạn, ✓/⚠ trên Timeline · `50421a6` |
 | Rà soát | ✅ | Kiểm thử localhost, sửa nhập PA trước khi mất focus, tách CSS công cụ, dùng chung hàm xuất ảnh và ghi Chốt mã bền vững khi dùng Gist. |
-| 6 | 🔄 | 6.1 ✅ Bảng gọn và nhập mã · 6.2 ✅ Crop trực quan và chữ ký · Tiếp theo 6.3 đóng gói và kiểm thử |
+| 6 | ✅ | 6.1 Bảng gọn, nhãn, menu Xuất và mã tại ô · 6.2 Crop và chữ ký · 6.3 Module điều khoản, cache và kiểm tra localhost |
 
-Bước tiếp theo: Claude review các commit trên `main`, đối chiếu checklist dưới đây rồi chép script deploy sang Desktop theo lệnh chạy đêm. Tất cả commit là cục bộ.
+Bước tiếp theo: Claude review commit GĐ6 và chuẩn bị triển khai. Tất cả commit là cục bộ.
 
 ## Kiểm thử nhanh
 
@@ -30,3 +30,11 @@ Bước tiếp theo: Claude review các commit trên `main`, đối chiếu chec
 - Chưa chạy trên Render/Gmail/Gist/R2 thật theo phạm vi commit cục bộ. Kho ảnh tạm chỉ dùng để thử. Hướng dẫn cấu hình ở `HUONG-DAN-R2.md`. Chưa đối chiếu bản in thực tế từ máy in GD HOME.
 
 XONG
+
+## Kiểm tra GĐ6
+
+- GĐ6.1: thử tạo bảng, xem menu Xuất, nhập mã PA, chọn gợi ý thư viện và dán ảnh. Dòng đo khoảng 44 / 72 / 130 px, thumbnail Vừa 90×64; tiêu đề cột giữ vị trí khi cuộn 1.440 px.
+- GĐ6.2: kéo góc crop, huỷ, rồi mở lại và lưu ảnh cắt. Ký thử A/B; trang khách, lịch sử và A4 đều có tỷ lệ 600×190. Mở A4 xác nhận đủ điều khoản và không có quốc hiệu.
+- GĐ6.3: phát hành link, gửi yêu cầu đổi, kiểm tra ⚠ trên Timeline và xem trước thống kê ảnh. So khớp Điều 2–4 với mẫu, nạp server từ bản sao thiếu `docs/`. Cập nhật danh sách deploy trong repo và phiên bản cache. 21/21 test đạt. Render và xuất file từ trình duyệt chưa chạy trong lượt kiểm tra này.
+
+XONG GĐ6

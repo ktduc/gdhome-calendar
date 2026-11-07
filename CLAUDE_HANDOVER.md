@@ -139,17 +139,20 @@
 - Đề xuất dùng lại Gmail và ID dự án Tiến độ, giữ kho Tiến độ hiện tại, dùng Postgres riêng cho Chốt mã và R2 Standard private cho ảnh. Đây là thiết kế chờ duyệt.
 - `npm test` gặp `spawn EPERM` trong môi trường thực thi. `node --test --test-isolation=none` đạt 18/18. Giai đoạn 1 chờ anh Đức duyệt. Bản A4 và Sheet gốc cần bổ sung để đối chiếu.
 
-## 3l. GD HOME Tools và Chốt mã vật liệu (GĐ1–5)
+## 3l. GD HOME Tools và Chốt mã vật liệu (GĐ1–6)
 
 - Quyết định triển khai theo REVIEW-GD0-CHOT-MA.md. `/` giữ Tiến độ, `/tools` là trang công cụ, `/chot-ma` là trình nhập, `/duyet/:token` là bản khách. Menu dùng chung, dùng lại `gdhome_session` và quyền theo Gmail. Server chỉ phục vụ danh sách file UI; tài liệu và kho dữ liệu ở ngoài tuyến tĩnh.
 - `materials.js` có MaterialStore theo khóa `mat-v1-<băm tài khoản>`, dùng FileStore/GistStore. API `GET/POST /api/materials` giữ `_version`, từ chối xung đột với 409. Lịch sử ký và audit append-only, revisions chuyển sang file kho riêng quanh 800 KB. Khi dùng Gist, Chốt mã chờ GitHub nhận lần ghi trước khi báo đã lưu. Một tiến trình Render giữ hàng đợi ghi theo tài khoản; không chạy nhiều instance ghi cùng Gist.
 - `material-assets.js` giữ ảnh riêng, dùng R2 Standard với URL ký 60 giây gọi phía server. Cài `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` theo HUONG-DAN-R2.md. Thiếu biến dùng `DATA_DIR/assets` để thử. Khi dùng Gist/R2 thật, đặt `SESSION_SECRET` ổn định để giữ hiệu lực link khách qua các lần triển khai.
 - `material-editor.js`, `material-template.js`, `material-image-ui.js`, `material-import.js` xử lý mẫu, thao tác bảng, ảnh WebP, thư viện và nhập CSV/XLSX. SheetJS 0.18.5 tải theo nhu cầu từ CDN giống phần AI. Bản nhập giữ giá trị ô, tham chiếu ảnh cần kiểm tra thủ công.
-- `material-review.js` xử lý `/api/materials/settings`, `/api/materials/sheets/:id/review`, `/api/review/:token[/sign|/change|/assets/:id]`. Token mã hóa, chỉ lưu hash trong revision, link chưa ký 14 ngày. Sau khi ký có 48 giờ yêu cầu đổi; không sửa bản đã ký. Chữ ký A/B lưu bằng nét vẽ. Nội dung mặc định Điều 2–4 từ `docs/mau-bien-ban.md`, chỉnh được và chụp theo bản phát hành.
+- `material-review.js` xử lý `/api/materials/settings`, `/api/materials/sheets/:id/review`, `/api/review/:token[/sign|/change|/assets/:id]`. Token mã hóa, chỉ lưu hash trong revision, link chưa ký 14 ngày. Sau khi ký có 48 giờ yêu cầu đổi; không sửa bản đã ký. Chữ ký A/B lưu bằng nét vẽ. Điều 2–4 mặc định ở `material-terms.js` (chép nguyên văn mẫu), chỉnh được và chụp theo bản phát hành. Server khởi động được khi thiếu `docs/`.
 - `material-print.js` và `material-release.js` dựng Biên bản A4, thống kê ảnh và Excel nội bộ. Xuất PNG/copy dùng chung `export-canvas.js` với Tiến độ. Bản A4 không quốc hiệu, xuất PDF qua hộp in.
 - `material-schedule.js` tính hạn bằng `scheduler.js`. `/api/materials/timeline` trả trạng thái rút gọn. `material-timeline.js` hiện ✓/⚠ trên Timeline, không ghi tiến độ thi công.
 - Chi tiết chạy thử và giới hạn trong [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md). Test 21/21, đã chạy localhost với dữ liệu thử. Claude review trước khi push/deploy và chép bản .bat cập nhật sang Desktop.
 
+- **GĐ6 hoàn thiện**: các nút dòng nằm ngang, tiêu đề cột dính khi cuộn, mật độ Gọn/Vừa/Ảnh lớn đo được khoảng 44/72/130 px với thumbnail Vừa 90×64. Nhãn khách nằm trên ô, Xuất gom hai chức năng. Gõ mã tại PA và chọn từ thư viện bằng Alt+1…9.
+- Crop trong `material-image-ui.js` dùng khung kéo bốn góc, hỗ trợ phím mũi tên ở từng góc, Lưu/Huỷ. Nét ký giữ tỷ lệ 600×190 trong khung vẽ, bản khách, lịch sử và A4. Hai script trên `index.html` có phiên bản cache, `material-terms.js` đã vào danh sách deploy.
+- Kiểm tra GĐ6: 21/21 test; localhost đã tạo bảng, dán/chốt, thử crop, duyệt và ký A/B, mở lịch sử và A4, gửi yêu cầu đổi, thấy ⚠ trên Timeline. Thử khởi động module server trên bản sao không có `docs/`.
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

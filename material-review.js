@@ -1,6 +1,4 @@
 const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
 const { MaterialAssets } = require('./material-assets');
 
 const HOUR = 3600000;
@@ -59,8 +57,7 @@ function hasOption(pa) {
   return !!(pa.code || pa.brand || pa.finish || pa.color || pa.size || pa.images?.length);
 }
 
-const original = fs.readFileSync(path.join(__dirname,'docs','mau-bien-ban.md'),'utf8');
-const terms = original.slice(original.indexOf('**Điều 2.'),original.indexOf('Cuối trang, 2 cột:')).trim();
+const terms = require('./material-terms');
 const defaultSettings = {
   representative:'', position:'', address:'Văn phòng CTCP GD Home - Số 35 ngõ 1 Nguyễn Thị Định - Trung Hoà - Cầu Giấy - Hà Nội', terms
 };
