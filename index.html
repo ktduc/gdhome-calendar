@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261107">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -33,46 +33,87 @@
       <h2 class="current-range-title" id="display-range-title">Tháng 6, 2026 - Tháng 9, 2026</h2>
     </div>
 
-    <!-- Filter & Khoảng thời gian mong muốn -->
+    <!-- Filter & Khoảng thời gian mong muốn (nút gọn + popover chọn tháng) -->
     <div class="header-center">
-      <div class="range-selector-box">
-        <label for="start-month-input" class="range-lbl">Từ:</label>
-        <input type="month" id="start-month-input" value="2026-06">
-        <label for="end-month-input" class="range-lbl">Đến:</label>
-        <input type="month" id="end-month-input" value="2026-09">
-        <button class="btn btn-primary btn-sm" id="btn-apply-range">Áp dụng</button>
+      <div class="hdr-dropdown" id="hdr-range-dropdown">
+        <button type="button" class="btn btn-outline hdr-range-btn hdr-dropdown-toggle" id="btn-toggle-range-popover" title="Chọn khoảng tháng hiển thị">
+          <i data-lucide="calendar-range"></i>
+          <span id="header-range-btn-label">Tháng 06/2026 → 09/2026</span>
+          <span class="hdr-caret">▾</span>
+        </button>
+        <div class="hdr-dropdown-menu range-selector-popover" id="header-range-popover">
+          <div class="range-selector-box">
+            <label for="start-month-input" class="range-lbl">Từ:</label>
+            <input type="month" id="start-month-input" value="2026-06">
+            <label for="end-month-input" class="range-lbl">Đến:</label>
+            <input type="month" id="end-month-input" value="2026-09">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-apply-range">Áp dụng</button>
+          </div>
+        </div>
       </div>
     </div>
 
     <div class="header-right">
       <input type="file" id="input-import-msproject" accept=".xml,.mspdi,.csv,.json" style="display: none;">
-      <button class="btn hdr-p1 btn-outline btn-msp-io" id="btn-import-msproject" title="Mở file định dạng Microsoft Project (.xml, .csv, .json) từ máy tính">
-        <i data-lucide="folder-open"></i><span class="btn-label">Mở file MS Project</span>
-      </button>
-      <button class="btn hdr-p1 btn-outline btn-msp-io" id="btn-export-msproject" title="Xuất ra file chuẩn Microsoft Project (.xml) để mở trực tiếp trong phần mềm MS Project">
-        <i data-lucide="file-spreadsheet"></i><span class="btn-label">Xuất file MS Project</span>
-      </button>
-      <button class="btn hdr-p1 btn-outline btn-crop" id="btn-start-crop-export" title="Quét chọn vùng nhìn trực tiếp trên lịch để tải hoặc copy ảnh">
-        <i data-lucide="crop"></i><span class="btn-label">Chọn vùng xuất</span>
-      </button>
-      <button class="btn hdr-p2 btn-success" id="btn-quick-copy-clipboard" title="Copy ngay bảng tiến độ vào Clipboard để Ctrl+V dán vào Zalo / Word / Photoshop">
-        <i data-lucide="copy"></i><span class="btn-label">Copy ảnh</span>
-      </button>
-      <button class="btn hdr-p2 btn-primary" id="btn-open-export-modal" title="Tùy chọn vùng nhìn, Tải ảnh & Copy Clipboard">
-        <i data-lucide="camera"></i><span class="btn-label">Xuất ảnh</span>
-      </button>
-      <button class="btn hdr-p2 btn-outline" id="btn-undo-action" title="Hoàn tác (Undo - Ctrl+Z)">
-        <i data-lucide="undo-2"></i><span class="btn-label">Hoàn tác</span>
-      </button>
-      <button class="btn btn-outline" id="btn-redo-action" title="Làm lại (Redo - Ctrl+Y)" style="display: none;">
-        <i data-lucide="redo-2"></i><span class="btn-label"></span>
-      </button>
-      <button title="Thêm việc" class="btn hdr-p3 btn-outline" id="btn-add-task">
+
+      <!-- 1. Nhóm Tệp: menu thả xuống "📁 File ▾" -->
+      <div class="hdr-dropdown" id="hdr-file-dropdown">
+        <button type="button" class="btn btn-outline hdr-dropdown-toggle" id="btn-file-menu-toggle" title="Mở hoặc xuất file dự án (.xml, .csv, .json)">
+          <i data-lucide="folder"></i><span class="btn-label">File</span><span class="hdr-caret">▾</span>
+        </button>
+        <div class="hdr-dropdown-menu">
+          <button type="button" class="hdr-menu-item btn-msp-io" id="btn-import-msproject" title="Mở file định dạng Microsoft Project (.xml, .csv, .json) từ máy tính">
+            <i data-lucide="folder-open"></i><span>Mở .xml / .csv / .json</span>
+          </button>
+          <button type="button" class="hdr-menu-item btn-msp-io" id="btn-export-msproject" title="Xuất ra file chuẩn Microsoft Project (.xml) để mở trực tiếp trong phần mềm MS Project">
+            <i data-lucide="file-spreadsheet"></i><span>Xuất MS Project (.xml)</span>
+          </button>
+          <button type="button" class="hdr-menu-item" id="btn-export-json-backup" title="Tải về file JSON sao lưu toàn bộ tiến độ">
+            <i data-lucide="download"></i><span>Xuất JSON sao lưu</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 2. Nhóm Ảnh: nút chính "Copy ảnh" + mũi tên "▾" -->
+      <div class="hdr-dropdown hdr-split-group" id="hdr-image-dropdown">
+        <button type="button" class="btn btn-success hdr-split-main" id="btn-quick-copy-clipboard" title="Copy ngay bảng tiến độ vào Clipboard để Ctrl+V dán vào Zalo / Word / Photoshop">
+          <i data-lucide="copy"></i><span class="btn-label">Copy ảnh</span>
+        </button>
+        <button type="button" class="btn btn-success hdr-split-caret hdr-dropdown-toggle" id="btn-image-menu-toggle" title="Thêm tuỳ chọn xuất ảnh & chọn vùng">
+          <span class="hdr-caret">▾</span>
+        </button>
+        <div class="hdr-dropdown-menu">
+          <button type="button" class="hdr-menu-item" id="btn-open-export-modal" title="Tùy chọn vùng nhìn, Tải ảnh & Copy Clipboard">
+            <i data-lucide="camera"></i><span>Xuất ảnh (tuỳ chọn)…</span>
+          </button>
+          <button type="button" class="hdr-menu-item btn-crop" id="btn-start-crop-export" title="Quét chọn vùng nhìn trực tiếp trên lịch để tải hoặc copy ảnh">
+            <i data-lucide="crop"></i><span>Chọn vùng xuất</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- 3. Nhóm Sửa: Undo / Redo 2 nút icon gọn cạnh nhau -->
+      <div class="hdr-undo-group">
+        <button type="button" class="btn btn-outline hdr-icon-sq" id="btn-undo-action" title="Hoàn tác (Undo - Ctrl+Z)">
+          <i data-lucide="undo-2"></i>
+        </button>
+        <button type="button" class="btn btn-outline hdr-icon-sq" id="btn-redo-action" title="Làm lại (Redo - Ctrl+Y)" style="display: none;">
+          <i data-lucide="redo-2"></i>
+        </button>
+      </div>
+
+      <!-- 4. Nút "＋ Thêm việc" nổi bật -->
+      <button type="button" title="Thêm việc" class="btn btn-primary" id="btn-add-task">
         <i data-lucide="plus"></i><span class="btn-label">Thêm việc</span>
       </button>
+
+      <!-- Chip chế độ Khách + nút Đăng nhập hoặc Chip tài khoản Gmail -->
+      <span class="user-chip guest-chip" id="guest-mode-chip" style="display:none;" title="Đang dùng chế độ khách – dữ liệu chỉ lưu trên trình duyệt này">👤 Khách</span>
+      <button type="button" class="btn btn-outline btn-sm" id="btn-guest-login" style="display:none;" title="Đăng nhập bằng Gmail">Đăng nhập</button>
       <button type="button" class="btn btn-outline user-chip" id="btn-user-account" style="display:none;" title="Tài khoản"></button>
-      <button class="btn btn-outline icon-only-btn" id="btn-project-settings" title="Cài đặt dự án & Logo">
-        <i data-lucide="settings"></i><span class="btn-label"></span>
+
+      <button type="button" class="btn btn-outline hdr-icon-sq icon-only-btn" id="btn-project-settings" title="Cài đặt dự án & Logo">
+        <i data-lucide="settings"></i>
       </button>
     </div>
   </header>
@@ -741,11 +782,12 @@
   <div class="quick-create-popover" id="quick-create-popover">
     <div class="popover-header">
       <span class="popover-heading-label">Chọn nhanh giai đoạn (1-Click là xong):</span>
+      <button type="button" class="popover-toggle-design-btn" id="btn-toggle-design-tags" title="Ẩn/hiện 3 nút Thiết kế (3D / Chỉnh sửa 3D / HSKT) tuỳ dự án Thiết kế hay Thi công">Ẩn nút TK</button>
       <button type="button" class="icon-btn close-popover" id="btn-close-popover">&times;</button>
     </div>
 
     <!-- 3 Nút Tag 1-Click: Bấm vào là tự ghép với Tên Khách Hàng + Màu chuẩn và Lưu luôn -->
-    <div class="popover-instant-tags">
+    <div class="popover-instant-tags" id="popover-instant-tags">
       <button type="button" class="instant-tag-btn instant-3d" data-prefix="3D" data-color="#cc0000" title="Tự động tạo thanh màu Đỏ: 3D - Tên khách hàng">
         <span class="instant-tag-name">3D</span>
         <span class="instant-tag-sub">Màu Đỏ • Tự ghép tên KH</span>
@@ -842,13 +884,17 @@
       <h2>Lịch Tiến Độ GD HOME</h2>
       <p>Đăng nhập bằng tài khoản Gmail để xem và lưu các dự án của bạn.<br>Mỗi tài khoản có dữ liệu riêng, dùng được trên mọi máy.</p>
       <div id="google-signin-btn" class="google-signin-btn"></div>
+      <div class="login-guest-divider"><span>hoặc</span></div>
+      <button type="button" class="btn btn-outline login-guest-btn" id="btn-guest-mode">
+        👤 Dùng thử – chế độ khách (không cần đăng nhập)
+      </button>
       <div class="login-msg" id="login-overlay-msg"></div>
     </div>
   </div>
 
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
-  <script src="holidays-data.js"></script>
-  <script src="scheduler.js"></script>
-  <script src="app.js"></script>
+  <script src="holidays-data.js?v=20261107"></script>
+  <script src="scheduler.js?v=20261107"></script>
+  <script src="app.js?v=20261107"></script>
 </body>
 </html>
