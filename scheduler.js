@@ -338,10 +338,11 @@ function inferMissingPredecessors(tasks) {
   return inferred;
 }
 
-// TỰ NỐI LIÊN KẾT cho 1 việc (giống cách AI đề xuất):
-//  - Ưu tiên FS: việc cùng giai đoạn kết thúc gần nhất TRƯỚC ngày bắt đầu (cách ≤ maxGap ngày làm việc)
-//  - Nếu không có: SS với việc đang chạy / bắt đầu cùng ngày (bắt đầu muộn nhất nhưng ≤ ngày bắt đầu)
-// Trả về link đã thêm hoặc null. Không tạo vòng lặp, không dời ngày.
+// TỰ NỐI LIÊN KẾT cho 1 việc: nối vào "mốc" GẦN NHẤT xảy ra trước (hoặc cùng ngày) khi việc bắt đầu.
+//  - Mốc FS = ngày làm việc kế tiếp sau khi 1 việc KẾT THÚC  -> nối Kết thúc → Bắt đầu
+//  - Mốc SS = ngày 1 việc BẮT ĐẦU (việc đó còn đang chạy)     -> nối Bắt đầu → Bắt đầu (chạy song song / gối đầu)
+//  Chọn mốc muộn nhất (sát ngày bắt đầu nhất). Bằng nhau thì ưu tiên SS (bắt đầu đồng thời).
+//  Mốc cách quá maxGap ngày làm việc thì không nối. Không tạo vòng lặp, không dời ngày.
 function autoLinkTask(task, tasks, opts = {}) {
   if (!task || !task.calendarId || !task.startDate) return null;
   const list = _schedTasks(tasks);
@@ -350,34 +351,29 @@ function autoLinkTask(task, tasks, opts = {}) {
   const maxGap = typeof opts.maxGap === 'number' ? opts.maxGap : 7;
   const allowed = opts.candidateIds ? new Set(opts.candidateIds) : null;
   const skip = task.skipSundays !== false;
-  const cands = list.filter(c => c !== task && c.id !== task.id && c.calendarId === task.calendarId &&
-    c.visibleOnBoard !== false && c.startDate && c.endDate && (!allowed || allowed.has(c.id)) &&
-    !dependsOn(c.id, task.id, list));
+  const start = shiftDateByWorkingDays(task.startDate, 0, skip);
   let best = null;
-  cands.forEach(c => {
-    if (c.endDate >= task.startDate) return;
-    if (!best || c.endDate > best.endDate || (c.endDate === best.endDate && c.startDate >= best.startDate)) best = c;
+  list.forEach(c => {
+    if (c === task || c.id === task.id || c.calendarId !== task.calendarId || c.visibleOnBoard === false) return;
+    if (!c.startDate || !c.endDate || (allowed && !allowed.has(c.id))) return;
+    if (c.startDate > task.startDate) return; // chỉ xét việc bắt đầu trước / cùng ngày
+    if (dependsOn(c.id, task.id, list)) return;
+    const running = c.endDate >= task.startDate;
+    const type = running ? 'SS' : 'FS';
+    const anchor = running ? shiftDateByWorkingDays(c.startDate, 0, skip) : getNextWorkingDateStr(c.endDate, skip);
+    const lag = getSignedWorkingDaysGap(anchor, start, skip);
+    if (lag < 0 || lag > maxGap) return;
+    const better = !best || anchor > best.anchor ||
+      (anchor === best.anchor && type === 'SS' && best.type === 'FS') ||
+      // cùng mốc SS: chọn việc "dẫn đầu" (kết thúc sớm nhất) -> các việc bắt đầu đồng thời toả ra từ 1 việc, không nối chuỗi
+      (anchor === best.anchor && type === 'SS' && best.type === 'SS' && c.endDate < best.c.endDate);
+    if (better) best = { c, type, anchor, lag };
   });
-  if (best) {
-    const lag = computeLinkLag(best, task, 'FS');
-    if (lag >= 0 && lag <= maxGap) {
-      const link = { id: best.id, type: 'FS', lag };
-      task.predecessors.push(link);
-      return link;
-    }
-  }
-  let ss = null;
-  cands.forEach(c => {
-    if (c.startDate > task.startDate || c.endDate < task.startDate) return; // phải đang chạy vào ngày bắt đầu
-    if (!ss || c.startDate > ss.startDate) ss = c;
-  });
-  if (ss) {
-    const lag = Math.max(0, getSignedWorkingDaysGap(shiftDateByWorkingDays(ss.startDate, 0, skip), task.startDate, skip));
-    const link = { id: ss.id, type: 'SS', lag };
-    task.predecessors.push(link);
-    return link;
-  }
-  return null;
+  if (!best) return null;
+  const link = { id: best.c.id, type: best.type, lag: best.lag };
+  if (opts.markAuto) link.auto = true;
+  task.predecessors.push(link);
+  return link;
 }
 
 // Tự nối các việc CHƯA có liên kết trong 1 giai đoạn (theo thứ tự ngày bắt đầu). Trả về số liên kết đã thêm.

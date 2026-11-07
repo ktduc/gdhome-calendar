@@ -131,6 +131,8 @@
 
 - **Tự nối liên kết**: `autoLinkTask` / `autoLinkStage` trong scheduler.js (FS với việc cùng giai đoạn kết thúc gần nhất trước đó, cách ≤ 7 ngày LV; nếu không có thì SS với việc đang chạy; chặn vòng lặp; không dời ngày). `autoLinkFreshTasks()` chạy đầu `saveToBackend`: chỉ việc id `task_<13 số>` tạo < 60 giây, chưa có link, tối đa 3 việc/lần (bỏ qua nhập file/AI/Notion). Tuỳ chọn `AppState.autoLinkNewTasks` (mặc định bật, ô "Tự nối việc mới tạo") + nút "🔗 Tự nối các việc chưa nối" (giai đoạn đang hiển thị, Ctrl+Z hoàn tác). 17 test pass. Cache `?v=20261107j`.
 
+- **Tự nối – quy tắc mới (mốc gần nhất)**: mỗi việc ứng viên (cùng giai đoạn, bắt đầu ≤ ngày bắt đầu) tạo 1 mốc: đã xong → FS (mốc = ngày LV sau khi kết thúc); còn đang chạy → SS (mốc = ngày bắt đầu). Chọn mốc muộn nhất (≤ ngày bắt đầu, cách ≤ 7 ngày LV); bằng nhau ưu tiên SS; nhiều việc bắt đầu cùng ngày toả ra từ việc "dẫn đầu" (kết thúc sớm nhất) thay vì nối chuỗi. Link tự động có `auto: true`. Nút "↺ Nối lại tất cả" xoá liên kết trong-giai-đoạn của các giai đoạn đang hiển thị (giữ liên kết khác giai đoạn) rồi nối lại. 18 test. Cache `?v=20261107k`.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

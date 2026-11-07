@@ -160,6 +160,16 @@ test('Tự nối cả giai đoạn theo thứ tự ngày, giữ nguyên liên k�
   const tasks = [D, C, B, A];
   assert.strictEqual(S.autoLinkStage('c1', tasks), 2);
   assert.deepStrictEqual(B.predecessors, [{ id: 'A', type: 'FS', lag: 0 }]);
-  assert.deepStrictEqual(C.predecessors, [{ id: 'A', type: 'FS', lag: 0 }]);
+  assert.deepStrictEqual(C.predecessors, [{ id: 'B', type: 'SS', lag: 0 }]); // bắt đầu cùng B -> song song
   assert.strictEqual(D.predecessors.length, 1);
+});
+
+test('Tự nối: chọn mốc gần nhất – việc dài chạy từ trước không lấn át việc vừa xong', () => {
+  cfg();
+  const L = { id: 'L', calendarId: 'c1', startDate: '2026-11-02', endDate: '2026-11-20', predecessors: [] }; // việc dài
+  const A = { id: 'A', calendarId: 'c1', startDate: '2026-11-03', endDate: '2026-11-05', predecessors: [] };
+  const N = { id: 'N', calendarId: 'c1', startDate: '2026-11-06', endDate: '2026-11-07', predecessors: [] };
+  assert.deepStrictEqual(S.autoLinkTask(N, [L, A, N]), { id: 'A', type: 'FS', lag: 0 });
+  const M = { id: 'M', calendarId: 'c1', startDate: '2026-11-04', endDate: '2026-11-09', predecessors: [] }; // gối lên A
+  assert.deepStrictEqual(S.autoLinkTask(M, [L, A, M]), { id: 'A', type: 'SS', lag: 1 });
 });

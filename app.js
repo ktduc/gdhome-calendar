@@ -1390,7 +1390,7 @@ function autoLinkFreshTasks() {
   AppState.tasks.forEach(t => _autoLinkSeen.add(t.id));
   if (!fresh.length || fresh.length > 3) return 0; // tạo hàng loạt -> không tự nối
   let n = 0;
-  fresh.forEach(t => { if (autoLinkTask(t, AppState.tasks)) n++; });
+  fresh.forEach(t => { if (autoLinkTask(t, AppState.tasks, { markAuto: true })) n++; });
   return n;
 }
 
@@ -8720,8 +8720,25 @@ window.addEventListener('DOMContentLoaded', () => {
     const timelineOn = !!document.querySelector('.msp-split-workspace') && !!document.querySelector('.msp-split-workspace').offsetParent;
     const cals = timelineOn && typeof getMspTargetCalendars === 'function' ? getMspTargetCalendars() : [getActiveCalendar()].filter(Boolean);
     let n = 0;
-    cals.forEach(c => { n += autoLinkStage(c.id, AppState.tasks); });
+    cals.forEach(c => { n += autoLinkStage(c.id, AppState.tasks, { markAuto: true }); });
     if (!n) { showToast('Không có việc nào cần nối thêm (các việc đã có liên kết hoặc cách nhau quá xa)'); return; }
     syncAllFromMSProject(`🔗 Đã tự nối ${n} liên kết trong ${cals.length} giai đoạn (Ctrl+Z để hoàn tác)`);
+  });
+  const btnRe = document.getElementById('btn-auto-relink-stages');
+  if (btnRe) btnRe.addEventListener('click', () => {
+    const timelineOn = !!document.querySelector('.msp-split-workspace') && !!document.querySelector('.msp-split-workspace').offsetParent;
+    const cals = timelineOn && typeof getMspTargetCalendars === 'function' ? getMspTargetCalendars() : [getActiveCalendar()].filter(Boolean);
+    if (!cals.length) return;
+    const names = cals.map(c => c.name).slice(0, 4).join(', ') + (cals.length > 4 ? '…' : '');
+    if (!confirm(`Nối lại TOÀN BỘ liên kết trong ${cals.length} giai đoạn đang hiển thị (${names}) theo quy tắc mới?\n\nCác liên kết hiện có giữa các việc trong những giai đoạn này sẽ được thay thế. Ctrl+Z để hoàn tác.`)) return;
+    const calIds = new Set(cals.map(c => c.id));
+    const taskCal = new Map(AppState.tasks.map(t => [t.id, t.calendarId]));
+    AppState.tasks.forEach(t => {
+      if (!calIds.has(t.calendarId) || !Array.isArray(t.predecessors)) return;
+      t.predecessors = t.predecessors.filter(l => taskCal.get(l.id) !== t.calendarId); // giữ liên kết khác giai đoạn
+    });
+    let n = 0;
+    cals.forEach(c => { n += autoLinkStage(c.id, AppState.tasks, { markAuto: true }); });
+    syncAllFromMSProject(`↺ Đã nối lại ${n} liên kết trong ${cals.length} giai đoạn (Ctrl+Z để hoàn tác)`);
   });
 });

@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261107j">
+  <link rel="stylesheet" href="style.css?v=20261107k">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -258,7 +258,10 @@
             <input type="checkbox" id="toggle-auto-link" checked>
             <span>Tự nối việc mới tạo</span>
           </label>
-          <button type="button" class="btn btn-outline btn-sm sb-autolink-btn" id="btn-auto-link-stages" title="Nối các việc CHƯA có liên kết trong giai đoạn đang hiển thị theo thứ tự ngày (Ctrl+Z để hoàn tác)">🔗 Tự nối các việc chưa nối</button>
+          <div class="sb-autolink-row">
+            <button type="button" class="btn btn-outline btn-sm sb-autolink-btn" id="btn-auto-link-stages" title="Nối các việc CHƯA có liên kết trong giai đoạn đang hiển thị (Ctrl+Z để hoàn tác)">🔗 Nối việc chưa nối</button>
+            <button type="button" class="btn btn-outline btn-sm sb-autolink-btn" id="btn-auto-relink-stages" title="Xoá liên kết cũ trong các giai đoạn đang hiển thị và nối lại toàn bộ theo quy tắc mới (Ctrl+Z để hoàn tác)">↺ Nối lại tất cả</button>
+          </div>
           <label class="sb-switch" title="Khi đổi ngày 1 việc, các việc được nối phía sau tự dịch theo (giữ nguyên số ngày làm việc)">
             <input type="checkbox" id="toggle-cascade-shift">
             <span>Tự dịch việc nối phía sau</span>
@@ -1048,8 +1051,8 @@
   </div>
 
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
-  <script src="holidays-data.js?v=20261107j"></script>
-  <script src="scheduler.js?v=20261107j"></script>
-  <script src="app.js?v=20261107j"></script>
+  <script src="holidays-data.js?v=20261107k"></script>
+  <script src="scheduler.js?v=20261107k"></script>
+  <script src="app.js?v=20261107k"></script>
 </body>
 </html>
