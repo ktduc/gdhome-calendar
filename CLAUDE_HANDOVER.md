@@ -122,6 +122,9 @@
 - **AI lập tiến độ** (env `ANTHROPIC_API_KEY`, tuỳ chọn `AI_MODEL`, `AI_DAILY_LIMIT`, `AI_ALLOWED_EMAILS`): `/api/ai/schedule` nhận ảnh (thu nhỏ 1568px), PDF, text Excel (SheetJS 0.18.5 cdnjs nạp khi cần) → AI trả JSON `{stageName, tasks:[{name, workDays, dependsOn:[{index,type,lag}]}], questions}`; client tự tính ngày theo lịch nghỉ, bảng duyệt, "Co giãn cho vừa hạn", tạo việc + liên kết FS/SS. UI: nút ✨ AI (`#ai-planner-modal`).
 - `/api/config` và `/api/health` trả `features: {notion, ai}`. `integrations.js` đã thêm vào `Cap-Nhat-Web-Len-Mang.bat` (BẮT BUỘC đẩy lên, thiếu là server lỗi). Hướng dẫn: `HUONG-DAN-NOTION-AI.md`. Cache `?v=20261107e`.
 
+- **Bổ sung (07/11 tối)**: bỏ tick "Tiến độ %" ở CỘT & ĐỀ MỤC → Timeline ẩn luôn % trên nhãn dự án/giai đoạn, thanh tô tiến độ và tooltip (`mspShowProgress()`).
+- **Kết nối riêng từng tài khoản** (không cần Render): `/api/integrations/settings` GET/POST; khoá Notion + AI lưu mã hoá AES-256-GCM (khoá dẫn xuất từ SESSION_SECRET) trong store key `cfg-<email>` (Gist file `user-cfg-<email>.json`). Lưu là kiểm tra thật (Notion đọc database, AI liệt kê model). AI hỗ trợ 3 nhà cung cấp: `gemini` (generateContent, tự chọn gemini-x-flash mới nhất), `openai` (chat/completions JSON mode, tự chọn gpt-N mới nhất), `anthropic`. Env cũ vẫn làm khoá chung dự phòng (thêm GEMINI_API_KEY / OPENAI_API_KEY). Cột Dự án/Giai đoạn trên Notion tạo kiểu Select để Group by. Cache `?v=20261107f`.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

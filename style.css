@@ -3875,3 +3875,16 @@ body {
 .notion-log .is-ok { color: #166534; }
 .notion-log .is-warn { color: #b45309; }
 @media (max-width: 1280px) { .hdr-ai-btn .btn-label { display: none; } }
+.int-settings { border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 12px; background: #f8fafc; }
+.int-settings summary { cursor: pointer; padding: 9px 12px; font-size: 13px; font-weight: 700; color: #1e293b; }
+.int-settings summary .is-ok { color: #15803d; }
+.int-settings summary .is-warn { color: #b45309; }
+.int-settings-body { padding: 0 12px 10px; }
+.int-help { font-size: 12.5px; color: #475569; line-height: 1.55; margin: -2px 0 8px; }
+.int-help a, .int-steps a { color: #2563eb; }
+.int-steps { font-size: 12.5px; color: #334155; line-height: 1.6; padding-left: 18px; margin: 0 0 10px; }
+.int-steps code { background: #e2e8f0; padding: 0 4px; border-radius: 4px; }
+.int-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.int-actions a.btn { text-decoration: none; }
+.int-settings input[type=password], .int-settings input[type=text] { width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: #fff; box-sizing: border-box; }
+.notion-actions button:disabled { opacity: 0.45; cursor: not-allowed; }

@@ -4262,6 +4262,11 @@ function getMspRowHeightPx() {
   return MSP_ROW_HEIGHT_PRESETS[AppState.mspRowHeight] || MSP_ROW_HEIGHT_PRESETS.normal;
 }
 
+// Ẩn/hiện % tiến độ trên Timeline theo tick "Tiến độ %" ở mục CỘT & ĐỀ MỤC
+function mspShowProgress() {
+  return !!(AppState.mspVisibility && AppState.mspVisibility.colProg);
+}
+
 const MSP_FONT_WEIGHT_CLASSES = ['msp-fw-light', 'msp-fw-bold', 'msp-fw-heavy'];
 function applyMspFontWeight(targetContainer = null) {
   const fw = AppState.mspFontWeight || 'normal';
@@ -6250,7 +6255,7 @@ function renderMSProjectView() {
 
       const sumLabel = document.createElement('div');
       sumLabel.className = 'msp-summary-label';
-      sumLabel.textContent = `${pg.cal.name} (${pg.overallWorkDays} ngày LV • ${pg.totalActualDays} ngày TT • ${pg.avgProgress}%)`;
+      sumLabel.textContent = `${pg.cal.name} (${pg.overallWorkDays} ngày LV • ${pg.totalActualDays} ngày TT${mspShowProgress() ? ` • ${pg.avgProgress}%` : ''})`;
       sumBar.appendChild(sumLabel);
 
       gRowSum.appendChild(sumBar);
@@ -6574,7 +6579,7 @@ function renderMSProjectView() {
         taskBar.style.background = task.color || '#cc0000';
         taskBar.style.color = getContrastTextColor(task.color || '#cc0000');
         const modeLabel = isActualDaysMode ? 'ngày thực tế (gồm cả ngày nghỉ)' : 'ngày làm việc';
-        taskBar.title = `${task.title}\nTừ: ${formatShortVNDate(task.startDate)} đến ${formatShortVNDate(task.endDate)} (${workDays} ${modeLabel})\nTiến độ: ${taskProg}%\n(Kéo để dời ngày, Chuột phải để chuyển đổi Ngày thực tế / Ngày làm việc hoặc Nhân đôi)`;
+        taskBar.title = `${task.title}\nTừ: ${formatShortVNDate(task.startDate)} đến ${formatShortVNDate(task.endDate)} (${workDays} ${modeLabel})${mspShowProgress() ? `\nTiến độ: ${taskProg}%` : ''}\n(Kéo để dời ngày, Chuột phải để chuyển đổi Ngày thực tế / Ngày làm việc hoặc Nhân đôi)`;
 
         taskBar.addEventListener('contextmenu', (e) => {
           e.preventDefault();
@@ -6582,7 +6587,7 @@ function renderMSProjectView() {
           openTaskContextMenu(e, task);
         });
 
-        if (taskProg > 0) {
+        if (taskProg > 0 && mspShowProgress()) {
           const progFill = document.createElement('div');
           progFill.className = 'msp-task-progress-fill';
           progFill.style.width = `${taskProg}%`;
@@ -6955,7 +6960,7 @@ function renderMspProjectHeaderRow(og, oIdx, ctx) {
     bar.title = `${owner.name}: ${pStartDisp} → ${pEndDisp} (${pLV} ngày làm việc • ${pTT} ngày thực tế)`;
     const lbl = document.createElement('div');
     lbl.className = 'msp-summary-label';
-    lbl.textContent = `📁 ${owner.name} (${pLV} ngày LV • ${pTT} ngày TT • ${pProg}%)`;
+    lbl.textContent = `📁 ${owner.name} (${pLV} ngày LV • ${pTT} ngày TT${mspShowProgress() ? ` • ${pProg}%` : ''})`;
     bar.appendChild(lbl);
     gRow.appendChild(bar);
   }
@@ -7983,15 +7988,88 @@ function featureEnabled(name) {
   return !!(_appConfig && _appConfig.features && _appConfig.features[name]);
 }
 
-function integrationBlockedReason(name) {
-  if (isOfflineFileMode && isOfflineFileMode()) return 'Tính năng này cần mở web qua server (localhost hoặc Render), không dùng được khi mở file trực tiếp.';
+function integrationBlockedReason() {
+  if (typeof isOfflineFileMode === 'function' && isOfflineFileMode()) return 'Tính năng này cần mở web qua server (localhost hoặc Render), không dùng được khi mở file trực tiếp.';
   if (_guestMode) return 'Chế độ khách không dùng được tính năng này. Hãy đăng nhập Gmail.';
-  if (!featureEnabled(name)) {
-    return name === 'ai'
-      ? 'Server chưa bật AI. Thêm biến ANTHROPIC_API_KEY trên Render (xem HUONG-DAN-NOTION-AI.md).'
-      : 'Server chưa bật Notion. Thêm NOTION_TOKEN và NOTION_DATABASE_ID trên Render (xem HUONG-DAN-NOTION-AI.md).';
-  }
   return '';
+}
+
+// ----- Cài đặt kết nối (mỗi tài khoản tự dán khoá; server mã hoá & giữ, trình duyệt không đọc lại được) -----
+let _intSettings = null;
+const AI_KEY_HELP = {
+  gemini: 'Lấy key <b>miễn phí</b> bằng chính Gmail: mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <b>Create API key</b> → copy (dạng AIza…). Gói miễn phí có giới hạn số lượt/phút.',
+  openai: 'Đăng nhập <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a> → <b>Create new secret key</b> → copy (sk-…). Cần nạp tiền ở mục Billing (tài khoản ChatGPT Plus KHÔNG dùng chung cho API).',
+  anthropic: 'Đăng nhập <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> → <b>API Keys → Create Key</b> → copy (sk-ant-…). Cần nạp tiền ở mục Billing (gói Claude Pro KHÔNG dùng chung cho API).'
+};
+
+function setConnMsg(id, text, kind) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = text || '';
+  el.className = 'ai-msg' + (text && kind ? ' is-' + kind : '');
+}
+
+function renderIntegrationStatus() {
+  const st = _intSettings || {};
+  const ai = st.ai || {};
+  const nt = st.notion || {};
+  const aiEl = document.getElementById('ai-conn-status');
+  if (aiEl) {
+    aiEl.textContent = ai.configured
+      ? `✅ ${ai.providerLabel}${ai.source === 'user' ? ` (key ${ai.keyMasked})` : ' (khoá chung của server)'}`
+      : '❌ chưa kết nối – bấm để cài';
+    aiEl.className = ai.configured ? 'is-ok' : 'is-warn';
+  }
+  const prov = document.getElementById('ai-provider');
+  if (prov && ai.source === 'user' && ai.provider) prov.value = ai.provider;
+  const mdl = document.getElementById('ai-model');
+  if (mdl && ai.source === 'user') mdl.value = ai.model || '';
+  updateAiKeyHelp();
+  const ntEl = document.getElementById('notion-conn-status');
+  if (ntEl) {
+    ntEl.textContent = nt.configured ? `✅ đã kết nối${nt.source === 'user' ? ` (mã ${nt.tokenMasked})` : ' (dùng chung của server)'}` : '❌ chưa kết nối – bấm để cài';
+    ntEl.className = nt.configured ? 'is-ok' : 'is-warn';
+  }
+  const dbInp = document.getElementById('notion-db');
+  if (dbInp && nt.source === 'user' && nt.db && !dbInp.value) dbInp.value = nt.db;
+  const openDb = document.getElementById('notion-open-db');
+  if (openDb) {
+    openDb.style.display = nt.dbUrl ? '' : 'none';
+    if (nt.dbUrl) openDb.href = nt.dbUrl;
+  }
+  document.querySelectorAll('#notion-sync-modal .notion-actions button').forEach(b => { b.disabled = !nt.configured; });
+}
+
+function updateAiKeyHelp() {
+  const prov = document.getElementById('ai-provider');
+  const help = document.getElementById('ai-key-help');
+  if (prov && help) help.innerHTML = AI_KEY_HELP[prov.value] || '';
+}
+
+async function fetchIntegrationSettings() {
+  try {
+    const res = await apiFetch('/api/integrations/settings');
+    const json = await res.json().catch(() => ({}));
+    if (res.ok && json.success) _intSettings = json;
+  } catch (e) { /* bỏ qua */ }
+  renderIntegrationStatus();
+  return _intSettings;
+}
+
+async function saveIntegrationSettings(payload, msgId) {
+  setConnMsg(msgId, '⏳ Đang kiểm tra kết nối…', 'busy');
+  try {
+    const res = await apiFetch('/api/integrations/settings', { method: 'POST', body: JSON.stringify(payload) });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
+    _intSettings = json;
+    renderIntegrationStatus();
+    setConnMsg(msgId, payload.clear ? 'Đã gỡ kết nối.' : '✅ Kết nối thành công, đã lưu (khoá được mã hoá trên server).', 'ok');
+    return true;
+  } catch (err) {
+    setConnMsg(msgId, '⚠ ' + err.message, 'warn');
+    return false;
+  }
 }
 
 function openModalById(id) {
@@ -8091,8 +8169,14 @@ function fillAiStageSelect() {
 
 function openAiPlanner() {
   const msg = document.getElementById('ai-input-msg');
-  const reason = integrationBlockedReason('ai');
+  const reason = integrationBlockedReason();
   if (msg) { msg.textContent = reason; msg.className = 'ai-msg' + (reason ? ' is-warn' : ''); }
+  if (!reason) {
+    fetchIntegrationSettings().then(st => {
+      const det = document.getElementById('ai-settings');
+      if (det) det.open = !(st && st.ai && st.ai.configured);
+    });
+  }
   const sd = document.getElementById('ai-start-date');
   if (sd && !sd.value) sd.value = formatDateStr(new Date());
   fillAiStageSelect();
@@ -8116,8 +8200,14 @@ function getAiTargetWorkDays() {
 async function runAiPlanner() {
   const msg = document.getElementById('ai-input-msg');
   const btn = document.getElementById('btn-ai-run');
-  const reason = integrationBlockedReason('ai');
+  const reason = integrationBlockedReason();
   if (reason) { msg.textContent = reason; msg.className = 'ai-msg is-warn'; return; }
+  if (_intSettings && _intSettings.ai && !_intSettings.ai.configured) {
+    document.getElementById('ai-settings').open = true;
+    msg.textContent = 'Chưa kết nối AI: chọn Gemini / ChatGPT / Claude, dán API key rồi bấm "Lưu & kiểm tra".';
+    msg.className = 'ai-msg is-warn';
+    return;
+  }
   const notes = document.getElementById('ai-notes').value.trim();
   if (!AIPlanner.files.length && !notes) { msg.textContent = 'Hãy chọn ít nhất 1 ảnh / file hoặc nhập mô tả.'; msg.className = 'ai-msg is-warn'; return; }
   if (document.getElementById('ai-limit-mode').value !== 'auto' && !getAiTargetWorkDays()) {
@@ -8335,12 +8425,18 @@ function getNotionScopeTasks() {
 }
 
 function openNotionSync() {
-  const reason = integrationBlockedReason('notion');
+  const reason = integrationBlockedReason();
   const st = document.getElementById('notion-status-msg');
-  st.textContent = reason || 'Đã kết nối server với Notion. Chọn phạm vi rồi bấm đồng bộ.';
-  st.className = 'ai-msg' + (reason ? ' is-warn' : ' is-ok');
-  document.querySelectorAll('#notion-sync-modal .notion-actions button').forEach(b => { b.disabled = !!reason; });
+  st.textContent = reason;
+  st.className = 'ai-msg' + (reason ? ' is-warn' : '');
+  document.querySelectorAll('#notion-sync-modal .notion-actions button').forEach(b => { b.disabled = true; });
   openModalById('notion-sync-modal');
+  if (!reason) {
+    fetchIntegrationSettings().then(s2 => {
+      const det = document.getElementById('notion-settings');
+      if (det) det.open = !(s2 && s2.notion && s2.notion.configured);
+    });
+  }
 }
 
 async function notionPushTasks() {
@@ -8354,6 +8450,7 @@ async function notionPushTasks() {
   const res = await apiFetch('/api/notion/push', { method: 'POST', body: JSON.stringify({ items }) });
   const json = await res.json().catch(() => ({}));
   if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
+  if (json.dbUrl && _intSettings && _intSettings.notion) { _intSettings.notion.dbUrl = json.dbUrl; renderIntegrationStatus(); }
   let ok = 0, created = 0, failed = 0;
   json.results.forEach(r => {
     const t = AppState.tasks.find(x => x.id === r.gdId);
@@ -8470,5 +8567,25 @@ function setupIntegrationsUI() {
   on('btn-notion-sync2', () => runNotionAction('both'));
   on('btn-notion-push', () => runNotionAction('push'));
   on('btn-notion-pull', () => runNotionAction('pull'));
+  const prov = document.getElementById('ai-provider');
+  if (prov) prov.addEventListener('change', updateAiKeyHelp);
+  updateAiKeyHelp();
+  on('btn-ai-save-conn', async () => {
+    const ok = await saveIntegrationSettings({
+      aiProvider: document.getElementById('ai-provider').value,
+      aiKey: document.getElementById('ai-key').value.trim(),
+      aiModel: document.getElementById('ai-model').value.trim()
+    }, 'ai-conn-msg');
+    if (ok) { document.getElementById('ai-key').value = ''; setConnMsg('ai-input-msg', ''); }
+  });
+  on('btn-ai-clear-conn', () => saveIntegrationSettings({ clear: 'ai' }, 'ai-conn-msg'));
+  on('btn-notion-save-conn', async () => {
+    const ok = await saveIntegrationSettings({
+      notionToken: document.getElementById('notion-token').value.trim(),
+      notionDb: document.getElementById('notion-db').value.trim()
+    }, 'notion-conn-msg');
+    if (ok) document.getElementById('notion-token').value = '';
+  });
+  on('btn-notion-clear-conn', () => saveIntegrationSettings({ clear: 'notion' }, 'notion-conn-msg'));
 }
 window.addEventListener('DOMContentLoaded', setupIntegrationsUI);

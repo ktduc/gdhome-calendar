@@ -38,6 +38,7 @@ const AUTH_MODE = GOOGLE_CLIENT_ID ? 'google' : (APP_PASSWORD ? 'password' : 'no
 const SESSION_SECRET = process.env.SESSION_SECRET ||
   crypto.createHash('sha256').update(`gdhome|${GOOGLE_CLIENT_ID}|${GITHUB_TOKEN}|${APP_PASSWORD}|${ROOT_DIR}`).digest('hex');
 const SESSION_DAYS = 30;
+integrations.setSecret(SESSION_SECRET);
 const SHARED_KEY = 'shared'; // dữ liệu chung (khi không bật đăng nhập) = data.json cũ
 
 // Chỉ cho phép tải các file giao diện, KHÔNG cho tải data.json / backups / server.js / .bat qua trình duyệt
@@ -454,8 +455,8 @@ async function handleApi(req, res, urlPath) {
   }
 
   // Notion + AI (chỉ cho người đã đăng nhập)
-  if (urlPath.startsWith('/api/notion/') || urlPath.startsWith('/api/ai/')) {
-    if (await integrations.handleIntegrations(req, res, urlPath, { sendJson, readJsonBody, dataKey })) return;
+  if (urlPath.startsWith('/api/notion/') || urlPath.startsWith('/api/ai/') || urlPath.startsWith('/api/integrations/')) {
+    if (await integrations.handleIntegrations(req, res, urlPath, { sendJson, readJsonBody, dataKey, store })) return;
   }
 
   if (urlPath === '/api/schedule' && req.method === 'GET') {

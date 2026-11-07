@@ -12,7 +12,7 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="style.css?v=20261107e">
+  <link rel="stylesheet" href="style.css?v=20261107f">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -708,6 +708,28 @@
       </div>
       <div class="modal-body">
         <div class="ai-step" id="ai-step-input">
+          <details class="int-settings" id="ai-settings">
+            <summary>⚙ Kết nối AI: <span id="ai-conn-status">đang kiểm tra…</span></summary>
+            <div class="int-settings-body">
+              <div class="ai-grid">
+                <div class="form-group"><label for="ai-provider">Dùng AI của</label>
+                  <select id="ai-provider" class="form-select">
+                    <option value="gemini">Google Gemini (có gói miễn phí)</option>
+                    <option value="openai">ChatGPT (OpenAI)</option>
+                    <option value="anthropic">Claude (Anthropic)</option>
+                  </select>
+                </div>
+                <div class="form-group"><label for="ai-key">API key</label><input type="password" id="ai-key" autocomplete="off" placeholder="Dán API key vào đây"></div>
+                <div class="form-group"><label for="ai-model">Model (để trống = tự chọn)</label><input type="text" id="ai-model" autocomplete="off" placeholder="tự chọn bản mới nhất"></div>
+              </div>
+              <div class="int-help" id="ai-key-help"></div>
+              <div class="int-actions">
+                <button type="button" class="btn btn-primary btn-sm" id="btn-ai-save-conn">Lưu & kiểm tra</button>
+                <button type="button" class="btn btn-outline btn-sm" id="btn-ai-clear-conn">Gỡ kết nối</button>
+              </div>
+              <div class="ai-msg" id="ai-conn-msg"></div>
+            </div>
+          </details>
           <label class="ai-drop" id="ai-drop-zone">
             <input type="file" id="ai-file-input" multiple accept="image/*,.xlsx,.xls,.csv,.pdf" hidden>
             <i data-lucide="upload-cloud"></i>
@@ -770,6 +792,25 @@
       </div>
       <div class="modal-body">
         <div class="ai-msg" id="notion-status-msg"></div>
+        <details class="int-settings" id="notion-settings">
+          <summary>⚙ Kết nối Notion: <span id="notion-conn-status">đang kiểm tra…</span></summary>
+          <div class="int-settings-body">
+            <ol class="int-steps">
+              <li>Mở <a href="https://www.notion.so/profile/integrations" target="_blank" rel="noopener">notion.so/profile/integrations</a> → <b>New integration</b> → đặt tên <i>GD HOME Lich</i>, chọn workspace, Type <b>Internal</b> → Save → copy <b>Internal Integration Secret</b> (ntn_…).</li>
+              <li>Trong Notion tạo 1 trang, gõ <code>/database</code> → <b>Database – Full page</b>, đặt tên vd <i>TIẾN ĐỘ GD HOME</i> (đây là "dự án lớn" chứa mọi lịch). Thêm 1 cột kiểu <b>Date</b> tên <i>Ngày</i>.</li>
+              <li>Ở database bấm <b>•••</b> (góc phải trên) → <b>Connections</b> → chọn <i>GD HOME Lich</i> → Confirm.</li>
+              <li><b>Share → Copy link</b> của database, dán vào ô bên dưới.</li>
+            </ol>
+            <div class="form-group"><label for="notion-token">Internal Integration Secret</label><input type="password" id="notion-token" autocomplete="off" placeholder="ntn_…"></div>
+            <div class="form-group"><label for="notion-db">Link database Notion</label><input type="text" id="notion-db" autocomplete="off" placeholder="https://www.notion.so/…"></div>
+            <div class="int-actions">
+              <button type="button" class="btn btn-primary btn-sm" id="btn-notion-save-conn">Lưu & kiểm tra</button>
+              <button type="button" class="btn btn-outline btn-sm" id="btn-notion-clear-conn">Gỡ kết nối</button>
+              <a class="btn btn-outline btn-sm" id="notion-open-db" target="_blank" rel="noopener" style="display:none">Mở database trên Notion ↗</a>
+            </div>
+            <div class="ai-msg" id="notion-conn-msg"></div>
+          </div>
+        </details>
         <div class="form-group">
           <label for="notion-scope">Phạm vi</label>
           <select id="notion-scope" class="form-select">
@@ -1007,8 +1048,8 @@
   </div>
 
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
-  <script src="holidays-data.js?v=20261107e"></script>
-  <script src="scheduler.js?v=20261107e"></script>
-  <script src="app.js?v=20261107e"></script>
+  <script src="holidays-data.js?v=20261107f"></script>
+  <script src="scheduler.js?v=20261107f"></script>
+  <script src="app.js?v=20261107f"></script>
 </body>
 </html>
