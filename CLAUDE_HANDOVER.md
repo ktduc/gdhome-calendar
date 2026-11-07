@@ -101,6 +101,14 @@
 4. **Task 4 (Tối ưu thanh Header 56px)**: Gom gọn thành menu `"📁 File ▾"` (Mở `.xml/.csv/.json`, Xuất MS Project `.xml`, Xuất JSON sao lưu), cụm `"📋 Copy ảnh"` + `"▾"` (Xuất ảnh tuỳ chọn, Chọn vùng xuất), 2 nút icon Undo/Redo cạnh nhau (`34×34px`), nút `"＋ Thêm việc"` nổi bật, và nút chọn khoảng tháng gọn `"Tháng MM/YYYY → MM/YYYY ▾"` bung popover. Giữ nguyên toàn bộ `id` nút cũ; chữ trên các nút chính ("File", "Copy ảnh", "Thêm việc") luôn hiển thị rõ từ `1024px` đến `3440px`.
 5. **Task 5 (Review & dọn code)**: Gộp các selector lặp ở cuối `style.css` (`.sidebar-compact`, `.msp-summary-dur-*`); bỏ gọi `normalizeAppState()` thừa trong `getActiveCalendar` / `getVisibleTasks`; tách `renderMSProjectView` thành các hàm con (`renderMspKpiSummary`, `renderMspDayHeaders`, `renderMspProjectHeaderRow`, `renderMspGridBackground`, `renderMspDependencyArrows`); thêm nút ẩn/hiện 3 nút thiết kế (`3D / CHỈNH SỬA 3D / HSKT`) trên bảng tạo nhanh (`#btn-toggle-design-tags`). Pass 14/14 unit test (`npm test`).
 
+## 3i. Chỉnh thêm 07/11/2026 (Claude, sau Antigravity)
+- Sọc chìm ảnh xuất: CHỈ 1 chiều "/" (phải → trái, trên xuống), nét dày 5px*unit, rất nhạt (alpha 0.05), cách 34px*unit; bỏ chiều ngược & chữ "GD HOME".
+- Dòng DỰ ÁN trên Timeline: nền xám xanh sáng hơn (#52637a), chữ trắng (cả trên màn hình lẫn ảnh xuất).
+- Thanh tổng giai đoạn/dự án mỏng (5–6px) và màu xám xanh thay vì đen.
+- Tên dự án trên tiêu đề: theo dự án đang hiển thị (`getTitleProject(mode)`); từ 2 dự án trở lên thì ẩn ô tên dự án.
+- Tháng lập bảng tự theo tháng hiện tại (`getAutoScheduleMonth`); tự gõ tháng khác chỉ giữ trong tháng đó (`scheduleMonthManualFor`). Chọn khoảng tháng xem KHÔNG còn đổi tháng lập bảng.
+- Cache file tĩnh: `?v=20261107b`.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

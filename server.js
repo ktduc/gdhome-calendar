@@ -54,7 +54,7 @@ const STATIC_MIME = {
 const STATIC_DENY = new Set(['server.js']);
 
 const ALLOWED_KEYS = [
-  'startMonth', 'endMonth', 'scheduleMonth', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
+  'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
   'daysOffConfig', 'calendars', 'activeCalendarId', 'tasks', 'companyName', 'companyLogo',
   'footerNote', 'showVnHolidays', 'showLunarDates', 'customTaskTitles'
 ];

@@ -717,13 +717,59 @@ function formatStageTitleWithCustomer(prefix) {
   return prefix;
 }
 
+// Tháng lập bảng: TỰ ĐỘNG theo tháng hiện tại.
+// Nếu người dùng tự gõ tháng khác thì chỉ giữ trong tháng đó; sang tháng mới tự nhảy lại theo lịch.
+function getCurrentYM() {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`;
+}
+function getCurrentMonthLabel() {
+  const n = new Date();
+  return `Tháng ${n.getMonth() + 1}, ${n.getFullYear()}`;
+}
+function getAutoScheduleMonth() {
+  if (AppState.scheduleMonthManualFor === getCurrentYM() && AppState.scheduleMonth) return AppState.scheduleMonth;
+  return getCurrentMonthLabel();
+}
+function setManualScheduleMonth(text) {
+  AppState.scheduleMonth = String(text || '').trim();
+  AppState.scheduleMonthManualFor = AppState.scheduleMonth ? getCurrentYM() : null;
+}
+
 // Lấy tháng đang lập bảng hiển thị bên trái tiêu đề
 function getScheduleMonthText() {
   const inputEl = document.getElementById('schedule-month-input');
   if (inputEl && inputEl.value.trim()) {
     return inputEl.value.trim();
   }
-  return AppState.scheduleMonth || 'Tháng 9, 2026';
+  return getAutoScheduleMonth();
+}
+
+// Tên dự án hiện trên tiêu đề: chỉ khi đang hiển thị ĐÚNG 1 dự án; từ 2 dự án trở lên thì để trống
+function getTitleProject(mode) {
+  let cals;
+  if (mode === 'msproject' && typeof getMspTargetCalendars === 'function') {
+    cals = getMspTargetCalendars();
+  } else {
+    cals = AppState.calendars.filter(c => c.visible !== false);
+  }
+  const ownerIds = [...new Set(cals.map(c => c.ownerId))];
+  if (ownerIds.length !== 1) return null;
+  return AppState.projectOwners.find(o => o.id === ownerIds[0]) || null;
+}
+
+function getTitleProjectName(mode) {
+  let cals;
+  if (mode === 'msproject' && typeof getMspTargetCalendars === 'function') {
+    cals = getMspTargetCalendars();
+  } else {
+    cals = AppState.calendars.filter(c => c.visible !== false);
+  }
+  const ownerIds = [...new Set(cals.map(c => c.ownerId))];
+  if (ownerIds.length !== 1) return null;
+  const owner = AppState.projectOwners.find(o => o.id === ownerIds[0]);
+  if (!owner || !owner.name || owner.name === 'CHƯA ĐẶT TÊN DỰ ÁN') return '';
+  return owner.name;
 }
 
 // Đồng bộ & Lưu trữ
@@ -1119,6 +1165,7 @@ function buildServerPayload() {
     startMonth: AppState.startMonth,
     endMonth: AppState.endMonth,
     scheduleMonth: AppState.scheduleMonth,
+    scheduleMonthManualFor: AppState.scheduleMonthManualFor || null,
     viewMode: AppState.viewMode,
     extraWeeksTop: AppState.extraWeeksTop,
     extraWeeksBottom: AppState.extraWeeksBottom,
@@ -1155,6 +1202,7 @@ function applyServerData(data) {
   if (data.startMonth) AppState.startMonth = data.startMonth;
   if (data.endMonth) AppState.endMonth = data.endMonth;
   if (data.scheduleMonth) AppState.scheduleMonth = data.scheduleMonth;
+  AppState.scheduleMonthManualFor = data.scheduleMonthManualFor || null;
   if (data.viewMode === 'calendar' || data.viewMode === 'msproject') AppState.viewMode = data.viewMode;
   if (data.extraWeeksTop !== undefined) AppState.extraWeeksTop = data.extraWeeksTop;
   if (data.extraWeeksBottom !== undefined) AppState.extraWeeksBottom = data.extraWeeksBottom;
@@ -1480,11 +1528,11 @@ function updateUIElements() {
 
   const monthInput = document.getElementById('schedule-month-input');
   if (monthInput) {
-    monthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
+    monthInput.value = getAutoScheduleMonth();
   }
   const mspMonthInput = document.getElementById('msp-month-input');
   if (mspMonthInput) {
-    mspMonthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
+    mspMonthInput.value = getAutoScheduleMonth();
   }
   const mspTitlePrefixInput = document.getElementById('msp-title-prefix-input');
   if (mspTitlePrefixInput && document.activeElement !== mspTitlePrefixInput) {
@@ -1503,24 +1551,17 @@ function updateUIElements() {
 }
 
 function syncCustomerInputWithActiveCalendar() {
-  const activeProj = typeof getActiveProject === 'function' ? getActiveProject() : null;
-  const activeCal = getActiveCalendar();
-  let displayVal = '';
-  if (activeProj && activeProj.name && activeProj.name !== 'CHƯA ĐẶT TÊN DỰ ÁN' && activeProj.name !== 'GD HOME') {
-    displayVal = activeProj.name;
-  } else if (activeCal && activeCal.name && activeCal.name !== 'CHƯA ĐẶT TÊN KHÁCH HÀNG') {
-    displayVal = activeCal.name;
-  } else if (activeProj && activeProj.name && activeProj.name !== 'CHƯA ĐẶT TÊN DỰ ÁN') {
-    displayVal = activeProj.name;
-  }
-  const custInput = document.getElementById('customer-name-input');
-  if (custInput && document.activeElement !== custInput) {
-    custInput.value = displayVal;
-  }
-  const mspCustInput = document.getElementById('msp-customer-input');
-  if (mspCustInput && document.activeElement !== mspCustInput) {
-    mspCustInput.value = displayVal;
-  }
+  // Tiêu đề tên dự án tự nhảy theo dự án đang được tích chọn hiển thị.
+  // Từ 2 dự án trở lên -> ẩn tên dự án trên tiêu đề.
+  const applyTitle = (inputEl, name) => {
+    if (!inputEl) return;
+    const multi = name === null;
+    inputEl.style.display = multi ? 'none' : '';
+    inputEl.dataset.multiProject = multi ? '1' : '';
+    if (document.activeElement !== inputEl) inputEl.value = multi ? '' : name;
+  };
+  applyTitle(document.getElementById('customer-name-input'), getTitleProjectName('calendar'));
+  applyTitle(document.getElementById('msp-customer-input'), getTitleProjectName('msproject'));
 }
 
 function saveToStorage() {
@@ -1529,6 +1570,7 @@ function saveToStorage() {
     startMonth: AppState.startMonth,
     endMonth: AppState.endMonth,
     scheduleMonth: AppState.scheduleMonth,
+    scheduleMonthManualFor: AppState.scheduleMonthManualFor || null,
     viewMode: AppState.viewMode,
     extraWeeksTop: AppState.extraWeeksTop,
     extraWeeksBottom: AppState.extraWeeksBottom,
@@ -1573,6 +1615,7 @@ function loadFromStorage() {
       if (parsed.startMonth) AppState.startMonth = parsed.startMonth;
       if (parsed.endMonth) AppState.endMonth = parsed.endMonth;
       if (parsed.scheduleMonth) AppState.scheduleMonth = parsed.scheduleMonth;
+      AppState.scheduleMonthManualFor = parsed.scheduleMonthManualFor || null;
       if (parsed.viewMode === 'calendar' || parsed.viewMode === 'msproject') AppState.viewMode = parsed.viewMode;
       if (parsed.extraWeeksTop !== undefined) AppState.extraWeeksTop = parsed.extraWeeksTop;
       if (parsed.extraWeeksBottom !== undefined) AppState.extraWeeksBottom = parsed.extraWeeksBottom;
@@ -2064,7 +2107,7 @@ function setupSidebarEvents() {
   const custInput = document.getElementById('customer-name-input');
   if (custInput) {
     custInput.addEventListener('input', () => {
-      const activeProj = getActiveProject();
+      const activeProj = getTitleProject('calendar') || getActiveProject();
       if (activeProj) {
         renameProjectAndSync(activeProj, custInput.value);
       } else {
@@ -2085,7 +2128,7 @@ function setupSidebarEvents() {
   const monthInput = document.getElementById('schedule-month-input');
   if (monthInput) {
     monthInput.addEventListener('input', () => {
-      AppState.scheduleMonth = monthInput.value.trim();
+      setManualScheduleMonth(monthInput.value);
       saveToBackend();
     });
   }
@@ -3685,7 +3728,7 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
   if (includeBranding) {
     const topBannerClone = document.createElement('div');
     topBannerClone.className = 'sheet-top-banner';
-    const custName = getCurrentCustomerName();
+    const custName = getTitleProjectName('calendar') || '';
     const monthText = getScheduleMonthText();
     topBannerClone.innerHTML = `
       <div class="sheet-banner-left">
@@ -3774,47 +3817,21 @@ function applyAntiEditWatermark(canvas) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return canvas;
   const unit = Math.max(1, Math.round(w / 1400)); // ảnh 2x -> nét & khoảng cách gấp đôi
-  const gap = 14 * unit;
   ctx.save();
   ctx.globalCompositeOperation = 'source-over';
-  // Lớp 1: sọc chéo chính phủ kín 100% toàn bộ bề mặt ảnh từ mép trên xuống mép dưới
-  ctx.globalAlpha = 0.22;
-  ctx.strokeStyle = '#475569';
-  ctx.lineWidth = 1.6 * unit;
+  // Sọc chéo 1 chiều duy nhất: từ PHẢI sang TRÁI, trên xuống dưới ( / ).
+  // Nét dày nhưng rất nhạt -> chìm, đủ nhận ra khi ảnh bị chỉnh sửa, không làm khó đọc.
+  ctx.globalAlpha = 0.05;
+  ctx.strokeStyle = '#334155';
+  ctx.lineWidth = 5 * unit;
+  ctx.lineCap = 'butt';
+  const gap = 34 * unit;
   ctx.beginPath();
-  for (let x = -h; x < w + h; x += gap) {
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x + h, h);
-  }
-  ctx.stroke();
-  // Lớp 2: sọc chéo chiều ngược lại, mảnh và mờ hơn -> khó xoá bằng công cụ chỉnh ảnh
-  ctx.globalAlpha = 0.09;
-  ctx.lineWidth = 1.2 * unit;
-  ctx.beginPath();
-  for (let x = 0; x < w + h; x += gap * 3) {
+  for (let x = 0; x < w + h + gap; x += gap) {
     ctx.moveTo(x, 0);
     ctx.lineTo(x - h, h);
   }
   ctx.stroke();
-  // Lớp 3: chữ chìm nghiêng lặp lại rất mờ "GD HOME" (-30°) để cắt ghép lộ ngay
-  ctx.globalAlpha = 0.065;
-  ctx.fillStyle = '#334155';
-  ctx.font = `700 ${Math.round(18 * unit)}px Roboto, sans-serif`;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  const stepX = 220 * unit;
-  const stepY = 140 * unit;
-  const angle = -Math.PI / 6; // -30°
-  for (let y = -stepY; y < h + stepY; y += stepY) {
-    const rowShift = (Math.round(y / stepY) % 2) * (stepX / 2);
-    for (let x = -stepX; x < w + stepX; x += stepX) {
-      ctx.save();
-      ctx.translate(x + rowShift, y);
-      ctx.rotate(angle);
-      ctx.fillText('GD HOME', 0, 0);
-      ctx.restore();
-    }
-  }
   ctx.restore();
   canvas.__gdWatermarked = true;
   return canvas;
@@ -3893,11 +3910,7 @@ function setupEvents() {
     AppState.extraWeeksTop = 0;
     AppState.extraWeeksBottom = 1;
 
-    // Tự động đồng bộ tháng đang lập bảng sang tháng được chọn
-    const [ey, em] = e.split('-').map(Number);
-    AppState.scheduleMonth = `Tháng ${em}, ${ey}`;
-    const mInput = document.getElementById('schedule-month-input');
-    if (mInput) mInput.value = AppState.scheduleMonth;
+    // Tháng lập bảng luôn theo lịch hiện tại (không đổi theo khoảng tháng đang xem)
 
     closeAllHeaderDropdowns();
     saveToBackend();
@@ -5358,9 +5371,9 @@ function setupMSProjectEvents() {
   // Đồng bộ sửa Tháng lập bảng trên Header MS Project <-> Bảng Lịch
   if (mspMonthInput) {
     mspMonthInput.addEventListener('input', () => {
-      AppState.scheduleMonth = mspMonthInput.value.trim();
+      setManualScheduleMonth(mspMonthInput.value);
       const calMonthInput = document.getElementById('schedule-month-input');
-      if (calMonthInput) calMonthInput.value = AppState.scheduleMonth;
+      if (calMonthInput) calMonthInput.value = getAutoScheduleMonth();
       saveToBackend();
     });
   }
@@ -5444,7 +5457,7 @@ function setupMSProjectEvents() {
   // Đồng bộ sửa Tên DỰ ÁN trên Header MS Project <-> Bảng Lịch & Sidebar & WBS Cấp 1
   if (mspCustomerInput) {
     mspCustomerInput.addEventListener('input', () => {
-      const activeProj = getActiveProject();
+      const activeProj = getTitleProject('msproject') || getActiveProject();
       if (activeProj) {
         renameProjectAndSync(activeProj, mspCustomerInput.value);
       }
@@ -5648,16 +5661,12 @@ function renderMSProjectView() {
   document.querySelectorAll('.msp-row-height-btn[data-row-height]').forEach(b => b.classList.toggle('active', b.dataset.rowHeight === String(AppState.mspRowHeight || 'normal')));
 
   if (mspMonthInput && document.activeElement !== mspMonthInput) {
-    mspMonthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
+    mspMonthInput.value = getAutoScheduleMonth();
   }
   if (mspTitlePrefixInput && document.activeElement !== mspTitlePrefixInput) {
     mspTitlePrefixInput.value = AppState.mspCustomTitlePrefix !== undefined ? AppState.mspCustomTitlePrefix : 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
   }
-  if (mspCustomerInput && document.activeElement !== mspCustomerInput) {
-    const activeProj = getActiveProject();
-    const pName = activeProj && activeProj.name ? activeProj.name : '';
-    mspCustomerInput.value = pName === 'CHƯA ĐẶT TÊN KHÁCH HÀNG' ? '' : pName;
-  }
+  syncCustomerInputWithActiveCalendar(); // tên dự án trên tiêu đề theo dự án đang hiển thị
   if (mspFooterNote && document.activeElement !== mspFooterNote) {
     mspFooterNote.textContent = AppState.footerNote || '';
   }
@@ -7723,7 +7732,7 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
       span.textContent = oEl.value || '';
       span.style.fontSize = '13px';
       span.style.fontWeight = '800';
-      span.style.color = '#b91c1c';
+      span.style.color = '#ffffff'; // Tên dự án: chữ trắng trên nền xám xanh (không dùng đỏ cho dễ đọc)
     } else if (cEl.classList.contains('msp-inline-project-input')) {
       span.textContent = oEl.value || '';
       span.style.fontSize = '12.5px';

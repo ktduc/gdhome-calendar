@@ -3778,3 +3778,23 @@ body {
 .user-chip-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-chip-email { overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
 @media (max-width: 1650px) { .user-chip .user-chip-email { display: none; } .user-chip:not(.guest-chip) { padding: 4px !important; } }
+
+/* ===== 07/11 (Claude): Dòng DỰ ÁN sáng hơn, chữ trắng; thanh thời gian mỏng & nhạt hơn ===== */
+.msp-tr.project-row,
+.msp-tr.project-row .msp-td { background: #52637a; color: #ffffff; border-color: #64748b; }
+.msp-tr.project-row .msp-inline-owner-input,
+.msp-tr.project-row .msp-export-static-text { color: #ffffff !important; }
+.msp-tr.project-row .msp-summary-dur-work { color: #ffffff; }
+.msp-tr.project-row .msp-summary-dur-act { color: #e2e8f0; }
+.msp-tr.project-row .msp-date-display-text { color: #f1f5f9; }
+.msp-inline-owner-input:hover, .msp-inline-owner-input:focus { background: #3f4e63; border-color: #94a3b8; }
+.msp-gantt-row.project-row { background: rgba(82, 99, 122, 0.10); }
+
+/* Thanh tổng (giai đoạn & dự án): mỏng, xám xanh thay vì đen đặc */
+.msp-summary-bar { height: 5px; background-color: #7b8aa0; border-radius: 3px; }
+.msp-summary-bar::before,
+.msp-summary-bar::after { top: 4px; border-left-width: 4px; border-right-width: 4px; border-top: 5px solid #7b8aa0; }
+.msp-summary-bar.msp-project-bar { height: 6px; background: #52637a; }
+.msp-summary-bar.msp-project-bar::before,
+.msp-summary-bar.msp-project-bar::after { border-top-color: #52637a; top: 5px; }
+.msp-summary-bar.msp-project-bar .msp-summary-label { color: #334155; }
