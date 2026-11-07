@@ -8,6 +8,7 @@
 | 4 | ✅ | 4.1 Bản phát hành, duyệt và ký A/B, 48 giờ và lịch sử · 4.2 A4, thống kê ảnh, Excel mua hàng · `f2c0a07` |
 | 5 | ✅ | 5.1 Gắn nhóm với công việc, tính hạn, ✓/⚠ trên Timeline · `50421a6` |
 | Rà soát | ✅ | Kiểm thử localhost, sửa nhập PA trước khi mất focus, tách CSS công cụ, dùng chung hàm xuất ảnh và ghi Chốt mã bền vững khi dùng Gist. |
+| 6 | 🔄 | 6.1 ✅ Mật độ bảng, nhãn khách, menu Xuất và nhập mã tại ô · Tiếp theo 6.2 crop và chữ ký |
 
 Bước tiếp theo: Claude review các commit trên `main`, đối chiếu checklist dưới đây rồi chép script deploy sang Desktop theo lệnh chạy đêm. Tất cả commit là cục bộ.
 

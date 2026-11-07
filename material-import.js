@@ -150,11 +150,15 @@ function librarySuggestions(key,q,pa) {
     .slice(0,6).map(item => ({ label:[item.code,item.brand,item.color,item.name].filter(Boolean).join(' · '),
       apply:field => {
         modify(() => Object.assign(pa,structuredClone(Object.fromEntries([...fields,'images'].map(name => [name,item[name]])))),false);
-        field.dataset.libraryApplied = '1';
-        field.value = pa[key] || '';
-        const {row,slot} = activeDetail;
-        byId('material-dialog').close();
-        editDetail(row,slot);
+        if (field.closest('dialog')) {
+          const {row,slot} = activeDetail;
+          byId('material-dialog').close();
+          editDetail(row,slot);
+        } else {
+          const {row,slot} = context(field);
+          renderEditor();
+          box().querySelector('[data-row="' + row.id + '"] [data-slot="' + slot + '"] input')?.focus({ preventScroll:true });
+        }
       }
     }));
 }

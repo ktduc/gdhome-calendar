@@ -58,19 +58,26 @@ function counts(current) {
   return 'Đã chốt ' + rows.filter(r => r.chosen !== null && r.chosen !== undefined && r.decision !== 'changed').length + '/' + rows.length;
 }
 
+function labeledInput(key, value, label) {
+  return '<label><span>' + label + '</span>' + input(key,value,label) + '</label>';
+}
+
 function renderEditor() {
+  const scroll = box().querySelector('.sheet-scroll');
   const meta = sheet.meta || {};
   box().innerHTML = '<div class="panel" id="material-meta"><div class="toolbar"><button data-action="back">← Danh sách</button>' +
     '<button data-action="undo">Hoàn tác</button><button data-action="redo">Làm lại</button><button data-action="density">' +
     ({ gon:'Gọn', vua:'Vừa', lon:'Ảnh lớn' })[density] + '</button><label>Phòng <select id="room-filter"><option value="">Tất cả</option>' +
     [...new Set(sheet.groups.flatMap(g => g.rows.map(r => r.room)).filter(Boolean))].map(r => option(r,r,sheetRoom)).join('') +
     '</select></label><strong id="material-count">' + counts(sheet) + '</strong><span id="save-label">' + (conflict?'Xung đột':dirty?'Chờ lưu':saving?'Đang lưu':'Đã lưu') +
-    '</span><span id="release-actions"></span></div><div class="toolbar">' + input('title',sheet.title,'Tên bảng') +
-    [['customer','Kính gửi'],['address','Địa chỉ'],['project','Dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']].map(([key,label]) => input(key,meta[key],label)).join('') +
+    '</span><span id="release-actions"></span></div><div class="material-meta-fields">' + labeledInput('title',sheet.title,'Tên bảng') +
+    [['customer','Kính gửi'],['address','Địa chỉ'],['project','Dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']].map(([key,label]) => labeledInput(key,meta[key],label)).join('') +
     '</div>' + (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm trên máy chủ.</p>') + '</div>' +
     '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid"><thead><tr>' +
     ['Hạng mục','Vị trí','Phối cảnh 3D','Chất liệu / Quy cách','Phương án 1','Phương án 2','Phương án 3','Khối lượng','Đơn vị','NCC / Nhà thầu','Ghi chú','Trạng thái',''].map(t => '<th>' + t + '</th>').join('') +
     '</tr></thead>' + sheet.groups.map(renderGroup).join('') + '</table></div><button data-action="add-group">＋ Thêm nhóm</button><dialog id="material-dialog"></dialog>';
+  const updatedScroll = box().querySelector('.sheet-scroll');
+  if (scroll) { updatedScroll.scrollTop = scroll.scrollTop; updatedScroll.scrollLeft = scroll.scrollLeft; }
   showImages();
   byId('room-filter').onchange = event => { sheetRoom = event.target.value; renderEditor(); };
   if (typeof installRelease === 'function') installRelease();
@@ -85,19 +92,33 @@ function renderGroup(group) {
     (collapsed.has(group.id) ? '' : group.rows.filter(r => !sheetRoom || r.room === sheetRoom).map(renderRow).join('') + '<tr><td colspan="13"><button data-action="add-row">＋ Dòng</button></td></tr>') + '</tbody>';
 }
 
+function imageCell(list, slot, content = '', state = '') {
+  const hasImage = list.length > 0;
+  const photo = hasImage ? images(list.slice(0,1)) : '<span class="image-plus" aria-hidden="true">＋</span>';
+  const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (slot+1);
+  return '<div class="image-cell ' + state + (hasImage ? ' has-image' : '') + '" tabindex="0" data-slot="' + slot +
+    '" title="Bấm ảnh để chốt phương án. Dán ảnh bằng Ctrl+V hoặc kéo thả."><div class="image-preview">' + photo +
+    (list.length > 1 ? '<small class="image-count">+' + (list.length-1) + '</small>' : '') +
+    (state ? '<span class="image-state" aria-label="' + (state === 'chosen' ? 'Đã chọn' : 'Dự phòng') + '">' + (state === 'chosen' ? '✓' : 'Dự phòng') + '</span>' : '') +
+    '</div><button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' + content + '</div>';
+}
+
 function renderRow(row) {
   const chosen = row.options[row.chosen];
   return '<tr data-row="' + html(row.id) + '"><td>' + input('name',row.name,'Hạng mục') + '</td><td>' + input('room',row.room,'Vị trí') +
-    '</td><td><div class="image-cell" tabindex="0" data-slot="render">' + (images(row.render) || '＋ Dán ảnh 3D') + '<button data-action="detail">⋯</button></div></td><td>' +
-    input('spec',chosen?.finish || row.spec,'Quy cách') + '</td>' +
-    row.options.map((pa,i) => '<td><div class="image-cell' + (row.chosen === i ? ' chosen' : row.chosen != null ? ' reserve' : '') +
-      '" tabindex="0" data-slot="' + i + '" title="Bấm ảnh để chốt, Ctrl+V để dán ảnh">' + (images(pa.images) || '<span>＋ Ảnh</span>') +
-      '<div>' + html([pa.color,pa.code,pa.size].filter(Boolean).join(' · ')) + '</div>' +
-      (row.chosen === i ? '<strong>✓ Đã chọn</strong>' : row.chosen != null ? '<small>Dự phòng</small>' : '') + ' <button data-action="detail" aria-label="Chi tiết phương án">⋯</button></div></td>').join('') +
+    '</td><td>' + imageCell(row.render,'render') + '</td><td>' + input('spec',chosen?.finish || row.spec,'Quy cách') + '</td>' +
+    row.options.map((pa,i) => {
+      const detail = [pa.color,pa.size].filter(Boolean).join(' · ');
+      const code = '<div class="pa-caption">' + input('code',pa.code,'Mã PA' + (i+1)) +
+        (detail ? '<small title="' + html(detail) + '"> · ' + html(detail) + '</small>' : '') + '</div>';
+      return '<td>' + imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '') + '</td>';
+    }).join('') +
     '<td>' + input('qty',row.qty,'Khối lượng') + '</td><td>' + input('unit',row.unit,'Đơn vị') + '</td><td>' + input('supplier',row.supplier,'NCC / Nhà thầu') +
     '</td><td>' + input('note',row.note,'Ghi chú') + '</td><td><select data-field="decision" aria-label="Trạng thái">' +
     Object.entries(statusLabels).map(([key,label]) => option(key,label,row.ordered?'ordered':row.decision)).join('') +
-    option('ordered','Đã đặt hàng',row.ordered?'ordered':row.decision) + '</select></td><td><button data-action="move-up" title="Đưa dòng lên">↑</button> <button data-action="move-down" title="Đưa dòng xuống">↓</button> <button data-action="duplicate" title="Nhân bản dòng">⧉</button> <button data-action="del-row" title="Bỏ dòng">×</button></td></tr>';
+    option('ordered','Đã đặt hàng',row.ordered?'ordered':row.decision) + '</select></td><td><div class="row-actions">' +
+    [['move-up','Đưa dòng lên','↑'],['move-down','Đưa dòng xuống','↓'],['duplicate','Nhân bản dòng','⧉'],['del-row','Bỏ dòng','×']].map(([action,label,icon]) =>
+      '<button data-action="' + action + '" title="' + label + '" aria-label="' + label + '">' + icon + '</button>').join('') + '</div></td></tr>';
 }
 
 function context(target) {
@@ -272,6 +293,10 @@ function suggestions(field, pa) {
   const q = field.value.toLocaleLowerCase();
   const presets = [...new Set([...(initialPresets[key] || []),...(materials.presets[key] || []),...(sheet.presets?.[key] || [])])]
     .filter(value => !q || value.toLocaleLowerCase().includes(q));
+  if (key === 'code' && !pa) {
+    const {row,slot} = context(field);
+    pa = row?.options[Number(slot)];
+  }
   const library = typeof librarySuggestions === 'function' ? librarySuggestions(key,q,pa) : [];
   const choices = [...library, ...presets.map(value => ({ label:value, apply:() => {
     field.value = value;
@@ -296,7 +321,8 @@ function suggestions(field, pa) {
     }
     if (event.key === 'Escape') menu?.remove();
   };
-  field.onblur = () => setTimeout(() => menu?.remove(),120);
+  const currentMenu = menu;
+  field.onblur = () => setTimeout(() => currentMenu.remove(),120);
 }
 
 document.addEventListener('click', async event => {
@@ -305,7 +331,7 @@ document.addEventListener('click', async event => {
   const {group,row,slot} = context(event.target);
   if (!button) {
     const cell = event.target.closest('.image-cell');
-    if (row && cell && slot !== 'render' && row.options[Number(slot)].images.length) {
+    if (row && event.target.closest('.image-preview img') && cell && slot !== 'render' && row.options[Number(slot)].images.length) {
       const rowId = row.id;
       pick(row,slot);
       box().querySelector('[data-row="' + rowId + '"] [data-slot="' + slot + '"]')?.focus({ preventScroll:true });
@@ -368,7 +394,7 @@ document.addEventListener('change', event => {
   const field = event.target;
   const key = field.dataset.field;
   if (!sheet || !key || !field.closest('#materials') || field.closest('dialog')) return;
-  const {group,row} = context(field);
+  const {group,row,slot} = context(field);
   const value = field.value;
   modify(() => {
     if (row && key === 'decision') {
@@ -380,6 +406,9 @@ document.addEventListener('change', event => {
       row.ordered = value === 'ordered';
       row.decision = row.ordered ? 'chosen' : value;
       if (['draft','sent'].includes(value)) row.chosen = null;
+    } else if (row && key === 'code' && row.options[Number(slot)]) {
+      row.options[Number(slot)].code = value;
+      field.defaultValue = value;
     } else if (row && key === 'spec' && row.chosen != null) row.options[row.chosen].finish = value;
     else if (row) { row[key] = value; learnPreset(key,value); }
     else if (group) group[key === 'groupName' ? 'name' : key] = value;
@@ -407,7 +436,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!row) return;
-  if (slot != null && event.key === ' ' && slot !== 'render') { event.preventDefault(); pick(row,slot); return; }
+  if (target.matches('.image-cell') && event.key === ' ' && slot !== 'render') { event.preventDefault(); pick(row,slot); return; }
   const cell = target.closest('td');
   if (!cell) return;
   if (event.key === 'Escape') { if (target.tagName === 'INPUT') target.value = target.defaultValue; target.blur(); return; }
@@ -420,7 +449,7 @@ document.addEventListener('keydown', event => {
     const direction = event.key === 'ArrowLeft' || event.shiftKey ? -1 : 1;
     next = cell.parentElement.cells[col+direction] || rows[index+direction]?.cells[direction > 0 ? 0 : rows[index+direction].cells.length-1];
   }
-  const control = next?.querySelector('input,select,[tabindex],button');
+  const control = next?.querySelector('.pa-caption input') || next?.querySelector('input,select,[tabindex],button');
   if (control) { event.preventDefault(); control.focus(); control.select?.(); }
 });
 

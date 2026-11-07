@@ -1,11 +1,11 @@
 function installRelease() {
   byId('release-actions').innerHTML = '<button id="material-publish">Phát hành link khách</button> <button id="material-history">Biên bản / Lịch sử</button> ' +
-    '<button id="material-settings">Điều khoản mẫu</button> <button id="material-stats">Thống kê ảnh</button> <button id="material-buy">Excel mua hàng</button>';
+    '<button id="material-settings">Điều khoản mẫu</button> <details class="material-export"><summary>Xuất ▾</summary><div><button id="material-stats">Thống kê ảnh</button><button id="material-buy">Excel mua hàng</button></div></details>';
   byId('material-publish').onclick = () => safeRelease(publish);
   byId('material-history').onclick = () => safeRelease(historyDialog);
   byId('material-settings').onclick = () => safeRelease(settingsDialog);
-  byId('material-stats').onclick = () => safeRelease(statistics);
-  byId('material-buy').onclick = () => safeRelease(exportPurchasing);
+  byId('material-stats').onclick = event => { event.target.closest('details').open = false; safeRelease(statistics); };
+  byId('material-buy').onclick = event => { event.target.closest('details').open = false; safeRelease(exportPurchasing); };
 }
 async function safeRelease(task) {
   try {
