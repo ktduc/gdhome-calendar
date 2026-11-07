@@ -81,6 +81,14 @@
 - Chọn nhiều việc -> chuột phải -> "Liên kết nhóm ... (làm lần lượt / bắt đầu cùng)": nối FS/SS, đánh dấu `link.emphasis = true` (vẽ nét đậm #0b4f8a 2.4px) và xếp các việc đứng liền nhau (`calendar.hasManualTaskOrder = true`, không tự sắp theo ngày nữa). Nút "🔃 Theo ngày" xếp lại theo thời gian. Code: `linkSelectedTasksAsGroup()`.
 - Mũi tên FS đi ra từ đáy cuối thanh, chạy theo khe giữa 2 dòng -> không đè lên nhãn ngày.
 
+## 3f. Cập nhật 07/11/2026 - lần 5 (cấu trúc mới, Gist, Gmail)
+- **Cấu trúc 3 cấp:** `projectOwners` = DỰ ÁN (quản lý), `calendars` = GIAI ĐOẠN (`ownerId` trỏ về dự án), `tasks` = CÔNG VIỆC. Tên khoá dữ liệu giữ nguyên. Timeline có dòng Dự án (WBS 1) → Giai đoạn (1.1) → Việc (1.1.1); XML MS Project xuất/nhập 3 cấp. Phạm vi mặc định `mspScope = 'active-project'` (chỉ hiện dự án đang chọn). Hàm: `getProjectOfCalendar`, `getActiveProject`, `getMspTargetCalendars`.
+- **Thư viện tiêu đề** trong bảng tạo nhanh: `TASK_TITLE_LIBRARY` (6 nhóm) + `AppState.customTaskTitles` ("Của tôi", lưu server).
+- **Server:** lưu trữ `FileStore` (mặc định) hoặc `GistStore` khi có `GIST_TOKEN` (tự tìm/tạo Gist bí mật "GD HOME - du lieu lich tien do", file `data.json` + `user-<email>.json`). Đăng nhập Google khi có `GOOGLE_CLIENT_ID` (`/api/config`, `/api/auth/google`, `/api/import-legacy`), phiên ký HMAC 30 ngày. Hướng dẫn: `HUONG-DAN-CAI-DAT.md`.
+- **Client:** `bootstrapAuthAndData()`, màn hình đăng nhập, khoá localStorage theo email (`getLocalStateKey`). Tự phát hiện server bị reset (phiên bản server < phiên bản trình duyệt đã lưu) → hỏi giữ bản trên máy.
+- `.bat` không còn đẩy `data.json` lên GitHub.
+- Xuất ảnh Timeline: không còn tự chèn tên khách hàng (ô ẩn) sau tiêu đề; tiêu đề để trống thì xuất trống. Sọc chéo chìm rõ hơn (alpha 0.13). Ngày mùng 1: nhãn đỏ trên nền đỏ rất nhạt.
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

@@ -3,3 +3,5 @@ node_modules/
 *.log
 backups/
 *.tmp
+user-*.json
+_backup*/

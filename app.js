@@ -96,7 +96,7 @@ const AppState = {
   endMonth: '2026-09',
   scheduleMonth: 'Tháng 9, 2026', // Tháng đang lập bảng hiển thị bên trái tiêu đề
   viewMode: 'calendar', // 'calendar' (Google Lịch) hoặc 'msproject' (Microsoft Project Timeline / Gantt)
-  mspScope: 'all-visible', // 'all-visible' hoặc 'active-only'
+  mspScope: 'active-project', // 'active-project' (dự án đang chọn) | 'all-visible' (tất cả dự án đang bật) | 'active-only' (chỉ giai đoạn đang chọn)
   mspZoom: 'normal', // 'compact' | 'normal' | 'wide'
   mspRowHeight: 'normal', // 'compact' (32px) | 'normal' (42px) | 'tall' (54px) hoặc số px
   colorPaletteTheme: 'default', // 'default' | 'default_soft' | 'olive' | 'mauve'
@@ -621,7 +621,8 @@ function getCurrentCustomerName() {
 
 // Ghép Tag Tiền tố ("3D", "CHỈNH SỬA 3D", "HSKT") + Hậu tố Tên khách hàng
 function formatStageTitleWithCustomer(prefix) {
-  const customer = getCurrentCustomerName();
+  const proj = getActiveProject();
+  const customer = (proj && proj.name) || getCurrentCustomerName();
   if (customer) {
     return `${prefix} - ${customer}`;
   }
@@ -658,6 +659,184 @@ function isOfflineFileMode() {
   return typeof location !== 'undefined' && location.protocol === 'file:';
 }
 
+// =========================================================================
+// ĐĂNG NHẬP BẰNG GMAIL (Google Identity Services)
+// Chỉ bật khi server có GOOGLE_CLIENT_ID. Mỗi tài khoản Gmail có dữ liệu riêng.
+// =========================================================================
+const SESSION_STORAGE_KEY = 'gdhome_session';
+let _appConfig = { authMode: 'none', googleClientId: null, storage: 'file' };
+let _currentUser = null;
+let _loginOverlayShown = false;
+
+function getSession() {
+  try {
+    const s = JSON.parse(localStorage.getItem(SESSION_STORAGE_KEY) || 'null');
+    return s && s.token ? s : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function setSession(sess) {
+  try {
+    if (sess) localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(sess));
+    else localStorage.removeItem(SESSION_STORAGE_KEY);
+  } catch (e) { /* bỏ qua */ }
+}
+
+// Khoá lưu trên trình duyệt tách riêng theo tài khoản (2 người dùng chung 1 máy không bị lẫn dữ liệu)
+function getLocalStateKey() {
+  return _currentUser && _currentUser.email ? `timeline_calendar_state::${_currentUser.email}` : 'timeline_calendar_state';
+}
+
+async function loadAppConfig() {
+  if (isOfflineFileMode()) return _appConfig;
+  try {
+    const res = await fetch('/api/config', { cache: 'no-store' });
+    if (res.ok) _appConfig = Object.assign(_appConfig, await res.json());
+  } catch (e) { /* mất mạng: dùng mặc định */ }
+  return _appConfig;
+}
+
+function loadGoogleScript() {
+  return new Promise((resolve, reject) => {
+    if (window.google && window.google.accounts && window.google.accounts.id) return resolve();
+    const s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.async = true;
+    s.defer = true;
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error('Không tải được thư viện đăng nhập Google (kiểm tra mạng)'));
+    document.head.appendChild(s);
+  });
+}
+
+function renderUserChip() {
+  const chip = document.getElementById('btn-user-account');
+  if (!chip) return;
+  if (_appConfig.authMode !== 'google' || !_currentUser) {
+    chip.style.display = 'none';
+    return;
+  }
+  chip.style.display = 'inline-flex';
+  const initial = (_currentUser.name || _currentUser.email || '?').trim().charAt(0).toUpperCase();
+  chip.innerHTML = '';
+  const av = document.createElement('span');
+  av.className = 'user-chip-avatar';
+  if (_currentUser.picture) {
+    const img = document.createElement('img');
+    img.src = _currentUser.picture;
+    img.alt = '';
+    img.referrerPolicy = 'no-referrer';
+    av.appendChild(img);
+  } else {
+    av.textContent = initial;
+  }
+  chip.appendChild(av);
+  const label = document.createElement('span');
+  label.className = 'btn-label user-chip-email';
+  label.textContent = _currentUser.email;
+  chip.appendChild(label);
+  chip.title = `Đang đăng nhập: ${_currentUser.email} • Bấm để đăng xuất`;
+}
+
+async function handleGoogleCredential(response) {
+  const msgEl = document.getElementById('login-overlay-msg');
+  try {
+    if (msgEl) msgEl.textContent = 'Đang đăng nhập...';
+    const res = await fetch('/api/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ credential: response.credential })
+    });
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok || !result.token) throw new Error(result.message || 'Đăng nhập thất bại');
+    setSession({ token: result.token, user: result.user });
+    _currentUser = result.user;
+
+    if (result.isNewUser && result.legacyAvailable) {
+      const ok = confirm(
+        `Chào ${result.user.name || result.user.email}!\n\n` +
+        'Tài khoản này chưa có dữ liệu. Bạn có muốn CHÉP dữ liệu tiến độ dùng chung trước đây vào tài khoản của mình không?\n\n' +
+        '• [OK] = Chép sang (dữ liệu chung cũ vẫn giữ nguyên)\n• [Cancel / Huỷ] = Bắt đầu với bảng trống'
+      );
+      if (ok) {
+        await apiFetch('/api/import-legacy', { method: 'POST', body: '{}' });
+      }
+    }
+    hideLoginOverlay();
+    // Nạp lại dữ liệu của đúng tài khoản này
+    _serverVersion = null;
+    _pendingSync = false;
+    _undoStack = [];
+    _redoStack = [];
+    renderUserChip();
+    await syncWithBackend();
+    showToast(`Đã đăng nhập: ${result.user.email}`);
+  } catch (err) {
+    if (msgEl) msgEl.textContent = '⚠ ' + err.message;
+  }
+}
+
+async function showLoginOverlay(message) {
+  const overlay = document.getElementById('login-overlay');
+  if (!overlay) return;
+  overlay.classList.add('active');
+  _loginOverlayShown = true;
+  const msgEl = document.getElementById('login-overlay-msg');
+  if (msgEl) msgEl.textContent = message || '';
+  try {
+    await loadGoogleScript();
+    window.google.accounts.id.initialize({
+      client_id: _appConfig.googleClientId,
+      callback: handleGoogleCredential,
+      auto_select: true,
+      cancel_on_tap_outside: false
+    });
+    const btnBox = document.getElementById('google-signin-btn');
+    if (btnBox) {
+      btnBox.innerHTML = '';
+      window.google.accounts.id.renderButton(btnBox, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'vi', width: 280 });
+    }
+    window.google.accounts.id.prompt();
+  } catch (err) {
+    if (msgEl) msgEl.textContent = '⚠ ' + err.message;
+  }
+}
+
+function hideLoginOverlay() {
+  const overlay = document.getElementById('login-overlay');
+  if (overlay) overlay.classList.remove('active');
+  _loginOverlayShown = false;
+}
+
+function signOut() {
+  if (!confirm(`Đăng xuất tài khoản ${_currentUser ? _currentUser.email : ''}?`)) return;
+  setSession(null);
+  try { if (window.google && window.google.accounts) window.google.accounts.id.disableAutoSelect(); } catch (e) { /* bỏ qua */ }
+  location.reload();
+}
+
+// Khởi động: đọc cấu hình -> nếu cần đăng nhập mà chưa có phiên -> hiện màn hình đăng nhập
+async function bootstrapAuthAndData() {
+  await loadAppConfig();
+  const chip = document.getElementById('btn-user-account');
+  if (chip && !chip.dataset.bound) {
+    chip.dataset.bound = '1';
+    chip.addEventListener('click', signOut);
+  }
+  if (_appConfig.authMode === 'google') {
+    const sess = getSession();
+    if (!sess) {
+      showLoginOverlay();
+      return;
+    }
+    _currentUser = sess.user;
+    renderUserChip();
+  }
+  syncWithBackend();
+}
+
 function getAppKey() {
   try { return localStorage.getItem(APP_KEY_STORAGE) || ''; } catch (e) { return ''; }
 }
@@ -667,7 +846,15 @@ async function apiFetch(url, options = {}, allowPrompt = true) {
   const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
   const key = getAppKey();
   if (key) headers['x-app-key'] = key;
+  const sess = getSession();
+  if (sess && _appConfig.authMode === 'google') headers.Authorization = `Bearer ${sess.token}`;
   const res = await fetch(url, Object.assign({}, options, { headers }));
+  if (res.status === 401 && _appConfig.authMode === 'google') {
+    // Phiên đăng nhập hết hạn -> đăng nhập lại (dữ liệu chưa lưu vẫn giữ trên trình duyệt)
+    setSession(null);
+    if (!_loginOverlayShown) showLoginOverlay('Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+    return res;
+  }
   if (res.status === 401 && allowPrompt) {
     const entered = prompt('Trang này đã được đặt mật khẩu. Nhập mật khẩu để xem & lưu tiến độ:');
     if (entered) {
@@ -718,7 +905,8 @@ function buildServerPayload() {
     companyLogo: AppState.companyLogo,
     footerNote: AppState.footerNote,
     showVnHolidays: AppState.showVnHolidays,
-    showLunarDates: AppState.showLunarDates
+    showLunarDates: AppState.showLunarDates,
+    customTaskTitles: AppState.customTaskTitles || []
   };
 }
 
@@ -740,11 +928,17 @@ function applyServerData(data) {
   if (data.footerNote) AppState.footerNote = data.footerNote;
   if (data.showVnHolidays !== undefined) AppState.showVnHolidays = data.showVnHolidays;
   if (data.showLunarDates !== undefined) AppState.showLunarDates = data.showLunarDates;
+  if (Array.isArray(data.customTaskTitles)) AppState.customTaskTitles = data.customTaskTitles;
 }
+
+let _localSavedAt = null;
 
 async function syncWithBackend() {
   // 1. Nạp bản lưu trên trình duyệt trước (gồm cả cấu hình cột, palette...)
+  _localSavedAt = null;
   loadFromStorage();
+  const localTaskCount = Array.isArray(AppState.tasks) ? AppState.tasks.length : 0;
+  const localTasksJson = JSON.stringify(AppState.tasks || []);
   const localHadPending = _pendingSync;
   const localBaseVersion = _serverVersion;
 
@@ -761,6 +955,32 @@ async function syncWithBackend() {
     if (res.ok) {
       const result = await res.json();
       const serverVersion = typeof result.version === 'number' ? result.version : 0;
+
+      // Phát hiện server bị "reset" (VD: Render cập nhật code làm mất dữ liệu, server trả về bản cũ hơn
+      // bản trình duyệt này đã từng lưu) -> hỏi trước, KHÔNG để bản cũ ghi đè lên dữ liệu trên máy
+      const serverData = result.data || {};
+      const serverUpdatedAt = serverData._updatedAt || null;
+      const serverLooksOlder =
+        localTaskCount > 0 &&
+        localTasksJson !== JSON.stringify(serverData.tasks || []) &&
+        ((typeof localBaseVersion === 'number' && serverVersion < localBaseVersion) ||
+          (localBaseVersion === null && _localSavedAt && (!serverUpdatedAt || _localSavedAt > serverUpdatedAt)));
+      if (!localHadPending && serverLooksOlder) {
+        const keepLocal = confirm(
+          'Dữ liệu trên server đang CŨ HƠN dữ liệu đã lưu trên trình duyệt này (có thể server vừa cập nhật / khởi động lại).\n\n' +
+          `• Trên máy này: ${localTaskCount} việc\n• Trên server: ${(serverData.tasks || []).length} việc\n\n` +
+          '• [OK] = GIỮ bản trên máy này và gửi lại lên server (khuyên dùng)\n' +
+          '• [Cancel / Huỷ] = Dùng bản trên server'
+        );
+        if (keepLocal) {
+          _serverVersion = serverVersion;
+          normalizeAppState();
+          updateUIElements();
+          snapshotState();
+          flushSaveToBackend({ force: true });
+          return;
+        }
+      }
 
       if (localHadPending && localBaseVersion === serverVersion) {
         // Máy này có thay đổi chưa kịp gửi (mất mạng / tắt trình duyệt) và server chưa đổi -> giữ bản máy này & gửi lên
@@ -973,7 +1193,7 @@ function syncCustomerInputWithActiveCalendar() {
 
 function saveToStorage() {
   try {
-  localStorage.setItem('timeline_calendar_state', JSON.stringify({
+  localStorage.setItem(getLocalStateKey(), JSON.stringify({
     startMonth: AppState.startMonth,
     endMonth: AppState.endMonth,
     scheduleMonth: AppState.scheduleMonth,
@@ -991,6 +1211,8 @@ function saveToStorage() {
     showLunarDates: AppState.showLunarDates,
     mspRowHeight: AppState.mspRowHeight,
     mspZoom: AppState.mspZoom,
+    customTaskTitles: AppState.customTaskTitles,
+    mspScope: AppState.mspScope,
     exportWatermark: AppState.exportWatermark,
     colorPaletteTheme: AppState.colorPaletteTheme,
     autoCascadeShift: AppState.autoCascadeShift,
@@ -1007,7 +1229,7 @@ function saveToStorage() {
 }
 
 function loadFromStorage() {
-  const saved = localStorage.getItem('timeline_calendar_state');
+  const saved = localStorage.getItem(getLocalStateKey());
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
@@ -1028,6 +1250,8 @@ function loadFromStorage() {
       if (parsed.showLunarDates !== undefined) AppState.showLunarDates = parsed.showLunarDates;
       if (parsed.mspRowHeight !== undefined) AppState.mspRowHeight = parsed.mspRowHeight;
       if (parsed.mspZoom !== undefined) AppState.mspZoom = parsed.mspZoom;
+      if (parsed.mspScope) AppState.mspScope = parsed.mspScope;
+      if (Array.isArray(parsed.customTaskTitles)) AppState.customTaskTitles = parsed.customTaskTitles;
       if (parsed.exportWatermark !== undefined) AppState.exportWatermark = parsed.exportWatermark;
       if (parsed.colorPaletteTheme) AppState.colorPaletteTheme = parsed.colorPaletteTheme;
       if (parsed.autoCascadeShift !== undefined) AppState.autoCascadeShift = parsed.autoCascadeShift;
@@ -1036,6 +1260,7 @@ function loadFromStorage() {
       if (parsed.mspVisibility) AppState.mspVisibility = Object.assign(AppState.mspVisibility, parsed.mspVisibility);
       _pendingSync = !!parsed._pendingSync;
       _serverVersion = typeof parsed._serverVersion === 'number' ? parsed._serverVersion : null;
+      _localSavedAt = parsed._savedAt || null;
     } catch (e) {
       console.error(e);
     }
@@ -1064,7 +1289,7 @@ function renderCalendarSidebar() {
 
     const headerEl = document.createElement('div');
     headerEl.className = 'project-owner-header';
-    headerEl.title = `Bấm để sổ ra / thu gọn danh sách "Dự án của ${owner.name}"`;
+    headerEl.title = `Dự án "${owner.name}" • Bấm để sổ ra / thu gọn các giai đoạn`;
 
     const leftHeader = document.createElement('div');
     leftHeader.className = 'project-owner-left';
@@ -1073,7 +1298,7 @@ function renderCalendarSidebar() {
     ownerCheck.type = 'checkbox';
     ownerCheck.checked = ownerCalendars.length > 0 && ownerCalendars.some(c => c.visible !== false);
     ownerCheck.style.cssText = 'width:13px; height:13px; accent-color:#b91c1c; cursor:pointer; flex-shrink:0;';
-    ownerCheck.title = `Bật / Tắt toàn bộ các lịch trong "Dự án của ${owner.name}"`;
+    ownerCheck.title = `Bật / Tắt toàn bộ các giai đoạn của dự án "${owner.name}"`;
     ownerCheck.addEventListener('click', (e) => {
       e.stopPropagation();
       const targetVis = ownerCheck.checked;
@@ -1089,7 +1314,7 @@ function renderCalendarSidebar() {
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'project-owner-title';
-    titleSpan.innerHTML = `Dự án của <em>${escapeHtml(owner.name)}</em>`;
+    titleSpan.innerHTML = `<em>${escapeHtml(owner.name)}</em>`;
 
     const countSpan = document.createElement('span');
     countSpan.className = 'project-owner-count';
@@ -1106,7 +1331,7 @@ function renderCalendarSidebar() {
     const addCalBtn = document.createElement('button');
     addCalBtn.type = 'button';
     addCalBtn.className = 'owner-mini-btn';
-    addCalBtn.title = `Thêm dự án mới vào mục "Dự án của ${owner.name}"`;
+    addCalBtn.title = `Thêm giai đoạn mới vào dự án "${owner.name}"`;
     addCalBtn.textContent = '+';
     addCalBtn.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -1118,16 +1343,16 @@ function renderCalendarSidebar() {
     const renameOwnerBtn = document.createElement('button');
     renameOwnerBtn.type = 'button';
     renameOwnerBtn.className = 'owner-mini-btn';
-    renameOwnerBtn.title = `Đổi tên mục "Dự án của ${owner.name}"`;
+    renameOwnerBtn.title = `Đổi tên dự án "${owner.name}"`;
     renameOwnerBtn.textContent = '✎';
     renameOwnerBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      const newOwnerName = prompt('Nhập tên người dùng / phụ trách (Hiển thị: "Dự án của ..."):', owner.name);
+      const newOwnerName = prompt('Tên dự án (VD: VĂN PHÒNG B4 PHẠM NGỌC THẠCH, NHÀ A DŨNG - HẢI PHÒNG...):', owner.name);
       if (newOwnerName && newOwnerName.trim()) {
         owner.name = newOwnerName.trim();
         saveToBackend();
         renderCalendarSidebar();
-        showToast(`Đã đổi thành "Dự án của ${owner.name}"!`);
+        showToast(`Đã đổi tên dự án thành "${owner.name}"!`);
       }
     });
     actionsHeader.appendChild(renameOwnerBtn);
@@ -1136,11 +1361,11 @@ function renderCalendarSidebar() {
       const delOwnerBtn = document.createElement('button');
       delOwnerBtn.type = 'button';
       delOwnerBtn.className = 'owner-mini-btn del';
-      delOwnerBtn.title = `Xóa mục "Dự án của ${owner.name}"`;
+      delOwnerBtn.title = `Xóa dự án "${owner.name}"`;
       delOwnerBtn.textContent = '×';
       delOwnerBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (confirm(`Xóa nhóm "Dự án của ${owner.name}"? (Các lịch dự án bên trong sẽ được chuyển sang nhóm đầu tiên)`)) {
+        if (confirm(`Xóa dự án "${owner.name}"? (Các giai đoạn bên trong sẽ được chuyển sang dự án đầu tiên, không mất công việc)`)) {
           const fallbackOwner = AppState.projectOwners.find(o => o.id !== owner.id);
           if (fallbackOwner) {
             AppState.calendars.forEach(c => {
@@ -1178,7 +1403,7 @@ function renderCalendarSidebar() {
     ownerCalendars.forEach(cal => {
       const item = document.createElement('div');
       item.className = `calendar-list-item ${cal.id === AppState.activeCalendarId ? 'active-selected' : ''}`;
-      item.title = `Bấm để chọn lịch "${cal.name}" (Dự án của ${owner.name})`;
+      item.title = `Bấm để chọn giai đoạn "${cal.name}" (dự án ${owner.name})`;
 
       const leftDiv = document.createElement('div');
       leftDiv.className = 'cal-item-left';
@@ -1292,17 +1517,17 @@ function openCalendarCategoryModal(cal = null, presetOwnerId = null) {
   const targetOwnerId = (cal && cal.ownerId) || presetOwnerId || AppState.projectOwners[0].id;
   if (ownerSelect) {
     ownerSelect.innerHTML = AppState.projectOwners.map(o =>
-      `<option value="${o.id}" ${o.id === targetOwnerId ? 'selected' : ''}>Dự án của ${o.name}</option>`
+      `<option value="${o.id}" ${o.id === targetOwnerId ? 'selected' : ''}>${escapeHtml(o.name)}</option>`
     ).join('');
   }
 
   if (cal) {
-    titleEl.textContent = 'Chỉnh sửa Tên Khách Hàng / Lịch';
+    titleEl.textContent = 'Sửa giai đoạn';
     idInput.value = cal.id;
     nameInput.value = cal.name === 'CHƯA ĐẶT TÊN KHÁCH HÀNG' ? '' : cal.name;
     selectedCalCatColor = cal.color || getActivePaletteColors()[0];
   } else {
-    titleEl.textContent = 'Tạo Lịch Khách Hàng Mới';
+    titleEl.textContent = 'Thêm giai đoạn mới';
     idInput.value = '';
     nameInput.value = '';
     const pal = getActivePaletteColors();
@@ -1358,7 +1583,7 @@ function setupSidebarEvents() {
   const addOwnerBtn = document.getElementById('btn-add-project-owner');
   if (addOwnerBtn) {
     addOwnerBtn.addEventListener('click', () => {
-      const ownerName = prompt('Nhập tên người phụ trách cho mục "Dự án của ..." mới (VD: KTS. Đức, KTS. Minh, Nhóm 2...):');
+      const ownerName = prompt('Tên DỰ ÁN mới (VD: VĂN PHÒNG B4 PHẠM NGỌC THẠCH, NHÀ A DŨNG - HẢI PHÒNG...):');
       if (ownerName && ownerName.trim()) {
         const newOwner = {
           id: 'owner_' + Date.now(),
@@ -1368,7 +1593,22 @@ function setupSidebarEvents() {
         AppState.projectOwners.push(newOwner);
         saveToBackend();
         renderCalendarSidebar();
-        showToast(`Đã thêm mục "Dự án của ${newOwner.name}"!`);
+        // Tạo sẵn 1 giai đoạn đầu tiên cho dự án mới & chọn luôn
+        const pal = getActivePaletteColors();
+        const firstStage = {
+          id: 'cal_' + Date.now(),
+          ownerId: newOwner.id,
+          name: 'GIAI ĐOẠN 1',
+          customerName: 'GIAI ĐOẠN 1',
+          color: pal[AppState.calendars.length % pal.length],
+          visible: true
+        };
+        AppState.calendars.push(firstStage);
+        AppState.activeCalendarId = firstStage.id;
+        saveToBackend();
+        renderCalendarSidebar();
+        renderCalendar();
+        showToast(`Đã tạo dự án "${newOwner.name}" (kèm "GIAI ĐOẠN 1" - bấm ✎ để đổi tên)`);
       }
     });
   }
@@ -2258,24 +2498,20 @@ function showQuickPopover(startStr, endStr, clientX, clientY) {
   const calc = calculateTaskDays(minD, maxD, true);
   countSummary.textContent = `${calc.workDays} ngày làm việc (đã trừ ngày nghỉ) • ${calc.totalDays} ngày thực tế`;
 
-  const popWidth = 360;
-  const popHeight = 320;
+  if (typeof window.__renderPopoverTitleLib === 'function') window.__renderPopoverTitleLib();
+
+  popover.style.visibility = 'hidden';
+  popover.classList.add('active');
+  const popWidth = popover.offsetWidth || 380;
+  const popHeight = Math.min(popover.offsetHeight || 520, window.innerHeight - 24);
   let left = clientX + 12;
   let top = clientY - 80;
-
-  if (left + popWidth > window.innerWidth - 16) {
-    left = Math.max(16, clientX - popWidth - 12);
-  }
-  if (top + popHeight > window.innerHeight - 16) {
-    top = window.innerHeight - popHeight - 16;
-  }
-  if (top < 75) {
-    top = 75;
-  }
-
+  if (left + popWidth > window.innerWidth - 12) left = Math.max(12, clientX - popWidth - 12);
+  if (top + popHeight > window.innerHeight - 12) top = window.innerHeight - popHeight - 12;
+  if (top < 12) top = 12;
   popover.style.left = `${left}px`;
   popover.style.top = `${top}px`;
-  popover.classList.add('active');
+  popover.style.visibility = '';
 
   setTimeout(() => titleInput.focus(), 30);
 }
@@ -2399,6 +2635,123 @@ function closeQuickPopover() {
   clearSelectionHighlight();
 }
 
+// =========================================================================
+// THƯ VIỆN TIÊU ĐỀ CÔNG VIỆC (chọn nhanh trong bảng tạo việc)
+// Nhóm "Của tôi" do người dùng tự thêm, lưu cùng dữ liệu (customTaskTitles)
+// =========================================================================
+const TASK_TITLE_LIBRARY = [
+  { key: 'design', label: 'Thiết kế', items: [
+    'Khảo sát & đo đạc hiện trạng', 'Lên phương án mặt bằng bố trí', 'Concept / moodboard', 'Dựng 3D', 'Chỉnh sửa 3D',
+    'Hồ sơ kỹ thuật (HSKT)', 'Dự toán - báo giá', 'Chốt vật liệu & mẫu', 'Ký hợp đồng thi công', 'Thủ tục với ban quản lý tòa nhà'
+  ] },
+  { key: 'prep', label: 'Chuẩn bị', items: [
+    'Bàn giao mặt bằng', 'Che chắn bảo vệ công trình', 'Tháo dỡ - phá dỡ', 'Vận chuyển phế thải', 'Định vị - lấy dấu tim mốc'
+  ] },
+  { key: 'rough', label: 'Phần thô & M&E', items: [
+    'Xây tường - chèn tường', 'Đục tường - cắt rãnh', 'Thi công điện (đi dây âm tường)', 'Thi công điện nhẹ (mạng, camera, âm thanh)',
+    'Thi công cấp thoát nước', 'Thi công điều hòa (ống đồng, thoát nước)', 'Thi công PCCC (sprinkler, báo cháy)',
+    'Chống thấm WC / ban công / mái', 'Trát tường', 'Cán nền', 'Nghiệm thu phần thô'
+  ] },
+  { key: 'finish', label: 'Hoàn thiện', items: [
+    'Thi công trần thạch cao', 'Thi công vách thạch cao', 'Ốp lát gạch', 'Lát sàn gỗ / sàn nhựa', 'Bả matit - sơn lót', 'Sơn hoàn thiện',
+    'Giấy dán tường', 'Phào chỉ trần / chân tường', 'Ốp đá (bếp, lavabo, cầu thang)', 'Lắp cửa gỗ / cửa nhôm kính',
+    'Lắp vách kính - kính tắm', 'Lắp thiết bị vệ sinh', 'Lắp thiết bị điện (công tắc, ổ cắm, đèn)', 'Lắp điều hòa & thiết bị'
+  ] },
+  { key: 'furniture', label: 'Nội thất', items: [
+    'Đo đạc sản xuất đồ nội thất', 'Sản xuất đồ nội thất tại xưởng', 'Kiểm tra đồ tại xưởng', 'Vận chuyển & lắp đặt nội thất',
+    'Đặt hàng đồ rời (sofa, bàn ghế, rèm)', 'Lắp rèm cửa', 'Lắp đặt đồ rời & decor', 'Thi công biển - logo'
+  ] },
+  { key: 'handover', label: 'Bàn giao', items: [
+    'Vệ sinh công nghiệp', 'Kiểm tra - chạy thử thiết bị', 'Sửa lỗi tồn đọng (defect)', 'Nghiệm thu tổng thể', 'Bàn giao', 'Bảo hành'
+  ] }
+];
+let _titleLibTab = 'design';
+
+function normalizeVN(str) {
+  return String(str || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
+}
+
+function getTitleLibraryGroups() {
+  const custom = Array.isArray(AppState.customTaskTitles) ? AppState.customTaskTitles : [];
+  return [{ key: 'mine', label: '⭐ Của tôi', items: custom }, ...TASK_TITLE_LIBRARY];
+}
+
+function renderTitleLibrary(onPick) {
+  const tabsEl = document.getElementById('title-lib-tabs');
+  const listEl = document.getElementById('title-lib-list');
+  const input = document.getElementById('popover-task-title');
+  if (!tabsEl || !listEl) return;
+  const groups = getTitleLibraryGroups();
+  const q = normalizeVN(input ? input.value : '');
+
+  tabsEl.innerHTML = '';
+  groups.forEach(g => {
+    if (g.key === 'mine' && g.items.length === 0) return;
+    const tab = document.createElement('button');
+    tab.type = 'button';
+    tab.className = `title-lib-tab ${!q && _titleLibTab === g.key ? 'active' : ''}`;
+    tab.textContent = g.label;
+    tab.addEventListener('click', () => {
+      _titleLibTab = g.key;
+      if (input) input.value = '';
+      renderTitleLibrary(onPick);
+    });
+    tabsEl.appendChild(tab);
+  });
+  tabsEl.style.display = q ? 'none' : '';
+
+  let items = [];
+  if (q) {
+    groups.forEach(g => g.items.forEach(t => {
+      if (normalizeVN(t).includes(q) && !items.some(x => x.title === t)) items.push({ title: t, mine: g.key === 'mine' });
+    }));
+    items = items.slice(0, 40);
+  } else {
+    let g = groups.find(x => x.key === _titleLibTab);
+    if (!g || g.items.length === 0) { g = groups.find(x => x.key === 'design'); _titleLibTab = 'design'; }
+    items = g.items.map(t => ({ title: t, mine: g.key === 'mine' }));
+  }
+
+  listEl.innerHTML = '';
+  if (items.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'title-lib-empty';
+    empty.textContent = 'Không có mẫu khớp. Bấm Enter để tạo việc với tên vừa gõ, hoặc lưu vào "Của tôi".';
+    listEl.appendChild(empty);
+    return;
+  }
+  items.forEach(it => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = `title-lib-chip ${it.mine ? 'is-mine' : ''}`;
+    chip.textContent = it.title;
+    chip.title = it.mine ? 'Bấm để tạo việc ngay • Chuột phải để xoá khỏi "Của tôi"' : 'Bấm để tạo việc ngay với tiêu đề này';
+    chip.addEventListener('click', () => onPick(it.title));
+    if (it.mine) {
+      chip.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (confirm(`Xoá "${it.title}" khỏi danh sách "Của tôi"?`)) {
+          AppState.customTaskTitles = (AppState.customTaskTitles || []).filter(t => t !== it.title);
+          saveToBackend();
+          renderTitleLibrary(onPick);
+        }
+      });
+    }
+    listEl.appendChild(chip);
+  });
+}
+
+function addCustomTaskTitle(title) {
+  const t = String(title || '').trim();
+  if (!t) return false;
+  if (!Array.isArray(AppState.customTaskTitles)) AppState.customTaskTitles = [];
+  if (AppState.customTaskTitles.some(x => normalizeVN(x) === normalizeVN(t))) return false;
+  AppState.customTaskTitles.unshift(t);
+  AppState.customTaskTitles = AppState.customTaskTitles.slice(0, 80);
+  return true;
+}
+
 function setupQuickPopoverEvents() {
   document.getElementById('btn-close-popover').addEventListener('click', closeQuickPopover);
 
@@ -2499,6 +2852,34 @@ function setupQuickPopoverEvents() {
   };
 
   document.getElementById('btn-popover-save').addEventListener('click', saveQuickTask);
+
+  // Thư viện tiêu đề: bấm 1 lần là tạo việc với tiêu đề đó
+  const pickTitle = (title) => {
+    document.getElementById('popover-task-title').value = title;
+    saveQuickTask();
+    showToast(`Đã tạo: ${title}`);
+  };
+  window.__renderPopoverTitleLib = () => renderTitleLibrary(pickTitle);
+  document.getElementById('popover-task-title').addEventListener('input', () => renderTitleLibrary(pickTitle));
+  const btnLibAdd = document.getElementById('btn-title-lib-add');
+  if (btnLibAdd) {
+    btnLibAdd.addEventListener('click', () => {
+      const v = document.getElementById('popover-task-title').value.trim();
+      if (!v) {
+        showToast('Gõ tên việc vào ô phía trên trước, rồi bấm lưu.');
+        return;
+      }
+      if (addCustomTaskTitle(v)) {
+        saveToBackend();
+        _titleLibTab = 'mine';
+        document.getElementById('popover-task-title').value = '';
+        renderTitleLibrary(pickTitle);
+        showToast(`Đã lưu "${v}" vào nhóm "Của tôi"`);
+      } else {
+        showToast('Tiêu đề này đã có trong "Của tôi".');
+      }
+    });
+  }
   document.getElementById('popover-task-title').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -2888,11 +3269,11 @@ function applyAntiEditWatermark(canvas) {
   const w = canvas.width;
   const h = canvas.height;
   const unit = Math.max(1, Math.round(w / 1400)); // ảnh 2x -> nét & khoảng cách gấp đôi
-  const gap = 22 * unit;
+  const gap = 16 * unit;
   ctx.save();
-  ctx.globalAlpha = 0.07;
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1 * unit;
+  ctx.globalAlpha = 0.13;
+  ctx.strokeStyle = '#475569';
+  ctx.lineWidth = 1.3 * unit;
   ctx.beginPath();
   for (let x = -h; x < w + h; x += gap) {
     ctx.moveTo(x, 0);
@@ -2900,7 +3281,7 @@ function applyAntiEditWatermark(canvas) {
   }
   ctx.stroke();
   // Thêm 1 lớp sọc mảnh hơn theo chiều ngược lại, rất mờ -> khó xoá bằng công cụ chỉnh ảnh
-  ctx.globalAlpha = 0.035;
+  ctx.globalAlpha = 0.07;
   ctx.beginPath();
   for (let x = 0; x < w + h; x += gap * 3) {
     ctx.moveTo(x, 0);
@@ -3936,19 +4317,40 @@ function measureTextWidthPx(text, fontSpec) {
   return Math.ceil(String(text).length * 5.8);
 }
 
+// =========================================================================
+// CẤU TRÚC: DỰ ÁN (projectOwners) -> GIAI ĐOẠN (calendars) -> CÔNG VIỆC (tasks)
+// (Tên khoá dữ liệu giữ nguyên như cũ để không phải chuyển đổi dữ liệu)
+// =========================================================================
+function getProjectOfCalendar(cal) {
+  if (!cal) return null;
+  return AppState.projectOwners.find(o => o.id === cal.ownerId) || AppState.projectOwners[0] || null;
+}
+
+function getActiveProject() {
+  return getProjectOfCalendar(getActiveCalendar());
+}
+
+// Danh sách giai đoạn hiển thị trên Timeline theo Phạm vi đang chọn
+function getMspTargetCalendars() {
+  const activeCal = getActiveCalendar();
+  let list;
+  if (AppState.mspScope === 'active-only' || AppState.mspScope === 'active') {
+    list = activeCal ? [activeCal] : [];
+  } else if (AppState.mspScope === 'all-visible') {
+    list = AppState.calendars.filter(c => c.visible !== false);
+  } else {
+    // Mặc định: chỉ các giai đoạn (đang bật) của DỰ ÁN đang chọn -> không lẫn với dự án khác
+    const ownerId = activeCal ? activeCal.ownerId : null;
+    list = AppState.calendars.filter(c => c.ownerId === ownerId && c.visible !== false);
+  }
+  if (list.length === 0 && activeCal) list = [activeCal];
+  return list;
+}
+
 // Tính độ rộng cột "Hạng mục / Công việc" vừa khít 100% dòng chữ dài nhất (không dư khoảng trống bên phải)
 function computeTightMspNameColWidth() {
   let maxTextPx = 175;
-  let targetCalendars = [];
-  if (AppState.mspScope === 'active-only' || AppState.mspScope === 'active') {
-    const activeCal = getActiveCalendar();
-    if (activeCal) targetCalendars = [activeCal];
-  } else {
-    targetCalendars = AppState.calendars.filter(c => c.visible !== false);
-    if (targetCalendars.length === 0 && AppState.calendars.length > 0) {
-      targetCalendars = [getActiveCalendar()];
-    }
-  }
+  let targetCalendars = getMspTargetCalendars();
   const visCalIds = new Set(targetCalendars.map(c => c.id));
 
   targetCalendars.forEach(c => {
@@ -3990,7 +4392,7 @@ function applyMspGridColumnWidths(targetPane = null, forceExportMode = false, ex
   }
 
   const colDefs = [
-    { key: 'wbs', selector: '.col-wbs', show: vis.colWbs !== false, width: Math.max(74, cw.wbs || 74) },
+    { key: 'wbs', selector: '.col-wbs', show: vis.colWbs !== false, width: Math.max(86, cw.wbs || 86) },
     { key: 'name', selector: '.col-name', show: true, width: effectiveNameWidth },
     { key: 'dur', selector: '.col-dur', show: vis.colDur !== false, width: Math.max(74, cw.dur || 74) },
     { key: 'start', selector: '.col-start', show: vis.colDate !== false, width: cw.start || 86 },
@@ -4248,8 +4650,10 @@ function setupMSProjectEvents() {
     btnMsp.addEventListener('click', () => switchViewMode('msproject'));
   }
   if (scopeSelect) {
+    scopeSelect.value = AppState.mspScope || 'active-project';
     scopeSelect.addEventListener('change', (e) => {
       AppState.mspScope = e.target.value;
+      saveToStorage();
       renderMSProjectView();
     });
   }
@@ -4334,7 +4738,7 @@ function setupMSProjectEvents() {
       saveToStorage();
     });
     mspTitlePrefixInput.addEventListener('change', () => {
-      AppState.mspCustomTitlePrefix = mspTitlePrefixInput.value.trim() || 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
+      AppState.mspCustomTitlePrefix = mspTitlePrefixInput.value.trim();
       saveToBackend();
     });
   }
@@ -4612,7 +5016,7 @@ function renderMSProjectView() {
     mspMonthInput.value = AppState.scheduleMonth || 'Tháng 9, 2026';
   }
   if (mspTitlePrefixInput && document.activeElement !== mspTitlePrefixInput) {
-    mspTitlePrefixInput.value = AppState.mspCustomTitlePrefix || 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
+    mspTitlePrefixInput.value = AppState.mspCustomTitlePrefix !== undefined ? AppState.mspCustomTitlePrefix : 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
   }
   if (mspCustomerInput && document.activeElement !== mspCustomerInput) {
     const activeCal = getActiveCalendar();
@@ -4626,16 +5030,7 @@ function renderMSProjectView() {
 
   // 1. Xác định danh sách dự án hiển thị (normalizeAppState tự động sắp xếp công việc theo thứ tự ngày)
   normalizeAppState();
-  let targetCalendars = [];
-  if (AppState.mspScope === 'active-only' || AppState.mspScope === 'active') {
-    const activeCal = getActiveCalendar();
-    if (activeCal) targetCalendars = [activeCal];
-  } else {
-    targetCalendars = AppState.calendars.filter(c => c.visible !== false);
-    if (targetCalendars.length === 0 && AppState.calendars.length > 0) {
-      targetCalendars = [getActiveCalendar()];
-    }
-  }
+  let targetCalendars = getMspTargetCalendars();
 
   // 2. Gom nhóm công việc
   const projectGroups = targetCalendars.map((cal, idx) => {
@@ -4739,7 +5134,7 @@ function renderMSProjectView() {
 
     kpiSummary.innerHTML = `
       <div class="msp-kpi-pill">
-        <span>Dự án:</span>
+        <span>Giai đoạn:</span>
         <strong>${totalCalCount}</strong>
       </div>
       <div class="msp-kpi-pill">
@@ -4872,7 +5267,116 @@ function renderMSProjectView() {
     rowEl.appendChild(rowResizer);
   };
 
-  projectGroups.forEach(pg => {
+  // ===== CẤP 1: DỰ ÁN (quản lý) -> CẤP 2: GIAI ĐOẠN -> CẤP 3: CÔNG VIỆC =====
+  if (!AppState.collapsedMspOwners) AppState.collapsedMspOwners = {};
+  const ownerGroupsForRender = [];
+  AppState.projectOwners.forEach(owner => {
+    const groups = projectGroups.filter(pg => (pg.cal.ownerId || AppState.projectOwners[0].id) === owner.id);
+    if (groups.length > 0) ownerGroupsForRender.push({ owner, groups });
+  });
+  ownerGroupsForRender.forEach((og, oIdx) => {
+    og.groups.forEach((pg, gIdx) => { pg.wbsIndex = `${oIdx + 1}.${gIdx + 1}`; });
+  });
+
+  const renderProjectHeaderRow = (og, oIdx) => {
+    const owner = og.owner;
+    const isOwnerCollapsed = !!AppState.collapsedMspOwners[owner.id];
+    let pMin = null;
+    let pMax = null;
+    let wSum = 0;
+    let pSum = 0;
+    og.groups.forEach(pg => {
+      if (pg.minStart && (!pMin || pg.minStart < pMin)) pMin = pg.minStart;
+      if (pg.maxEnd && (!pMax || pg.maxEnd > pMax)) pMax = pg.maxEnd;
+      wSum += pg.totalWorkDays;
+      pSum += pg.totalWorkDays * pg.avgProgress;
+    });
+    const pLV = (pMin && pMax) ? countWorkingDays(pMin, pMax, true) : 0;
+    const pTT = (pMin && pMax) ? diffDaysInclusive(pMin, pMax) : 0;
+    const pProg = wSum > 0 ? Math.round(pSum / wSum) : 0;
+    const pStartDisp = pMin ? formatShortVNDate(pMin) : '--/--/--';
+    const pEndDisp = pMax ? formatShortVNDate(pMax) : '--/--/--';
+
+    const rowEl = document.createElement('div');
+    rowEl.className = 'msp-tr project-row';
+    rowEl.dataset.ownerId = owner.id;
+    rowEl.innerHTML = `
+      <div class="msp-td col-wbs" title="Dự án">${oIdx + 1}</div>
+      <div class="msp-td col-name">
+        <button type="button" class="msp-project-toggle msp-owner-toggle" title="Thu gọn / Mở rộng dự án">${isOwnerCollapsed ? '▶' : '▼'}</button>
+        <span class="msp-project-icon">📁</span>
+        <input type="text" class="msp-inline-owner-input" value="${escapeHtml(owner.name)}" title="Tên DỰ ÁN (gõ để đổi tên)">
+      </div>
+      <div class="msp-td col-dur msp-summary-dur-cell" title="Từ ${pStartDisp} đến ${pEndDisp}:&#10;• ${pTT} ngày thực tế&#10;• ${pLV} ngày làm việc (= ngày thực tế trừ ngày nghỉ)">
+        <span class="msp-summary-dur-work">${pLV} LV</span>
+        <span class="msp-summary-dur-act">${pTT} TT</span>
+      </div>
+      <div class="msp-td col-date col-start"><span class="msp-date-display-text">${pStartDisp}</span></div>
+      <div class="msp-td col-date col-end"><span class="msp-date-display-text">${pEndDisp}</span></div>
+      <div class="msp-td col-prog">
+        <span class="msp-prog-badge ${pProg === 100 ? 'msp-prog-100' : pProg > 0 ? 'msp-prog-mid' : 'msp-prog-0'}">${pProg}%</span>
+      </div>
+      <div class="msp-td col-act">
+        <button type="button" class="msp-quick-add-btn msp-add-stage-btn" title="Thêm giai đoạn mới vào dự án này">+ GĐ</button>
+      </div>
+    `;
+    rowEl.querySelectorAll('input, button').forEach(el => el.addEventListener('mousedown', ev => ev.stopPropagation()));
+    rowEl.querySelector('.msp-owner-toggle').addEventListener('click', () => {
+      AppState.collapsedMspOwners[owner.id] = !isOwnerCollapsed;
+      renderMSProjectView();
+    });
+    const ownerInput = rowEl.querySelector('.msp-inline-owner-input');
+    ownerInput.addEventListener('change', () => {
+      const v = ownerInput.value.trim();
+      if (!v || v === owner.name) return;
+      owner.name = v.toUpperCase();
+      syncAllFromMSProject(`Đã đổi tên dự án thành "${owner.name}"`);
+    });
+    ownerInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') ownerInput.blur(); });
+    rowEl.querySelector('.msp-add-stage-btn').addEventListener('click', () => {
+      const name = prompt(`Tên giai đoạn mới cho dự án "${owner.name}" (VD: THI CÔNG PHẦN THÔ, HOÀN THIỆN, NỘI THẤT...):`);
+      if (!name || !name.trim()) return;
+      const pal = getActivePaletteColors();
+      const stage = {
+        id: 'cal_' + Date.now(),
+        ownerId: owner.id,
+        name: name.trim().toUpperCase(),
+        customerName: name.trim().toUpperCase(),
+        color: pal[AppState.calendars.length % pal.length],
+        visible: true
+      };
+      AppState.calendars.push(stage);
+      AppState.activeCalendarId = stage.id;
+      syncAllFromMSProject(`Đã thêm giai đoạn "${stage.name}" vào dự án "${owner.name}"`);
+    });
+    tableBody.appendChild(rowEl);
+
+    const gRow = document.createElement('div');
+    gRow.className = 'msp-gantt-row project-row';
+    gRow.dataset.calId = og.groups[0].cal.id;
+    gRow.style.width = `${totalTimelineWidth}px`;
+    if (pMin && pMax) {
+      const leftPx = diffDaysFromStart(globalMinDate, pMin) * colWidth + 2;
+      const widthPx = Math.max(12, diffDaysInclusive(pMin, pMax) * colWidth - 4);
+      const bar = document.createElement('div');
+      bar.className = 'msp-summary-bar msp-project-bar';
+      bar.style.left = `${leftPx}px`;
+      bar.style.width = `${widthPx}px`;
+      bar.title = `${owner.name}: ${pStartDisp} → ${pEndDisp} (${pLV} ngày làm việc • ${pTT} ngày thực tế)`;
+      const lbl = document.createElement('div');
+      lbl.className = 'msp-summary-label';
+      lbl.textContent = `📁 ${owner.name} (${pLV} ngày LV • ${pTT} ngày TT • ${pProg}%)`;
+      bar.appendChild(lbl);
+      gRow.appendChild(bar);
+    }
+    ganttRowsLayer.appendChild(gRow);
+    currentRowIndex++;
+  };
+
+  ownerGroupsForRender.forEach((og, oIdx) => {
+    renderProjectHeaderRow(og, oIdx);
+    if (AppState.collapsedMspOwners[og.owner.id]) return;
+    og.groups.forEach(pg => {
     const isCollapsed = !!AppState.collapsedProjects[pg.cal.id];
     const startDisp = pg.minStart ? formatShortVNDate(pg.minStart) : '--/--/--';
     const endDisp = pg.maxEnd ? formatShortVNDate(pg.maxEnd) : '--/--/--';
@@ -5516,6 +6020,7 @@ function renderMSProjectView() {
       });
     }
   });
+  });
 
   // Áp dụng độ rộng cột hiện tại & ẩn/hiện cột theo ĐỀ MỤC
   applyMspGridColumnWidths();
@@ -5815,9 +6320,13 @@ function escapeXml(str) {
 // Xuất ra file chuẩn Microsoft Project XML (.xml) mở trực tiếp được trên phần mềm MS Project
 function exportMSProjectXMLFile() {
   normalizeAppState();
-  const visibleCals = AppState.calendars.filter(c => c.visible !== false);
-  const targetCals = visibleCals.length > 0 ? visibleCals : AppState.calendars;
-  const custName = getCurrentCustomerName() || 'GD_HOME_PROJECT';
+  // Xuất đúng phạm vi đang xem trên Timeline, xếp theo Dự án -> Giai đoạn
+  const scopeCals = getMspTargetCalendars();
+  const targetCals = [];
+  AppState.projectOwners.forEach(o => scopeCals.filter(c => c.ownerId === o.id).forEach(c => targetCals.push(c)));
+  scopeCals.forEach(c => { if (!targetCals.includes(c)) targetCals.push(c); });
+  const activeProj = getActiveProject();
+  const custName = (activeProj && activeProj.name) || getCurrentCustomerName() || 'GD_HOME_PROJECT';
 
   let allTasks = [];
   targetCals.forEach(c => {
@@ -5848,8 +6357,10 @@ function exportMSProjectXMLFile() {
   const taskUidMap = new Map();
   {
     let preUid = 1;
+    let preOwner = null;
     targetCals.forEach(cal => {
-      preUid++; // dòng dự án
+      if (cal.ownerId !== preOwner) { preOwner = cal.ownerId; preUid++; } // dòng Dự án
+      preUid++; // dòng Giai đoạn
       AppState.tasks
         .filter(t => t.calendarId === cal.id && t.visibleOnBoard !== false)
         .slice()
@@ -5858,10 +6369,37 @@ function exportMSProjectXMLFile() {
     });
   }
 
+  let lastOwnerId = null;
+  let ownerIdx = 0;
+  let stageIdx = 0;
   targetCals.forEach((cal, cIdx) => {
+    if (cal.ownerId !== lastOwnerId) {
+      lastOwnerId = cal.ownerId;
+      ownerIdx++;
+      stageIdx = 0;
+      const owner = getProjectOfCalendar(cal) || { name: 'DỰ ÁN' };
+      const oTasks = AppState.tasks.filter(t => t.visibleOnBoard !== false && targetCals.some(c => c.ownerId === cal.ownerId && c.id === t.calendarId));
+      const oStart = oTasks.length ? oTasks.reduce((m, t) => (t.startDate < m ? t.startDate : m), oTasks[0].startDate) : projStart;
+      const oEnd = oTasks.length ? oTasks.reduce((m, t) => (t.endDate > m ? t.endDate : m), oTasks[0].endDate) : projEnd;
+      tasksXml += `
+    <Task>
+      <UID>${uidCounter++}</UID>
+      <ID>${idCounter++}</ID>
+      <Name>${escapeXml(owner.name)}</Name>
+      <Type>1</Type>
+      <IsNull>0</IsNull>
+      <WBS>${ownerIdx}</WBS>
+      <OutlineNumber>${ownerIdx}</OutlineNumber>
+      <OutlineLevel>1</OutlineLevel>
+      <Summary>1</Summary>
+      <Start>${oStart}T08:00:00</Start>
+      <Finish>${oEnd}T17:00:00</Finish>
+    </Task>`;
+    }
+    stageIdx++;
     const calUid = uidCounter++;
     const calIdNum = idCounter++;
-    const wbsParent = `${cIdx + 1}`;
+    const wbsParent = `${ownerIdx}.${stageIdx}`;
     const calTasks = AppState.tasks
       .filter(t => t.calendarId === cal.id && t.visibleOnBoard !== false)
       .slice()
@@ -5880,7 +6418,7 @@ function exportMSProjectXMLFile() {
       <IsNull>0</IsNull>
       <WBS>${wbsParent}</WBS>
       <OutlineNumber>${wbsParent}</OutlineNumber>
-      <OutlineLevel>1</OutlineLevel>
+      <OutlineLevel>2</OutlineLevel>
       <Summary>1</Summary>
       <Start>${cStart}T08:00:00</Start>
       <Finish>${cEnd}T17:00:00</Finish>
@@ -5920,7 +6458,7 @@ function exportMSProjectXMLFile() {
       <IsNull>0</IsNull>
       <WBS>${wbsCode}</WBS>
       <OutlineNumber>${wbsCode}</OutlineNumber>
-      <OutlineLevel>2</OutlineLevel>
+      <OutlineLevel>3</OutlineLevel>
       <Summary>0</Summary>
       <Start>${t.startDate}T08:00:00</Start>
       <Finish>${t.endDate}T17:00:00</Finish>
@@ -6014,6 +6552,19 @@ function importMSProjectFile(file) {
 
       let currentCal = null;
       let colorIdx = 0;
+      // File 3 cấp (Dự án -> Giai đoạn -> Việc) hay 2 cấp (Giai đoạn -> Việc)?
+      const isThreeLevel = taskNodes.some(n => {
+        const sEl = n.getElementsByTagName('Summary')[0];
+        const lEl = n.getElementsByTagName('OutlineLevel')[0];
+        return sEl && sEl.textContent.trim() === '1' && lEl && lEl.textContent.trim() === '2';
+      });
+      const importedOwners = [];
+      let currentOwner = null;
+      const ensureOwner = (name) => {
+        currentOwner = { id: 'owner_imp_' + Date.now() + '_' + importedOwners.length, name: (name || defaultProjName || 'DỰ ÁN').toUpperCase(), collapsed: false };
+        importedOwners.push(currentOwner);
+        return currentOwner;
+      };
 
       const getTagText = (parent, tag) => {
         const el = parent.getElementsByTagName(tag)[0];
@@ -6046,9 +6597,15 @@ function importMSProjectFile(file) {
           if (/^#[0-9a-fA-F]{6}$/.test(val)) customColor = val;
         });
 
-        if (isSummary && outlineLevel === 1) {
-          // Đây là dòng Dự án cha (Summary Row)
+        if (isThreeLevel && isSummary && outlineLevel === 1) {
+          // Dòng DỰ ÁN (cấp 1)
+          ensureOwner(name);
+          currentCal = null;
+        } else if (isSummary && outlineLevel === (isThreeLevel ? 2 : 1)) {
+          // Dòng GIAI ĐOẠN
+          if (!currentOwner) ensureOwner(defaultProjName);
           currentCal = {
+            ownerId: currentOwner.id,
             id: 'cal_imp_' + Date.now() + '_' + importedCalendars.length,
             name: name.toUpperCase(),
             customerName: name.toUpperCase(),
@@ -6058,7 +6615,9 @@ function importMSProjectFile(file) {
           importedCalendars.push(currentCal);
         } else if (!isSummary) {
           if (!currentCal) {
+            if (!currentOwner) ensureOwner(defaultProjName);
             currentCal = {
+              ownerId: currentOwner.id,
               id: 'cal_imp_' + Date.now() + '_0',
               name: defaultProjName || 'DỰ ÁN MS PROJECT',
               customerName: defaultProjName || 'DỰ ÁN MS PROJECT',
@@ -6129,9 +6688,11 @@ function importMSProjectFile(file) {
       );
 
       if (replaceMode) {
+        AppState.projectOwners = importedOwners.length ? importedOwners : AppState.projectOwners;
         AppState.calendars = importedCalendars;
         AppState.tasks = importedTasks;
       } else {
+        AppState.projectOwners.push(...importedOwners);
         AppState.calendars.push(...importedCalendars);
         AppState.tasks.push(...importedTasks);
       }
@@ -6279,18 +6840,16 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
       span.style.fontSize = '11.5px';
       span.style.color = oEl.value === '100' ? '#15803d' : '#1e293b';
     } else if (cEl.id === 'msp-title-prefix-input') {
-      span.textContent = oEl.value || 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
+      span.textContent = oEl.value || ''; // Xuất đúng tiêu đề đang gõ, không tự chèn thêm
       span.style.color = '#ffffff';
       span.style.fontSize = '18px';
       span.style.fontWeight = '800';
       span.style.textTransform = 'uppercase';
       span.style.marginRight = '6px';
-    } else if (cEl.id === 'msp-customer-input') {
-      span.textContent = oEl.value || '';
-      span.style.color = '#ffffff';
-      span.style.fontSize = '18px';
-      span.style.fontWeight = '800';
-      span.style.textTransform = 'uppercase';
+    } else if (cEl.id === 'msp-customer-input' || cEl.type === 'hidden') {
+      // Ô ẩn (tên khách hàng) -> KHÔNG đưa vào ảnh (trước đây bị tự chèn thêm sau tiêu đề)
+      cEl.remove();
+      return;
     } else if (cEl.id === 'msp-month-input') {
       span.textContent = oEl.value || '';
       span.style.color = '#ffffff';
@@ -6398,5 +6957,5 @@ window.addEventListener('DOMContentLoaded', () => {
       if (!isOfflineFileMode()) flushSaveToBackend();
     });
   }
-  syncWithBackend();
+  bootstrapAuthAndData();
 });

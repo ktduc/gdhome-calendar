@@ -70,6 +70,7 @@
       <button title="Thêm việc" class="btn hdr-p3 btn-outline" id="btn-add-task">
         <i data-lucide="plus"></i><span class="btn-label">Thêm việc</span>
       </button>
+      <button type="button" class="btn btn-outline user-chip" id="btn-user-account" style="display:none;" title="Tài khoản"></button>
       <button class="btn btn-outline icon-only-btn" id="btn-project-settings" title="Cài đặt dự án & Logo">
         <i data-lucide="settings"></i><span class="btn-label"></span>
       </button>
@@ -119,12 +120,12 @@
       <!-- 1. DỰ ÁN -->
       <div class="sidebar-section sb-collapsible" data-sb="projects">
         <div class="sidebar-section-header sb-head">
-          <span class="sb-title">📁 Dự án</span>
+          <span class="sb-title">📁 Dự án & giai đoạn</span>
           <div class="sb-head-actions">
-            <button type="button" class="icon-btn btn-sm-icon" id="btn-add-project-owner" title="Thêm nhóm 'Dự án của ...' cho người khác">
+            <button type="button" class="icon-btn btn-sm-icon" id="btn-add-project-owner" title="Tạo DỰ ÁN mới">
               <i data-lucide="folder-plus"></i>
             </button>
-            <button type="button" class="icon-btn btn-sm-icon" id="btn-open-new-calendar-modal" title="Tạo dự án mới">
+            <button type="button" class="icon-btn btn-sm-icon" id="btn-open-new-calendar-modal" title="Thêm GIAI ĐOẠN vào dự án đang chọn">
               <i data-lucide="plus"></i>
             </button>
           </div>
@@ -138,8 +139,8 @@
             </div>
           </div>
           <div class="calendar-list-container" id="calendar-list-container"></div>
-          <button class="sb-danger-link" id="btn-clear-active-calendar" title="Xóa toàn bộ các thanh công việc thuộc dự án đang chọn">
-            <i data-lucide="eraser"></i> Xóa hết việc của dự án đang chọn
+          <button class="sb-danger-link" id="btn-clear-active-calendar" title="Xóa toàn bộ các thanh công việc thuộc giai đoạn đang chọn">
+            <i data-lucide="eraser"></i> Xóa hết việc của giai đoạn đang chọn
           </button>
         </div>
       </div>
@@ -151,8 +152,9 @@
         </div>
         <div class="sb-body">
           <select id="msp-scope-select" class="form-select msp-mini-select" title="Phạm vi dự án trên Timeline">
+            <option value="active-project">Chỉ dự án đang chọn</option>
             <option value="all-visible">Tất cả dự án đang bật</option>
-            <option value="active-only">Chỉ dự án đang chọn</option>
+            <option value="active-only">Chỉ giai đoạn đang chọn</option>
           </select>
           <div class="sb-row-label">Rộng cột ngày</div>
           <div class="msp-zoom-btns sb-seg-btns" id="msp-col-zoom-btns">
@@ -461,13 +463,12 @@
         <form id="calendar-category-form">
           <input type="hidden" id="cal-cat-id">
           <div class="form-group">
-            <label for="cal-cat-owner">Thuộc nhóm người phụ trách ("Dự án của ...")</label>
+            <label for="cal-cat-owner">Thuộc dự án</label>
             <select id="cal-cat-owner" class="form-select"></select>
           </div>
           <div class="form-group">
-            <label for="cal-cat-name">Tên khách hàng / Dự án <span class="required">*</span></label>
-            <input type="text" id="cal-cat-name" required placeholder="Ví dụ: A DŨNG VŨ YÊN - HẢI PHÒNG">
-            <small class="helper-text">Tên này sẽ tự động đồng bộ lên tiêu đề và hậu tố các bước (3D, CHỈNH SỬA 3D, HSKT)</small>
+            <label for="cal-cat-name">Tên giai đoạn <span class="required">*</span></label>
+            <input type="text" id="cal-cat-name" required placeholder="Ví dụ: THIẾT KẾ, THI CÔNG PHẦN THÔ, HOÀN THIỆN, NỘI THẤT">
           </div>
           <div class="form-group">
             <label>Màu đại diện (2 hàng 20 màu theo Palette đang chọn)</label>
@@ -515,7 +516,7 @@
           <input type="hidden" id="task-id">
           
           <div class="form-group">
-            <label for="task-calendar-select">Thuộc Lịch Dự Án</label>
+            <label for="task-calendar-select">Thuộc giai đoạn (của dự án đang chọn)</label>
             <select id="task-calendar-select" class="form-select"></select>
           </div>
 
@@ -762,21 +763,28 @@
     <!-- Nút thêm giai đoạn mới không liền nhau vào chính dự án đang chọn -->
     <div style="padding: 0 16px 8px;">
       <button type="button" class="btn btn-outline btn-sm btn-full" id="btn-popover-append-same-project" style="font-weight:700; color:#1e40af; border-color:#93c5fd; background:#eff6ff; justify-content:center;">
-        ➕ Thêm giai đoạn này vào chính dự án đang chọn
+        ➕ Thêm khoảng ngày này vào giai đoạn đang chọn
       </button>
     </div>
 
     <div class="popover-divider">
-      <span>Hoặc nhập tên thủ công</span>
+      <span>Hoặc chọn / gõ tên công việc</span>
     </div>
 
     <div class="popover-manual-box">
-      <input type="text" id="popover-task-title" placeholder="Nhập tiêu đề khác (Enter để lưu)..." autocomplete="off">
+      <input type="text" id="popover-task-title" placeholder="Gõ tên việc hoặc chọn bên dưới (Enter để lưu)..." autocomplete="off">
+    </div>
+
+    <!-- THƯ VIỆN TIÊU ĐỀ CÔNG VIỆC: bấm 1 lần là tạo việc; gõ để lọc; lưu thêm vào "Của tôi" -->
+    <div class="title-lib" id="title-lib">
+      <div class="title-lib-tabs" id="title-lib-tabs"></div>
+      <div class="title-lib-list" id="title-lib-list"></div>
+      <button type="button" class="title-lib-add" id="btn-title-lib-add" title="Lưu tiêu đề đang gõ vào nhóm &quot;Của tôi&quot; để lần sau chọn nhanh">＋ Lưu tiêu đề đang gõ vào "Của tôi"</button>
     </div>
 
     <div class="popover-body">
       <div class="popover-cal-target">
-        <span>Khách hàng / Lịch:</span>
+        <span>Giai đoạn:</span>
         <strong id="popover-target-cal-name" style="color:#1a73e8;">A DŨNG VŨ YÊN - HẢI PHÒNG</strong>
       </div>
       <div class="popover-date-badge">
@@ -826,6 +834,17 @@
 
   <!-- Tooltip nổi hiển thị khi đang kéo 2 đầu mút hoặc quét ngày -->
   <div id="floating-action-tooltip" class="floating-action-tooltip"></div>
+
+  <!-- MÀN HÌNH ĐĂNG NHẬP GMAIL (chỉ hiện khi server bật GOOGLE_CLIENT_ID) -->
+  <div class="login-overlay" id="login-overlay">
+    <div class="login-card">
+      <img src="gdhome-logo.png" alt="GD HOME" class="login-logo">
+      <h2>Lịch Tiến Độ GD HOME</h2>
+      <p>Đăng nhập bằng tài khoản Gmail để xem và lưu các dự án của bạn.<br>Mỗi tài khoản có dữ liệu riêng, dùng được trên mọi máy.</p>
+      <div id="google-signin-btn" class="google-signin-btn"></div>
+      <div class="login-msg" id="login-overlay-msg"></div>
+    </div>
+  </div>
 
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
   <script src="holidays-data.js"></script>

@@ -3610,3 +3610,65 @@ body {
 .sidebar-compact .owner-mini-btn { width: 18px; height: 18px; }
 .sidebar-compact .project-owner-actions { display: none; }
 .sidebar-compact .project-owner-header:hover .project-owner-actions { display: flex; }
+/* Ngày mùng 1: nhãn đỏ trên nền đỏ rất nhạt, tách khỏi số Âm lịch (rõ cả khi xuất ảnh) */
+.day-month-label.is-month-first {
+  color: #b91c1c !important;
+  font-size: 14px !important;
+  font-weight: 800;
+  background: #fee2e2;
+  border-radius: 10px;
+  padding: 1px 8px;
+  margin-right: 4px;
+  line-height: 1.35;
+  white-space: nowrap;
+}
+.msp-gantt-day-cell.is-month-first { background-color: #fef2f2; }
+
+/* ===== Dòng DỰ ÁN (cấp 1) trên Timeline ===== */
+.msp-tr.project-row { background: #1e293b; color: #fff; font-weight: 800; }
+.msp-tr.project-row .msp-td { background: #1e293b; color: #f8fafc; border-color: #334155; }
+.msp-tr.project-row .col-wbs { color: #f8fafc; font-size: 12px; justify-content: center; }
+.msp-tr.project-row .msp-project-toggle { color: #f8fafc; }
+.msp-tr.project-row .msp-summary-dur-work { color: #fca5a5; }
+.msp-tr.project-row .msp-summary-dur-act { color: #cbd5e1; }
+.msp-tr.project-row .msp-date-display-text { color: #e2e8f0; font-weight: 700; }
+.msp-project-icon { font-size: 13px; margin: 0 4px 0 2px; }
+.msp-inline-owner-input {
+  flex: 1; min-width: 0; border: 1px solid transparent; background: transparent; color: #fff;
+  font: inherit; font-size: 13.5px; font-weight: 900; text-transform: uppercase; padding: 2px 4px; border-radius: 4px;
+}
+.msp-inline-owner-input:hover, .msp-inline-owner-input:focus { border-color: #475569; background: #0f172a; outline: none; }
+.msp-add-stage-btn { background: #fef2f2 !important; color: #b91c1c !important; }
+.msp-gantt-row.project-row { background: rgba(30, 41, 59, 0.06); }
+.msp-summary-bar.msp-project-bar { background: #0f172a; height: 9px; }
+.msp-summary-bar.msp-project-bar .msp-summary-label { color: #0f172a; font-weight: 900; }
+.msp-rows-mini .msp-inline-owner-input { font-size: 12px; padding: 0 4px; }
+
+/* ===== Bảng tạo nhanh: thư viện tiêu đề ===== */
+.quick-create-popover { width: 400px; max-height: calc(100vh - 24px); overflow-y: auto; }
+.title-lib { margin: 6px 16px 4px; display: flex; flex-direction: column; gap: 6px; }
+.title-lib-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.title-lib-tab { border: 1px solid #e2e8f0; background: #f8fafc; color: #475569; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 12px; cursor: pointer; }
+.title-lib-tab.active { background: #1e293b; color: #fff; border-color: #1e293b; }
+.title-lib-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 150px; overflow-y: auto; padding: 2px 0; }
+.title-lib-chip { border: 1px solid #cbd5e1; background: #fff; color: #1e293b; font-size: 11.5px; padding: 4px 8px; border-radius: 6px; cursor: pointer; text-align: left; line-height: 1.25; }
+.title-lib-chip:hover { background: #eff6ff; border-color: #60a5fa; color: #1d4ed8; }
+.title-lib-chip.is-mine { border-color: #fbbf24; background: #fffbeb; }
+.title-lib-empty { font-size: 11px; color: #64748b; padding: 4px 2px; }
+.title-lib-add { align-self: flex-start; border: 1px dashed #94a3b8; background: transparent; color: #475569; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; }
+.title-lib-add:hover { border-color: #2563eb; color: #2563eb; }
+
+/* ===== Đăng nhập Gmail ===== */
+.login-overlay { position: fixed; inset: 0; z-index: 20000; background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; padding: 16px; }
+.login-overlay.active { display: flex; }
+.login-card { background: #fff; border-radius: 16px; padding: 28px 28px 22px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.25); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.login-logo { height: 44px; object-fit: contain; }
+.login-card h2 { margin: 2px 0 0; font-size: 20px; color: #0f172a; }
+.login-card p { margin: 0 0 6px; font-size: 13px; color: #475569; line-height: 1.5; }
+.google-signin-btn { min-height: 44px; display: flex; justify-content: center; }
+.login-msg { font-size: 12.5px; color: #b91c1c; min-height: 18px; }
+.user-chip { gap: 6px !important; padding: 4px 10px 4px 4px !important; border-radius: 20px !important; max-width: 260px; }
+.user-chip-avatar { width: 26px; height: 26px; border-radius: 50%; background: #1e293b; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; overflow: hidden; flex-shrink: 0; }
+.user-chip-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-chip-email { overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+@media (max-width: 1750px) { .user-chip .user-chip-email { display: none; } .user-chip { padding: 4px !important; } }
