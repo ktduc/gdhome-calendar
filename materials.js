@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { MaterialAssets, r2 } = require('./material-assets');
 
 function fail(status, message) {
   throw Object.assign(new Error(message), { status });
@@ -48,13 +49,21 @@ class MaterialStore {
   }
 }
 
-async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res }) {
+async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res, dataDir }) {
   const materials = new MaterialStore(store, dataKey);
+  const assets = new MaterialAssets(dataDir, materials.key);
+  if (url === '/api/materials/assets' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    return sendJson(res, 200, { name: await assets.save(body.image) });
+  }
+  if (url.startsWith('/api/materials/assets/') && req.method === 'GET') {
+    return assets.send(res, url.split('/').at(-1));
+  }
   const schedule = await store.get(dataKey) || {};
   const projects = (schedule.projectOwners || []).map(({ id, name }) => ({ id, name }));
   if (url === '/api/materials' && req.method === 'GET') {
     const { _version, sheets, presets, library, settings } = await materials.get();
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects });
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2 });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);
@@ -65,7 +74,13 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
       const index = sheet.id ? data.sheets.findIndex(s => s.id === sheet.id) : -1;
       if (sheet.id && index < 0) fail(404, 'Không tìm thấy bảng.');
       if (!projects.some(p => p.id === sheet.projectId) && data.sheets[index]?.projectId !== sheet.projectId) fail(400, 'Chọn dự án Tiến độ trước.');
-      const updated = { id: sheet.id || id(), projectId: sheet.projectId, title: sheet.title.trim().slice(0, 200), groups: sheet.groups };
+      const updated = { id: sheet.id || id(), projectId: sheet.projectId, title: sheet.title.trim().slice(0, 200), groups: sheet.groups, meta: sheet.meta || {} };
+      for (const [key, values] of Object.entries(sheet.presets || {})) {
+        if (!['room','unit','size','finish','color','supplier'].includes(key) || !Array.isArray(values)) continue;
+        const merged = new Map((data.presets[key] || []).map(v => [v.toLocaleLowerCase(),v]));
+        for (const value of values) if (typeof value === 'string' && value.trim()) merged.set(value.trim().toLocaleLowerCase(), value.trim().slice(0,200));
+        data.presets[key] = [...merged.values()].slice(-250);
+      }
       if (index < 0) data.sheets.push(updated);
       else data.sheets[index] = updated;
       return { sheet: updated };

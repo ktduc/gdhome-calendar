@@ -21,7 +21,7 @@ if exist "%BACKUP_DIR%" (
 echo [1/3] Dang gom cac chinh sua moi nhat...
 REM KHONG dua data.json len GitHub nua: du lieu tren web duoc luu rieng (GitHub Gist),
 REM cap nhat code se KHONG ghi de du lieu nguoi khac dang dung.
-"%GIT_EXE%" add index.html style.css app.js scheduler.js holidays-data.js server.js integrations.js package.json .gitignore tests CLAUDE_HANDOVER.md HUONG-DAN-CAI-DAT.md HUONG-DAN-NOTION-AI.md materials.js tools.html tools.css tools.js chot-ma.html HUONG-DAN-R2.md
+"%GIT_EXE%" add index.html style.css app.js scheduler.js holidays-data.js server.js integrations.js package.json .gitignore tests CLAUDE_HANDOVER.md HUONG-DAN-CAI-DAT.md HUONG-DAN-NOTION-AI.md materials.js tools.html tools.css tools.js chot-ma.html material-template.js material-editor.js material-assets.js material-image-ui.js HUONG-DAN-R2.md
 "%GIT_EXE%" commit -m "Auto update GD HOME Schedule & MS Project Timeline" >nul 2>&1
 
 echo [2/3] Dang day ban cap nhat len GitHub (ktduc/gdhome-calendar)...

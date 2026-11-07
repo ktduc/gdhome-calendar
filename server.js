@@ -54,7 +54,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'tools.css', 'tools.js', 'chot-ma.html']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-editor.js', 'material-image-ui.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -440,7 +440,7 @@ async function handleApi(req, res, urlPath) {
   }
 
   if (urlPath === '/api/materials' || urlPath.startsWith('/api/materials/')) {
-    return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson });
+    return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR });
   }
 
   // Người mới đăng nhập: chép dữ liệu chung cũ (data.json) vào tài khoản của mình
