@@ -131,3 +131,35 @@ test('Đổi loại liên kết FS -> SS', () => {
   assert.strictEqual(B.predecessors[0].type, 'SS');
   assert.strictEqual(B.predecessors[0].lag, 2);
 });
+
+test('Tự nối: FS với việc cùng giai đoạn kết thúc gần nhất trước đó', () => {
+  cfg();
+  const A = { id: 'A', calendarId: 'c1', startDate: '2026-11-02', endDate: '2026-11-04', predecessors: [] };
+  const B = { id: 'B', calendarId: 'c1', startDate: '2026-11-02', endDate: '2026-11-05', predecessors: [] };
+  const X = { id: 'X', calendarId: 'c2', startDate: '2026-11-02', endDate: '2026-11-06', predecessors: [] };
+  const N = { id: 'N', calendarId: 'c1', startDate: '2026-11-06', endDate: '2026-11-07', predecessors: [] };
+  const link = S.autoLinkTask(N, [A, B, X, N]);
+  assert.deepStrictEqual(link, { id: 'B', type: 'FS', lag: 0 });
+});
+
+test('Tự nối: SS khi bắt đầu trong lúc việc khác đang chạy; không nối khi cách quá xa', () => {
+  cfg();
+  const A = { id: 'A', calendarId: 'c1', startDate: '2026-11-02', endDate: '2026-11-10', predecessors: [] };
+  const N = { id: 'N', calendarId: 'c1', startDate: '2026-11-04', endDate: '2026-11-05', predecessors: [] };
+  assert.deepStrictEqual(S.autoLinkTask(N, [A, N]), { id: 'A', type: 'SS', lag: 2 });
+  const F = { id: 'F', calendarId: 'c1', startDate: '2026-12-15', endDate: '2026-12-16', predecessors: [] };
+  assert.strictEqual(S.autoLinkTask(F, [A, N, F]), null);
+});
+
+test('Tự nối cả giai đoạn theo thứ tự ngày, giữ nguyên liên kết có sẵn', () => {
+  cfg();
+  const A = { id: 'A', calendarId: 'c1', startDate: '2026-11-02', endDate: '2026-11-03' };
+  const B = { id: 'B', calendarId: 'c1', startDate: '2026-11-04', endDate: '2026-11-05' };
+  const C = { id: 'C', calendarId: 'c1', startDate: '2026-11-04', endDate: '2026-11-06' };
+  const D = { id: 'D', calendarId: 'c1', startDate: '2026-11-09', endDate: '2026-11-09', predecessors: [{ id: 'A', type: 'FS', lag: 3 }] };
+  const tasks = [D, C, B, A];
+  assert.strictEqual(S.autoLinkStage('c1', tasks), 2);
+  assert.deepStrictEqual(B.predecessors, [{ id: 'A', type: 'FS', lag: 0 }]);
+  assert.deepStrictEqual(C.predecessors, [{ id: 'A', type: 'FS', lag: 0 }]);
+  assert.strictEqual(D.predecessors.length, 1);
+});

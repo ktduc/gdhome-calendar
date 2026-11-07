@@ -338,6 +338,60 @@ function inferMissingPredecessors(tasks) {
   return inferred;
 }
 
+// TỰ NỐI LIÊN KẾT cho 1 việc (giống cách AI đề xuất):
+//  - Ưu tiên FS: việc cùng giai đoạn kết thúc gần nhất TRƯỚC ngày bắt đầu (cách ≤ maxGap ngày làm việc)
+//  - Nếu không có: SS với việc đang chạy / bắt đầu cùng ngày (bắt đầu muộn nhất nhưng ≤ ngày bắt đầu)
+// Trả về link đã thêm hoặc null. Không tạo vòng lặp, không dời ngày.
+function autoLinkTask(task, tasks, opts = {}) {
+  if (!task || !task.calendarId || !task.startDate) return null;
+  const list = _schedTasks(tasks);
+  if (!Array.isArray(task.predecessors)) task.predecessors = [];
+  if (task.predecessors.length) return null;
+  const maxGap = typeof opts.maxGap === 'number' ? opts.maxGap : 7;
+  const allowed = opts.candidateIds ? new Set(opts.candidateIds) : null;
+  const skip = task.skipSundays !== false;
+  const cands = list.filter(c => c !== task && c.id !== task.id && c.calendarId === task.calendarId &&
+    c.visibleOnBoard !== false && c.startDate && c.endDate && (!allowed || allowed.has(c.id)) &&
+    !dependsOn(c.id, task.id, list));
+  let best = null;
+  cands.forEach(c => {
+    if (c.endDate >= task.startDate) return;
+    if (!best || c.endDate > best.endDate || (c.endDate === best.endDate && c.startDate >= best.startDate)) best = c;
+  });
+  if (best) {
+    const lag = computeLinkLag(best, task, 'FS');
+    if (lag >= 0 && lag <= maxGap) {
+      const link = { id: best.id, type: 'FS', lag };
+      task.predecessors.push(link);
+      return link;
+    }
+  }
+  let ss = null;
+  cands.forEach(c => {
+    if (c.startDate > task.startDate || c.endDate < task.startDate) return; // phải đang chạy vào ngày bắt đầu
+    if (!ss || c.startDate > ss.startDate) ss = c;
+  });
+  if (ss) {
+    const lag = Math.max(0, getSignedWorkingDaysGap(shiftDateByWorkingDays(ss.startDate, 0, skip), task.startDate, skip));
+    const link = { id: ss.id, type: 'SS', lag };
+    task.predecessors.push(link);
+    return link;
+  }
+  return null;
+}
+
+// Tự nối các việc CHƯA có liên kết trong 1 giai đoạn (theo thứ tự ngày bắt đầu). Trả về số liên kết đã thêm.
+function autoLinkStage(calendarId, tasks, opts = {}) {
+  const list = _schedTasks(tasks).filter(t => t.calendarId === calendarId && t.visibleOnBoard !== false && t.startDate);
+  const sorted = list.slice().sort((a, b) => (a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : (a.endDate < b.endDate ? -1 : 1)));
+  let added = 0;
+  sorted.forEach((t, i) => {
+    if (i === 0 || (Array.isArray(t.predecessors) && t.predecessors.length)) return;
+    if (autoLinkTask(t, tasks, Object.assign({}, opts, { candidateIds: sorted.slice(0, i).map(x => x.id) }))) added++;
+  });
+  return added;
+}
+
 // Xoá các liên kết trỏ tới việc không còn tồn tại
 function cleanupDanglingLinks(tasks) {
   const list = _schedTasks(tasks);
@@ -355,6 +409,6 @@ if (typeof module !== 'undefined' && module.exports) {
     getDayOverride, isDateDayOff, calculateTaskDays, countWorkingDays, shiftDateByWorkingDays,
     getSignedWorkingDaysGap, computeEndDateByWorkingDays, getNextWorkingDateStr,
     getLinkTypeOf, getLinkBaseDate, getLinkedStartDate, computeLinkLag, refreshAllLinkLags, dependsOn, addPredecessorLink,
-    removePredecessorLink, propagateLinkedTasks, inferMissingPredecessors, cleanupDanglingLinks
+    removePredecessorLink, propagateLinkedTasks, inferMissingPredecessors, cleanupDanglingLinks, autoLinkTask, autoLinkStage
   };
 }

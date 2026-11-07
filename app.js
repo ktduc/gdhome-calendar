@@ -100,6 +100,7 @@ function getDefaultLeftSidebarSettings() {
     exportWatermark: true,
     colorPaletteTheme: 'default',
     autoCascadeShift: false,
+    autoLinkNewTasks: true,
     showVnHolidays: false,
     showLunarDates: true,
     daysOffConfig: {
@@ -152,6 +153,7 @@ const AppState = {
   exportWatermark: _initDefaults.exportWatermark,
   colorPaletteTheme: _initDefaults.colorPaletteTheme,
   autoCascadeShift: _initDefaults.autoCascadeShift,
+  autoLinkNewTasks: _initDefaults.autoLinkNewTasks,
   mspCustomTitlePrefix: 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -', // Tiêu đề tự gõ trên thanh Timeline MS Project
   selectedTaskIds: [], // Danh sách các ID công việc đang được tick chọn nhiều để kéo di chuyển đồng thời
   collapsedProjects: {},
@@ -848,6 +850,7 @@ function resetStateToEmptyGuest() {
   AppState.exportWatermark = def.exportWatermark;
   AppState.colorPaletteTheme = def.colorPaletteTheme;
   AppState.autoCascadeShift = def.autoCascadeShift;
+  AppState.autoLinkNewTasks = def.autoLinkNewTasks;
   AppState.showVnHolidays = def.showVnHolidays;
   AppState.showLunarDates = def.showLunarDates;
   AppState.daysOffConfig = { ...def.daysOffConfig, overrides: {} };
@@ -1190,6 +1193,7 @@ function buildServerPayload() {
     exportWatermark: AppState.exportWatermark,
     colorPaletteTheme: AppState.colorPaletteTheme,
     autoCascadeShift: AppState.autoCascadeShift,
+    autoLinkNewTasks: AppState.autoLinkNewTasks,
     mspCustomTitlePrefix: AppState.mspCustomTitlePrefix,
     mspColWidths: AppState.mspColWidths,
     mspVisibility: AppState.mspVisibility,
@@ -1228,6 +1232,7 @@ function applyServerData(data) {
   if (data.exportWatermark !== undefined) AppState.exportWatermark = data.exportWatermark;
   if (data.colorPaletteTheme) AppState.colorPaletteTheme = data.colorPaletteTheme;
   if (data.autoCascadeShift !== undefined) AppState.autoCascadeShift = data.autoCascadeShift;
+  if (data.autoLinkNewTasks !== undefined) AppState.autoLinkNewTasks = data.autoLinkNewTasks;
   if (data.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = data.mspCustomTitlePrefix;
   if (data.mspColWidths && typeof data.mspColWidths === 'object') {
     AppState.mspColWidths = Object.assign({}, AppState.mspColWidths, data.mspColWidths);
@@ -1372,8 +1377,26 @@ async function syncWithBackend() {
 }
 
 // Gọi sau MỖI thay đổi dữ liệu: chuẩn hoá + chụp Undo + lưu trình duyệt + hẹn gửi server
+// Tự nối liên kết cho việc VỪA TẠO bằng tay (giống AI đề xuất). Bỏ qua việc nhập file / AI / Notion / nhân bản.
+const _autoLinkSeen = new Set();
+function autoLinkFreshTasks() {
+  if (AppState.autoLinkNewTasks === false || typeof autoLinkTask !== 'function') return 0;
+  const now = Date.now();
+  const fresh = AppState.tasks.filter(t => {
+    if (_autoLinkSeen.has(t.id)) return false;
+    const m = /^task_(\d{13})(?:_|$)/.exec(String(t.id));
+    return m && now - Number(m[1]) < 60000 && !t.notionPageId && (!Array.isArray(t.predecessors) || !t.predecessors.length);
+  });
+  AppState.tasks.forEach(t => _autoLinkSeen.add(t.id));
+  if (!fresh.length || fresh.length > 3) return 0; // tạo hàng loạt -> không tự nối
+  let n = 0;
+  fresh.forEach(t => { if (autoLinkTask(t, AppState.tasks)) n++; });
+  return n;
+}
+
 function saveToBackend() {
   normalizeAppState();
+  autoLinkFreshTasks();
   if (typeof refreshAllLinkLags === 'function') refreshAllLinkLags(AppState.tasks);
   snapshotState();
   if (_guestMode) {
@@ -1510,6 +1533,8 @@ function updateUIElements() {
   if (lunarToggle) lunarToggle.checked = AppState.showLunarDates !== false;
   const cascadeToggle = document.getElementById('toggle-cascade-shift');
   if (cascadeToggle) cascadeToggle.checked = !!AppState.autoCascadeShift;
+  const autoLinkToggle = document.getElementById('toggle-auto-link');
+  if (autoLinkToggle) autoLinkToggle.checked = AppState.autoLinkNewTasks !== false;
 
   const scopeSelect = document.getElementById('msp-scope-select');
   if (scopeSelect) {
@@ -1616,6 +1641,7 @@ function saveToStorage() {
     exportWatermark: AppState.exportWatermark,
     colorPaletteTheme: AppState.colorPaletteTheme,
     autoCascadeShift: AppState.autoCascadeShift,
+    autoLinkNewTasks: AppState.autoLinkNewTasks,
     mspCustomTitlePrefix: AppState.mspCustomTitlePrefix,
     mspColWidths: AppState.mspColWidths,
     mspVisibility: AppState.mspVisibility,
@@ -1662,6 +1688,7 @@ function loadFromStorage() {
       if (parsed.exportWatermark !== undefined) AppState.exportWatermark = parsed.exportWatermark;
       if (parsed.colorPaletteTheme) AppState.colorPaletteTheme = parsed.colorPaletteTheme;
       if (parsed.autoCascadeShift !== undefined) AppState.autoCascadeShift = parsed.autoCascadeShift;
+      if (parsed.autoLinkNewTasks !== undefined) AppState.autoLinkNewTasks = parsed.autoLinkNewTasks;
       if (parsed.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = parsed.mspCustomTitlePrefix;
       if (parsed.mspColWidths) AppState.mspColWidths = Object.assign(AppState.mspColWidths, parsed.mspColWidths);
       if (parsed.mspVisibility) AppState.mspVisibility = Object.assign(AppState.mspVisibility, parsed.mspVisibility);
@@ -8676,3 +8703,25 @@ function setupIntegrationsUI() {
   if (dpSel) dpSel.addEventListener('change', () => saveIntegrationSettings({ notionDateProp: dpSel.value }, 'notion-conn-msg'));
 }
 window.addEventListener('DOMContentLoaded', setupIntegrationsUI);
+
+// Tuỳ chọn tự nối liên kết + nút nối các việc cũ chưa nối
+window.addEventListener('DOMContentLoaded', () => {
+  const tg = document.getElementById('toggle-auto-link');
+  if (tg) {
+    tg.checked = AppState.autoLinkNewTasks !== false;
+    tg.addEventListener('change', () => {
+      AppState.autoLinkNewTasks = tg.checked;
+      saveToBackend();
+      showToast(tg.checked ? 'Việc mới tạo sẽ tự nối với việc trước trong cùng giai đoạn' : 'Đã tắt tự nối việc mới');
+    });
+  }
+  const btn = document.getElementById('btn-auto-link-stages');
+  if (btn) btn.addEventListener('click', () => {
+    const timelineOn = !!document.querySelector('.msp-split-workspace') && !!document.querySelector('.msp-split-workspace').offsetParent;
+    const cals = timelineOn && typeof getMspTargetCalendars === 'function' ? getMspTargetCalendars() : [getActiveCalendar()].filter(Boolean);
+    let n = 0;
+    cals.forEach(c => { n += autoLinkStage(c.id, AppState.tasks); });
+    if (!n) { showToast('Không có việc nào cần nối thêm (các việc đã có liên kết hoặc cách nhau quá xa)'); return; }
+    syncAllFromMSProject(`🔗 Đã tự nối ${n} liên kết trong ${cals.length} giai đoạn (Ctrl+Z để hoàn tác)`);
+  });
+});
