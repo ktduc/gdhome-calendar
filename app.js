@@ -3840,9 +3840,9 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
       }
 
       if (mode === 'clipboard') {
-        copyCanvasToClipboard(canvas);
+        copyCanvasToClipboard(canvas, { watermark: AppState.exportWatermark !== false, notify: showToast });
       } else {
-        downloadCanvas(canvas, `Bang_Tien_Do_${firstD}_den_${lastD}.png`);
+        downloadCanvas(canvas, `Bang_Tien_Do_${firstD}_den_${lastD}.png`, AppState.exportWatermark !== false);
         showToast('Đã tải xuống file ảnh PNG thành công!');
       }
     }).catch(err => {
@@ -3857,84 +3857,6 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
 }
 
 // Sọc chéo chìm mờ phủ toàn bộ ảnh (chống chỉnh sửa / cắt ghép)
-function applyAntiEditWatermark(canvas) {
-  if (!canvas || canvas.__gdWatermarked) return canvas;
-  if (AppState.exportWatermark === false) return canvas;
-  const w = canvas.width;
-  const h = canvas.height;
-  if (!w || !h) return canvas;
-
-  // Sao lưu hình ảnh gốc sang canvas tạm rồi reset kích thước canvas chính
-  // để xoá sạch mọi vùng cắt (clip path) / ma trận biến đổi (transform) mà html2canvas để lại!
-  if (typeof document !== 'undefined') {
-    const tmp = document.createElement('canvas');
-    tmp.width = w;
-    tmp.height = h;
-    const tmpCtx = tmp.getContext('2d');
-    if (tmpCtx) {
-      tmpCtx.drawImage(canvas, 0, 0);
-      canvas.width = w;
-      canvas.height = h;
-      const freshCtx = canvas.getContext('2d');
-      if (freshCtx) freshCtx.drawImage(tmp, 0, 0);
-    }
-  }
-
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return canvas;
-  const unit = Math.max(1, Math.round(w / 1400)); // ảnh 2x -> nét & khoảng cách gấp đôi
-  ctx.save();
-  ctx.globalCompositeOperation = 'source-over';
-  // Sọc chéo 1 chiều duy nhất: từ PHẢI sang TRÁI, trên xuống dưới ( / ).
-  // Nét mảnh nhất có thể (1px), xếp rất dày (cách ~3px) và rất mờ -> như lớp vân chìm phủ toàn ảnh.
-  ctx.globalAlpha = 0.035;
-  ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1.2; // dày hơn ~20%
-  ctx.lineCap = 'butt';
-  const gap = 3.45 * unit; // thưa hơn 15%
-  ctx.beginPath();
-  for (let x = 0; x < w + h + gap; x += gap) {
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x - h, h);
-  }
-  ctx.stroke();
-  ctx.restore();
-  canvas.__gdWatermarked = true;
-  return canvas;
-}
-
-function downloadCanvas(canvas, filename) {
-  applyAntiEditWatermark(canvas);
-  const link = document.createElement('a');
-  link.download = filename;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
-}
-
-function copyCanvasToClipboard(canvas) {
-  applyAntiEditWatermark(canvas);
-  canvas.toBlob(async (blob) => {
-    if (!blob) {
-      alert('Không thể tạo dữ liệu ảnh để copy.');
-      return;
-    }
-    try {
-      if (navigator.clipboard && window.ClipboardItem) {
-        const item = new ClipboardItem({ 'image/png': blob });
-        await navigator.clipboard.write([item]);
-        showToast('✅ Đã Copy ảnh vào bộ nhớ tạm! Bạn có thể bấm Ctrl+V để dán ngay vào Zalo, Word, Photoshop...');
-      } else {
-        throw new Error('Trình duyệt không hỗ trợ ClipboardItem');
-      }
-    } catch (err) {
-      console.error('Copy clipboard error:', err);
-      // Nếu trình duyệt chặn, tự động tải về làm phương án dự phòng
-      downloadCanvas(canvas, 'Bang_Tien_Do_Copied.png');
-      showToast('Đã tải ảnh về máy (Trình duyệt hiện tại hạn chế quyền Clipboard trực tiếp).');
-    }
-  }, 'image/png');
-}
-
 // =========================================================================
 // ĐIỀU KHIỂN VÙNG NHÌN LỊCH & EVENTS
 // =========================================================================
@@ -7955,10 +7877,10 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
       }
 
       if (mode === 'clipboard') {
-        copyCanvasToClipboard(canvas);
+        copyCanvasToClipboard(canvas, { watermark: AppState.exportWatermark !== false, notify: showToast });
       } else {
         const custName = getCurrentCustomerName().replace(/\s+/g, '_') || 'DuAn';
-        downloadCanvas(canvas, `Timeline_MSProject_${custName}.png`);
+        downloadCanvas(canvas, `Timeline_MSProject_${custName}.png`, AppState.exportWatermark !== false);
         showToast('✅ Đã xuất file ảnh PNG Timeline (MS Project) đầy đủ không mất chữ!');
       }
     }).catch(err => {

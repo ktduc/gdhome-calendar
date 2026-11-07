@@ -55,7 +55,7 @@ async function loadPrintImages(root, headers = {}) {
       if (!res.ok) throw new Error();
       const url = URL.createObjectURL(await res.blob());
       img.src = url;
-      try { await img.decode(); } finally { URL.revokeObjectURL(url); }
+      try { await img.decode(); } catch (error) { URL.revokeObjectURL(url); throw error; }
     } catch { img.alt = 'Ảnh chưa tải được'; }
   }));
 }
@@ -114,7 +114,11 @@ async function showPrint(view,base,headers,stats = false) {
     '<article id="print-sheet" class="' + (stats?'watermark':'') + '">' + printable(view,base,stats) + '</article>';
   document.body.append(overlay);
   document.body.classList.add('printing-material');
-  byId('close-print').onclick = () => { overlay.remove(); document.body.classList.remove('printing-material'); };
+  byId('close-print').onclick = () => {
+    overlay.querySelectorAll('img[data-print-img]').forEach(img => { if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src); });
+    overlay.remove();
+    document.body.classList.remove('printing-material');
+  };
   byId('do-print').onclick = () => window.print();
   await loadPrintImages(overlay,headers);
   if (overlay.isConnected) byId('do-print').disabled = false;

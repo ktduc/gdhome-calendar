@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="vi">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GD HOME Tools · Wireframe Giai đoạn 0</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef1f5;color:#202937;font:15px/1.5 system-ui,sans-serif}nav,section{padding:20px}nav{background:#fff;border-bottom:1px solid #d3d9e1;display:flex;gap:14px;flex-wrap:wrap;align-items:center}nav strong{color:#a41d24;margin-right:12px}a{color:#941a20}main{max-width:1400px;margin:auto;padding:18px}section{background:white;border:1px solid #d3d9e1;border-radius:12px;margin-bottom:24px;scroll-margin:16px}h1,h2,h3,p{margin:0 0 12px}h1{font-size:30px}small,.muted{color:#546273}.tag,.action{display:inline-block;padding:6px 10px;border-radius:6px;background:#edf0f4;margin:2px}.action{border:1px solid #c9d1db;text-decoration:none;color:#202937}.primary{background:#a41d24;color:white;border-color:#a41d24}.ok{background:#dff1e5;color:#175438}.warn{background:#fbe5e5;color:#961d25}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(190px,100%),1fr));gap:10px;margin:12px 0}.box,.signature{border:1px solid #d3d9e1;border-radius:8px;padding:14px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse}td,th{border:1px solid #d3d9e1;padding:8px;text-align:left;vertical-align:top}th{background:#e9edf3}caption{text-align:left;font-weight:700;padding:8px;background:#52637a;color:white}.editor{min-width:1060px}.selected{outline:2px solid #a41d24;outline-offset:-2px;background:#fff5f5}.swatch{display:block;height:42px;border-radius:5px;margin:0 0 6px;background:#dac4a7}.oak{background:repeating-linear-gradient(7deg,#c0a27a,#d9c3a4 6px,#bb9c72 8px)}.stone{background:linear-gradient(114deg,#ece9e4 42%,#b9b1a8 47%,#eeeae6 54%)}.light{background:#f0e8d8}.dark{background:#656464}.client{max-width:790px;margin-inline:auto}.client label{display:block}.signature{min-height:78px;background:#f8f9fb}.paper{max-width:210mm;min-height:270mm;margin:16px auto;padding:clamp(12px,4vw,16mm);border:1px solid #ccc;color:#171717;font-family:Georgia,serif}.paper h3,.center{text-align:center}.paper img{max-width:125px;max-height:55px;object-fit:contain}.paper footer{text-align:right;font-size:12px}.signature-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;text-align:center;margin:28px 0 76px}@page{size:A4;margin:15mm}@media print{body,main,section,.paper{background:#fff;margin:0;padding:0;border:0;max-width:none}.hide-print,body>nav,main>section:not(#bien-ban){display:none}.paper{min-height:260mm;break-after:page}.paper:last-child{break-after:auto}thead{display:table-header-group}tr,.signature-row{break-inside:avoid}}
+</style>
+<nav aria-label="Năm màn hình"><strong>GD HOME TOOLS</strong><a href="#trang-chu">01 Trang chủ</a><a href="#danh-sach">02 Danh sách</a><a href="#nhap-bang">03 Nhập bảng</a><a href="#khach-duyet">04 Khách duyệt</a><a href="#bien-ban">05 Biên bản A4</a></nav>
+<main>
+<section id="trang-chu">
+<small>01 · Trang chủ · Dữ liệu minh họa</small>
+<h1>GD HOME Tools</h1>
+<div class="grid"><article class="box"><h3>Lập tiến độ</h3><p>Lịch thi công và Timeline dự án.</p><span class="action primary">Mở Tiến độ ↗</span></article><article class="box"><h3>Bảng chốt mã vật liệu</h3><p>So sánh phương án, gửi khách duyệt và chuẩn bị đặt hàng.</p><a class="action" href="#danh-sach">Mở Chốt mã</a></article></div>
+<h2>Dự án của tôi</h2><p class="muted">Đã đăng nhập Gmail · Tài khoản minh họa</p>
+<div class="scroll"><table><thead><tr><th>Dự án</th><th>Tiến độ</th><th>Vật liệu</th></tr></thead><tbody><tr><td>Căn hộ Mộc An</td><td><span class="action">Mở Tiến độ ↗</span></td><td><a class="action" href="#danh-sach">2 bảng chốt mã</a></td></tr><tr><td>Nhà phố An Bình</td><td><span class="action">Mở Tiến độ ↗</span></td><td><span class="action">Tạo bảng đầu tiên</span></td></tr></tbody></table></div>
+</section>
+<section id="danh-sach">
+<small>02 · <a href="#trang-chu">Trang chủ</a> / Căn hộ Mộc An</small>
+<h2>Bảng chốt mã vật liệu</h2>
+<p><span class="action primary">＋ Tạo từ mẫu chuẩn</span><span class="action">Sao chép dự án cũ</span><span class="action">Nhập Excel / Google Sheet</span></p>
+<p class="muted">Tất cả trạng thái ▾ · Tìm theo tên hoặc số bảng</p>
+<div class="scroll"><table><thead><tr><th>Tên bảng</th><th>Đã chốt</th><th>Hạn cần chú ý</th><th>Trạng thái</th><th>Mở bảng</th></tr></thead><tbody><tr><td>Hoàn thiện nội thất · VL-01</td><td>1/3</td><td>1 nhóm quá hạn</td><td><span class="tag">Đã gửi khách</span></td><td><a href="#nhap-bang">Mở bảng nhập →</a></td></tr><tr><td>Đèn và thiết bị · VL-02</td><td>0/4</td><td>Chưa đặt</td><td>Bản nháp</td><td>⋯</td></tr></tbody></table></div>
+</section>
+<section id="nhap-bang">
+<small>03 · <a href="#danh-sach">Căn hộ Mộc An / Bảng chốt mã</a></small>
+<h2>Hoàn thiện nội thất · VL-01</h2><p>Kính gửi [Khách] · Địa chỉ [Địa chỉ] · Dự án Mộc An · SĐT [Số] · Email [Email] · Ngày 07/11 · Số VL-01</p><p><span class="action">Gọn</span><span class="action">Vừa</span><span class="action">Ảnh lớn</span></p>
+<p><span class="tag ok">✓ Đã lưu</span><span class="tag">Đã chốt 1/3 mục</span><span class="tag warn">1 nhóm quá hạn</span></p>
+<p><span class="action">Phòng: Tất cả ▾</span><span class="action">Trạng thái ▾</span><span class="action">Hoàn tác / Làm lại</span><span class="action">Xuất file ▾</span><a class="action primary" href="#khach-duyet">Xem trước bản khách</a></p>
+<div class="scroll"><table class="editor"><caption>▾ ĐÁ ỐP LÁT · Hạn 06/11 · ⚠ Quá hạn · Việc liên kết: Đo đạc sản xuất đá</caption><thead><tr><th>Hạng mục</th><th>Phòng</th><th>Phối cảnh 3D</th><th>Chất liệu / Quy cách</th><th>PA1</th><th>PA2</th><th>PA3</th><th>KL / ĐVT</th><th>NCC / Nhà thầu</th><th>Ghi chú</th><th>Trạng thái</th></tr></thead><tbody><tr><td>Đá mặt bếp</td><td class="selected">Bếp ▾</td><td><span class="swatch stone" role="img" aria-label="Phối cảnh 3D minh họa"></span></td><td>Đá bóng</td><td><span class="swatch stone"></span>DA-01 · Trắng</td><td><span class="swatch light"></span>DA-02 · Kem</td><td><span class="swatch dark"></span>DA-03 · Xám</td><td>3,2 md</td><td>NCC mẫu</td><td>Dày 20 mm</td><td>Đã gửi khách</td></tr><tr><td>Đá lavabo</td><td>WC</td><td>＋ Ảnh</td><td>Đá bóng</td><td>DA-01 · ✓ Đã chọn</td><td>＋ PA2</td><td>＋ PA3</td><td>1,4 md</td><td>NCC mẫu</td><td>Mép bo</td><td>Khách đã chốt</td></tr><tr><td colspan="12">＋ Thêm dòng</td></tr></tbody></table></div>
+<p class="tag">▸ MÃ GỖ · 1 dòng · Hạn 12/11 · Chưa chọn</p>
+<div class="grid"><article class="box"><h3>Gợi ý ô Phòng</h3><input aria-label="Tìm phòng" placeholder="Tìm hoặc thêm phòng"><p><span class="tag">Bếp</span><span class="tag">WC</span><span class="tag">Phòng khách</span></p></article><article class="box"><h3>Chi tiết PA1 · Đá mặt bếp</h3><p>Hãng mẫu · DA-01 · Trắng · Bóng · Dày 20 mm</p><div class="signature">＋ Dán Ctrl+V hoặc kéo ảnh vào đây<br><small>Xem lớn · Crop · Đổi thứ tự · Xóa ảnh</small></div><p>Gõ mã để tìm trong thư viện.</p></article></div>
+<small>Mũi tên / Tab / Enter chuyển ô · Esc thoát · Ctrl+D nhân bản dòng</small>
+</section>
+<section id="khach-duyet" class="client">
+<small>04 · Bản khách duyệt · Phiên bản 02</small>
+<h2>Chọn vật liệu cho Căn hộ Mộc An</h2>
+<p>Bếp · Đá mặt bếp · Chọn một phương án</p>
+<div class="grid"><label class="box"><span class="swatch stone"></span><input type="radio" name="pa" checked> PA1 · DA-01 · Trắng<br><small>Bóng · Dày 20 mm</small></label><label class="box"><span class="swatch light"></span><input type="radio" name="pa"> PA2 · DA-02 · Kem<br><small>Mờ · Dày 20 mm</small></label><label class="box"><span class="swatch dark"></span><input type="radio" name="pa"> PA3 · DA-03 · Xám<br><small>Mờ · Dày 20 mm</small></label></div>
+<details><summary>Các mục khác trong bản phát hành</summary><p>WC · Đá lavabo · PA1 đã chốt</p></details>
+<h3>Xác nhận lựa chọn</h3>
+<p><label>Họ và tên người ký <input placeholder="Nhập họ tên"></label></p>
+<div class="signature">Vùng ký trên màn hình <small>· Xóa và ký lại</small></div>
+<p><label><input type="checkbox"> Tôi đồng ý với các phương án đã chọn và nội dung biên bản.</label></p>
+<p><a href="#bien-ban">Xem biên bản</a> · Có thể yêu cầu đổi trong 02 ngày kể từ khi ký.</p>
+<button class="action primary" disabled>Đồng ý và ký</button><small> · Nút minh họa</small>
+<details><summary>Trạng thái sau khi ký</summary><p>✓ Đã nhận xác nhận. Hạn yêu cầu đổi: 09/11/2026, 15:30 (giờ Việt Nam).</p><span class="action">Gửi yêu cầu đổi mã</span></details>
+</section>
+<section id="bien-ban">
+<small class="hide-print">05 · Mẫu biên bản · Ctrl+P xem bản in A4 · Bố cục minh họa · Điều khoản mặc định xem ở mẫu gốc</small>
+<article class="paper">
+<img src="../../gdhome-logo.png" alt="GD HOME">
+<p style="text-align:right"><i>Hà Nội, ngày 07 tháng 11 năm 2026</i></p><h3>BIÊN BẢN XÁC NHẬN</h3><p class="center">* * *<br><strong><i>(V/v: Thống nhất quy cách vật liệu, kích thước thiết bị nội thất)</i></strong><br>Hợp đồng số TK-001 · Biên bản số VL-01</p>
+<p><strong>Bên A</strong> · Anh/Chị [Họ tên khách]<br>Địa chỉ lắp đặt: [Địa chỉ] · SĐT: [Số điện thoại]</p>
+<p><strong>Bên B</strong> · Công ty CP Nội thất GD<br>Đại diện: [Họ tên] · Chức vụ: [Chức vụ]<br>Địa chỉ: [Địa chỉ công ty]</p>
+<p>Hôm nay ngày 07 tháng 11 năm 2026 Tại trụ sở văn phòng Công ty cổ phần nội thất GD<br>Hai bên cùng nhau thống nhất ký biên bản xác nhận với điều khoản dưới đây:</p><p><strong>Điều 1. Nội dung công việc</strong></p>
+<table><thead><tr><th>STT</th><th>Hạng mục</th><th>Chất liệu / Quy cách</th><th>Màu / Mã / Kích thước</th><th>Ghi chú / Hình ảnh</th></tr></thead><tbody><tr><td>1</td><td>Đá mặt bếp<br>Bếp</td><td>Đá bề mặt bóng</td><td>Trắng · DA-01<br>Dày 20 mm</td><td><span class="swatch stone"></span>PA1 chốt; PA2/PA3 dự phòng</td></tr><tr><td>2</td><td>Đá lavabo<br>WC</td><td>Đá bề mặt bóng</td><td>Trắng · DA-01</td><td>Mép bo</td></tr></tbody></table>
+<p><strong>(Ghi chú : mỗi mã vật liệu có thể chốt từ 1 tới 3 mã trong trường hợp thực tế nhà cung cấp không có sản phẩm có sẵn ảnh hưởng tới tiến độ thi công căn hộ )</strong></p><footer>1 / 2</footer>
+</article>
+<article class="paper">
+<h3>BIÊN BẢN XÁC NHẬN · VL-01</h3>
+<p><strong>Điều 2. Trách nhiệm các bên</strong><br>[Điều khoản mẫu trong cài đặt]</p>
+<p><strong>Điều 3. Quyền thay đổi quy cách và màu</strong><br>[Điều khoản mẫu trong cài đặt]</p>
+<p><strong>Điều 4.</strong><br>Các điều khoản khác<br>[Điều khoản mẫu trong cài đặt]</p>
+<div class="signature-row"><div><strong>ĐẠI DIỆN BÊN A</strong><br><em>Ký và ghi rõ họ tên</em></div><div><strong>ĐẠI DIỆN BÊN B</strong><br><em>Ký và ghi rõ họ tên</em></div></div>
+<footer>2 / 2</footer>
+</article>
+</section>
+</main>
+</html>

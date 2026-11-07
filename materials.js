@@ -20,6 +20,7 @@ class MaterialStore {
   async get() {
     const data = await this.store.get(this.key) || blank();
     const archive = await this.store.get(this.key + '-rev');
+    if (data.archiveCount && (!Array.isArray(archive?.entries) || archive.entries.length < data.archiveCount)) fail(503,'Kho bản phát hành chưa đầy đủ. Thử lại sau khi đồng bộ.');
     if (archive) {
       const entries = archive.entries.slice(0, data.archiveCount || 0);
       data.revisions = [...entries.filter(e => e.type === 'revision').map(e => e.value), ...data.revisions];
@@ -32,17 +33,21 @@ class MaterialStore {
     const pending = previous.catch(() => {}).then(async () => {
       const data = await this.get();
       if (version !== undefined && version !== data._version) fail(409, 'Có thay đổi trên máy khác. Hãy giữ bản nháp và tải lại để đối chiếu.');
+      const revisionCount = data.revisions.length;
       const result = await edit(data);
       data._version++;
+      const writes = [];
       const compact = data.archiveCount || Buffer.byteLength(JSON.stringify(data, null, 2)) > 800000;
       if (compact) {
         const entries = data.revisions.map(value => ({ type: 'revision', value }));
         // Append before publishing the count. Readers only read entries committed by the main file.
-        await this.store.put(this.key + '-rev', { entries });
+        if (!data.archiveCount || revisionCount !== data.revisions.length) writes.push([this.key + '-rev', { entries }]);
         data.archiveCount = entries.length;
         data.revisions = [];
       }
-      await this.store.put(this.key, data);
+      writes.push([this.key,data]);
+      if (this.store.putMaterials) await this.store.putMaterials(writes);
+      else for (const [key,value] of writes) await this.store.put(key,value);
       return { _version: data._version, ...result };
     });
     queues.set(this.key, pending);
@@ -99,6 +104,20 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
         const task = tasks.get(group.taskId);
         if (task?.projectId === updated.projectId) group.calendarId = task.calendarId;
         else if (!data.sheets[index]?.groups.some(old => old.id === group.id && old.taskId === group.taskId)) fail(400,'Công việc không thuộc dự án.');
+      }
+      if (index >= 0) {
+        const older = new Map(data.sheets[index].groups.flatMap(group => group.rows).map(row => [row.id,row]));
+        for (const row of updated.groups.flatMap(group => group.rows)) {
+          const old = older.get(row.id);
+          const choice = row => row?.chosen != null ? row.options[row.chosen] : null;
+          if (!old || (!choice(row) && !choice(old))) continue;
+          const summary = row => ({ slot:row.chosen, code:choice(row)?.code || '', color:choice(row)?.color || '', size:choice(row)?.size || '', finish:choice(row)?.finish || '', decision:row.decision });
+          const previous = summary(old);
+          const next = summary(row);
+          if (JSON.stringify(previous) !== JSON.stringify(next)) data.audit.push({
+            sheetId:updated.id, at:Date.now(),event:'draft-choice',actor:dataKey,row:row.name,previous,next
+          });
+        }
       }
       if (index < 0) data.sheets.push(updated);
       else data.sheets[index] = updated;

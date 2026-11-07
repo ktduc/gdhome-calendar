@@ -97,7 +97,7 @@ function renderRow(row) {
     '<td>' + input('qty',row.qty,'Khối lượng') + '</td><td>' + input('unit',row.unit,'Đơn vị') + '</td><td>' + input('supplier',row.supplier,'NCC / Nhà thầu') +
     '</td><td>' + input('note',row.note,'Ghi chú') + '</td><td><select data-field="decision" aria-label="Trạng thái">' +
     Object.entries(statusLabels).map(([key,label]) => option(key,label,row.ordered?'ordered':row.decision)).join('') +
-    option('ordered','Đã đặt hàng',row.ordered?'ordered':row.decision) + '</select></td><td><button data-action="duplicate" title="Nhân bản dòng">⧉</button> <button data-action="del-row" title="Bỏ dòng">×</button></td></tr>';
+    option('ordered','Đã đặt hàng',row.ordered?'ordered':row.decision) + '</select></td><td><button data-action="move-up" title="Đưa dòng lên">↑</button> <button data-action="move-down" title="Đưa dòng xuống">↓</button> <button data-action="duplicate" title="Nhân bản dòng">⧉</button> <button data-action="del-row" title="Bỏ dòng">×</button></td></tr>';
 }
 
 function context(target) {
@@ -183,6 +183,11 @@ function duplicate(row) {
 function pick(row, slot) {
   const i = Number(slot);
   if (slot === 'render' || !row.options[i]) return;
+  const pa = row.options[i];
+  if (!pa.images.length && !['brand','code','finish','color','size'].some(key => pa[key])) {
+    say('Điền thông tin hoặc thêm ảnh trước khi chốt phương án.');
+    return;
+  }
   modify(() => { row.chosen = i; row.decision = 'chosen'; row.ordered = false; });
 }
 
@@ -205,16 +210,28 @@ function editDetail(row, slot) {
       i + '">Crop</button> <button data-detail="remove" data-index="' + i + '">Xóa</button></article>').join('') + '</div></div>');
   showImages(element);
   element.onclose = () => { if (!element.open && sheet && element.isConnected) renderEditor(); };
+  const signal = detailSignal();
+  let editedField;
+  element.addEventListener('input', event => {
+    const key = event.target.dataset.field;
+    if (!key || !pa || pa[key] === event.target.value) return;
+    const apply = () => { pa[key] = event.target.value; };
+    if (editedField !== event.target) modify(apply,false);
+    else { apply(); queueSave(); }
+    editedField = event.target;
+  },{ signal });
   element.addEventListener('change', async event => {
     const key = event.target.dataset.field;
     try {
       if (key && pa) {
-        if (event.target.dataset.libraryApplied) { delete event.target.dataset.libraryApplied; return; }
-        modify(() => { pa[key] = event.target.value; learnPreset(key,pa[key]); }, false);
+        if (pa[key] !== event.target.value) modify(() => { pa[key] = event.target.value; },false);
+        learnPreset(key,pa[key] || '');
+        editedField = null;
+        queueSave();
       }
       if (event.target.dataset.detail === 'upload') { await attachImages(row,slot,event.target.files); reopen(); }
     } catch (error) { showError(error); }
-  }, { once:false, signal:detailSignal(element) });
+  },{ signal });
   element.onclick = async event => {
     const button = event.target.closest('[data-detail]');
     if (!button) return;
@@ -287,7 +304,12 @@ document.addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
   const {group,row,slot} = context(event.target);
   if (!button) {
-    if (row && slot && slot !== 'render' && event.target.closest('.image-cell') && row.options[Number(slot)].images.length) pick(row,slot);
+    const cell = event.target.closest('.image-cell');
+    if (row && cell && slot !== 'render' && row.options[Number(slot)].images.length) {
+      const rowId = row.id;
+      pick(row,slot);
+      box().querySelector('[data-row="' + rowId + '"] [data-slot="' + slot + '"]')?.focus({ preventScroll:true });
+    }
     return;
   }
   try {
@@ -313,6 +335,15 @@ document.addEventListener('click', async event => {
       case 'del-group': if (confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1)); break;
       case 'add-row': modify(() => group.rows.push(newRow())); break;
       case 'del-row': if (confirm('Bỏ dòng khỏi bản nháp?')) modify(() => group.rows.splice(group.rows.indexOf(row),1)); break;
+      case 'move-up':
+      case 'move-down': {
+        const current = group.rows.indexOf(row);
+        const next = current + (button.dataset.action === 'move-up' ? -1 : 1);
+        if (next >= 0 && next < group.rows.length) modify(() => {
+          [group.rows[current],group.rows[next]] = [group.rows[next],group.rows[current]];
+        });
+        break;
+      }
       case 'duplicate': modify(() => group.rows.splice(group.rows.indexOf(row)+1,0,duplicate(row))); break;
       case 'detail': editDetail(row,slot); break;
       case 'undo': undo(false); break;

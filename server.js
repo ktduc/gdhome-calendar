@@ -55,7 +55,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-editor.js', 'material-image-ui.js', 'material-import.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-deadlines.js', 'material-timeline.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-editor.js', 'material-image-ui.js', 'material-import.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-deadlines.js', 'material-timeline.js', 'export-canvas.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -217,6 +217,21 @@ class GistStore {
     this.dirty.add(name);
     try { await this.local.put(key, data); } catch (e) { /* bản dự phòng trên máy: bỏ qua lỗi */ }
     this.schedule(1500);
+  }
+  // Hồ sơ ký và bản phát hành chỉ báo thành công sau khi Gist nhận cả lần ghi.
+  async putMaterials(writes) {
+    const files = Object.fromEntries(writes.map(([key,data]) => [
+      fileNameForKey(key), { content: JSON.stringify(data, null, 2) }
+    ]));
+    try {
+      await this.api('PATCH', `/gists/${this.gistId}`, { files });
+    } catch {
+      throw Object.assign(new Error('Chưa lưu được Chốt mã lên GitHub Gist. Thử lại.'), { status: 503 });
+    }
+    for (const [key,data] of writes) {
+      this.cache.set(fileNameForKey(key), JSON.parse(JSON.stringify(data)));
+      try { await this.local.put(key,data); } catch (error) { console.error('[Chốt mã] Lỗi ghi bản dự phòng:', error.code); }
+    }
   }
   schedule(ms) {
     clearTimeout(this.timer);

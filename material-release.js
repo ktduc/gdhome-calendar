@@ -58,8 +58,8 @@ async function historyDialog() {
       (view.customer && !view.company ? '<button data-company="' + view.id + '">Bên B xác nhận</button> ' : '') +
       (view.revoked ? '' : '<button data-revoke="' + view.id + '">Thu hồi link</button>') + '</article>').join('') +
     '<ol>' + [...result.audit].reverse().map(entry => '<li>' + html(vnDate(entry.at) + ' · ' + entry.actor + ' · ' +
-      ({ published:'Phát hành',revoked:'Thu hồi', 'customer-signed':'Bên A ký','company-signed':'Bên B ký','change-requested':'Yêu cầu đổi' })[entry.event] +
-      (entry.reason ? ' · '+entry.reason : '')) + '</li>').join('') + '</ol>');
+      ({ published:'Phát hành',revoked:'Thu hồi', 'customer-signed':'Bên A ký','company-signed':'Bên B ký','change-requested':'Yêu cầu đổi','draft-choice':'Sửa phương án bản nháp' })[entry.event] +
+      (entry.reason ? ' · '+entry.reason : entry.row ? ' · '+entry.row+' · '+(entry.previous.code || '—')+' → '+(entry.next.code || '—') : '')) + '</li>').join('') + '</ol>');
   element.onclick = event => {
     const { printRevision,company,revoke } = event.target.dataset;
     const view = result.revisions.find(r => r.id === (printRevision || company || revoke));
@@ -119,22 +119,8 @@ async function exportStatsImage(copy) {
   const root = byId('print-sheet');
   if (root.scrollHeight > 12000) throw new Error('Bảng quá dài để xuất một ảnh. Lọc theo phòng hoặc dùng PDF.');
   const canvas = await html2canvas(root,{ scale:2,backgroundColor:'#fff' });
-  // Cùng kiểu sọc chìm một chiều với bản xuất Tiến độ.
-  const ctx = canvas.getContext('2d');
-  ctx.strokeStyle = 'rgba(0,0,0,.035)';
-  ctx.lineWidth = 2.4;
-  ctx.beginPath();
-  for (let x = -canvas.height; x < canvas.width; x += 6.9) { ctx.moveTo(x+canvas.height,0); ctx.lineTo(x,canvas.height); }
-  ctx.stroke();
-  const blob = await new Promise(resolve => canvas.toBlob(resolve));
-  if (!blob) throw new Error('Không tạo được ảnh.');
-  if (copy) return navigator.clipboard.write([new ClipboardItem({ 'image/png':blob })]);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'GD-HOME-vat-lieu.png';
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url),1000);
+  if (copy) return copyCanvasToClipboard(canvas,{ notify:say,fallbackName:'GD-HOME-vat-lieu.png' });
+  downloadCanvas(canvas,'GD-HOME-vat-lieu.png');
 }
 async function exportPurchasing() {
   const includePrice = confirm('Thêm cột giá vào bản Excel mua hàng?');
