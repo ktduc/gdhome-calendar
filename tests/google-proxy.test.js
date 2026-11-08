@@ -129,3 +129,19 @@ test('Google Proxy: Chặn file quá lớn (> 8 MB) và sai Content-Type', async
   assert.equal(result.contentType, 'image/png');
   assert.equal(result.buffer.length, 8);
 });
+
+test('Proxy ảnh: chặn chuyển hướng vào mạng nội bộ và IPv6 dạng ngoặc / ánh xạ IPv4', async () => {
+  const { proxyDownloadImage, isPrivateIp } = require('../google-search');
+  const assert = require('node:assert/strict');
+  assert.equal(isPrivateIp('::ffff:127.0.0.1'), true);
+  assert.equal(isPrivateIp('100.64.1.1'), true);
+  const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
+  await assert.rejects(proxyDownloadImage('http://[::1]/a.png', { dnsResolver: publicDns }), /nội bộ/);
+  const redirectFetch = async url => url.includes('example.com')
+    ? new Response(null, { status: 302, headers: { location: 'http://127.0.0.1/secret.png' } })
+    : new Response(new Uint8Array([1]), { headers: { 'content-type': 'image/png' } });
+  await assert.rejects(proxyDownloadImage('https://example.com/a.png', { fetchFn: redirectFetch, dnsResolver: publicDns }), /nội bộ/);
+  const big = new Uint8Array(9 * 1024 * 1024);
+  const bigFetch = async () => new Response(big, { headers: { 'content-type': 'image/png' } });
+  await assert.rejects(proxyDownloadImage('https://example.com/b.png', { fetchFn: bigFetch, dnsResolver: publicDns }), /8 MB/);
+});

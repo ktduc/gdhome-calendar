@@ -18,10 +18,15 @@ function isPrivateIp(ip) {
     if (a === 192 && b === 168) return true; // 192.168.0.0/16 private
     if (a === 169 && b === 254) return true; // 169.254.0.0/16 link-local
     if (a === 0) return true;   // 0.0.0.0/8
+    if (a === 100 && b >= 64 && b <= 127) return true; // 100.64.0.0/10 CGNAT
+    if (a >= 224) return true; // multicast / dành riêng
     return false;
   }
   if (net.isIPv6(ip)) {
     const norm = ip.toLowerCase();
+    const mapped = norm.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+    if (mapped) return isPrivateIp(mapped[1]); // IPv4 nằm trong IPv6 (::ffff:127.0.0.1)
+    if (norm.startsWith('::ffff:')) return true;
     if (norm === '::1' || norm === '::') return true;
     if (norm.startsWith('fc') || norm.startsWith('fd')) return true; // fc00::/7
     if (norm.startsWith('fe8') || norm.startsWith('fe9') || norm.startsWith('fea') || norm.startsWith('feb')) return true; // fe80::/10
@@ -40,7 +45,7 @@ function checkSsrfUrl(targetUrl) {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw httpError(400, 'Chỉ hỗ trợ giao thức HTTP và HTTPS.');
   }
-  const host = parsed.hostname.toLowerCase();
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
     throw httpError(400, 'Địa chỉ máy chủ nội bộ bị chặn (SSRF protection).');
   }
@@ -51,6 +56,7 @@ function checkSsrfUrl(targetUrl) {
 }
 
 async function validateHostIp(hostname, dnsResolver = dns.lookup) {
+  hostname = String(hostname || '').replace(/^\[|\]$/g, '');
   if (net.isIP(hostname)) {
     if (isPrivateIp(hostname)) throw httpError(400, 'Địa chỉ IP nội bộ bị chặn (SSRF protection).');
     return;
@@ -70,19 +76,30 @@ async function validateHostIp(hostname, dnsResolver = dns.lookup) {
 }
 
 async function proxyDownloadImage(targetUrl, { fetchFn = fetch, dnsResolver = dns.lookup } = {}) {
-  const parsed = checkSsrfUrl(targetUrl);
+  let parsed = checkSsrfUrl(targetUrl);
   await validateHostIp(parsed.hostname, dnsResolver);
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 10000);
   try {
-    const res = await fetchFn(parsed.href, {
-      signal: controller.signal,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GDHomeTools/1.0',
-        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
-      }
-    });
+    let res;
+    // Tự đi theo chuyển hướng và kiểm tra lại từng địa chỉ, để không bị dẫn vào mạng nội bộ.
+    for (let hop = 0; ; hop++) {
+      res = await fetchFn(parsed.href, {
+        signal: controller.signal,
+        redirect: 'manual',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GDHomeTools/1.0',
+          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+        }
+      });
+      if (![301, 302, 303, 307, 308].includes(res.status)) break;
+      if (hop >= 3) throw httpError(400, 'Ảnh chuyển hướng quá nhiều lần.');
+      const location = res.headers.get('location');
+      if (!location) throw httpError(400, 'Chuyển hướng không hợp lệ.');
+      parsed = checkSsrfUrl(new URL(location, parsed).href);
+      await validateHostIp(parsed.hostname, dnsResolver);
+    }
     if (!res.ok) throw httpError(res.status, 'Không tải được ảnh từ trang nguồn (' + res.status + ').');
     const contentType = (res.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
     if (!contentType.startsWith('image/')) {
@@ -92,11 +109,27 @@ async function proxyDownloadImage(targetUrl, { fetchFn = fetch, dnsResolver = dn
     if (len > 8 * 1024 * 1024) {
       throw httpError(413, 'File ảnh vượt quá giới hạn 8 MB.');
     }
-    const arrayBuffer = await res.arrayBuffer();
-    const buf = Buffer.from(arrayBuffer);
-    if (buf.length > 8 * 1024 * 1024) {
-      throw httpError(413, 'File ảnh vượt quá giới hạn 8 MB.');
+    // Đọc dần và dừng ngay khi vượt 8 MB (kể cả khi trang nguồn không báo dung lượng).
+    const chunks = [];
+    let size = 0;
+    if (res.body && typeof res.body.getReader === 'function') {
+      const reader = res.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        size += value.length;
+        if (size > 8 * 1024 * 1024) {
+          try { await reader.cancel(); } catch {}
+          throw httpError(413, 'File ảnh vượt quá giới hạn 8 MB.');
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } else {
+      chunks.push(Buffer.from(await res.arrayBuffer()));
+      size = chunks[0].length;
+      if (size > 8 * 1024 * 1024) throw httpError(413, 'File ảnh vượt quá giới hạn 8 MB.');
     }
+    const buf = Buffer.concat(chunks);
     return { buffer: buf, contentType };
   } finally {
     clearTimeout(timer);

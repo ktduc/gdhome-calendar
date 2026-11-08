@@ -548,7 +548,11 @@ window.GDHomeAssets = (() => {
           (colors.length ? '<div class="asset-paint-grid">' + colors.map(c => '<button type="button" class="asset-paint-card" data-paint-code="' + esc(c.code) + '" title="' + esc(c.code + ' – ' + c.name) + '">' +
             '<div class="asset-paint-swatch" style="background-color:' + esc(c.hex) + '"></div>' +
             '<div class="asset-paint-info"><strong>' + esc(c.code) + '</strong><span>' + esc(c.name) + '</span></div></button>').join('') + '</div>' :
-            '<p class="asset-empty">Không tìm thấy màu phù hợp với "' + esc(query) + '".</p><div class="asset-google-fallback-slot"></div>') +
+            '<p class="asset-empty">Chưa có "' + esc(query) + '" trong bảng màu mẫu.</p>' +
+            '<form class="asset-paint-custom"><strong>Dùng mã này</strong><label>Mã <input name="code" required value="' + esc(query) + '"></label>' +
+            '<label>Tên màu <input name="name" placeholder="vd Ivory Lace"></label><label>Màu <input name="hex" type="color" value="#f2eee6"></label>' +
+            '<button class="primary">Dùng màu ' + esc(brand) + ' này</button><small class="asset-hint">Xem mã trên quạt màu hoặc web hãng rồi chọn màu gần đúng. Lần sau sẽ có sẵn trong Dữ liệu dùng chung.</small></form>' +
+            '<div class="asset-google-fallback-slot"></div>') +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(paintData.source || '') + ' (' + colors.length + ' màu)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
@@ -573,6 +577,15 @@ window.GDHomeAssets = (() => {
             if (c) onPick?.({ kind: 'paint', brand, code: c.code, name: c.name, hex: c.hex });
           };
         });
+        const custom = panel.querySelector('.asset-paint-custom');
+        if (custom) custom.onsubmit = event => {
+          event.preventDefault();
+          const form = new FormData(custom);
+          const code = String(form.get('code') || '').trim();
+          if (!code) return;
+          close();
+          onPick?.({ kind: 'paint', brand, code, name: String(form.get('name') || '').trim(), hex: String(form.get('hex') || '#f2eee6') });
+        };
         if (!colors.length && query.trim()) {
           renderGoogleFallback(panel.querySelector('.asset-google-fallback-slot'), query, {
             onPickImage: entry => {

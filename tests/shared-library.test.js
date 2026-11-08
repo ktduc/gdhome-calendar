@@ -71,3 +71,12 @@ test('Vùng nhìn ảnh: giữ x/y/z hợp lệ, bỏ giá trị mặc định',
   assert.deepEqual(render[0].view,{x:0.3,y:0.6,z:1.5});
   assert.equal(render[1].view,undefined);
 });
+
+test('Màu sơn trong PA được giữ khi lưu, mã màu sai bị bỏ', () => {
+  const sheet = cleanSheet({ groups:[{ id:'g',name:'SƠN TƯỜNG',rows:[{ id:'r',name:'Sơn tường',render:[],
+    options:[{ code:'30YY 72/107',paint:{kind:'paint',brand:'Dulux',code:'30YY 72/107',name:'Ivory Lace',hex:'#F5F0E1',x:'<b>'},images:[] },
+      { paint:{brand:'Jotun',code:'9918',hex:'red'},images:[] },{ images:[] }] }] }] });
+  const [first,second] = sheet.groups[0].rows[0].options;
+  assert.deepEqual(first.paint,{kind:'paint',brand:'Dulux',code:'30YY 72/107',name:'Ivory Lace',hex:'#f5f0e1'});
+  assert.equal(second.paint,undefined);
+});

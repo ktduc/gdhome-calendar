@@ -1398,6 +1398,8 @@ cases['16.4'] = async page => {
   await page.locator('#material-copy').click();
   await page.waitForTimeout(400);
   assert.equal(await page.locator('#material-image-scope').count(), 0, 'Copy ảnh không hiện modal mỗi lần');
+  // Xem trước xuất ảnh (nếu mở) phải đóng trước khi mở menu ▾
+  await page.evaluate(() => document.querySelectorAll('dialog#print-preview[open]').forEach(d => d.close()));
 
   // Mở menu ▾ -> bấm ⚙ Cài đặt xuất…
   await page.locator('.hdr-split-caret').click();

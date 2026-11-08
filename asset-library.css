@@ -96,3 +96,8 @@
 /* Khối màu sơn trong ô PA & xuất */
 .paint-swatch-box{position:relative;overflow:hidden;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1)}
 .print-square .paint-swatch{position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,0.1)}
+
+.asset-paint-custom{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 8px;align-items:end;margin:6px 0 10px;padding:10px;border:1px dashed #cbbfae;border-radius:8px;background:#fbf8f3}
+.asset-paint-custom strong{grid-column:1/-1}.asset-paint-custom label{display:flex;flex-direction:column;font-size:12px;gap:2px}
+.asset-paint-custom input[type=color]{width:100%;height:30px;padding:0;border:1px solid #cbd5e1}
+.asset-paint-custom button{grid-column:1/-1}.asset-paint-custom small{grid-column:1/-1}

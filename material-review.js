@@ -6,6 +6,14 @@ const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const text = (value, length = 500) => typeof value === 'string' ? value.trim().slice(0,length) : '';
 const pick = (source, keys) => Object.fromEntries(keys.map(key => [key,text(source?.[key],key === 'note' ? 2000 : 500)]));
 const { cleanView } = require('./shared-library');
+// Ô màu sơn trong PA: chỉ giữ hãng, mã, tên và mã màu hợp lệ.
+function cleanPaint(paint) {
+  if (!paint || typeof paint !== 'object' || !/^#[0-9a-f]{6}$/i.test(paint.hex || '')) return undefined;
+  const code = text(paint.code,80);
+  if (!code) return undefined;
+  return { kind:'paint', brand:text(paint.brand,40), code, name:text(paint.name,120), hex:paint.hex.toLowerCase() };
+}
+const withPaint = pa => { const paint = cleanPaint(pa?.paint); return paint ? { paint } : {}; };
 const assetsOnly = list => (Array.isArray(list) ? list : []).slice(0,8).flatMap(image => {
   if (imageName(image)) return [{ full:image, thumb:image }];
   if (!imageName(image?.full) || !imageName(image?.thumb)) return [];
@@ -39,7 +47,7 @@ function cleanSheet(sheet) {
           const decision = ['draft','sent','chosen','changed'].includes(row.decision) ? row.decision : 'draft';
           return { id:unique(row.id), ...pick(row,['name','room','qty','unit','supplier','note','spec']), render:assetsOnly(row.render),
             ...(Array.isArray(row.noteSuggestions) ? { noteSuggestions:row.noteSuggestions.slice(0,12).map(value => text(value,2000)).filter(Boolean) } : {}),
-            options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size','supplier','price']), images:assetsOnly(pa?.images) })),
+            options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size','supplier','price']), ...withPaint(pa), images:assetsOnly(pa?.images) })),
             paCount:Math.min(3,Math.max(1,Number.isInteger(row.paCount) ? row.paCount : 1)),
             chosen, decision, ordered:!!row.ordered && chosen !== null };
         })
@@ -56,7 +64,7 @@ function publicSheet(sheet) {
       id:group.id, name:group.name,
       rows:group.rows.filter(row => row.options.some(hasOption)).map(row => ({
         id:row.id, ...pick(row,['name','room','qty','unit','note','spec']), chosen:row.chosen, render:assetsOnly(row.render),
-        options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size']), images:assetsOnly(pa.images) }))
+        options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size']), ...withPaint(pa), images:assetsOnly(pa.images) }))
       }))
     })).filter(group => group.rows.length)
   };
