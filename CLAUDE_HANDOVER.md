@@ -162,6 +162,14 @@
 - `POST /api/ai/materials` dùng nhà cung cấp của tài khoản qua `callWithFallback`, prompt nhóm vật liệu riêng. `material-ai.js` nhận PDF, Excel, CSV hoặc ảnh, báo tiến độ góc phải và cho sửa, chọn dòng. Khi gộp, bỏ trùng theo nhóm, tên hạng mục và vị trí.
 - 23/23 test đạt. Kiểm tra localhost với Notion và Gemini giả lập. Các bước bấm thử và giới hạn trong [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
 
+## 3n. Chốt mã GĐ8
+
+- `material-editor-view.js` dựng header, sidebar, nhóm và dòng. Khi dựng lại, khôi phục cuộn trang, cuộn sidebar và cuộn ngang/dọc của bảng. Focus theo ID dòng và cột, chuyển sang dòng kế bên nếu dòng cũ bị xoá.
+- Lịch và Chốt mã dùng chung nút, thanh header, checkbox dạng chip, tay nắm đổi độ rộng và toast trong `tools-menu.css`. Sidebar Lịch dành sẵn vị trí cho nút hover để chiều cao không đổi.
+- `material-selection.js` quản lý chọn theo dòng, dải hoặc nhóm. Mỗi lượt xoá/nhân bản/đổi trạng thái/chuyển nhóm dùng một bước hoàn tác. API từ chối xoá dòng thuộc bản đã ký và cung cấp ID được bảo vệ cho giao diện.
+- Dán ảnh trực tiếp bằng `clipboardData.items`, `files`, ảnh trong HTML hoặc `navigator.clipboard.read()`. Link ảnh phụ thuộc quyền đọc từ trang nguồn. Khi trang nguồn chặn, có thể sao chép ảnh dưới dạng bitmap hoặc kéo tệp vào ô.
+- Test Node đạt 23/23. Kịch bản Playwright tại `docs/gd8-playwright.cjs` kiểm tra cả sáu bước với 150 dòng mẫu trên Edge. Xem cách chạy và số đo tại [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

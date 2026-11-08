@@ -21,7 +21,8 @@ async function request(url, options = {}, internal = true) {
 }
 
 function showError(error) {
-  byId('notice').textContent = error.message;
+  if (typeof say === 'function' && byId('materials')) say(error.message);
+  else byId('notice').textContent = error.message;
 }
 
 async function signIn() {

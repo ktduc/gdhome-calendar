@@ -23,6 +23,19 @@ cases['8.1'] = async page => {
   assert.ok(Math.abs(after.top-before.top) <= 75,JSON.stringify({ before,after }));
   assert.equal(after.left,before.left);
   assert.equal(after.page,before.page);
+
+  await page.setViewportSize({width:690,height:560});
+  const next = page.locator('[data-row="g8-r2"] [data-action="del-row"]');
+  await next.scrollIntoViewIfNeeded();
+  const mobileBefore = await viewPosition(page);
+  assert.ok(mobileBefore.page > 0,'test phải có cuộn cả trang');
+  page.once('dialog',dialog => dialog.accept());
+  await next.click();
+  await page.waitForFunction(() => document.activeElement?.closest('[data-row]')?.dataset.row === 'g8-r3');
+  const mobileAfter = await viewPosition(page);
+  assert.equal(mobileAfter.page,mobileBefore.page);
+  assert.equal(mobileAfter.left,mobileBefore.left);
+  assert.ok(Math.abs(mobileAfter.top-mobileBefore.top) <= 75);
 };
 
 cases['8.2'] = async page => {
@@ -85,6 +98,18 @@ cases['8.4'] = async page => {
   await page.getByText('Đã chọn 15 dòng',{exact:true}).waitFor();
   await page.keyboard.press('Escape');
   await page.getByText('Đã chọn 15 dòng',{exact:true}).waitFor({state:'hidden'});
+  await page.locator('input[data-select-all]').click();
+  await page.getByText('Đã chọn 150 dòng',{exact:true}).waitFor();
+  await page.keyboard.press('Escape');
+  await select('g1-r1').click();
+  await select('g1-r2').click();
+  await page.getByRole('combobox',{name:'Đổi trạng thái',exact:true}).selectOption('sent');
+  assert.equal(await page.locator('[data-row="g1-r1"] [data-field="decision"]').inputValue(),'sent');
+  assert.equal(await page.locator('[data-row="g1-r2"] [data-field="decision"]').inputValue(),'sent');
+  await page.getByRole('combobox',{name:'Chuyển sang nhóm',exact:true}).selectOption('g2');
+  assert.equal(await page.locator('[data-group="g2"] [data-row="g1-r1"]').count(),1);
+  await page.locator('#material-multiselect [data-action="bulk-duplicate"]').click();
+  assert.equal(await page.locator('tr[data-row]').count(),152);
 };
 
 const imageFixture = 'iVBORw0KGgoAAAANSUhEUgAAAMAAAAB4CAIAAAArJ2pIAAABCUlEQVR42u3VQQ3AIAxA0W3hOie42w0BszA5mMAJBrCwcCEp7zko/Sln/Z4DZl2eAAEhIASEgEBACAgBISAQEAJCQAgIBISAEBACAgEhINZKUQd7273tUkvuLhC+MAQEAkJACAgBgYAQEAJCQCAgBISAEBACAgEhIASEgEBACAgBISAQEAJCQAgIBISAEBACQkAgIASEgBAQCAgBISAEBAJCQAgIAYGAEBACQkAICASEgBAQAgIBISAEhIBAQAgIASEgEBACQkAICASEgBAQAkJAICAEhIAQEPyRog5WcrddFwgBISAQEAJCQAgIBISAEBACQkAgIASEgBAQCAgBISAEBAJCQAiIiAZB4QdWS5tt1wAAAABJRU5ErkJggg==';
@@ -136,6 +161,35 @@ function pasteFixture(page,mode) {
     return !document.activeElement.dispatchEvent(event);
   },{base64:imageFixture,mode});
 }
+
+cases['8.6'] = async page => {
+  await openMaterials(page);
+  assert.equal(await page.locator('tr[data-row]').count(),150);
+  const metrics = await page.evaluate(() => {
+    const render = [];
+    for (let i=0;i<5;i++) {
+      const start = performance.now();
+      renderEditor();
+      document.querySelector('.sheet-grid').getBoundingClientRect();
+      render.push(performance.now()-start);
+    }
+    const code = document.querySelector('tr[data-row] input[data-field=code]');
+    const keypress = [];
+    code.focus({preventScroll:true});
+    for (const letter of 'GD8PERF') {
+      const start = performance.now();
+      code.value += letter;
+      code.dispatchEvent(new InputEvent('input',{bubbles:true,data:letter,inputType:'insertText'}));
+      keypress.push(performance.now()-start);
+    }
+    return { maxRender:Math.max(...render),maxInput:Math.max(...keypress),focusRetained:code === document.activeElement };
+  });
+  console.log(JSON.stringify(metrics));
+  assert.ok(metrics.maxRender < 200,'150 dòng phải render dưới 200 ms');
+  assert.ok(metrics.maxInput < 50 && metrics.focusRetained,'Nhập mã không được dựng lại ô');
+  await page.locator('[data-row="g1-r2"] .image-cell[data-slot="0"]').press('Space');
+  await page.locator('.toast-notification.show').filter({hasText:'Điền thông tin hoặc thêm ảnh'}).waitFor();
+};
 
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));

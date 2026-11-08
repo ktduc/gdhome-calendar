@@ -264,3 +264,27 @@
 .sidebar-compact .sb-chip { display: flex; align-items: center; gap: 5px; padding: 4px 6px; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 11.5px; font-weight: 600; color: #334155; cursor: pointer; background: #fff; white-space: nowrap; overflow: hidden; }
 .sidebar-compact .sb-chip:has(input:checked) { background: #f1f5f9; border-color: #94a3b8; }
 .sidebar-compact .sb-chip input { margin: 0; width: 13px; height: 13px; flex-shrink: 0; }
+
+/* Toast Notification khi Copy vào Clipboard */
+.toast-notification {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background-color: #1e293b;
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  z-index: 3000;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s ease;
+}
+
+.toast-notification.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}

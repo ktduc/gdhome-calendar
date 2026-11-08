@@ -70,6 +70,19 @@ XONG GĐ7
 | 8.3 | ✅ | dùng chung header và kiểu điều khiển với Lịch |
 | 8.4 | ✅ | chọn nhiều dòng, hoàn tác và bảo vệ dòng đã ký |
 | 8.5 | ✅ | dán ảnh từ items, HTML và clipboard vào ô |
-| 8.6 | ⏳ | Tinh chỉnh và đo hiệu năng |
+| 8.6 | ✅ | tách phần dựng bảng, dùng toast chung và đo 150 dòng |
 
-Bước kế tiếp GĐ8: 8.6 tinh chỉnh render, toast và đo bảng 150 dòng.
+Bước kế tiếp GĐ8: Claude review 6 commit cục bộ.
+
+### Tự kiểm tra GĐ8
+
+1. Cuộn xuống nhóm 8 và sang phải, xoá dòng. Kiểm tra vị trí cuộn và focus dòng kế bên, cả ở khổ hẹp có cuộn trang.
+2. Ở Lịch, rê chuột qua tên dự án và giai đoạn. Các khung, nội dung và sidebar giữ cùng kích thước trước và sau hover.
+3. So sánh header hai trang. Mở nút Thêm dòng/nhóm để thêm danh mục. Bật/tắt cột và đổi mật độ từ menu trái.
+4. Shift+click để chọn dải, Ctrl+click để thêm một dòng. Thử chọn toàn nhóm, toàn bảng đang hiện, nhân bản, đổi trạng thái, chuyển nhóm, Delete và Ctrl+Z. API trả 409 nếu xoá dòng thuộc bản đã ký.
+5. Click ô ảnh rồi Ctrl+V. Thử dán vào ô có ảnh, dán vào ô 3D khi hover và dán văn bản vào ô mã. Playwright gửi ClipboardEvent có items nhưng files rỗng, HTML với data URL hoặc URL cùng nguồn và mô phỏng clipboard.read().
+6. Với Playwright đã cài và Edge có sẵn, chạy `node docs/gd8-playwright.cjs`. Có thể trỏ `PLAYWRIGHT_PATH` đến Playwright cài trong thư mục tạm. Script khởi động server với kho dữ liệu mẫu và chạy cả sáu ca. Không tải tệp trong lúc kiểm tra.
+
+23/23 test Node đạt. Playwright đạt 6/6. Hai lượt đo cuối với 150 dòng có lần render chậm nhất khoảng 116–131 ms và xử lý input dưới 1 ms trên Edge headless.
+
+XONG GĐ8

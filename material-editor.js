@@ -13,7 +13,18 @@ const option = (value, label, selected) => '<option value="' + html(value) + '"'
 const assetCache = new Map();
 
 function post(url, body) { return request(url, { method:'POST', body:JSON.stringify(body) }); }
-function say(message) { byId('notice').textContent = message; }
+let materialToastTimer, materialToast;
+function say(message) {
+  byId('notice').textContent = message;
+  if (!message || !sheet) return;
+  const toast = materialToast ||= byId('material-toast');
+  const layer = [...document.querySelectorAll('dialog[open]')].at(-1) || document.body;
+  layer.append(toast);
+  toast.textContent = message;
+  toast.classList.add('show');
+  clearTimeout(materialToastTimer);
+  materialToastTimer = setTimeout(() => { toast.classList.remove('show'); },3200);
+}
 
 function showImages(root = box()) {
   root.querySelectorAll('img[data-asset]').forEach(async img => {
@@ -61,297 +72,6 @@ function counts(current) {
   return 'Đã chốt ' + rows.filter(r => r.chosen !== null && r.chosen !== undefined && r.decision !== 'changed').length + '/' + rows.length;
 }
 
-function labeledInput(key, value, label) {
-  return '<label><span>' + label + '</span>' + input(key,value,label) + '</label>';
-}
-
-const materialColumns = [
-  ['select','Chọn dòng'],['name','Hạng mục'],['room','Vị trí'],['render','Phối cảnh 3D'],['spec','Chất liệu / Quy cách'],
-  ['pa0','PA1'],['pa1','PA2'],['pa2','PA3'],['qty','KL'],['unit','Đơn vị'],
-  ['supplier','NCC / Nhà thầu'],['note','Ghi chú'],['decision','Trạng thái'],['actions','Thao tác']
-];
-const optionalColumns = new Set(['render','spec','qty','unit','supplier','note','decision']);
-const hiddenColumns = new Set();
-const forcedPA = new Set();
-const hiddenGroups = new Set();
-const collapsed = new Set();
-const sidebarOpen = new Map();
-let sheetRoom = '', sheetStatus = '';
-const rowState = row => row.ordered ? 'ordered' : row.decision;
-const paHasData = pa => !!pa && (pa.images?.length || fields.some(key => pa[key]));
-function rowPaCount(row) {
-  return Math.max(1,row.paCount || 1,(row.chosen ?? -1)+1,row.options.findLastIndex(paHasData)+1);
-}
-function visibleColumns() {
-  const count = Math.max(1,...sheet.groups.flatMap(g => g.rows.map(rowPaCount)));
-  return materialColumns.filter(([key]) => !hiddenColumns.has(key) &&
-    (!/^pa[12]$/.test(key) || forcedPA.has(key) || Number(key[2]) < count));
-}
-function sidebarSection(key,title,content) {
-  return '<details class="sb-collapsible sidebar-section" data-sidebar="' + key + '"' + (sidebarOpen.get(key) !== false ? ' open' : '') +
-    '><summary class="sb-head">' + title + '</summary><div class="material-sidebar-body">' + content + '</div></details>';
-}
-function projectSidebar() {
-  const project = materials.projects.find(p => p.id === sheet.projectId);
-  const meta = sheet.meta || {};
-  return sidebarSection('project','📁 Dự án & khách hàng',
-    '<label class="side-field">Dự án Tiến độ<select id="editor-project">' + option(sheet.projectId,project?.name || meta.project || 'Dự án đã lưu',sheet.projectId) +
-    materials.projects.filter(p => p.id !== sheet.projectId).map(p => option(p.id,p.name,sheet.projectId)).join('') + '</select></label>' +
-    '<label class="side-field">Bảng chốt mã<select id="editor-sheet">' +
-    (!sheet.id ? '<option value="">Bảng mới</option>' : '') + materials.sheets.filter(s => s.projectId === sheet.projectId)
-      .map(s => option(s.id,s.id === sheet.id ? sheet.title : s.title,sheet.id)).join('') + '</select></label>' +
-    '<div class="material-meta-fields">' + labeledInput('title',sheet.title,'Tên bảng') +
-    [['customer','Kính gửi'],['address','Địa chỉ'],['project','Tên dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']]
-      .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div><button data-action="notion">Lấy từ Notion</button>');
-}
-function catalogSidebar() {
-  return sidebarSection('catalog','📋 Danh mục',
-    '<ul class="material-catalog">' + sheet.groups.map(group => '<li data-catalog="' + html(group.id) + '" draggable="true">' +
-      '<input type="checkbox" data-group-toggle="' + html(group.id) + '" aria-label="Hiện ' + html(group.name) + '"' +
-      (hiddenGroups.has(group.id) ? '' : ' checked') + '><button data-action="jump-group" data-id="' + html(group.id) + '">' +
-      html(group.name) + '</button><small>' + group.rows.filter(r => r.chosen != null && r.decision !== 'changed').length + '/' + group.rows.length +
-      '</small><span title="Kéo để đổi thứ tự">⋮⋮</span></li>').join('') + '</ul><button data-action="add-group">＋ Thêm danh mục</button>');
-}
-function displaySidebar() {
-  return sidebarSection('display','⚙ Hiển thị',
-    '<div class="sb-row-label">Mật độ dòng</div><div class="sb-seg-btns material-density">' +
-    Object.entries({gon:'Gọn',vua:'Vừa',lon:'Ảnh lớn'}).map(([key,label]) =>
-      '<button data-action="density" data-id="' + key + '" aria-pressed="' + (key === density) + '">' + label + '</button>').join('') + '</div>' +
-
-    '<label class="side-field">Phòng<select id="room-filter"><option value="">Tất cả</option>' +
-      [...new Set(sheet.groups.flatMap(g => g.rows.map(r => r.room)).filter(Boolean))].map(r => option(r,r,sheetRoom)).join('') + '</select></label>' +
-    '<label class="side-field">Trạng thái<select id="status-filter"><option value="">Tất cả</option>' +
-      Object.entries({...statusLabels,ordered:'Đã đặt hàng'}).map(([key,label]) => option(key,label,sheetStatus)).join('') + '</select></label>' +
-    '<div class="sb-chip-grid">' + materialColumns.filter(([key]) => optionalColumns.has(key) || /^pa[12]$/.test(key))
-      .map(([key,label]) => '<label class="sb-chip" title="' + label + '"><input type="checkbox" data-column-toggle="' + key + '"' +
-        ((optionalColumns.has(key) ? !hiddenColumns.has(key) : forcedPA.has(key)) ? ' checked' : '') + '> ' +
-        (optionalColumns.has(key) ? label : 'Luôn hiện ' + label) + '</label>').join('') + '</div>');
-}
-function materialKpis() {
-  const nearest = sheet.groups.map(g => deadlineFor(g).due).filter(Boolean).sort()[0];
-  return [sheet.groups.length + ' nhóm',sheet.groups.reduce((n,g) => n+g.rows.length,0) + ' hạng mục',
-    counts(sheet),nearest ? 'Hạn gần nhất ' + nearest : 'Chưa có hạn'].map(value => '<span>' + html(value) + '</span>').join('');
-}
-
-const defaultColumnWidths = {select:36,room:112,render:110,spec:152,pa0:118,pa1:118,pa2:118,qty:68,unit:75,supplier:136,note:156,decision:130,actions:134};
-const clampColumnWidth = width => Math.round(Math.min(720,Math.max(48,width)));
-
-function columnWidth(key) {
-  if (key === 'select') return defaultColumnWidths.select;
-  const manual = materials.columnWidths?.[key];
-  if (manual) return manual;
-  if (key === 'name') {
-    const context = document.createElement('canvas').getContext('2d');
-    context.font = '13px system-ui';
-    const longest = Math.max(0,...sheet.groups.flatMap(g => g.rows.map(row => context.measureText(row.name).width)));
-    return Math.ceil(Math.min(460,Math.max(148,longest+24)));
-  }
-  if (density === 'lon' && (key === 'render' || /^pa[012]$/.test(key))) return 176;
-  return defaultColumnWidths[key];
-}
-
-function installColumnResize(table) {
-  const apply = (key,width) => {
-    table.querySelector('col[data-column="' + key + '"]').style.width = width + 'px';
-    table.style.width = [...table.querySelectorAll('col')].reduce((sum,col) => sum+parseInt(col.style.width,10),0) + 'px';
-  };
-  const save = (key,width) => {
-    materials.columnWidths ||= {};
-    if (width == null) delete materials.columnWidths[key];
-    else materials.columnWidths[key] = width;
-    queueSave();
-  };
-  table.querySelectorAll('[data-resize]').forEach(handle => {
-    const key = handle.dataset.resize;
-    handle.onpointerdown = event => {
-      if (event.button !== 0) return;
-      event.preventDefault();
-      const start = event.clientX;
-      const initial = columnWidth(key);
-      let width = initial;
-      handle.setPointerCapture(event.pointerId);
-      handle.onpointermove = move => {
-        width = clampColumnWidth(initial + move.clientX-start);
-        apply(key,width);
-      };
-      handle.onpointerup = () => { if (width !== initial) save(key,width); };
-      handle.onlostpointercapture = () => {
-        handle.onpointermove = null;
-        handle.onpointerup = null;
-        apply(key,columnWidth(key));
-      };
-    };
-    handle.ondblclick = () => { save(key,null); apply(key,columnWidth(key)); };
-    handle.onkeydown = event => {
-      if (!['ArrowLeft','ArrowRight','Home'].includes(event.key)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      save(key,event.key === 'Home' ? null : clampColumnWidth(columnWidth(key) + (event.key === 'ArrowLeft' ? -12 : 12)));
-      apply(key,columnWidth(key));
-    };
-  });
-}
-let restoreViewFrame;
-const editorScrollAreas = ['.sheet-scroll','.material-sidebar'];
-const focusAttributes = ['id','data-field','data-action','data-group-toggle','data-column-toggle','data-resize','data-sidebar','data-select-row','data-id','data-header-command'];
-
-function captureEditorView() {
-  const root = box();
-  const active = document.activeElement;
-  const view = {
-    page:[window.scrollX,window.scrollY],
-    areas:editorScrollAreas.map(selector => {
-      const area = root.querySelector(selector);
-      return [selector,area?.scrollLeft || 0,area?.scrollTop || 0];
-    })
-  };
-  const inHeader = byId('material-header-actions').contains(active);
-  if ((!root.contains(active) && !inHeader) || active.closest('dialog')) return view;
-  const row = active.closest('[data-row]');
-  const rows = row ? [...root.querySelectorAll('tr[data-row]')] : [];
-  const index = rows.indexOf(row);
-  const candidates = row ? [row,...rows.slice(index+1),...rows.slice(0,index).reverse()] : [];
-  view.focus = {
-    inHeader,
-    rowIds:candidates.map(candidate => candidate.dataset.row),
-    groupId:active.closest('[data-group]')?.dataset.group,
-    column:active.closest('td[data-column]')?.dataset.column,
-    slot:active.closest('[data-slot]')?.dataset.slot,
-    keys:focusAttributes.filter(key => active.hasAttribute(key))
-      .map(key => '[' + key + '="' + CSS.escape(active.getAttribute(key)) + '"]').join(''),
-    range:active.selectionStart == null ? null : [active.selectionStart,active.selectionEnd,active.selectionDirection]
-  };
-  return view;
-}
-
-function restoreEditorView(view) {
-  const root = box();
-  const restoreScroll = () => {
-    for (const [selector,left,top] of view.areas) {
-      const area = root.querySelector(selector);
-      if (area) { area.scrollLeft = left; area.scrollTop = top; }
-    }
-    window.scrollTo(...view.page);
-  };
-  restoreScroll();
-  const focus = view.focus;
-  if (focus) {
-    let row;
-    for (const id of focus.rowIds) {
-      row = root.querySelector('[data-row="' + CSS.escape(id) + '"]');
-      if (row) break;
-    }
-    const group = focus.groupId && root.querySelector('[data-group="' + CSS.escape(focus.groupId) + '"]');
-    const column = row && focus.column && row.querySelector('[data-column="' + focus.column + '"]');
-    const slot = column && focus.slot != null && column.querySelector('[data-slot="' + focus.slot + '"]');
-    const scope = slot || column || row || group || (focus.inHeader ? byId('material-header-actions') : root);
-    const target = (focus.keys && scope.querySelector(focus.keys)) || slot ||
-      (row && row.querySelector('td[data-column="name"] input')) ||
-      (group && group.querySelector('button[data-action="fold"]'));
-    if (target) {
-      target.focus({preventScroll:true});
-      if (focus.range && target.selectionStart != null) target.setSelectionRange(...focus.range);
-    }
-  }
-  cancelAnimationFrame(restoreViewFrame);
-  restoreViewFrame = requestAnimationFrame(restoreScroll);
-}
-
-function renderEditor() {
-  const view = captureEditorView();
-  const columns = visibleColumns();
-  const widths = columns.map(([key]) => columnWidth(key));
-  renderMaterialHeader();
-  box().innerHTML = '<div class="material-workspace"><aside class="material-sidebar sidebar-compact">' + projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' +
-
-    '<section class="material-sheet"><div class="material-title"><h1>BẢNG CHỐT MÃ VẬT LIỆU – ' +
-    html(sheet.meta?.project || materials.projects.find(p => p.id === sheet.projectId)?.name || sheet.title) +
-    '</h1><div id="material-count">' + materialKpis() + '</div></div>' +
-    (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm.</p>') +
-    '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid" style="width:' + widths.reduce((sum,w) => sum+w,0) +
-    'px"><colgroup>' + columns.map(([key],i) => '<col data-column="' + key + '" style="width:' + widths[i] + 'px">').join('') + '</colgroup><thead><tr>' +
-    columns.map(([key,label]) => '<th data-column="' + key + '">' + (key === 'select' ?
-      '<input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện">' :
-      label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
-      label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + '</th>').join('') +
-
-    '</tr></thead>' + sheet.groups.filter(g => !hiddenGroups.has(g.id)).map(g => renderGroup(g,columns)).join('') +
-    '</table></div></section></div><div id="material-multiselect" hidden></div><dialog id="material-dialog"></dialog>';
-  const updatedScroll = box().querySelector('.sheet-scroll');
-
-  showImages();
-  installEditorSidebar();
-  refreshRowSelection();
-  installMaterialsAi();
-  installColumnResize(updatedScroll.querySelector('table'));
-  if (typeof installRelease === 'function') installRelease();
-  window.lucide?.createIcons({root:byId('material-header-actions')});
-  restoreEditorView(view);
-}
-
-function headerIcon(name,label = '') {
-  return '<i data-lucide="' + name + '" aria-hidden="true">' + label + '</i>';
-}
-function headerMenu(key,label,icon,contents,variant = 'outline') {
-  return '<details class="hdr-dropdown"><summary class="btn btn-' + variant + '" data-header-command="' + key + '">' +
-    headerIcon(icon) + '<span class="btn-label">' + label + '</span><span class="hdr-caret">▾</span></summary>' +
-    '<div class="hdr-dropdown-menu">' + contents + '</div></details>';
-}
-function renderMaterialHeader() {
-  const header = byId('material-header-actions');
-  header.innerHTML = headerMenu('file','File','folder','<button class="hdr-menu-item" data-action="back">Danh sách bảng</button><span id="release-actions"></span>') +
-    '<span id="ai-actions"></span><span id="image-actions"></span><div class="hdr-undo-group">' +
-    '<button class="btn btn-outline hdr-icon-sq" data-action="undo" data-header-command="undo" aria-label="Hoàn tác" title="Hoàn tác · Ctrl+Z">' + headerIcon('undo-2','↶') + '</button>' +
-    '<button class="btn btn-outline hdr-icon-sq" data-action="redo" data-header-command="redo" aria-label="Làm lại" title="Làm lại · Ctrl+Y">' + headerIcon('redo-2','↷') + '</button></div>' +
-    headerMenu('add','Thêm dòng/nhóm','plus','<label class="side-field">Danh mục<select id="header-add-group">' +
-      sheet.groups.map(group => option(group.id,group.name)).join('') + '</select></label>' +
-      '<button class="hdr-menu-item" data-action="header-add-row">Thêm dòng</button><button class="hdr-menu-item" data-action="add-group">Thêm danh mục</button>','primary') +
-    '<small id="save-label">' + (conflict ? 'Xung đột' : dirty ? 'Chờ lưu' : saving ? 'Đang lưu' : 'Đã lưu') + '</small>';
-  header.querySelector('[data-header-command="add"]').id = 'material-add';
-}
-function installEditorSidebar() {
-  box().querySelectorAll('[data-sidebar]').forEach(section => {
-    section.ontoggle = () => sidebarOpen.set(section.dataset.sidebar,section.open);
-  });
-  for (const [id,setValue] of [
-    ['room-filter',value => { sheetRoom = value; }],['status-filter',value => { sheetStatus = value; }],
-
-  ]) byId(id).onchange = event => { setValue(event.target.value); renderEditor(); };
-  byId('editor-project').onchange = event => leaveSheet(event.target.value);
-  byId('editor-sheet').onchange = async event => {
-    const id = event.target.value;
-    await flushSave();
-    if (!dirty && !saving) openSheet(materials.sheets.find(s => s.id === id));
-    else renderEditor();
-  };
-  const sidebar = box().querySelector('.material-sidebar');
-  sidebar.onchange = event => {
-    const {groupToggle,columnToggle} = event.target.dataset;
-    if (groupToggle) setMembership(hiddenGroups,groupToggle,!event.target.checked);
-    if (columnToggle) {
-      if (optionalColumns.has(columnToggle)) setMembership(hiddenColumns,columnToggle,!event.target.checked);
-      else setMembership(forcedPA,columnToggle,event.target.checked);
-    }
-    if (groupToggle || columnToggle) renderEditor();
-  };
-  sidebar.ondragstart = event => {
-    const item = event.target.closest('[data-catalog]');
-    if (item) event.dataTransfer.setData('application/gdhome-group',item.dataset.catalog);
-  };
-  sidebar.ondragover = event => {
-    if (event.target.closest('[data-catalog]') && event.dataTransfer.types.includes('application/gdhome-group')) event.preventDefault();
-  };
-  sidebar.ondrop = event => {
-    const target = event.target.closest('[data-catalog]');
-    const source = event.dataTransfer.getData('application/gdhome-group');
-    if (!source || !target || source === target.dataset.catalog) return;
-    const from = sheet.groups.findIndex(g => g.id === source);
-    const to = sheet.groups.findIndex(g => g.id === target.dataset.catalog);
-    if (from < 0 || to < 0) return;
-    event.preventDefault();
-    modify(() => sheet.groups.splice(to,0,sheet.groups.splice(from,1)[0]));
-  };
-}
 function setMembership(set,key,enabled) { if (enabled) set.add(key); else set.delete(key); }
 async function leaveSheet(projectId = sheet.projectId) {
   await flushSave();
@@ -359,60 +79,6 @@ async function leaveSheet(projectId = sheet.projectId) {
   sheet = null;
   renderMaterialApp(projectId);
 }
-function renderGroup(group,columns) {
-  return '<tbody data-group="' + html(group.id) + '"><tr class="group"><th colspan="' + columns.length + '">' +
-    '<input type="checkbox" data-select-group="' + html(group.id) + '" aria-label="Chọn cả nhóm ' + html(group.name) + '"> ' +
-    '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
-    input('groupName',group.name,'Nhóm') + ' <label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
-    (typeof scheduleControls === 'function' ? scheduleControls(group) : '') + ' <button data-action="del-group">Bỏ nhóm</button></th></tr>' +
-    (collapsed.has(group.id) ? '' : group.rows.filter(r => (!sheetRoom || r.room === sheetRoom) && (!sheetStatus || rowState(r) === sheetStatus))
-      .map(row => renderRow(row,columns)).join('') + '<tr><td colspan="' + columns.length + '"><button data-action="add-row">＋ Dòng</button></td></tr>') + '</tbody>';
-}
-
-function imageCell(list, slot, content = '', state = '', removable = false) {
-  const hasImage = list.length > 0;
-  const photo = hasImage ? images(list.slice(0,1)) : '<span class="image-plus" aria-hidden="true">＋</span>';
-  const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (slot+1);
-  return '<div class="image-cell ' + state + (hasImage ? ' has-image' : '') + '" tabindex="0" data-slot="' + slot +
-    '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả. Bấm ảnh PA để chốt phương án."><div class="image-preview">' + photo +
-    (!hasImage ? '<small class="paste-cell-hint">Ctrl+V để dán ảnh</small>' : '') +
-    (list.length > 1 ? '<small class="image-count">+' + (list.length-1) + '</small>' : '') +
-    (state ? '<span class="image-state" aria-label="' + (state === 'chosen' ? 'Đã chọn' : 'Dự phòng') + '">' + (state === 'chosen' ? '✓' : 'Dự phòng') + '</span>' : '') +
-    '</div><button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' + (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
-}
-
-function renderRow(row,columns) {
-  const chosen = row.options[row.chosen];
-  const count = rowPaCount(row);
-  const cells = {
-    select:'<input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '">',
-    name:input('name',row.name,'Hạng mục'),
-    room:input('room',row.room,'Vị trí'),
-    render:imageCell(row.render,'render'),
-    spec:input('spec',chosen?.finish || row.spec,'Quy cách'),
-    qty:input('qty',row.qty,'Khối lượng'),
-    unit:input('unit',row.unit,'Đơn vị'),
-    supplier:input('supplier',row.supplier,'NCC / Nhà thầu'),
-    note:input('note',row.note,'Ghi chú'),
-    decision:'<select data-field="decision" aria-label="Trạng thái">' + Object.entries({...statusLabels,ordered:'Đã đặt hàng'})
-      .map(([key,label]) => option(key,label,rowState(row))).join('') + '</select>',
-    actions:'<div class="row-actions">' +
-      (count < 3 ? '<button class="add-pa" data-action="add-pa">＋ PA</button>' : '') +
-      [['move-up','Đưa dòng lên','↑'],['move-down','Đưa dòng xuống','↓'],['duplicate','Nhân bản dòng','⧉'],['del-row','Bỏ dòng','×']]
-        .map(([action,label,icon]) => '<button data-action="' + action + '" title="' + label + '" aria-label="' + label + '">' + icon + '</button>').join('') + '</div>'
-  };
-  for (const [i,pa] of row.options.entries()) {
-    const key = 'pa' + i;
-    if (i >= count && !forcedPA.has(key)) { cells[key] = ''; continue; }
-    const detail = [pa.color,pa.size].filter(Boolean).join(' · ');
-    const code = '<div class="pa-caption">' + input('code',pa.code,'Mã PA' + (i+1)) +
-      (detail ? '<small title="' + html(detail) + '"> · ' + html(detail) + '</small>' : '') + '</div>';
-    const canRemove = i > 0 && i === count-1 && !paHasData(pa) && row.chosen !== i;
-    cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove);
-  }
-  return '<tr data-row="' + html(row.id) + '">' + columns.map(([key]) => '<td data-column="' + key + '">' + cells[key] + '</td>').join('') + '</tr>';
-}
-
 function context(target) {
   const group = sheet?.groups.find(g => g.id === target.closest('[data-group]')?.dataset.group);
   const row = group?.rows.find(r => r.id === target.closest('[data-row]')?.dataset.row);
@@ -429,11 +95,21 @@ function modify(change, render = true) {
   if (render) renderEditor();
 }
 
+let kpiFrame;
+function scheduleKpiRefresh() {
+  if (kpiFrame) return;
+  kpiFrame = requestAnimationFrame(() => {
+    kpiFrame = null;
+    const count = byId('material-count');
+    if (sheet && count) count.innerHTML = materialKpis();
+  });
+}
+
 function queueSave() {
   dirty = true;
   clearTimeout(saveTimer);
   if (byId('save-label')) byId('save-label').textContent = conflict ? 'Xung đột' : 'Chờ lưu';
-  if (byId('material-count')) byId('material-count').innerHTML = materialKpis();
+  scheduleKpiRefresh();
   saveTimer = setTimeout(flushSave, 550);
 }
 
