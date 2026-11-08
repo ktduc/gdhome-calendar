@@ -72,8 +72,8 @@ function toolsSnapshotKey() {
 function saveToolsSnapshot() {
   if (!materialServerReady || materialGuest) return;
   const key = toolsSnapshotKey();
-  const {projects,sheets,viewVersion,viewSettings,columnWidths,profiles,schedule,r2} = materials;
-  const snapshot = {projects,sheets,viewVersion,viewSettings,columnWidths,profiles,schedule,r2};
+  const {projects,sheets,archivedSheets,publishedSheetIds,viewVersion,viewSettings,columnWidths,profiles,schedule,r2} = materials;
+  const snapshot = {projects,sheets,archivedSheets,publishedSheetIds,viewVersion,viewSettings,columnWidths,profiles,schedule,r2};
   try { localStorage.setItem(key,JSON.stringify(snapshot)); }
   catch {
     // Preserve the sidebar even if every draft is too large for browser storage.

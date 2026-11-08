@@ -1,7 +1,7 @@
 const crypto = require('node:crypto');
 const { scheduleInfo, tasksFor } = require('./material-schedule');
-const { MaterialAssets, maxImageBytes, isConfigured } = require('./material-assets');
-const { cleanSheet, handleInternalReview } = require('./material-review');
+const { MaterialAssets, imageName, maxImageBytes, isConfigured } = require('./material-assets');
+const { cleanSheet, handleInternalReview, assetNames } = require('./material-review');
 const {projectList,profileFor,writeProjectProfile} = require('./project-profiles');
 
 function fail(status, message) {
@@ -37,7 +37,7 @@ function cleanMaterialSuggestions(patch,previous) {
   return result;
 }
 
-function cleanMaterialView(patch,previous = {},sheets = []) {
+function cleanMaterialView(patch,previous = {},sheets = [],archived = []) {
   const result = { ...previous };
   const flags = (value,allowed) => Array.isArray(value) ? [...new Set(value.filter(key => allowed.includes(key)))] : [];
   const validIds = value => Array.isArray(value) ? [...new Set(value.filter(key => typeof key === 'string' && /^[\w-]{1,80}$/.test(key)))].slice(0,100) : [];
@@ -64,7 +64,7 @@ function cleanMaterialView(patch,previous = {},sheets = []) {
     result.suggestions = cleanMaterialSuggestions(patch.suggestions,previous.suggestions);
   }
   if (patch.sheets && typeof patch.sheets === 'object') {
-    result.sheets = Object.fromEntries(sheets.flatMap(sheet => {
+    result.sheets = Object.fromEntries([...sheets,...archived].flatMap(sheet => {
       const values = patch.sheets[sheet.id];
       const view = { ...previous.sheets?.[sheet.id] };
       if (values && typeof values === 'object') {
@@ -72,6 +72,7 @@ function cleanMaterialView(patch,previous = {},sheets = []) {
         if (typeof values.room === 'string') view.room = values.room.slice(0,500);
         if (['','draft','sent','chosen','changed','ordered'].includes(values.status)) view.status = values.status;
         if (typeof values.viewAsPrint === 'boolean') view.viewAsPrint = values.viewAsPrint;
+        if (typeof values.onlyUnlinked === 'boolean') view.onlyUnlinked = values.onlyUnlinked;
       }
       return Object.keys(view).length ? [[sheet.id,view]] : [];
     }));
@@ -139,6 +140,59 @@ function signedRowsBySheet(data) {
 }
 
 
+function materialLifecycleSummary(data) {
+  return {
+    archivedSheets:(data.archivedSheets || []).map(({id,title,projectId,archivedAt}) => ({id,title,projectId,archivedAt})),
+    publishedSheetIds:[...new Set(data.revisions.map(revision => revision.sheet.id))]
+  };
+}
+
+function flagUnusedMaterialAssets(data,removed,at) {
+  const candidates = assetNames(removed);
+  if (!candidates.size) return;
+  for (const sheet of [...data.sheets,...(data.archivedSheets || []),...data.revisions.map(revision => revision.sheet)]) {
+    for (const name of assetNames(sheet)) candidates.delete(name);
+  }
+  for (const item of data.library) for (const image of item.images || []) {
+    for (const name of typeof image === 'string' ? [image] : [image?.full,image?.thumb]) {
+      if (imageName(name)) candidates.delete(name);
+    }
+  }
+  // Only mark candidates. A future cleanup must recheck references, including the project hub's shared 3D assets.
+  if (candidates.size) {
+    data.assetCleanupCandidates ||= {};
+    for (const name of candidates) data.assetCleanupCandidates[name] = at;
+  }
+}
+
+function applyMaterialLifecycle(data,sheetId,body,actor) {
+  const at = Date.now();
+  const archive = data.archivedSheets ||= [];
+  if (body.action === 'restore') {
+    const index = archive.findIndex(sheet => sheet.id === sheetId);
+    if (index < 0) fail(404,'Không tìm thấy bảng đã lưu trữ.');
+    const [{archivedAt,...sheet}] = archive.splice(index,1);
+    data.sheets.push(sheet);
+    data.audit.push({sheetId,at,actor,event:'sheet-restored'});
+    return {outcome:'restored',sheet,...materialLifecycleSummary(data)};
+  }
+  if (body.action !== 'remove') fail(400,'Hành động không hợp lệ.');
+  const index = data.sheets.findIndex(sheet => sheet.id === sheetId);
+  if (index < 0) fail(404,'Không tìm thấy bảng.');
+  if (typeof body.title !== 'string' || body.title.trim() !== data.sheets[index].title) fail(400,'Nhập đúng tên bảng để xác nhận.');
+  const [sheet] = data.sheets.splice(index,1);
+  if (data.viewSettings?.sheetId === sheetId) data.viewSettings.sheetId = null;
+  if (data.revisions.some(revision => revision.sheet.id === sheetId)) {
+    archive.push({...sheet,archivedAt:at});
+    data.audit.push({sheetId,at,actor,event:'sheet-archived'});
+    return {outcome:'archived',...materialLifecycleSummary(data)};
+  }
+  if (data.viewSettings?.sheets) delete data.viewSettings.sheets[sheetId];
+  data.audit = data.audit.filter(event => event.sheetId !== sheetId);
+  flagUnusedMaterialAssets(data,sheet,at);
+  return {outcome:'deleted',...materialLifecycleSummary(data)};
+}
+
 async function handleMaterials(req, url, { store, dataKey, readJsonBody, readRawBody, sendJson, res, dataDir, secret, defaultSchedule }) {
   const materials = new MaterialStore(store, dataKey);
   const assets = new MaterialAssets(dataDir, materials.key);
@@ -161,6 +215,13 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, readRaw
     const result = await handleInternalReview(req,url,{ res,repo:materials,account:dataKey,readJsonBody,sendJson,secret,resolveProfile });
     if (result === false) fail(404, 'Không tìm thấy API duyệt.');
     return;
+  }
+  const lifecycle = /^\/api\/materials\/sheets\/([\w-]{1,80})\/lifecycle$/.exec(url);
+  if (lifecycle && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    if (!Number.isSafeInteger(body?._version)) fail(400,'Thiếu phiên bản dữ liệu.');
+    const saved = await materials.update(body._version,data => applyMaterialLifecycle(data,lifecycle[1],body,dataKey));
+    return sendJson(res,200,saved);
   }
   const schedule = await store.get(dataKey) || {};
   const projects = (schedule.projectOwners || []).map(({ id, name }) => ({ id, name }));
@@ -185,7 +246,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, readRaw
         fail(400,'Thiếu phiên bản hoặc cài đặt hiển thị.');
       }
       const result = await materials.update(body._version,data => {
-        data.viewSettings = cleanMaterialView(body.patch,data.viewSettings,data.sheets);
+        data.viewSettings = cleanMaterialView(body.patch,data.viewSettings,data.sheets,data.archivedSheets);
         return { viewSettings:data.viewSettings };
       },'viewVersion');
       return sendJson(res,200,result);
@@ -195,7 +256,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, readRaw
     const data = await materials.get();
     const { _version, sheets, presets, library, settings } = data;
     const sharedProjects = projectList(schedule,data);
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2: isConfigured(), viewVersion:data.viewVersion || 0, viewSettings:data.viewSettings || {}, columnWidths:data.columnWidths || {}, profiles:Object.fromEntries(sharedProjects.map(project => [project.id,project.profile])), signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
+    return sendJson(res, 200, { _version, sheets, ...materialLifecycleSummary(data), presets, library, settings, projects, r2: isConfigured(), viewVersion:data.viewVersion || 0, viewSettings:data.viewSettings || {}, columnWidths:data.columnWidths || {}, profiles:Object.fromEntries(sharedProjects.map(project => [project.id,project.profile])), signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);

@@ -104,9 +104,13 @@ function hasPrintOption(option) {
   return !!(option.code || option.brand || option.finish || option.color || option.size || option.images?.length);
 }
 
+const materialQuantityNote = '<small class="material-quantity-note">(theo báo giá)</small>';
+function displayMaterialQuantity(row) {
+  return [row.qty,displayMaterialUnit(row.unit)].filter(Boolean).join(' ');
+}
 function rowsForPrint(view, base) {
   let i = 0;
-  return view.sheet.groups.map(group => '<tr class="print-group"><th colspan="' + 5 + '">' + html(group.name) + '</th></tr>' +
+  return view.sheet.groups.map(group => '<tr class="print-group"><th colspan="6">' + html(group.name) + '</th></tr>' +
     group.rows.map(row => {
       const index = view.customer?.choices?.[row.id] ?? row.chosen;
       const pa = row.options[index];
@@ -117,7 +121,7 @@ function rowsForPrint(view, base) {
       return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td class="material-copy-secondary">' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
         (pa ? '<br><small>' + html(options.filter(o => o !== pa && o.code).map(o => 'Dự phòng: '+o.code).join(' · ')) + '</small>' : '') +
-        '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base,true) + '</div></td></tr>';
+        '</td><td data-column="qty">' + html(displayMaterialQuantity(row)) + '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base,true) + '</div></td></tr>';
     }).join('')).join('');
 }
 function printable(view,base) {
@@ -126,7 +130,8 @@ function printable(view,base) {
   const day = materialPrintDate(view.customer?.at || view.publishedAt || Date.now());
   const heading = '<div class="print-heading"><img src="/gdhome-logo.png" alt="GD HOME"><i>Hà Nội, ' + day + '</i></div>';
   const table = '<table class="print-table"><thead><tr>' +
-    ['STT','Hạng mục','Chất liệu / Quy cách','Màu / Mã / Kích thước','Ghi chú / Hình ảnh minh hoạ'].map(label => '<th>' + label + '</th>').join('') +
+    ['STT','Hạng mục','Chất liệu / Quy cách','Màu / Mã / Kích thước','Khối lượng ' + materialQuantityNote,'Ghi chú / Hình ảnh minh hoạ']
+      .map(label => '<th>' + label + '</th>').join('') +
     '</tr></thead><tbody>' + rowsForPrint(view,base) + '</tbody></table>';
   return heading + '<h1>BIÊN BẢN XÁC NHẬN</h1><div class="print-center">* * *<br><strong><i>(V/v: Thống nhất quy cách vật liệu, kích thước thiết bị nội thất)</i></strong></div>' +
     '<p><strong>BÊN A: CHỦ ĐẦU TƯ - KHÁCH HÀNG</strong><br>Họ và tên khách hàng - Ông/Bà: ' + html(meta.customer) +

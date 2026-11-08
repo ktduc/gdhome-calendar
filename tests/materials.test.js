@@ -92,6 +92,51 @@ test('Chốt mã: phiên bản, quyền Gmail, ảnh riêng và hồ sơ ký b�
   assert.equal((await call(publicApi,null,null)).data.sheet.meta.customer,'Khách A');
   assert.equal((await call(endpoint,{ _version:change.data._version,revisionId:view.data.id,action:'revoke' })).status,200);
   assert.equal((await call(publicApi,null,null)).status,410);
+
+  await t.test('Xoá bản nháp theo phiên bản, lưu trữ bảng đã ký và khôi phục',async () => {
+    const current = (await call('/api/materials')).data;
+    const otherFile = Buffer.from(file);
+    otherFile[otherFile.length-1] ^= 1;
+    const orphan = (await call('/api/materials/assets',{image:otherFile.toString('base64')})).data.name;
+    const draft = structuredClone(sheet);
+    draft.title = 'Bản nháp được xoá';
+    draft.groups[0].rows[0].render = [{full:orphan,thumb:asset.name}];
+    const created = await call('/api/materials',{_version:current._version,sheet:draft});
+    assert.equal(created.status,200);
+    const draftId = created.data.sheet.id;
+    const route = id => '/api/materials/sheets/'+id+'/lifecycle';
+    const remove = {action:'remove',title:draft.title,_version:created.data._version};
+    assert.equal((await call(route(draftId),remove,null)).status,401);
+    assert.equal((await call(route(draftId),{...remove,_version:0},other)).status,404);
+    assert.equal((await call(route(draftId),{...remove,_version:current._version})).status,409);
+    assert.equal((await call(route(draftId),{...remove,title:'Sai tên'})).status,400);
+    const deleted = await call(route(draftId),remove);
+    assert.equal(deleted.status,200);
+    assert.equal(deleted.data.outcome,'deleted');
+    const {MaterialStore} = require('../materials');
+    const repo = new MaterialStore(getStore(),email);
+    const afterDelete = await repo.get();
+    assert.equal(afterDelete.sheets.some(entry => entry.id === draftId),false);
+    assert.ok(afterDelete.assetCleanupCandidates[orphan]);
+    assert.equal(Object.hasOwn(afterDelete.assetCleanupCandidates,asset.name),false,'Ảnh còn trong bản phát hành phải giữ lại');
+
+    const archived = await call(route(saved.sheet.id),{action:'remove',title:sheet.title,_version:deleted.data._version});
+    assert.equal(archived.status,200);
+    assert.equal(archived.data.outcome,'archived');
+    const state = (await call('/api/materials')).data;
+    assert.equal(state.sheets.length,0);
+    assert.equal(state.archivedSheets[0].id,saved.sheet.id);
+    assert.equal((await call('/api/materials',{_version:state._version,sheet:current.sheets[0]})).status,404);
+    const history = await call(endpoint);
+    assert.equal(history.data.revisions[0].customer.name,signature.name);
+    assert.equal(history.data.revisions[0].company.name,'Đại diện GD HOME');
+    assert.equal((await call(route(saved.sheet.id),{action:'restore',_version:deleted.data._version})).status,409);
+    const restored = await call(route(saved.sheet.id),{action:'restore',_version:state._version});
+    assert.equal(restored.status,200);
+    assert.equal(restored.data.sheet.id,saved.sheet.id);
+    assert.equal(restored.data.sheet.groups[0].rows[0].decision,'changed');
+    assert.deepEqual(restored.data.archivedSheets,[]);
+  });
 });
 
 test('Gist giới hạn mỗi lần gọi 15 giây và thử lại tối đa hai lần',async t => {

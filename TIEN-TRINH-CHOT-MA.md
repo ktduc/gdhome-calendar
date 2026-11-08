@@ -201,3 +201,23 @@ Bước kế tiếp GĐ13: Hoàn thành 13.1–13.5; đồng bộ origin/main, k
 - 13.5: đo độ rộng và vị trí cột, so điểm ảnh với PNG thật, xác nhận PDF A4 ngang. Ảnh so sánh trong docs/gd13/ và bàn giao mục 3q. Kiểm thử trước rebase: Node 36/36, Playwright 32/32.
 
 XONG GĐ13
+
+## Giai đoạn 14A
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| A1 | ✅ | ghi rõ khối lượng theo báo giá và gộp ĐVT khi ẩn |
+| A2 | ✅ | lưu cửa sổ gợi ý khi bấm ngoài và thêm xoá nhanh |
+| A3 | ✅ | đánh dấu và lọc nhóm chưa liên kết Tiến độ |
+| A4 | ✅ | xoá bản nháp hoặc lưu trữ và khôi phục bảng đã phát hành |
+| A5 | ⏳ | Độ rộng cột ảnh |
+
+Bước kế tiếp GĐ14A: A5
+
+- A1: kiểm tra nhập ĐVT trong ô Khối lượng, bật lại cột và tắt in riêng ĐVT; trang khách và biên bản có nhãn. Node 36/36, Playwright 33/33.
+
+- A2: Ghi chú, Quy cách, Vị trí và NCC có lưu khi bấm ngoài/Enter, Shift+Enter xuống dòng trong ô nhiều dòng, Esc huỷ. Xoá nhanh trên bảng hoàn tác được. Node 36/36, Playwright 34/34.
+
+- A3: nhóm thiếu việc hoặc độ khớp dưới ngưỡng được tô vàng; chip mở danh sách việc, bộ lọc được lưu theo bảng và không đưa cảnh báo lên bản xuất. Node 36/36, Playwright 35/35.
+
+- A4: xác nhận bằng tên bảng; API kiểm tra tài khoản và phiên bản, giữ biên bản/link khách khi lưu trữ, cho khôi phục. Ảnh chỉ đánh dấu ứng viên dọn sau, phải kiểm tra lại tham chiếu ở cả Chốt mã và Quản lý dự án trước khi xoá khỏi B2. Node 37/37, Playwright 36/36.

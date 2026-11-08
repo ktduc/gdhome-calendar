@@ -92,7 +92,16 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .sheet-grid .group input[data-field=leadDays]{width:68px}
 
 .material-notes-form{display:grid;gap:8px;width:min(72vw,500px)}
-.material-notes-form>label{display:grid;gap:4px}
+.material-notes-form>label,.material-suggestion-edit label{display:grid;gap:4px}
+.material-suggestion-edit{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:6px}
+.material-suggestion-edit button{align-self:start;margin-top:18px}
+.material-note-choices [data-single-suggestion]{text-align:left}
+.material-suggestion-cell{position:relative}
+.material-paper .sheet-grid .material-suggestion-cell :is(input,textarea){width:100%;padding-right:20px}
+.material-suggestion-cell [data-action=clear-suggestion]{position:absolute;top:3px;right:2px;width:17px;height:17px;
+  padding:0;line-height:1;font-size:10px;opacity:0;pointer-events:none}
+.material-suggestion-cell:is(:hover,:focus-within) [data-action=clear-suggestion]{
+  opacity:1;pointer-events:auto}
 .material-notes-form textarea{min-height:4em;resize:vertical}
 .material-note-choices{display:grid;gap:4px;max-height:35vh;overflow:auto;border:1px solid #d5dce5;padding:8px}
 .material-note-choices input{vertical-align:middle}
@@ -118,6 +127,11 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .side-field{display:grid;font-size:12px;margin:4px 0}.side-field select{width:100%}
 .material-sidebar .material-meta-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
 .material-sidebar .material-meta-fields label:nth-child(-n+4){grid-column:span 2}
+.material-sheet-list-item{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+#material-archive summary{cursor:pointer;font-weight:600}
+.material-unlinked-filter{margin-bottom:5px}
+.material-paper .sheet-grid .material-unlinked-group th{background:#fff4d4;box-shadow:inset 4px 0 #d77712}
+.material-unlinked-chip{background:#ffecb9;border-color:#d89a3b;color:#794208;border-radius:12px;font-size:11px}
 .material-catalog{list-style:none;margin:0 0 6px;padding:0}
 .material-catalog li{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:3px;cursor:grab}
 .material-catalog button{border:0;text-align:left;padding:3px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -238,6 +252,14 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-copy-secondary{font-size:.85em;color:#475569}
 .material-paper .sheet-value[data-field=groupName]{display:inline;padding:3px;font-weight:700}
 .material-paper .pa-caption .sheet-value{width:auto;padding:2px;font-size:11px;text-align:center}
+.material-quantity-note{display:block;font-size:10px;font-style:italic;font-weight:400;text-transform:none;line-height:1.25}
+.material-review-quantity .material-quantity-note{display:inline;margin-right:.45em}
+.material-review-quantity{margin:2px 0 8px}
+.material-quantity-combined{display:flex;align-items:baseline;gap:3px}
+.material-quantity-combined input[data-field=qty]{flex:1;min-width:0}
+.material-paper .sheet-grid .material-quantity-combined input[data-field=unit]{width:42%;min-width:0;padding:1px 2px;
+  text-align:center;font-size:.85em;border:1px solid #d5dce5;background:#f5f7fa}
+.material-paper .material-quantity-combined input[data-field=unit]::placeholder{color:#66768b}
 .material-paper [data-column=qty] .sheet-value{text-align:right;font-variant-numeric:tabular-nums}
 .material-paper-output .sheet-grid :is(th,td){position:static}
 .material-paper-output{max-width:min(1050px,100%)}

@@ -16,7 +16,7 @@ const forcedPA = new Set();
 const hiddenGroups = new Set();
 const collapsed = new Set();
 const sidebarOpen = new Map();
-let sheetRoom = '', sheetStatus = '';
+let sheetRoom = '', sheetStatus = '', onlyUnlinkedGroups = false;
 const rowState = row => row.ordered ? 'ordered' : row.decision;
 const paHasData = pa => !!pa && (pa.images?.length || fields.some(key => pa[key]));
 function rowPaCount(row) {
@@ -74,12 +74,18 @@ function projectSidebar() {
     '<label class="side-field">Bảng chốt mã<select id="editor-sheet">' +
     (!sheet.id ? '<option value="">Bảng mới</option>' : '') + materials.sheets.filter(s => s.projectId === sheet.projectId)
       .map(s => option(s.id,s.id === sheet.id ? sheet.title : s.title,sheet.id)).join('') + '</select></label>' +
+    '<button type="button" data-action="remove-sheet">' + materialSheetRemoveLabel(sheet) + '</button>' +
     '<div class="material-meta-fields">' + labeledInput('title',sheet.title,'Tên bảng') +
     [['customer','Kính gửi'],['address','Địa chỉ'],['project','Tên dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']]
       .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div><button data-action="project-profile">Sửa hồ sơ</button> <button data-action="notion">Lấy từ Notion</button> <a class="button" href="/du-an?project=' + encodeURIComponent(sheet.projectId || '') + '" target="_blank">📁 Hồ sơ dự án</a>');
 }
+function materialGroupVisible(group) {
+  return !hiddenGroups.has(group.id) && (!onlyUnlinkedGroups || !linkedMaterialTask(group));
+}
 function catalogSidebar() {
   return sidebarSection('catalog','📋 Danh mục',
+    '<label class="sb-chip material-unlinked-filter"><input type="checkbox" id="material-unlinked-only"' +
+    (onlyUnlinkedGroups ? ' checked' : '') + '> Chỉ nhóm chưa liên kết</label>' +
     '<ul class="material-catalog">' + sheet.groups.map(group => '<li data-catalog="' + html(group.id) + '" draggable="true">' +
       '<input type="checkbox" data-group-toggle="' + html(group.id) + '" aria-label="Hiện ' + html(group.name) + '"' +
       (hiddenGroups.has(group.id) ? '' : ' checked') + '><button data-action="jump-group" data-id="' + html(group.id) + '">' +
@@ -338,9 +344,10 @@ function materialPaperHeading(current) {
 }
 
 function materialColumnHeading(key,label,editing) {
-  if (!editing) return html(label);
+  const subtitle = key === 'qty' ? ' ' + materialQuantityNote : '';
+  if (!editing) return html(label) + subtitle;
   return '<span class="material-column-label" data-column-drag="' + key + '" draggable="true" tabindex="0" title="Kéo đổi thứ tự cột · Alt và mũi tên">' +
-    html(label) + '</span>';
+    html(label) + subtitle + '</span>';
 }
 
 function renderMaterialPaper(current,columns,widths,groups,editing) {
@@ -389,7 +396,7 @@ function materialPaperForExport(current) {
 }
 
 function renderMaterialPreview() {
-  const groups = sheet.groups.filter(group => !hiddenGroups.has(group.id))
+  const groups = sheet.groups.filter(materialGroupVisible)
     .map(group => ({...group,rows:visibleGroupRows(group)})).filter(group => group.rows.length);
   const paper = materialPaperForExport({...sheet,groups});
   paper.id = 'material-table-preview';
@@ -397,7 +404,7 @@ function renderMaterialPreview() {
 }
 
 function renderMaterialTable(columns,widths) {
-  const groups = sheet.groups.filter(group => !hiddenGroups.has(group.id));
+  const groups = sheet.groups.filter(materialGroupVisible);
   return '<section class="material-sheet ' + materialFontClass() + '"><div class="material-title"><div id="material-count">' +
     materialKpis() + '</div></div>' + (materials.r2 ? '' : '<p class="asset-warning">Đang dùng thư mục ảnh tạm.</p>') +
     '<div class="sheet-scroll">' + renderMaterialPaper(sheet,columns,widths,groups,true) + '</div></section>';
@@ -408,7 +415,8 @@ const headerMenu = GDHomeShell.dropdown;
 
 function renderMaterialHeader() {
   const header = byId('material-header-actions');
-  header.innerHTML = headerMenu('file','File','folder','<button class="hdr-menu-item" data-action="back">Danh sách bảng</button><span id="release-actions"></span>') +
+  header.innerHTML = headerMenu('file','File','folder','<button class="hdr-menu-item" data-action="back">Danh sách bảng</button>' +
+    '<button class="hdr-menu-item" data-action="remove-sheet">' + materialSheetRemoveLabel(sheet) + '</button><span id="release-actions"></span>') +
     '<span id="ai-actions" data-shell-slot="ai"></span><span id="image-actions" data-shell-slot="copy"></span><div class="hdr-undo-group" data-shell-slot="undo">' +
     '<button class="btn btn-outline hdr-icon-sq" data-action="undo" data-header-command="undo" aria-label="Hoàn tác" title="Hoàn tác · Ctrl+Z">' + headerIcon('undo-2','↶') + '</button>' +
     '<button class="btn btn-outline hdr-icon-sq" data-action="redo" data-header-command="redo" aria-label="Làm lại" title="Làm lại · Ctrl+Y">' + headerIcon('redo-2','↷') + '</button></div>' +
@@ -440,6 +448,11 @@ function installEditorSidebar() {
   byId('status-filter').onchange = event => {
     sheetStatus = event.target.value;
     setMaterialSheetView({status:sheetStatus});
+    renderEditor();
+  };
+  byId('material-unlinked-only').onchange = event => {
+    onlyUnlinkedGroups = event.target.checked;
+    setMaterialSheetView({onlyUnlinked:onlyUnlinkedGroups});
     renderEditor();
   };
   byId('material-print-view').onchange = event => {
@@ -503,10 +516,12 @@ function renderMaterialGroups(columns,groups,editing) {
 }
 function renderGroup(group,columns,nextNumber,editing) {
   const span = columns.length;
-  const heading = '<tr class="group print-group"><th colspan="' + span + '">' +
+  const unlinked = editing && !linkedMaterialTask(group);
+  const heading = '<tr class="group print-group' + (unlinked ? ' material-unlinked-group' : '') + '"><th colspan="' + span + '">' +
     '<input type="checkbox" data-select-group="' + html(group.id) + '" aria-label="Chọn cả nhóm ' + html(group.name) + '"> ' +
     '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
     input('groupName',group.name,'Nhóm') + ' <span class="material-group-controls"><label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
+    (unlinked ? '<button type="button" class="material-unlinked-chip" data-action="choose-group-task">Chưa liên kết Tiến độ</button> ' : '') +
     scheduleControls(group) + ' <button data-action="del-group">Bỏ nhóm</button></span></th></tr>';
   const rows = (editing ? visibleGroupRows(group) : group.rows).map(row => renderRow(row,columns,nextNumber(),editing)).join('');
   const add = !editing || collapsed.has(group.id) ? '' : '<tr><td colspan="' + span + '"><button data-action="add-row">＋ Dòng</button></td></tr>';
@@ -531,6 +546,13 @@ function imageCell(list, slot, content = '', state = '', removable = false, edit
 }
 
 
+const materialDialogFields = {note:'Ghi chú',spec:'Quy cách',room:'Vị trí',supplier:'NCC'};
+function materialSuggestionCell(key,field,editing) {
+  const label = materialDialogFields[key];
+  return editing ? '<div class="material-suggestion-cell">' + field +
+    '<button type="button" data-action="clear-suggestion" aria-label="Xóa nhanh ' + label + '" title="Xóa nhanh ' +
+    label + '">✕</button></div>' : field;
+}
 function materialTextField(key,value,label) {
   return '<textarea rows="1" data-field="' + key + '" aria-label="' + label + '" placeholder="' + label +
     '" maxlength="' + (key === 'note' ? 2000 : 500) + '">' + html(value) + '</textarea>';
@@ -539,16 +561,20 @@ function materialTextField(key,value,label) {
 function renderRow(row,columns,number,editing) {
   const chosen = row.options[row.chosen];
   const count = rowPaCount(row);
+  const unit = input('unit',displayMaterialUnit(row.unit),'Đơn vị');
+  const quantity = input('qty',row.qty,'Khối lượng');
+  const combineUnit = !columns.some(([key]) => key === 'unit');
   const cells = {
     select:'<label class="material-row-number"><input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '"><span>' + number + '</span></label>',
     name:input('name',row.name,'Hạng mục'),
-    room:input('room',row.room,'Vị trí'),
+    room:materialSuggestionCell('room',input('room',row.room,'Vị trí'),editing),
     render:imageCell(row.render,'render','','',false,editing),
-    spec:materialTextField('spec',chosen?.finish || row.spec,'Quy cách'),
-    qty:input('qty',row.qty,'Khối lượng'),
-    unit:input('unit',displayMaterialUnit(row.unit),'Đơn vị'),
-    supplier:input('supplier',row.supplier,'NCC / Nhà thầu'),
-    note:materialTextField('note',row.note,'Ghi chú'),
+    spec:materialSuggestionCell('spec',materialTextField('spec',chosen?.finish || row.spec,'Quy cách'),editing),
+    qty:combineUnit ? (editing ? '<div class="material-quantity-combined">' + quantity + unit + '</div>' :
+      '<span class="sheet-value" data-field="qty">' + html(displayMaterialQuantity(row)) + '</span>') : quantity,
+    unit,
+    supplier:materialSuggestionCell('supplier',input('supplier',row.supplier,'NCC / Nhà thầu'),editing),
+    note:materialSuggestionCell('note',materialTextField('note',row.note,'Ghi chú'),editing),
     decision:'<select data-field="decision" aria-label="Trạng thái">' + Object.entries({...statusLabels,ordered:'Đã đặt hàng'})
       .map(([key,label]) => option(key,label,rowState(row))).join('') + '</select>',
     actions:'<div class="row-actions">' +

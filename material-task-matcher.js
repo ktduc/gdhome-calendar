@@ -52,12 +52,13 @@ const MaterialTaskMatcher = (() => {
       start:/^\d{4}-\d{2}-\d{2}$/.test(task.start) ? task.start : '9999-12-31'
     }));
   }
+  const minScore = 72;
   function best(groupName,candidates) {
     const needle = signature(String(groupName || '').split('(')[0]);
     let match;
     for (const candidate of candidates) {
       const points = score(needle,candidate.title,candidate.stage);
-      if (points < 72) continue;
+      if (points < minScore) continue;
       if (!match || points > match.score || (points === match.score &&
           (candidate.start < match.start || (candidate.start === match.start && candidate.task.id < match.task.id)))) {
         match = {task:candidate.task,score:points,start:candidate.start};
@@ -77,7 +78,7 @@ const MaterialTaskMatcher = (() => {
     });
   }
 
-  return {find:(groupName,tasks,projectId) => best(groupName,prepare(tasks,projectId)),suggestions};
+  return {minScore,find:(groupName,tasks,projectId) => best(groupName,prepare(tasks,projectId)),suggestions};
 })();
 
 if (typeof module !== 'undefined') module.exports = MaterialTaskMatcher;

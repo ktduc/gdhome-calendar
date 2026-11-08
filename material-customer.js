@@ -15,6 +15,8 @@ function renderCustomer() {
     '</p><button id="customer-print">Xem biên bản A4</button><form id="customer-form">' +
     sheet.groups.map(group => '<section class="panel"><h3>' + html(group.name) + '</h3>' + group.rows.map(row =>
       '<fieldset><legend>' + html(row.name) + (row.room ? ' · '+html(row.room) : '') + '</legend>' +
+      (displayMaterialQuantity(row) ? '<p class="material-review-quantity">Khối lượng ' + materialQuantityNote + ' <strong>' +
+        html(displayMaterialQuantity(row)) + '</strong></p>' : '') +
       '<div class="cards">' + (row.render.length ? '<div class="review-option"><label>Phối cảnh 3D</label><div class="print-squares">' +
         printImages(row.render,reviewApi+'/assets/',false,true) + '</div></div>' : '') + row.options.map((pa,i) =>
         (pa.code || pa.brand || pa.finish || pa.size || pa.color || pa.images.length) ? '<div class="review-option"><label><input type="radio" name="' + row.id +

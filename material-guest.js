@@ -60,6 +60,15 @@ function saveGuestMaterial(sheet,profilePatch) {
   return { _version:version,sheet:saved,profiles };
 }
 
+function deleteGuestMaterial(id) {
+  const previous = guestMaterialState();
+  if (!previous.sheets?.some(item => item.id === id)) throw new Error('Không tìm thấy bản nháp trên máy.');
+  const _version = (previous._version || 0)+1;
+  const sheets = previous.sheets.filter(item => item.id !== id);
+  localStorage.setItem(guestMaterialKey,JSON.stringify({...previous,_version,sheets}));
+  return {_version,outcome:'deleted'};
+}
+
 async function saveGuestAsset(blob) {
   const bytes = await blob.arrayBuffer();
   const hash = await crypto.subtle.digest('SHA-256',bytes);
