@@ -86,3 +86,17 @@ Bước kế tiếp GĐ8: Claude review 6 commit cục bộ.
 23/23 test Node đạt. Playwright đạt 6/6. Hai lượt đo cuối với 150 dòng có lần render chậm nhất khoảng 116–131 ms và xử lý input dưới 1 ms trên Edge headless.
 
 XONG GĐ8
+
+## Giai đoạn 9
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| 9.1 | ✅ | mặc định nhóm đang bật và nhớ phạm vi xuất |
+| 9.2 | ⏳ | Bố cục ảnh và A4 |
+| 9.3 | ⏳ | Bảng nhập và bản in |
+| 9.4 | ⏳ | Font Tiến độ |
+| 9.5 | ⏳ | Xem ảnh và chốt PA |
+| 9.6 | ⏳ | Gợi ý ghi chú |
+| 9.7 | ⏳ | Kiểm tra và bàn giao |
+
+Bước kế tiếp GĐ9: 9.2 căn bảng, ảnh và logo bản xuất.

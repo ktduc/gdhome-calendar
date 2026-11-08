@@ -111,16 +111,29 @@ function companyDialog(view,version) {
   };
 }
 const exportLabels = {copy:'Copy ảnh bảng',png:'Tải PNG',pdf:'Tải PDF A4'};
+function materialExportKey() {
+  return 'gdhome-material-export:' + (session()?.user?.email?.toLowerCase() || 'local');
+}
+function savedMaterialExportScope() {
+  try { return JSON.parse(localStorage.getItem(materialExportKey())) || {}; }
+  catch { return {}; }
+}
 function statistics(mode) {
   const rooms = [...new Set(sheet.groups.flatMap(g => g.rows.map(row => row.room)).filter(Boolean))];
-  const element = dialog('<h2>' + exportLabels[mode] + '</h2><form id="material-image-scope" class="stack">' +
-    '<label>Danh mục<select name="groups"><option value="all">Tất cả</option><option value="visible">Chỉ nhóm đang bật</option></select></label>' +
-    '<label>Dòng<select name="rows"><option value="all">Tất cả</option><option value="chosen">Chỉ dòng đã chốt</option></select></label>' +
-    '<label>Phòng<select name="room"><option value="">Tất cả</option>' + rooms.map(room => option(room,room,sheetRoom)).join('') +
-    '</select></label><p id="export-scope-status" role="status"></p><button class="primary">Xem trước</button></form>');
+  const saved = savedMaterialExportScope();
+  const element = dialog('<h2>' + exportLabels[mode] + '</h2><form id="material-image-scope">' +
+    '<label><span>Danh mục</span><select name="groups">' +
+    option('visible','Chỉ nhóm đang bật',saved.groups === 'all' ? 'all' : 'visible') + option('all','Tất cả',saved.groups) + '</select></label>' +
+    '<label><span>Dòng</span><select name="rows">' + option('all','Tất cả',saved.rows !== 'chosen' ? 'all' : '') +
+    option('chosen','Chỉ dòng đã chốt',saved.rows) + '</select></label>' +
+    '<label><span>Phòng</span><select name="room"><option value="">Tất cả</option>' +
+    rooms.map(room => option(room,room,saved.room)).join('') + '</select></label>' +
+    '<p id="export-scope-status" role="status"></p><button class="primary">Xem trước</button></form>');
+
   byId('material-image-scope').onsubmit = async event => {
     event.preventDefault();
     const scope = new FormData(event.target);
+    try { localStorage.setItem(materialExportKey(),JSON.stringify(Object.fromEntries(scope))); } catch { /* storage unavailable */ }
     const filtered = { ...sheet,groups:sheet.groups
       .filter(group => scope.get('groups') !== 'visible' || !hiddenGroups.has(group.id))
       .map(group => ({ ...group,rows:group.rows.filter(row =>

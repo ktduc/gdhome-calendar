@@ -151,3 +151,8 @@ body:has(.material-header){font-family:var(--gd-font)}
 .image-cell:focus .paste-cell-hint,.image-cell:hover .paste-cell-hint{display:block}
 .material-main:has(.material-workspace) #notice:not(:has(button)){display:none}
 #material-toast{max-width:calc(100vw - 32px);box-sizing:border-box}
+#material-image-scope{width:min(360px,75vw);display:grid;gap:8px}
+#material-image-scope label{display:grid;grid-template-columns:82px minmax(0,1fr);align-items:center;gap:8px}
+#material-image-scope select{width:100%;min-width:0;box-sizing:border-box}
+#material-image-scope [role=status]{margin:0}
+#material-image-scope button{justify-self:start}
