@@ -12,6 +12,14 @@ window.GDHomeAssets = (() => {
   const renderCache = new Map();
   let library = null, libraryLoading = null;
 
+  const renderChanges = typeof BroadcastChannel === 'function' ? new BroadcastChannel('gdhome-project-renders') : null;
+  function invalidateRenders(projectId,broadcast = true) {
+    renderCache.delete(projectId);
+    document.dispatchEvent(new CustomEvent('gdhome:renders-changed',{detail:projectId}));
+    if (broadcast) renderChanges?.postMessage(projectId);
+  }
+  if (renderChanges) renderChanges.onmessage = event => invalidateRenders(event.data,false);
+
   function defaultHeaders() {
     const headers = {};
     try {
@@ -146,7 +154,7 @@ window.GDHomeAssets = (() => {
       if (entry.page) { query.set('pageNumber',entry.page); query.set('sourcePdf',entry.source); }
       await api('/api/project-hub/documents/upload?' + query,{method:'POST',body});
     }
-    renderCache.delete(projectId);
+    invalidateRenders(projectId);
     const sized = bytes => bytes >= 1048576 ? (bytes/1048576).toFixed(1).replace('.',',') + ' MB' : Math.max(1,Math.round(bytes/1024)) + ' KB';
     const message = 'Đã thêm ' + queue.length + ' ảnh 3D vào dự án · ' + sized(before) + ' → ' + sized(after);
     onStatus?.(message);
@@ -184,10 +192,12 @@ window.GDHomeAssets = (() => {
       const data = guestLibrary();
       const result = guestChange(data);
       library = saveGuest(data);
+      document.dispatchEvent(new Event('gdhome:library-changed'));
       return {...library,...result};
     }
     const data = await api('/api/library/' + path,{method:'POST',body:JSON.stringify(body)});
     library = {_version:data._version,categories:data.categories,items:data.items};
+    document.dispatchEvent(new Event('gdhome:library-changed'));
     return data;
   }
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
@@ -779,7 +789,7 @@ window.GDHomeAssets = (() => {
   }
 
   function openRenders({projectId,projectName,onPick} = {}) {
-    const {body} = modal('asset-render-dialog','🎨 Phối cảnh 3D' + (projectName ? ' · ' + projectName : ''));
+    const {dialog,body} = modal('asset-render-dialog','🎨 Phối cảnh 3D' + (projectName ? ' · ' + projectName : ''));
     let status = '';
     async function paint(force = false) {
       body.innerHTML = '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh hoặc PDF phối cảnh cả nhà · PDF tự tách từng trang thành ảnh và nén</div>' +
@@ -795,10 +805,11 @@ window.GDHomeAssets = (() => {
       drop.onclick = async () => { const files = await filePicker('image/*,application/pdf'); if (files.length) upload(files); };
       drop.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); drop.click(); } };
       enableDrop(drop,upload);
+      const list = body.querySelector('.asset-render-list');
       try {
         const items = await loadRenders(projectId,force);
-        const list = body.querySelector('.asset-render-list');
-        list.innerHTML = grid(items,{selectable:!!onPick,empty:'Dự án chưa có phối cảnh 3D.'});
+        if (!list.isConnected) return;
+        list.innerHTML = grid(items,{selectable:!!onPick,removable:true,empty:'Dự án chưa có phối cảnh 3D.'});
         list.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
           const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
           body.closest('dialog').close();
@@ -808,17 +819,28 @@ window.GDHomeAssets = (() => {
           const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
           window.open(await assetUrl(item.full),'_blank');
         });
+        list.querySelectorAll('[data-asset-remove]').forEach(button => button.onclick = async () => {
+          if (!confirm('Xoá ảnh 3D khỏi dự án?')) return;
+          button.disabled = true;
+          try {
+            await api('/api/project-hub/documents/delete',{method:'POST',body:JSON.stringify({projectId,documentId:button.closest('[data-asset-id]').dataset.assetId})});
+            invalidateRenders(projectId);
+          } catch (error) { toast(error.message); button.disabled = false; }
+        });
         await hydrate(list);
       } catch (error) {
         body.querySelector('.asset-render-list').innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>';
       }
     }
+    const refresh = event => { if (event.detail === projectId) paint(); };
+    document.addEventListener('gdhome:renders-changed',refresh);
+    dialog.addEventListener('close',() => document.removeEventListener('gdhome:renders-changed',refresh),{once:true});
     paint();
   }
 
   if (location.hash === '#library') addEventListener('load',() => setTimeout(() => openLibrary(),300));
 
-  return {configure,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
+  return {configure,invalidateRenders,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
     categoryFor,openLibrary,openRenders,pickRender,pickLibrary,pickPaint,pickWood,loadPaintData,loadWoodData,storeAsset,closePicker,editView,viewCss,viewStyle,clampView,hydrate,assetUrl,
     filePicker,isPdf,pdfPages};
 })();

@@ -996,3 +996,8 @@ async function fillMaterialAssetSidebar(force = false) {
     } catch (error) { summary.textContent = error.message; }
   }
 }
+
+document.addEventListener('gdhome:library-changed',() => fillMaterialAssetSidebar());
+document.addEventListener('gdhome:renders-changed',event => {
+  if (event.detail === sheet?.projectId) fillMaterialAssetSidebar();
+});

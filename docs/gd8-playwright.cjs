@@ -1540,6 +1540,35 @@ cases['17.2'] = async page => {
   assert.equal(await page.evaluate(() => AppState.tasks.some(t => t.id === 'gd17-task')),true);
 };
 
+cases['17.0'] = async page => {
+  const asset = 'a'.repeat(64) + '.webp';
+  await page.route('**/api/materials/assets/' + asset,route => route.fulfill({status:404}));
+  let documents = [{id:'render-test',name:'3D mẫu',type:'render',assetKey:'render-' + asset}];
+  await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents}}}}));
+  await page.route('**/api/project-hub/documents/delete',route => {
+    documents = [];
+    return route.fulfill({json:{ok:true}});
+  });
+  await openMaterials(page);
+  const data = await page.evaluate(async asset => {
+    const {categories} = await GDHomeAssets.loadLibrary();
+    return GDHomeAssets.addItems(categories[0].id,[{name:'Ảnh mẫu',full:asset,thumb:asset}]);
+  },asset);
+  assert.equal(data.added.length,1);
+  await page.locator('[data-library-summary]').filter({hasText:'1 ảnh mẫu'}).waitFor();
+  await page.locator('[data-action=open-library]').click();
+  page.on('dialog',dialog => dialog.accept());
+  await page.locator('.asset-library-dialog [data-asset-remove]').click();
+  await page.locator('.asset-library-dialog').getByText('Chưa có ảnh trong hạng mục này.').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('[data-library-summary]').filter({hasText:'0 ảnh mẫu'}).waitFor();
+  await page.locator('[data-render-strip] [data-id=render-test]').waitFor();
+  await page.locator('[data-sidebar=renders] [data-action=open-renders]').click();
+  await page.locator('.asset-render-dialog [data-asset-remove]').click();
+  await page.locator('.asset-render-dialog').getByText('Dự án chưa có phối cảnh 3D.').waitFor();
+  assert.equal(await page.locator('[data-render-strip] [data-id=render-test]').count(),0);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

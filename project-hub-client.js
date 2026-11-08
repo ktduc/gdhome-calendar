@@ -523,6 +523,7 @@
     if (!confirm('Bạn chắc chắn muốn xoá tài liệu này?')) return;
     try {
       await api('/api/project-hub/documents/delete', { projectId: currentProjectId, documentId: docId });
+      window.GDHomeAssets?.invalidateRenders(currentProjectId);
       toast('Đã xoá tài liệu.');
       await selectProject(currentProjectId);
     } catch (err) {
