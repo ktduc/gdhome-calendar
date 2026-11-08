@@ -1399,7 +1399,7 @@ cases['16.4'] = async page => {
   await page.waitForTimeout(400);
   assert.equal(await page.locator('#material-image-scope').count(), 0, 'Copy ảnh không hiện modal mỗi lần');
   // Xem trước xuất ảnh (nếu mở) phải đóng trước khi mở menu ▾
-  await page.evaluate(() => document.querySelectorAll('dialog#print-preview[open]').forEach(d => d.close()));
+  await page.evaluate(() => document.querySelectorAll('dialog:is(#print-preview,#material-copy-result)[open]').forEach(d => d.close()));
 
   // Mở menu ▾ -> bấm ⚙ Cài đặt xuất…
   await page.locator('.hdr-split-caret').click();
@@ -1499,7 +1499,7 @@ cases['16.7'] = async page => {
   await page.keyboard.press('Escape');
 };
 
-cases['17.3'] = async page => {
+cases['18.6'] = async page => {
   await openMaterials(page);
   await page.evaluate(() => {
     const showModal = HTMLDialogElement.prototype.showModal;
@@ -1515,22 +1515,24 @@ cases['17.3'] = async page => {
     Object.defineProperty(navigator,'clipboard',{value:{write:async () => {}}});
   });
   await page.locator('#material-copy').click();
-  await page.getByText(/Đã copy ảnh bảng \(/).waitFor();
+  const result = page.locator('#material-copy-result');
+  await result.getByText(/Đã copy vào bộ nhớ/).waitFor();
   assert.equal(await page.evaluate(() => window.printPreviewOpened),false);
-  assert.equal(await page.locator('#print-preview[open]').count(),0);
+  await result.locator('img').waitFor();
+  assert.match(await result.getByRole('link',{name:'Tải PNG'}).getAttribute('href'),/^blob:/);
+  await result.getByRole('button',{name:'Mở xem lớn'}).click();
+  assert.ok((await result.getAttribute('class')).includes('is-large'));
+  await page.keyboard.press('Escape');
+  await result.waitFor({state:'detached'});
   await page.evaluate(() => { window.html2canvas = async () => { throw new Error('Test clipboard'); }; });
   await page.locator('#material-copy').click();
-  const errorToast = page.locator('.toast-notification').filter({hasText:'Test clipboard'});
-  await errorToast.waitFor();
+  await result.getByText(/Test clipboard/).waitFor();
   assert.equal(await page.evaluate(() => window.printPreviewOpened),false);
-  await errorToast.getByRole('button',{name:'Xem trước'}).click();
-  await page.locator('#print-preview[open]').waitFor();
-  await page.locator('#close-print').click();
-  await page.locator('.hdr-split-caret').click();
-  await page.locator('[data-image-mode=preview]').click();
-  await page.locator('#print-preview[open]').waitFor();
-  await page.locator('#close-print').click();
+  await page.mouse.click(1,1);
+  await result.waitFor({state:'detached'});
 };
+
+cases['17.3'] = cases['18.6'];
 
 cases['17.2'] = async page => {
   await page.goto('/');

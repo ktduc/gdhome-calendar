@@ -148,6 +148,8 @@ async function runDirectExport(mode) {
     return;
   }
   if (mode === 'copy') {
+    let blob;
+    let error;
     const root = materialPaperForExport(filtered);
     root.style.cssText += ';position:fixed;left:-10000px;top:0;';
     root.setAttribute('aria-hidden','true');
@@ -156,27 +158,42 @@ async function runDirectExport(mode) {
       await Promise.all([showImages(root),document.fonts.ready]);
       const canvas = await captureStatsImage(root);
       applyAntiEditWatermark(canvas,watermark);
-      const blob = await new Promise(resolve => canvas.toBlob(resolve,'image/png'));
+      blob = await new Promise(resolve => canvas.toBlob(resolve,'image/png'));
       if (!blob) throw new Error('Không tạo được ảnh PNG.');
       await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-      const count = filtered.groups.reduce((n,group) => n + group.rows.length,0);
-      window.GDHomeShell?.toast?.('Đã copy ảnh bảng (' + count + ' dòng)');
-    } catch (error) {
-      const toast = document.createElement('div');
-      window.GDHomeShell?.toast?.('Không copy được ảnh: ' + error.message + ' ',toast);
-      const preview = document.createElement('button');
-      preview.textContent = 'Xem trước';
-      preview.onclick = () => { toast.remove(); showStatistics(filtered,'copy',watermark); };
-      toast.append(preview);
-      setTimeout(() => toast.remove(),10000);
+    } catch (failure) {
+      error = failure;
     } finally {
       clearPrintImages(root);
       root.remove();
     }
+    showCopyResult(blob,error);
     return;
   }
   await showStatistics(filtered,mode,watermark);
   if (mode === 'pdf') byId('do-print')?.click();
+}
+function showCopyResult(blob,error) {
+  const result = document.createElement('dialog');
+  result.id = 'material-copy-result';
+  result.setAttribute('aria-label','Kết quả copy ảnh');
+  document.body.append(result);
+  GDHomeShell.dialog(result,'<h2>Kết quả copy ảnh</h2><p role="status">' +
+    (error ? 'Không copy được ảnh: ' + html(error.message) : '✓ Đã copy vào bộ nhớ – dán Ctrl+V vào Zalo/Email') +
+    '</p>' + (blob ? '<img alt="Ảnh bảng vừa xuất"><div class="toolbar"><a data-copy-download download="GD-HOME-vat-lieu.png">Tải PNG</a>' +
+      '<button type="button" data-copy-large>Mở xem lớn</button></div>' : '') +
+    '<form method="dialog"><button>Đóng</button></form>');
+  const url = blob ? URL.createObjectURL(blob) : '';
+  if (url) {
+    result.querySelector('img').src = url;
+    result.querySelector('[data-copy-download]').href = url;
+    result.querySelector('[data-copy-large]').onclick = event => {
+      const large = result.classList.toggle('is-large');
+      event.currentTarget.textContent = large ? 'Thu nhỏ' : 'Mở xem lớn';
+    };
+  }
+  result.addEventListener('click',event => { if (event.target === result) result.close(); });
+  result.addEventListener('close',() => { if (url) URL.revokeObjectURL(url); result.remove(); },{once:true});
 }
 function statistics(mode) {
   const rooms = [...new Set(sheet.groups.flatMap(g => g.rows.map(row => row.room)).filter(Boolean))];
