@@ -111,7 +111,7 @@ test('GĐ18B.3: Tự điền Hồ sơ dự án từ Notion (tìm theo SĐT trư�
             properties: {
               'Tên KH': { type: 'title', title: [{ plain_text: 'Anh Nguyễn Văn Đức' }] },
               'Địa chỉ': { type: 'rich_text', rich_text: [{ plain_text: 'Masteri Waterfront, Gia Lâm' }] },
-              'Điện thoại': { type: 'phone_number', phone_number: '0999888777' },
+              'Điện thoại': { type: 'phone_number', phone_number: '0912345678' },
               'Email': { type: 'email', email: 'duc@gdhome.vn' }
             }
           }
