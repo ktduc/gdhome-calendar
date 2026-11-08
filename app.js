@@ -1718,6 +1718,64 @@ function loadFromStorage() {
 // =========================================================================
 // SIDEBAR DANH SÁCH "DỰ ÁN CỦA ..." (NHIỀU NGƯỜI DÙNG, SỔ RA & THU GỌN)
 // =========================================================================
+function openDeleteScheduleProject(owner) {
+  const others = AppState.projectOwners.filter(project => project.id !== owner.id);
+  const stages = new Set(AppState.calendars.filter(cal => cal.ownerId === owner.id).map(cal => cal.id));
+  const jobs = AppState.tasks.filter(task => stages.has(task.calendarId));
+  const dialog = document.createElement('dialog');
+  dialog.id = 'delete-schedule-project';
+  dialog.setAttribute('aria-labelledby','delete-schedule-title');
+  document.body.append(dialog);
+  dialog.addEventListener('close',() => dialog.remove(),{once:true});
+  const escape = GDHomeShell.escape;
+  GDHomeShell.dialog(dialog,`<h2 id="delete-schedule-title">Xoá dự án ${escape(owner.name)}</h2>
+    <p>${stages.size} giai đoạn · ${jobs.length} công việc</p>
+    <p>Bảng chốt mã của dự án này vẫn giữ, xoá riêng ở Chốt mã. Hồ sơ Quản lý dự án vẫn giữ.</p>
+    <p><label>Dự án đích <select id="delete-project-target"><option value="">Chọn dự án…</option>
+    ${others.map(project => `<option value="${escape(project.id)}">${escape(project.name)}</option>`).join('')}</select></label>
+    <button type="button" id="move-project-stages" disabled>Chuyển giai đoạn sang dự án…</button></p>
+    <p><label>Gõ tên dự án để xác nhận <input id="delete-project-confirm" autocomplete="off"></label>
+    <button type="button" id="delete-project-all" style="background:#b91c1c;color:#fff" disabled>Xoá hết (dự án + giai đoạn + công việc)</button></p>
+    <button type="button" id="cancel-delete-project">Huỷ</button>`);
+  const target = dialog.querySelector('#delete-project-target');
+  const confirmName = dialog.querySelector('#delete-project-confirm');
+  const move = dialog.querySelector('#move-project-stages');
+  const remove = dialog.querySelector('#delete-project-all');
+  const apply = destination => {
+    snapshotState();
+    if (destination) {
+      AppState.calendars.forEach(cal => { if (stages.has(cal.id)) cal.ownerId = destination; });
+    } else {
+      AppState.calendars = AppState.calendars.filter(cal => !stages.has(cal.id));
+      AppState.tasks = AppState.tasks.filter(task => !stages.has(task.calendarId));
+      if (stages.has(AppState.activeCalendarId)) AppState.activeCalendarId = AppState.calendars[0]?.id || '';
+    }
+    AppState.projectOwners = AppState.projectOwners.filter(project => project.id !== owner.id);
+    dialog.close();
+    syncAllFromMSProject();
+    const deletion = _undoStack.at(-1);
+    const toast = document.createElement('div');
+    toast.className = 'toast-notification show';
+    toast.setAttribute('role','status');
+    toast.append('Đã xoá dự án. ');
+    const undo = document.createElement('button');
+    undo.type = 'button';
+    undo.textContent = 'Hoàn tác';
+    undo.onclick = () => {
+      if (_undoStack.at(-1) === deletion) undoLastAction();
+      toast.remove();
+    };
+    toast.append(undo);
+    document.body.append(toast);
+    setTimeout(() => toast.remove(),10000);
+  };
+  target.onchange = () => { move.disabled = !target.value; };
+  confirmName.oninput = () => { remove.disabled = confirmName.value.trim() !== owner.name; };
+  move.onclick = () => { if (others.some(project => project.id === target.value)) apply(target.value); };
+  remove.onclick = () => { if (confirmName.value.trim() === owner.name) apply(null); };
+  dialog.querySelector('#cancel-delete-project').onclick = () => dialog.close();
+}
+
 function renderCalendarSidebar() {
   normalizeAppState();
   const container = document.getElementById('calendar-list-container');
@@ -1824,17 +1882,7 @@ function renderCalendarSidebar() {
       delOwnerBtn.textContent = '×';
       delOwnerBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        if (confirm(`Xóa dự án "${owner.name}"? (Các giai đoạn bên trong sẽ được chuyển sang dự án đầu tiên, không mất công việc)`)) {
-          const fallbackOwner = AppState.projectOwners.find(o => o.id !== owner.id);
-          if (fallbackOwner) {
-            AppState.calendars.forEach(c => {
-              if (c.ownerId === owner.id) c.ownerId = fallbackOwner.id;
-            });
-          }
-          AppState.projectOwners = AppState.projectOwners.filter(o => o.id !== owner.id);
-          saveToBackend();
-          renderCalendarSidebar();
-        }
+        openDeleteScheduleProject(owner);
       });
       actionsHeader.appendChild(delOwnerBtn);
     }

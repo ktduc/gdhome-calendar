@@ -1520,6 +1520,26 @@ cases['17.3'] = async page => {
   assert.equal(await page.locator('#print-preview[open]').count(),0);
 };
 
+cases['17.2'] = async page => {
+  await page.goto('/');
+  const deleteButton = page.locator('.project-owner-header').filter({hasText:'Căn hộ mẫu GĐ8'}).locator('.owner-mini-btn.del');
+  const dialog = page.locator('#delete-schedule-project');
+  await deleteButton.dispatchEvent('click');
+  assert.ok(await dialog.getByText('2 giai đoạn · 1 công việc').isVisible());
+  assert.ok(await dialog.locator('#move-project-stages').isDisabled());
+  assert.ok(await dialog.locator('#delete-project-all').isDisabled());
+  await dialog.locator('#delete-project-target').selectOption('gd13-other');
+  await dialog.locator('#move-project-stages').click();
+  assert.equal(await page.evaluate(() => AppState.calendars.find(c => c.id === 'c1').ownerId),'gd13-other');
+  await page.locator('.toast-notification button').dispatchEvent('click');
+  await deleteButton.dispatchEvent('click');
+  await dialog.locator('#delete-project-confirm').fill('Căn hộ mẫu GĐ8');
+  await dialog.locator('#delete-project-all').click();
+  assert.equal(await page.evaluate(() => AppState.tasks.some(t => t.id === 'gd17-task')),false);
+  await page.keyboard.press('Control+z');
+  assert.equal(await page.evaluate(() => AppState.tasks.some(t => t.id === 'gd17-task')),true);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });
@@ -1545,7 +1565,11 @@ async function main() {
     browser = await chromium.launch({ channel:'msedge',headless:true });
     for (const key of process.argv.length > 2 ? process.argv.slice(2) : Object.keys(cases)) {
       const caseSchedule = structuredClone(schedule);
-      if (key === '13.3') caseSchedule.projectOwners.push({id:'gd13-other',name:'Dự án thứ hai'});
+      if (['13.3','17.2'].includes(key)) caseSchedule.projectOwners.push({id:'gd13-other',name:'Dự án thứ hai'});
+      if (key === '17.2') {
+        caseSchedule.calendars.push({id:'other-cal',ownerId:'gd13-other',name:'Khác',visible:true,color:'#a00'});
+        caseSchedule.tasks.push({id:'gd17-task',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-03'});
+      }
       await getStore().put('shared',caseSchedule);
       await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; data.viewSettings = {}; return {}; });
       const page = await browser.newPage({ baseURL:'http://127.0.0.1:'+server.address().port,viewport:{width:1050,height:720},acceptDownloads:false });
