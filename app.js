@@ -1532,6 +1532,11 @@ function updateUIElements() {
   }
 }
 
+function projectContactText(mode) {
+  const profile = getTitleProject(mode)?.profile;
+  return [profile?.customer,profile?.address].filter(Boolean).join(' · ');
+}
+
 function syncCustomerInputWithActiveCalendar() {
   // Tiêu đề tên dự án tự nhảy theo dự án đang được tích chọn hiển thị.
   // Từ 2 dự án trở lên -> ẩn tên dự án trên tiêu đề.
@@ -1544,6 +1549,20 @@ function syncCustomerInputWithActiveCalendar() {
   };
   applyTitle(document.getElementById('customer-name-input'), getTitleProjectName('calendar'));
   applyTitle(document.getElementById('msp-customer-input'), getTitleProjectName('msproject'));
+  for (const [id,mode] of [['customer-name-input','calendar'],['msp-customer-input','msproject']]) {
+    const input = document.getElementById(id);
+    if (!input) continue;
+    let summary = document.querySelector('[data-project-summary="' + mode + '"]');
+    if (!summary) {
+      summary = document.createElement('small');
+      summary.dataset.projectSummary = mode;
+      summary.className = 'project-summary';
+      input.closest('.sheet-banner-title')?.after(summary);
+      if (!summary.isConnected) input.parentElement.after(summary);
+    }
+    summary.textContent = projectContactText(mode);
+    summary.hidden = !summary.textContent;
+  }
 
   // Đang lọc "1 tuần tới / 2 tuần tới" -> ghi rõ ngay sau tên dự án trên tiêu đề Timeline
   const badge = document.getElementById('msp-scope-badge');
@@ -3786,6 +3805,13 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
         ${custName ? `<span style="font-size:22px; font-weight:800; color:#b91d14; letter-spacing:0.5px; text-transform:uppercase;">${escapeHtml(custName)}</span>` : ''}
       </div>
     `;
+    const contact = projectContactText('calendar');
+    if (contact) {
+      const summary = document.createElement('small');
+      summary.className = 'project-summary';
+      summary.textContent = contact;
+      topBannerClone.append(summary);
+    }
     cloneSheet.appendChild(topBannerClone);
   }
 
@@ -8401,7 +8427,45 @@ function setupIntegrationsUI() {
   on('btn-notion-sync2', () => runNotionAction('both'));
   on('btn-notion-pull', () => runNotionAction('pull'));
 }
-window.addEventListener('DOMContentLoaded', setupIntegrationsUI);
+window.addEventListener('DOMContentLoaded',setupIntegrationsUI);
+document.getElementById('btn-project-profile').onclick = () => {
+  const project = getTitleProject(AppState.viewMode) || getActiveProject();
+  if (!project) return showToast('Chọn một dự án để mở hồ sơ.');
+  GDHomeProjects.open({...project.profile,project:project.name},async profile => {
+    if (_guestMode || isOfflineFileMode()) {
+      if (profile.project) renameProjectAndSync(project,profile.project);
+      const {project:_name,...contact} = profile;
+      project.profile = {...project.profile,...contact};
+      saveToBackend();
+      updateUIElements();
+      return;
+    }
+    if (_pendingSync) await flushSaveToBackend();
+    if (_pendingSync) throw new Error('Lưu thay đổi Tiến độ trước khi sửa hồ sơ.');
+    await GDHomeProjects.save({projectId:project.id,profile});
+    await syncWithBackend();
+  });
+};
+function refreshSharedProjectProfiles() {
+  if (_guestMode || _loginOverlayShown || _pendingSync || isOfflineFileMode()) return;
+  GDHomeProjects.list().then(({projects}) => {
+    let changed = false;
+    for (const project of projects) {
+      const owner = AppState.projectOwners.find(owner => owner.id === project.id);
+      if (owner && (owner.name !== project.name || JSON.stringify(owner.profile) !== JSON.stringify(project.profile))) {
+        owner.name = project.name;
+        owner.profile = project.profile;
+        changed = true;
+      }
+    }
+    if (changed) {
+      updateUIElements();
+      renderCalendarSidebar();
+    }
+  }).catch(() => {});
+}
+window.addEventListener('focus',refreshSharedProjectProfiles);
+window.addEventListener('storage',event => { if (event.key === 'gdhome-project-update') refreshSharedProjectProfiles(); });
 
 // Tuỳ chọn tự nối liên kết + nút nối các việc cũ chưa nối
 window.addEventListener('DOMContentLoaded', () => {

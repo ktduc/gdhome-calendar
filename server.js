@@ -141,6 +141,28 @@ class FileStore {
 // đẩy lên GitHub sau ~1.5 giây (gom nhiều lần lưu), tự thử lại nếu lỗi mạng.
 // Đồng thời vẫn ghi 1 bản ra file trên máy (dự phòng).
 // -------------------------------------------------------------------------
+const GIST_TIMEOUT_MS = 15000;
+const GIST_INIT_BUDGET_MS = 60000;
+
+async function gistRequest(url,options,deadline = Infinity) {
+  // Creating a Gist is not idempotent. The next init searches by description before trying again.
+  const attempts = options.method === 'POST' ? 1 : 3;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const remaining = Math.floor(deadline-performance.now());
+    if (remaining <= 0) throw new Error('Hết thời gian kết nối GitHub Gist.');
+    try {
+      const response = await fetch(url,{...options,signal:AbortSignal.timeout(Math.min(remaining,GIST_TIMEOUT_MS))});
+      const body = await response.text();
+      if (response.ok) return body;
+      throw Object.assign(new Error('GitHub Gist HTTP ' + response.status + ': ' + body.slice(0,200)),{upstreamStatus:response.status});
+    } catch (error) {
+      const status = error.upstreamStatus;
+      if (attempt+1 === attempts || (status && status !== 429 && status < 500)) throw error;
+      console.error('[GIST] Thử lại ' + options.method + ' (' + (attempt+1) + '/2):',error.message);
+    }
+  }
+}
+
 class GistStore {
   constructor(token, gistId, fallbackFileStore) {
     this.token = token;
@@ -154,8 +176,8 @@ class GistStore {
     this.lastError = null;
     this.lastSyncAt = null;
   }
-  async api(method, url, body) {
-    const res = await fetch(`https://api.github.com${url}`, {
+  async api(method,url,body,deadline) {
+    const text = await gistRequest(`https://api.github.com${url}`,{
       method,
       headers: {
         Authorization: `Bearer ${this.token}`,
@@ -165,17 +187,16 @@ class GistStore {
         ...(body ? { 'Content-Type': 'application/json' } : {})
       },
       body: body ? JSON.stringify(body) : undefined
-    });
-    const txt = await res.text();
-    if (!res.ok) throw new Error(`GitHub ${method} ${url} -> ${res.status}: ${txt.slice(0, 200)}`);
-    return txt ? JSON.parse(txt) : {};
+    },deadline);
+    return text ? JSON.parse(text) : {};
   }
   async init() {
     await this.local.init();
+    const deadline = performance.now()+GIST_INIT_BUDGET_MS;
     if (!this.gistId) {
       // Tìm Gist cũ theo mô tả (để không phải cấu hình GIST_ID)
       for (let page = 1; page <= 5 && !this.gistId; page++) {
-        const list = await this.api('GET', `/gists?per_page=100&page=${page}`);
+        const list = await this.api('GET', `/gists?per_page=100&page=${page}`,undefined,deadline);
         const found = (list || []).find(g => g.description === GIST_DESC);
         if (found) this.gistId = found.id;
         if (!list || list.length < 100) break;
@@ -189,16 +210,15 @@ class GistStore {
         description: GIST_DESC,
         public: false,
         files: { 'data.json': { content: JSON.stringify(seed || defaultData(), null, 2) } }
-      });
+      },deadline);
       this.gistId = created.id;
       console.log(`- Đã tạo Gist bí mật mới để lưu dữ liệu: ${this.gistId}`);
     }
-    const gist = await this.api('GET', `/gists/${this.gistId}`);
+    const gist = await this.api('GET', `/gists/${this.gistId}`,undefined,deadline);
     for (const [name, file] of Object.entries(gist.files || {})) {
       let content = file.content;
       if (file.truncated && file.raw_url) {
-        const r = await fetch(file.raw_url, { headers: { Authorization: `Bearer ${this.token}` } });
-        content = await r.text();
+        content = await gistRequest(file.raw_url,{method:'GET',headers:{Authorization:`Bearer ${this.token}`}},deadline);
       }
       try {
         this.cache.set(name, parseData(content, `Gist/${name}`));
@@ -263,21 +283,33 @@ class GistStore {
 }
 
 let store = null;
-
+let storeRetry;
+let initializingStore;
 async function initStore() {
-  const fileStore = new FileStore(DATA_DIR);
-  if (GITHUB_TOKEN) {
-    const gs = new GistStore(GITHUB_TOKEN, GIST_ID_ENV, fileStore);
-    try {
-      await gs.init();
-      store = gs;
-      return;
-    } catch (e) {
-      console.error('[GIST] Không kết nối được GitHub Gist -> tạm lưu file trên máy:', e.message);
+  if (initializingStore) return initializingStore;
+  initializingStore = (async () => {
+    const fileStore = new FileStore(DATA_DIR);
+    if (GITHUB_TOKEN) {
+      const gist = new GistStore(GITHUB_TOKEN,GIST_ID_ENV,fileStore);
+      await gist.init();
+      store = gist;
+    } else {
+      await fileStore.init();
+      store = fileStore;
     }
-  }
-  await fileStore.init();
-  store = fileStore;
+    return store;
+  })();
+  try { return await initializingStore; }
+  finally { initializingStore = null; }
+}
+
+function connectStore() {
+  initStore().then(ready => console.log('[STORE] Sẵn sàng:',ready.kind)).catch(error => {
+    console.error('[STORE] Khởi tạo thất bại. Thử lại sau 10 giây:',error);
+    clearTimeout(storeRetry);
+    storeRetry = setTimeout(connectStore,10000);
+    storeRetry.unref();
+  });
 }
 
 // -------------------------------------------------------------------------
@@ -307,7 +339,7 @@ function verifySession(token) {
 
 // Xác thực ID token của Google qua endpoint chính thức tokeninfo
 async function verifyGoogleCredential(credential) {
-  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+  const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`,{signal:AbortSignal.timeout(15000)});
   if (!res.ok) throw Object.assign(new Error('Token Google không hợp lệ'), { status: 401 });
   const info = await res.json();
   if (info.aud !== GOOGLE_CLIENT_ID) throw Object.assign(new Error('Token không dành cho ứng dụng này'), { status: 401 });
@@ -449,7 +481,10 @@ function serveStatic(req, res, urlPath) {
 // -------------------------------------------------------------------------
 async function handleApi(req, res, urlPath) {
   if (urlPath === '/api/health') {
-    sendJson(res, 200, { ok: true, auth: AUTH_MODE, ...(store ? store.info() : {}), features: integrations.features() });
+    sendJson(res,200,{
+      ok:!!store,ready:!!store,auth:AUTH_MODE,...(store ? store.info() : {}),
+      features:integrations.features(),uptime:process.uptime(),memoryUsage:process.memoryUsage(),eventLoopLagMax
+    });
     return;
   }
 
@@ -577,24 +612,63 @@ async function handleApi(req, res, urlPath) {
   sendJson(res, 404, { success: false, message: 'API không tồn tại' });
 }
 
-const server = http.createServer(async (req, res) => {
+const activeRequests = new Map();
+let eventLoopLagMax = 0;
+let nextLoopCheck = performance.now()+1000;
+const loopMonitor = setInterval(() => {
+  const now = performance.now();
+  const lag = Math.max(0,Math.round(now-nextLoopCheck));
+  nextLoopCheck = now+1000;
+  eventLoopLagMax = Math.max(eventLoopLagMax,lag);
+  if (lag > 2000) {
+    console.error('[EVENT LOOP LAG]',{ms:lag,active:[...activeRequests.values()].map(request => ({
+      method:request.method,url:request.url,ms:Math.round(now-request.start)
+    }))});
+  }
+  for (const request of activeRequests.values()) {
+    const ms = Math.round(now-request.start);
+    if (ms < 3000 || request.reportedSlow) continue;
+    request.reportedSlow = true;
+    console.error('[REQUEST STILL RUNNING]',{method:request.method,url:request.url,ms});
+  }
+},1000);
+loopMonitor.unref();
+
+function safeRequestUrl(url) {
+  return url.replace(/^(\/api\/review\/|\/duyet\/)[^/]+/,'$1[ẩn]');
+}
+
+const server = http.createServer(async (req,res) => {
   const urlPath = (req.url || '/').split('?')[0];
+  const request = {method:req.method,url:safeRequestUrl(urlPath),start:performance.now()};
+  activeRequests.set(res,request);
+  function finish() {
+    if (!activeRequests.delete(res)) return;
+    const ms = Math.round(performance.now()-request.start);
+    if (ms >= 3000 || res.statusCode >= 400 || !res.writableFinished) {
+      const details = {method:request.method,url:request.url,ms,status:res.statusCode,closed:!res.writableFinished};
+      if (res.statusCode >= 400 || !res.writableFinished) console.error('[REQUEST ERROR]',details);
+      else console.warn('[REQUEST SLOW]',details);
+    }
+  }
+  res.once('finish',finish);
+  res.once('close',finish);
   try {
     if (urlPath.startsWith('/api/')) {
-      if (!store) {
-        sendJson(res, 503, { success: false, message: 'Server đang khởi động, thử lại sau vài giây' });
-        return;
+      if (!store && !['/api/health','/api/config'].includes(urlPath)) {
+        return sendJson(res,503,{success:false,message:'Đang kết nối máy chủ…'});
       }
-      await handleApi(req, res, urlPath);
+      await handleApi(req,res,urlPath);
     } else if (req.method === 'GET' || req.method === 'HEAD') {
-      serveStatic(req, res, req.url || '/');
+      serveStatic(req,res,req.url || '/');
     } else {
       res.writeHead(405);
       res.end();
     }
-  } catch (err) {
-    console.error('[LỖI]', err.message);
-    sendJson(res, err.status || 500, { success: false, message: err.message || 'Lỗi server' });
+  } catch (error) {
+    console.error('[REQUEST EXCEPTION]',request.method,request.url,error);
+    if (res.headersSent) res.destroy();
+    else sendJson(res,error.status || 500,{success:false,message:error.message || 'Lỗi server'});
   }
 });
 
@@ -607,28 +681,15 @@ process.on('SIGTERM', gracefulExit);
 process.on('SIGINT', gracefulExit);
 
 if (require.main === module) {
-  initStore().then(() => {
-    // Lắng nghe trên mọi địa chỉ (0.0.0.0) để máy khác cùng Wi-Fi/LAN truy cập được
-    server.listen(PORT, '0.0.0.0', () => {
-      console.log('=======================================================');
-      console.log('🚀 Server Lịch Tiến Độ đang chạy tại:');
-      console.log(`- Trực tiếp trên máy này: http://localhost:${PORT}`);
-      const interfaces = os.networkInterfaces();
-      for (const iface in interfaces) {
-        for (const alias of interfaces[iface]) {
-          if (alias.family === 'IPv4' && !alias.internal) {
-            console.log(`- Máy khác trong cùng Wi-Fi/LAN truy cập: http://${alias.address}:${PORT}`);
-          }
-        }
-      }
-      const info = store.info();
-      console.log(info.storage === 'gist'
-        ? `- Lưu dữ liệu: GitHub Gist bí mật (${info.gistId}) - cập nhật code không mất dữ liệu`
-        : `- Lưu dữ liệu: file trên máy tại ${DATA_DIR} (sao lưu hằng ngày trong thư mục backups)`);
-      console.log(`- Đăng nhập: ${AUTH_MODE === 'google' ? 'Google (Gmail)' : AUTH_MODE === 'password' ? 'Mật khẩu chung' : 'Không yêu cầu'}`);
-      console.log('=======================================================');
-    });
+  process.on('uncaughtException',error => {
+    console.error('[UNCAUGHT EXCEPTION]',error);
+    process.exit(1);
+  });
+  process.on('unhandledRejection',reason => console.error('[UNHANDLED REJECTION]',reason));
+  server.listen(PORT,'0.0.0.0',() => {
+    console.log('GD HOME Tools đang nghe tại cổng',PORT);
+    connectStore();
   });
 }
 
-module.exports = { server, initStore, signSession, verifySession, fileNameForKey, getStore: () => store };
+module.exports = { server, GistStore, initStore, signSession, verifySession, fileNameForKey, getStore: () => store };

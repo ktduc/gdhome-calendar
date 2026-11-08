@@ -52,7 +52,7 @@ class MaterialAssets {
     }
     const name = hash(buf) + '.webp';
     if (r2) {
-      const response = await fetch(signedUrl('PUT', this.prefix + name), { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: buf });
+      const response = await fetch(signedUrl('PUT', this.prefix + name), { method: 'PUT', signal:AbortSignal.timeout(20000), headers: { 'Content-Type': 'image/webp' }, body: buf });
       if (!response.ok) throw Object.assign(new Error('Không ghi được ảnh lên R2.'), { status: 502 });
     } else {
       await fs.mkdir(this.dir, { recursive: true });
@@ -65,7 +65,7 @@ class MaterialAssets {
     if (!/^[a-f0-9]{64}\.webp$/.test(name)) throw Object.assign(new Error('Không tìm thấy ảnh.'), { status: 404 });
     let bytes;
     if (r2) {
-      const response = await fetch(signedUrl('GET', this.prefix + name));
+      const response = await fetch(signedUrl('GET',this.prefix + name),{signal:AbortSignal.timeout(20000)});
       if (!response.ok) throw Object.assign(new Error('Không mở được ảnh R2.'), { status: response.status === 404 ? 404 : 502 });
       bytes = Buffer.from(await response.arrayBuffer());
     } else {

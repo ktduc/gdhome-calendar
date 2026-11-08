@@ -139,11 +139,12 @@ function materialDueDate(start, days, mode, config, holidayInfo) {
   const date = parseDateStr(start);
   if (formatDateStr(date) !== start) return '';
   let remaining = Math.min(365, Math.max(0, Number(days) || 0));
-  while (remaining > 0) {
+  let guard = 0;
+  while (remaining > 0 && guard++ < 20000) {
     date.setDate(date.getDate() - 1);
     remaining -= mode === 'actual' ? 1 : isDateDayOff(date, true, config, holidayInfo).workWeight;
   }
-  return formatDateStr(date);
+  return remaining > 0 ? '' : formatDateStr(date);
 }
 
 // Khoảng cách số ngày làm việc có dấu từ dateA sang dateB
@@ -251,15 +252,19 @@ function refreshAllLinkLags(tasks) {
 function dependsOn(taskId, ancestorId, tasks) {
   const list = _schedTasks(tasks);
   const byId = new Map(list.map(t => [t.id, t]));
-  const seen = new Set();
+  const seen = new Set([taskId]);
   const stack = [taskId];
-  while (stack.length) {
+  for (let remaining = byId.size+1; stack.length && remaining > 0; remaining--) {
     const id = stack.pop();
     if (id === ancestorId) return true;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    const t = byId.get(id);
-    if (t && Array.isArray(t.predecessors)) t.predecessors.forEach(l => stack.push(l.id));
+    const predecessors = byId.get(id)?.predecessors;
+    if (!Array.isArray(predecessors)) continue;
+    for (const link of predecessors) {
+      if (link.id === ancestorId) return true;
+      if (!byId.has(link.id) || seen.has(link.id)) continue;
+      seen.add(link.id);
+      stack.push(link.id);
+    }
   }
   return false;
 }
