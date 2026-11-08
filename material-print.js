@@ -158,10 +158,11 @@ async function showPrint(view,base,headers,stats = false,watermark = stats) {
   }
   document.body.append(overlay);
   document.body.classList.add('printing-material');
+  document.body.classList.toggle('printing-material-board',stats);
   overlay.addEventListener('close',() => {
     clearPrintImages(overlay);
     overlay.remove();
-    if (!byId('print-preview')) document.body.classList.remove('printing-material');
+    if (!byId('print-preview')) document.body.classList.remove('printing-material','printing-material-board');
   },{once:true});
   overlay.onclick = event => { if (event.target === overlay) overlay.close(); };
   byId('close-print').onclick = () => overlay.close();

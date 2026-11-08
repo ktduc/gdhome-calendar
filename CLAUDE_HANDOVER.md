@@ -192,12 +192,17 @@
 - Bổ sung sau báo lỗi Render. `/api/health` trả `ready`, `uptime`, `memoryUsage` và `eventLoopLagMax` (ms). Log ghi request chậm hoặc lỗi và URL đang chạy nếu event loop trễ quá 2 giây. Gist giới hạn 15 giây mỗi lượt gọi và 60 giây mỗi lượt khởi tạo. Giao diện và health mở ngay trong lúc Gist kết nối.
 - Khi GET dữ liệu chưa thành công, Lịch và Chốt mã dựng bản gần nhất từ localStorage theo tài khoản và hiện **Đang kết nối máy chủ…**. Bản hiển thị tạm chỉ đọc. Kiểm tra chậm, 503, thử lại và số lượt POST bằng ca `10.6-recovery`.
 
-## 3q. Bảng Chốt mã và bản xuất (GĐ12)
+## 3q. Bảng Chốt mã và bản xuất (GĐ12–13)
 
 - Bảng nhập, xem trước, PNG và PDF thống kê dùng cùng bộ dựng đầu tờ, độ rộng và thứ tự cột. Tuỳ chọn in theo cột, thứ tự kéo thả và Fill/Vừa lưu cùng cài đặt Chốt mã. PDF thống kê thu đều vào A4 ngang. Biên bản ký dùng mẫu A4 của bản phát hành.
 - `material-note-suggestions.js` chứa kho gợi ý Ghi chú và Quy cách cho 17 nhóm. Gợi ý học từ giá trị đã dùng theo nhóm và xếp theo tần suất.
 - `material-task-matcher.js` chuẩn hoá tiếng Việt, khớp tên, từ đồng nghĩa và giai đoạn trong cùng dự án. Việc cùng điểm ưu tiên ngày bắt đầu sớm hơn. Nhóm lưu `taskLinkMode` và `taskLinkScore` trong bản nháp. Nút tự liên kết lại chỉ xét nhóm chưa có lựa chọn tay hoặc đang liên kết tự động.
 - Kiểm thử cuối đạt 27/27 Node và 27/27 Playwright trên Edge với kho tạm. Kịch bản ghi trong [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
+
+- GĐ13: bản thống kê co các cột đang bật in theo tỷ lệ, bám mép nội dung giấy và loại bỏ trường nhập, nút, placeholder và viền chọn. PDF thống kê dùng A4 ngang; biên bản ký vẫn giữ A4 dọc. Ảnh chính 3D/PA vuông và lấp chiều rộng cột; dải ảnh phụ nằm bên dưới. Ảnh đầy đủ dùng cho PNG, PDF và lightbox. Bảng làm việc và trang khách tải thumbnail.
+- Gợi ý tự thêm lưu trong `viewSettings.suggestions` theo tài khoản, dùng cho mọi bảng. Có thể dùng theo nhóm vật liệu hoặc cho mọi nhóm. Dấu ★ phân biệt mục tự thêm; tần suất ưu tiên trước, thứ tự kéo áp dụng khi bằng lượt. Màn quản lý cho sửa và xóa mục tự thêm. Giá trị đã xóa không xuất hiện lại từ lịch sử học.
+- `image-compression.js` nén trong trình duyệt ở Chốt mã và Quản lý dự án: tối đa 1600 px, thumbnail 480 px, WebP 0,8 hoặc JPEG 0,82. PNG trong suốt giữ định dạng PNG; PDF không đổi. Hai trang dùng chung kho ảnh theo hash trong tài khoản; ảnh cũ vẫn đọc được. Kho B2/R2 kiểm tra tồn tại trước khi ghi.
+- Chạy `node --test` và `node docs/gd8-playwright.cjs` (có thể đặt `PLAYWRIGHT_PATH` nếu cài Playwright ngoài dự án). Ca 13.5 đo cột, so màu điểm ảnh giữa ảnh chụp và PNG thật, kiểm tra kích thước PDF. Đặt `GD13_SCREENSHOTS=docs/gd13` khi chạy riêng ca 13.5 để ghi [ảnh bảng làm việc](docs/gd13/2-bang-lam-viec.png) và [PNG xuất](docs/gd13/3-anh-xuat.png). Ảnh bàn giao dùng dữ liệu mẫu.
 
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.

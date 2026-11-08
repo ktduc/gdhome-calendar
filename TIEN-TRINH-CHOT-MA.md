@@ -186,9 +186,9 @@ XONG GĐ12
 | 13.2 | ✅ | ảnh 3D và PA lấp đầy cột và mở được từng ảnh |
 | 13.3 | ✅ | thêm và quản lý gợi ý dùng chung theo tài khoản |
 | 13.4 | ✅ | nén ảnh trong trình duyệt và dùng chung ảnh theo hash |
-| 13.5 | ⏳ | Kiểm tra và bàn giao |
+| 13.5 | ✅ | đối chiếu bảng làm việc với PNG và xác nhận PDF A4 ngang |
 
-Bước kế tiếp GĐ13: 13.5
+Bước kế tiếp GĐ13: Hoàn thành 13.1–13.5; đồng bộ origin/main, kiểm thử lại và push.
 
 - 13.1: test tái hiện tràn 16 px và viền dashed; bản sửa qua 6 cấu hình khổ/cột, Node 36/36 và Playwright 28/28.
 
@@ -197,3 +197,7 @@ Bước kế tiếp GĐ13: 13.5
 - 13.3: gợi ý tự thêm dùng theo nhóm hoặc mọi nhóm, đánh ★, đếm lượt chọn, sửa, xóa và kéo đổi thứ tự. Đã kiểm tra xóa localStorage, dùng ở dự án khác và sửa/xóa trên server. Node 36/36, Playwright 30/30.
 
 - 13.4: PNG mẫu 4000×3000 từ 5.315.529 byte xuống 102.812 byte, ảnh đầy đủ 1600×1200, thumbnail 480×360. Kiểm tra PNG trong suốt, dự phòng JPEG, byte PDF giữ nguyên, kho B2 giả lập chỉ PUT một lần cho cùng hash. Node 36/36, Playwright 31/31.
+
+- 13.5: đo độ rộng và vị trí cột, so điểm ảnh với PNG thật, xác nhận PDF A4 ngang. Ảnh so sánh trong docs/gd13/ và bàn giao mục 3q. Kiểm thử trước rebase: Node 36/36, Playwright 32/32.
+
+XONG GĐ13

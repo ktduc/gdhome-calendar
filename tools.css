@@ -191,11 +191,11 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 #material-image-scope button{justify-self:start}
 :root{--material-square:92px;--material-group-fill:#eef2f5;--material-column-fill:#dceaf6}
 @page material-board{size:A4 landscape;margin:9mm}
-.material-paper{box-sizing:border-box;margin:0;background:white;color:#172438;font:13px/1.35 var(--gd-font)}
+.material-paper{box-sizing:border-box;margin:0;padding:0;border:0;border-radius:0;background:white;color:#172438;font:13px/1.35 var(--gd-font)}
 .material-paper-heading{padding:12px 14px 10px}
 .material-paper-heading h1{margin:4px 0 6px;text-align:center;font-size:20px;line-height:1.25}
 .material-paper-meta{display:flex;justify-content:center;flex-wrap:wrap;gap:3px 12px;font-size:12px}
-.material-paper .sheet-grid{min-width:0;table-layout:fixed;border-collapse:separate;border-spacing:0;border-left:1px solid #a7b5c5}
+.material-paper .sheet-grid{width:100%;min-width:0;table-layout:fixed;border-collapse:separate;border-spacing:0;border-left:1px solid #a7b5c5}
 .material-paper .sheet-grid :is(th,td){box-sizing:border-box;padding:4px;vertical-align:top;border-width:0 1px 1px 0}
 .material-paper .sheet-grid thead th{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .material-paper:not(.material-paper-output) .sheet-grid thead th{padding-right:24px}
@@ -216,9 +216,9 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .export-print-columns summary{cursor:pointer;margin:3px 0}
 #material-image-scope .export-print-columns label{display:flex;justify-content:flex-start;gap:4px}
 .export-print-columns .sb-chip-grid input{width:13px}
-.material-paper .sheet-grid tr[data-row]>td{vertical-align:top}
+.material-paper .sheet-grid tr[data-row]>td{vertical-align:top;padding:4px}
 .material-paper .sheet-grid :is(th,td).is-no-print{background:#dce1e7;color:#354256}
-.material-paper .sheet-grid .group th{min-height:32px;height:32px;vertical-align:middle}
+.material-paper .sheet-grid .group th{height:40px;vertical-align:middle}
 .material-paper .sheet-grid :is(input:not([type=checkbox]),select,textarea){box-sizing:border-box;color:inherit;border-color:transparent;background:transparent}
 .material-paper .sheet-grid :is(input:not([type=checkbox]),select,textarea):is(:hover,:focus){border-color:#a7b5c5;background:#fff}
 .material-paper .sheet-grid :is(input,textarea)::placeholder{color:transparent}
@@ -246,8 +246,9 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 #print-sheet.material-paper{margin:14px auto;padding:0}
 
 @media print{
+  body.printing-material-board{page:material-board}
   #print-preview:has(.material-paper-output){padding:0}
-  #print-sheet.material-paper{page:material-board;margin:0 auto;print-color-adjust:exact}
+  #print-sheet.material-paper{margin:0 auto;print-color-adjust:exact}
   #print-sheet.material-paper .sheet-grid{table-layout:fixed}
 }
 .print-squares:empty,.material-image-thumbs:empty{display:none}

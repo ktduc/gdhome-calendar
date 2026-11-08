@@ -1,7 +1,7 @@
 // node docs/gd8-playwright.cjs [8.1 ... 9.6]
 // PLAYWRIGHT_PATH may point to a local Playwright installation. Uses installed Edge.
 const assert = require('node:assert/strict');
-const { mkdtemp,rm } = require('node:fs/promises');
+const { mkdtemp,rm,writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
@@ -1150,6 +1150,88 @@ cases['13.4'] = async page => {
   const document = documents.find(item => item.name === 'draw-gd13.pdf');
   const response = await page.request.get('/api/project-hub/assets/'+document.assetKey);
   assert.deepEqual(await response.body(),pdfBytes);
+};
+
+cases['13.5'] = async page => {
+  await page.setViewportSize({width:1600,height:900});
+  await openMaterials(page);
+  await addFixtureImage(page,'render');
+  await addFixtureImage(page,'0');
+  await page.evaluate(() => modify(() => {
+    const group = sheet.groups[0];
+    group.name = 'Gạch ốp lát';
+    const [first,second] = group.rows;
+    Object.assign(first,{name:'Gạch lát sảnh',room:'Sảnh',note:'Đối chiếu mẫu dưới ánh sáng tự nhiên',qty:'14,50',unit:'m2'});
+    Object.assign(first.options[0],{code:'G-601',color:'Trắng ngà',size:'600×600'});
+    Object.assign(second,{name:'Gạch ốp tường',room:'Bếp',qty:'5,20',unit:'m2'});
+    sheet.groups = [{...group,rows:[first,second]}];
+    sheet.title = 'Bảng mẫu GĐ13';
+    sheet.meta = {...sheet.meta,project:'Căn hộ mẫu GĐ13',date:'2026-11-08'};
+    for (const key of ['spec','supplier','decision']) hiddenColumns.add(key);
+    materials.columnWidths = {name:155,render:245,pa0:200,qty:72,unit:52,note:136,room:100};
+  }));
+  const work = page.locator('#materials .material-paper');
+  await work.locator('.image-open img[data-image-axis]').last().waitFor();
+  await page.mouse.move(14,14);
+  await page.evaluate(() => document.fonts.ready);
+  const workPng = await work.screenshot({animations:'disabled'});
+  const measure = paper => {
+    const bounds = paper.getBoundingClientRect();
+    const box = node => {
+      const rect = node.getBoundingClientRect();
+      return [rect.x-bounds.x,rect.y-bounds.y,rect.width,rect.height].map(Math.round);
+    };
+    return {
+      headings:[...paper.querySelectorAll('thead th[data-column]:not([data-column=actions])')].map(col => [col.textContent.trim(),...box(col)]),
+      images:[...paper.querySelectorAll('.image-open')].map(box),width:bounds.width,height:bounds.height
+    };
+  };
+  const workLayout = await work.evaluate(measure);
+  const form = await openImageScope(page);
+  await form.locator('[name=watermark]').uncheck();
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-download').waitFor();
+  const preview = page.locator('#print-sheet');
+  const printLayout = await preview.evaluate(measure);
+  assert.deepEqual(printLayout.headings.map(([name]) => name),workLayout.headings.map(([name]) => name));
+  for (const [i,[,x,,width]] of printLayout.headings.entries()) {
+    assert.ok(Math.abs(x-workLayout.headings[i][1]) <= 2,JSON.stringify({i,workLayout,printLayout}));
+    assert.ok(Math.abs(width-workLayout.headings[i][3]) <= 2,JSON.stringify({i,workLayout,printLayout}));
+  }
+  assert.deepEqual(printLayout.images.map(([,,w,h]) => [w,h]),workLayout.images.map(([,,w,h]) => [w,h]));
+  await page.evaluate(() => { window.downloadCanvas = canvas => { window.gd13Export = canvas.toDataURL('image/png'); }; });
+  await page.locator('#stats-download').click();
+  await page.waitForFunction(() => window.gd13Export || document.querySelector('#export-image-status')?.textContent,null,{timeout:20000});
+  const png = await page.evaluate(async ({workPng,workLayout,printLayout}) => {
+    const data = window.gd13Export;
+    if (!data) return {error:document.querySelector('#export-image-status').textContent};
+    async function sample(source,layout,scale) {
+      const image = await createImageBitmap(await fetch(source).then(response => response.blob()));
+      const canvas = Object.assign(document.createElement('canvas'),{width:image.width,height:image.height});
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image,0,0);
+      return {width:image.width,height:image.height,colors:layout.images.map(([x,y,w,h]) =>
+        [0.16,0.5,0.84].map(at => [...ctx.getImageData(Math.round((x+w*at)*scale),Math.round((y+h/2)*scale),1,1).data]))};
+    }
+    return {data,work:await sample('data:image/png;base64,'+workPng,workLayout,1),exported:await sample(data,printLayout,2)};
+  },{workPng:workPng.toString('base64'),workLayout,printLayout});
+  assert.ok(png.data,png.error);
+  assert.ok(Math.abs(png.exported.width - printLayout.width*2) <= 2);
+  assert.ok(Math.abs(png.exported.height - printLayout.height*2) <= 2);
+  png.work.colors.forEach((image,i) => image.forEach((pixel,j) => {
+    assert.notDeepEqual(pixel,[255,255,255,255]);
+    assert.ok(pixel.every((value,channel) => Math.abs(value-png.exported.colors[i][j][channel]) < 20),
+      JSON.stringify({pixel,exported:png.exported.colors[i][j]}));
+  }));
+  const {PDFDocument} = require('pdf-lib');
+  const pdf = await PDFDocument.load(await page.pdf({preferCSSPageSize:true}));
+  const {width,height} = pdf.getPage(0).getSize();
+  assert.ok(Math.abs(width-841.9)<2 && Math.abs(height-595.3)<2,JSON.stringify({width,height}));
+  if (process.env.GD13_SCREENSHOTS) {
+    const destination = process.env.GD13_SCREENSHOTS;
+    await writeFile(path.join(destination,'2-bang-lam-viec.png'),workPng);
+    await writeFile(path.join(destination,'3-anh-xuat.png'),Buffer.from(png.data.split(',')[1],'base64'));
+  }
 };
 
 async function main() {

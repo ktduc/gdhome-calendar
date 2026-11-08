@@ -194,8 +194,8 @@ function installColumnOrder(table) {
 function installColumnResize(table) {
   const apply = (key,width) => {
     table.querySelector('col[data-column="' + key + '"]').style.width = width + 'px';
-    table.style.width = [...table.querySelectorAll('col')].reduce((sum,col) => sum+parseInt(col.style.width,10),0) + 'px';
-    table.closest('.material-paper').style.width = table.style.width;
+    table.closest('.material-paper').style.width = [...table.querySelectorAll('col')]
+      .reduce((sum,col) => sum+parseInt(col.style.width,10),1) + 'px';
   };
   const save = (key,width) => {
     materials.columnWidths ||= {};
@@ -350,9 +350,9 @@ function renderMaterialPaper(current,columns,widths,groups,editing) {
     materialColumnHeading(key,label,editing) + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
     label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + (editing ? printColumnButton(key,label) : '') + '</th>').join('');
   const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + (editing ? widths[index] + 'px' : (widths[index]/width*100) + '%') + '">').join('');
-  return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" data-image-fit="' + materialImageFit() + '" style="width:' + width +
+  return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" data-image-fit="' + materialImageFit() + '" style="width:' + (width+1) +
     'px">' + materialPaperHeading(current) +
-    '<table class="sheet-grid print-table" style="width:' + (editing ? width + 'px' : '100%') + '"><colgroup>' + columnSizes + '</colgroup><thead><tr>' +
+    '<table class="sheet-grid print-table"><colgroup>' + columnSizes + '</colgroup><thead><tr>' +
     columnHeadings + '</tr></thead>' + renderMaterialGroups(columns,groups,editing) + '</table></article>';
 }
 
