@@ -81,8 +81,8 @@
    - Bổ sung định tuyến API `if (urlPath === '/api/project-hub' || urlPath.startsWith('/api/project-hub/'))` chuyển quyền xử lý cho `handleProjectHub`.
 2. `shell.js`:
    - Thêm liên kết `['/du-an', 'Quản lý dự án']` vào menu `GDHomeShell.menu`.
-3. `tools.html`:
-   - Bổ sung thẻ bài viết "Quản lý dự án" dẫn tới `/du-an`.
+3. `tools.html` & `tools.js`:
+   - Bổ sung thẻ bài viết "Quản lý dự án" dẫn tới `/du-an` trên trang `/tools` và nút "Hồ sơ dự án" (`/du-an?project=<id>`) cho từng dự án trong danh sách "Dự án của tôi".
 4. `app.js`:
    - Bổ sung nút liên kết `📁` mở Hồ sơ dự án tương ứng trong danh sách dự án ở sidebar Lịch Tiến Độ.
 5. `material-editor.js` & `material-editor-view.js`:

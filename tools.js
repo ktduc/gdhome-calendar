@@ -100,7 +100,7 @@ function showTools() {
   if (byId('projects')) {
     byId('projects').innerHTML = materials.projects.map(project => {
       const count = materials.sheets.filter(sheet => sheet.projectId === project.id).length;
-      return '<article><strong>' + html(project.name) + '</strong> <a class="button" href="/">Tiến độ</a> <a class="button" href="/chot-ma?project=' + encodeURIComponent(project.id) + '">Chốt mã · ' + count + '</a></article>';
+      return '<article><strong>' + html(project.name) + '</strong> <a class="button" href="/">Tiến độ</a> <a class="button" href="/chot-ma?project=' + encodeURIComponent(project.id) + '">Chốt mã · ' + count + '</a> <a class="button" href="/du-an?project=' + encodeURIComponent(project.id) + '">Hồ sơ dự án</a></article>';
     }).join('') || '<p>Tạo dự án trong Tiến độ trước.</p>';
   }
   if (byId('materials') && typeof renderMaterialApp === 'function') {
