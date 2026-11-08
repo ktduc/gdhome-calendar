@@ -655,7 +655,7 @@ function renderRow(row,columns,number,editing) {
     const key = 'pa' + i;
     if (i >= count && !forcedPA.has(key)) { cells[key] = ''; continue; }
     const detail = [pa.color,pa.size].filter(Boolean).join(' · ');
-    const code = '<div class="pa-caption">' + input('code',pa.code,'Mã PA' + (i+1)) +
+    const code = '<div class="pa-caption">' + materialTextField('code',pa.code,'Mã PA' + (i+1)) +
       (detail ? '<small title="' + html(detail) + '"> · ' + html(detail) + '</small>' : '') + '</div>';
     const canRemove = i > 0 && i === count-1 && !paHasData(pa) && row.chosen !== i;
     cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove,editing,pa);

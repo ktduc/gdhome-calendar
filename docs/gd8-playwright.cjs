@@ -141,7 +141,7 @@ cases['8.5'] = async page => {
   await pasteFixture(page,'url');
   await fallback.locator('.material-image-thumbs img[src]').waitFor();
 
-  const code = cell.locator('input[data-field="code"]');
+  const code = cell.locator('[data-field="code"]');
   await code.focus();
   const intercepted = await pasteFixture(page,'text');
   assert.equal(intercepted,false,'Không chiếm Ctrl+V khi nhập mã văn bản');
@@ -173,7 +173,7 @@ cases['8.6'] = async page => {
       document.querySelector('.sheet-grid').getBoundingClientRect();
       render.push(performance.now()-start);
     }
-    const code = document.querySelector('tr[data-row] input[data-field=code]');
+    const code = document.querySelector('tr[data-row] [data-field=code]');
     const keypress = [];
     code.focus({preventScroll:true});
     for (const letter of 'GD8PERF') {
@@ -1367,7 +1367,7 @@ cases['16.2'] = async page => {
 cases['16.3'] = async page => {
   await openMaterials(page);
   const row = page.locator('[data-row="g1-r1"]');
-  const codeInput = row.locator('input[data-field="code"]').first();
+  const codeInput = row.locator('[data-field="code"]').first();
   await codeInput.fill('MFC 7241 T');
   await codeInput.dispatchEvent('change');
   const cell = row.locator('.image-cell[data-slot="0"]');
@@ -1444,7 +1444,7 @@ cases['16.5'] = async page => {
 
   await cell.locator('.paint-swatch-box').waitFor();
   assert.ok(await cell.locator('.image-code-tag').getByText('30YY 72/107').isVisible(), 'Có tag mã màu sơn trên swatch');
-  const codeVal = await page.locator('[data-row="g1-r1"] input[data-field="code"]').first().inputValue();
+  const codeVal = await page.locator('[data-row="g1-r1"] [data-field="code"]').first().inputValue();
   assert.equal(codeVal, '30YY 72/107', 'Tự điền mã sơn vào ô mã PA');
 
   // Kiểm tra bảng xuất có khối màu
@@ -1471,7 +1471,7 @@ cases['16.6'] = async page => {
   await card.waitFor();
   await card.click();
 
-  const codeVal = await page.locator('[data-row="g1-r1"] input[data-field="code"]').first().inputValue();
+  const codeVal = await page.locator('[data-row="g1-r1"] [data-field="code"]').first().inputValue();
   assert.equal(codeVal, 'MFC 7241 T', 'Tự điền mã gỗ');
   const specVal = await page.locator('[data-row="g1-r1"] [data-field="spec"]').inputValue();
   assert.equal(specVal, 'Melamine MFC', 'Tự điền dòng sản phẩm vào quy cách');
@@ -1769,7 +1769,7 @@ cases['17.6'] = async page => {
   await picker.locator('select').selectOption('Vân gỗ thử');
   await picker.locator('input[type=search]').fill('van go thu');
   await picker.locator('[data-wood-code="MS 3000"]').click();
-  assert.equal(await page.locator('[data-row="g1-r1"] input[data-field=code]').first().inputValue(),'MS 3000');
+  assert.equal(await page.locator('[data-row="g1-r1"] [data-field=code]').first().inputValue(),'MS 3000');
   await cell.locator('.image-open img').waitFor();
 };
 
@@ -1807,13 +1807,27 @@ cases['18.5'] = async page => {
   assert.deepEqual(await check('both'),[true,true]);
   await cell.locator('[data-action=cell-menu]').click();
   await page.locator('.image-cell-dropdown-menu').getByRole('button',{name:/Xoá ảnh/}).click();
-  assert.equal(await cell.locator('input[data-field=code]').inputValue(),'');
+  assert.equal(await cell.locator('[data-field=code]').inputValue(),'');
   await page.evaluate(() => undo(false));
-  assert.equal(await cell.locator('input[data-field=code]').inputValue(),'MFC 416 EV');
-  await cell.locator('input[data-field=code]').fill('Mã gõ tay');
+  assert.equal(await cell.locator('[data-field=code]').inputValue(),'MFC 416 EV');
+  await cell.locator('[data-field=code]').fill('Mã gõ tay');
   await cell.locator('[data-action=cell-menu]').click();
   await page.locator('.image-cell-dropdown-menu').getByRole('button',{name:/Xoá ảnh/}).click();
-  assert.equal(await cell.locator('input[data-field=code]').inputValue(),'Mã gõ tay');
+  assert.equal(await cell.locator('[data-field=code]').inputValue(),'Mã gõ tay');
+};
+
+cases['18.4'] = async page => {
+  await openMaterials(page);
+  const label = 'MFC 612 T · Óc Chó Walnut Elegance với tên rất dài để kiểm tra xuống dòng';
+  const code = page.locator('[data-row="g1-r1"] .pa-caption textarea').first();
+  await code.fill(label);
+  assert.ok(await code.evaluate(field => field.clientHeight > 2*parseFloat(getComputedStyle(field).lineHeight)));
+  await page.evaluate(() => { materialView.export = {codePosition:'below'}; });
+  await page.locator('.hdr-split-caret').click();
+  await page.locator('[data-image-mode=preview]').click();
+  const printed = page.locator('#print-sheet [data-row="g1-r1"] .pa-caption .sheet-value').first();
+  assert.equal(await printed.textContent(),label);
+  assert.ok(await printed.evaluate(field => field.offsetHeight > 2*parseFloat(getComputedStyle(field).lineHeight)));
 };
 
 async function main() {

@@ -679,11 +679,11 @@ document.addEventListener('focusout', event => {
 });
 
 document.addEventListener('focusin', event => {
-  if (sheet && event.target.closest('.sheet-grid') && event.target.matches('input')) suggestions(event.target);
+  if (sheet && event.target.closest('.sheet-grid') && event.target.matches('input,textarea[data-field=code]')) suggestions(event.target);
 });
 document.addEventListener('input', event => {
   const field = event.target;
-  if (!sheet || !field.closest('.sheet-grid') || !field.matches('input')) return;
+  if (!sheet || !field.closest('.sheet-grid') || !field.matches('input,textarea[data-field=code]')) return;
   if (field.dataset.field === 'code') {
     const {row,slot} = context(field);
     if (row?.options[Number(slot)]) updateInlineCode(field,row.options[Number(slot)]);
