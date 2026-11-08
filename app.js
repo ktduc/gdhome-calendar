@@ -4502,6 +4502,20 @@ function openDayOverrideContextMenu(e, dateStr) {
   showCustomContextMenu(e.clientX, e.clientY, `📅 Ngày ${dLabel} • ${status}${info.reason ? ' • ' + info.reason : ''}`, items);
 }
 
+// Bấm vùng tối bên ngoài hộp thoại thì đóng (trừ hộp nhập công việc để không mất dữ liệu đang gõ).
+document.addEventListener('mousedown', event => {
+  const overlay = event.target;
+  if (!overlay.classList || !overlay.classList.contains('active') || overlay.id === 'login-overlay' || overlay.id === 'task-modal') return;
+  if (!overlay.classList.contains('modal-overlay') && !overlay.classList.contains('ai-panel-overlay')) return;
+  overlay.dataset.outsideDown = '1';
+});
+document.addEventListener('click', event => {
+  const overlay = event.target;
+  if (!overlay.dataset || overlay.dataset.outsideDown !== '1') return;
+  delete overlay.dataset.outsideDown;
+  if (overlay.classList.contains('active')) overlay.classList.remove('active');
+});
+
 function handleEscapeKey() {
   if (document.querySelector('dialog[open]')) return false;
   const menu = document.getElementById('custom-context-menu');

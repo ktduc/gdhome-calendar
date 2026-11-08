@@ -41,7 +41,13 @@ function openMaterialLightbox(row,slot,initialIndex = 0) {
       figure.innerHTML = images([list[index]],true);
       showImages(figure);
     },
-    crop:(index,element,refresh) => cropImage(row,slot,index,element,() => { renderEditor(); refresh(); }),
+    crop:async (index,element,refresh) => {
+      const view = await GDHomeAssets.editView(list[index]);
+      if (!view) return;
+      modify(() => setImageView(list,index,view),false);
+      renderEditor();
+      refresh();
+    },
     remove(index) {
       if (!confirm('Xoá ảnh này khỏi ô?')) return false;
       modify(() => list.splice(index,1));
@@ -52,7 +58,8 @@ function openMaterialLightbox(row,slot,initialIndex = 0) {
       (cell?.querySelector('.image-open') || cell)?.focus({preventScroll:true});
     },
     onError:showError,
-    extraClass:'material-lightbox'
+    extraClass:'material-lightbox',
+    cropLabel:'Chỉnh vùng nhìn'
   });
 }
 
@@ -259,4 +266,12 @@ document.addEventListener('drop', event => {
   event.preventDefault();
   const {row,slot} = context(cell);
   attachImages(row,slot,event.dataTransfer.files,true).catch(showError);
+});
+
+
+if (window.GDHomeAssets) GDHomeAssets.configure({
+  headers:() => authHeaders(),
+  guest:() => materialGuest,
+  storeAsset:blob => storeMaterialImage(blob),
+  readAsset:name => readMaterialAsset(name)
 });

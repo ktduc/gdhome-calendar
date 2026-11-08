@@ -213,3 +213,12 @@
 
 ## 5. Hướng dẫn bàn giao cho Claude
 Khi chuyển sang Claude, hãy gửi đoạn tóm tắt dưới đây để Claude nắm trọn vẹn ngữ cảnh và tiếp tục phát triển ngay mà không cần khảo sát lại từ đầu.
+
+
+## 3s. GĐ15 – Thư viện ảnh dùng chung (Claude, 08/11/2026)
+
+- `asset-library.js` + `asset-library.css` (client, nạp ở mọi trang): `GDHomeAssets` gồm kho phối cảnh 3D theo dự án (đọc `/api/project-hub/project?id=`, tải lên `/api/project-hub/documents/upload` dạng multipart full/thumb, PDF tách trang bằng pdf.js 3.11.174 nạp khi cần), dữ liệu dùng chung (`/api/library`), popover chọn nhanh, hộp "Chỉnh vùng nhìn".
+- `shared-library.js` (server): kho `lib-v1-<sha256(dataKey)>`, ảnh nằm trong kho ảnh Chốt mã của tài khoản nên dùng thẳng cho ô PA. API: GET `/api/library`, POST `/items`, `/items/update`, `/items/delete`, `/categories`, `/categories/delete`, `/categories/order`.
+- Ảnh trong ô có thể có `view:{x,y,z}` (tâm vùng nhìn 0–1, phóng 1–6). `material-review.js` giữ trường này; hiển thị bằng `--view` (transform) chỉ khi khung ảnh = Fill.
+- `shell.js`: đóng menu khi click ra ngoài/Esc/Tab (đóng ở sự kiện click để không trượt cú bấm), đóng `<dialog>` khi bấm nền tối (trừ `[data-no-backdrop-close]`, `.crop-dialog`), menu GD HOME Tools có "📚 Dữ liệu dùng chung". `app.js`: modal Lịch đóng khi bấm nền (trừ `task-modal`).
+- Test: `tests/shared-library.test.js`, Playwright 9.5 (vùng nhìn), 15.1, 15.2.

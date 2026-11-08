@@ -46,7 +46,8 @@ function authHeaders() {
 function images(list, large = false) {
   return (list || []).map(image => {
     const name = typeof image === 'string' ? image : (large ? image.full : image.thumb);
-    return GDHomeImages.isAssetName(name) ? '<img data-asset="' + name + '" alt="Ảnh vật liệu">' : '';
+    const view = typeof image === 'object' && window.GDHomeAssets ? GDHomeAssets.viewStyle(image.view) : '';
+    return GDHomeImages.isAssetName(name) ? '<img data-asset="' + name + '" alt="Ảnh vật liệu"' + view + '>' : '';
   }).join('');
 }
 
@@ -313,7 +314,7 @@ function editDetail(row, slot) {
     '"><div class="toolbar">' + (pa ? fields.map(k => input(k,pa[k],labels[k])).join('') + '<button data-detail="pick">✓ Chốt PA</button>' : '') +
     '</div><label>Thêm ảnh <input type="file" accept="image/*" multiple data-detail="upload"></label><div class="detail-images">' +
     list.map((image,i) => '<article>' + images([image],true) + '<button data-detail="left" data-index="' + i + '">←</button> <button data-detail="crop" data-index="' +
-      i + '">Crop</button> <button data-detail="remove" data-index="' + i + '">Xóa</button></article>').join('') + '</div></div>');
+      i + '">Vùng nhìn</button> <button data-detail="remove" data-index="' + i + '">Xóa</button></article>').join('') + '</div></div>');
   showImages(element);
   element.onclose = () => { if (!element.open && sheet && element.isConnected) renderEditor(); };
   const signal = detailSignal();
@@ -346,7 +347,11 @@ function editDetail(row, slot) {
       if (button.dataset.detail === 'pick') { element.close(); return pick(row,slot); }
       if (button.dataset.detail === 'remove') modify(() => list.splice(i,1),false);
       if (button.dataset.detail === 'left' && i > 0) modify(() => { [list[i-1],list[i]] = [list[i],list[i-1]]; },false);
-      if (button.dataset.detail === 'crop') return await cropImage(row,slot,i,element,reopen);
+      if (button.dataset.detail === 'crop') {
+        const view = await GDHomeAssets.editView(list[i]);
+        if (view) modify(() => { setImageView(list,i,view); },false);
+        return reopen();
+      }
       reopen();
     } catch (error) { showError(error); }
   };
@@ -462,7 +467,10 @@ document.addEventListener('click', async event => {
       return openMaterialSuggestions(event.target,group,row);
     }
     const cell = event.target.closest('.image-cell');
-    if (row && cell && !event.target.closest('input,select,textarea,a')) focusMaterialImageCell(cell);
+    if (row && cell && !event.target.closest('input,select,textarea,a')) {
+      focusMaterialImageCell(cell);
+      if (!cell.classList.contains('has-image') && !box().querySelector('.material-paper-output')) openAssetPicker(cell,row,group,slot);
+    }
     return;
   }
   try {
@@ -564,6 +572,25 @@ document.addEventListener('click', async event => {
       }
       case 'detail': editDetail(row,slot); break;
       case 'view-image': openMaterialLightbox(row,slot,Number(button.dataset.index || 0)); break;
+      case 'pick-asset': {
+        const cell = button.closest('.image-cell');
+        focusMaterialImageCell(cell);
+        openAssetPicker(cell,row,group,slot);
+        break;
+      }
+      case 'upload-renders': await uploadProjectRenders(); break;
+      case 'open-renders':
+        GDHomeAssets.openRenders({projectId:sheet.projectId,projectName:materialProjectName(),onPick:pickedRenderForSelection()});
+        break;
+      case 'open-library': GDHomeAssets.openLibrary({onPick:pickedLibraryForSelection()}); break;
+      case 'render-strip': {
+        const items = await GDHomeAssets.loadRenders(sheet.projectId);
+        const item = items.find(entry => entry.id === button.dataset.id);
+        const apply = pickedRenderForSelection();
+        if (item && apply) apply(item);
+        else if (item) window.open(await GDHomeAssets.assetUrl(item.full),'_blank');
+        break;
+      }
       case 'pick-pa': pick(row,slot); break;
       case 'undo': undo(false); break;
       case 'redo': undo(true); break;
@@ -696,3 +723,89 @@ document.addEventListener('keydown', event => {
 });
 
 window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });
+
+
+// ---------------------------------------------------------------- Thư viện ảnh (phối cảnh 3D dự án + dữ liệu dùng chung)
+function setImageView(list,index,view) {
+  const item = list[index];
+  if (!item) return;
+  const entry = typeof item === 'string' ? {full:item,thumb:item} : {...item};
+  if (!view || (view.x === 0.5 && view.y === 0.5 && view.z === 1)) delete entry.view;
+  else entry.view = {x:view.x,y:view.y,z:view.z};
+  list[index] = entry;
+}
+function materialProjectName() {
+  return materials.projects.find(project => project.id === sheet?.projectId)?.name || sheet?.meta?.project || '';
+}
+function addPickedImage(row,slot,item,extra) {
+  if (!item || !sheet) return;
+  const list = slot === 'render' ? row.render : row.options[Number(slot)]?.images;
+  if (!list) return;
+  if (list.some(image => (typeof image === 'string' ? image : image.full) === item.full)) return say('Ảnh đã có trong ô.');
+  if (list.length >= 8) return say('Mỗi ô tối đa 8 ảnh.');
+  modify(() => {
+    list.push({full:item.full,thumb:item.thumb});
+    extra?.();
+  });
+}
+function selectedCellTarget(kind) {
+  const selected = selectedImageCell;
+  if (!selected || selected.sheetId !== sheet?.id) return null;
+  const isRender = selected.slot === 'render';
+  if ((kind === 'render') !== isRender) return null;
+  for (const group of sheet.groups) {
+    const row = group.rows.find(entry => entry.id === selected.rowId);
+    if (row) return {group,row,slot:selected.slot};
+  }
+  return null;
+}
+function pickedRenderForSelection() {
+  const target = selectedCellTarget('render');
+  return target ? item => addPickedImage(target.row,'render',item) : null;
+}
+function pickedLibraryForSelection() {
+  const target = selectedCellTarget('library');
+  return target ? item => libraryPicked(target.row,target.slot,item) : null;
+}
+function libraryPicked(row,slot,item) {
+  const pa = row.options[Number(slot)];
+  addPickedImage(row,slot,item,() => { if (pa && !pa.code && item.name) pa.code = item.name; });
+}
+function openAssetPicker(cell,row,group,slot) {
+  if (!window.GDHomeAssets || !row) return;
+  if (slot === 'render') {
+    GDHomeAssets.pickRender(cell,{projectId:sheet.projectId,onPick:item => addPickedImage(row,'render',item)});
+  } else {
+    GDHomeAssets.pickLibrary(cell,{groupName:group?.name,onPick:item => libraryPicked(row,slot,item)});
+  }
+}
+async function uploadProjectRenders() {
+  const files = await GDHomeAssets.filePicker('image/*,application/pdf');
+  if (!files.length) return;
+  const result = await GDHomeAssets.uploadRenders(sheet.projectId,files,message => say(message));
+  say(result.message);
+  fillMaterialAssetSidebar(true);
+}
+async function fillMaterialAssetSidebar(force = false) {
+  const strip = box().querySelector('[data-render-strip]');
+  if (strip && sheet) {
+    try {
+      const items = await GDHomeAssets.loadRenders(sheet.projectId,force);
+      if (!strip.isConnected) return;
+      strip.innerHTML = items.slice(0,7).map(item => '<button type="button" data-action="render-strip" data-id="' + html(item.id) +
+        '" title="' + html((item.page ? 'Trang ' + item.page + ' · ' : '') + (item.room || item.name)) + ' — bấm để gắn vào ô 3D đang chọn"><img data-lib-asset="' + html(item.thumb) + '" alt=""></button>').join('') +
+        (items.length > 7 ? '<button type="button" class="more" data-action="open-renders">+' + (items.length-7) + '</button>' : '') +
+        (!items.length ? '<small class="material-library-summary" style="grid-column:1/-1">Chưa có ảnh 3D. Tải ảnh hoặc PDF cả nhà lên.</small>' : '');
+      GDHomeAssets.hydrate(strip);
+    } catch (error) {
+      strip.innerHTML = '<small class="material-library-summary" style="grid-column:1/-1">' + html(error.message) + '</small>';
+    }
+  }
+  const summary = box().querySelector('[data-library-summary]');
+  if (summary) {
+    try {
+      const data = await GDHomeAssets.loadLibrary();
+      if (summary.isConnected) summary.textContent = data.items.length + ' ảnh mẫu · ' + data.categories.length + ' hạng mục';
+    } catch (error) { summary.textContent = error.message; }
+  }
+}

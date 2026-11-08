@@ -50,7 +50,7 @@ function cleanMaterialView(patch,previous = {},sheets = [],archived = []) {
   if (Object.hasOwn(patch,'printHidden')) result.printHidden = flags(patch.printHidden,['select',...widthKeys].filter(key => key !== 'actions'));
   if (patch.columnWidths && typeof patch.columnWidths === 'object') result.columnWidths = cleanColumnWidths(patch.columnWidths);
   if (patch.sidebarOpen && typeof patch.sidebarOpen === 'object') {
-    result.sidebarOpen = { ...previous.sidebarOpen,...Object.fromEntries(['project','catalog','display']
+    result.sidebarOpen = { ...previous.sidebarOpen,...Object.fromEntries(['project','renders','library','catalog','display']
       .filter(key => typeof patch.sidebarOpen[key] === 'boolean').map(key => [key,patch.sidebarOpen[key]])) };
   }
   if (patch.projectId === null || typeof patch.projectId === 'string') result.projectId = patch.projectId?.slice(0,120) ?? null;

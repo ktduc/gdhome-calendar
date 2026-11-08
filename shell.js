@@ -44,7 +44,8 @@ window.GDHomeShell = (() => {
     };
     element.innerHTML = '<summary>GD HOME Tools</summary><nav aria-label="GD HOME Tools">' +
       links.map(([href,label]) => '<a href="' + href + '">' + label + '</a>').join('') +
-      (element.dataset.shellMenu === 'public' ? '' : '<button type="button" data-open-connections>⚙ Kết nối</button>') + '</nav>';
+      (element.dataset.shellMenu === 'public' ? '' : '<button type="button" data-open-library>📚 Dữ liệu dùng chung</button>' +
+        '<button type="button" data-open-connections>⚙ Kết nối</button>') + '</nav>';
   }
 
   function dropdown(command,label,glyph,body,variant = 'outline') {
@@ -131,7 +132,7 @@ window.GDHomeShell = (() => {
     return panel;
   }
 
-  function lightbox({title,count,render,crop,remove,onClose,onError,extraClass = '',initialIndex = 0}) {
+  function lightbox({title,count,render,crop,remove,onClose,onError,extraClass = '',initialIndex = 0,cropLabel = 'Cắt ảnh'}) {
     if (!count()) return;
     const element = document.createElement('dialog');
     element.className = 'shell-dialog shell-lightbox ' + extraClass;
@@ -140,7 +141,7 @@ window.GDHomeShell = (() => {
       '<div class="lightbox-stage"><button data-lightbox="prev" aria-label="Ảnh trước">←</button>' +
       '<figure></figure><button data-lightbox="next" aria-label="Ảnh tiếp theo">→</button></div>' +
       '<div class="lightbox-actions"><output aria-live="polite"></output>' +
-      (crop ? '<button data-lightbox="crop">Cắt ảnh</button>' : '') +
+      (crop ? '<button data-lightbox="crop">' + escape(cropLabel) + '</button>' : '') +
       (remove ? '<button data-lightbox="remove">Xoá ảnh</button>' : '') + '</div>';
     const figure = element.querySelector('figure');
     let index = Math.min(count()-1,Math.max(0,initialIndex));
@@ -280,6 +281,57 @@ window.GDHomeShell = (() => {
   }
 
   document.querySelectorAll('[data-shell-menu]').forEach(menu);
+
+  // Mọi menu thả xuống (File ▾, GD HOME Tools, Copy ảnh ▾…) tự đóng khi bấm ra ngoài hoặc nhấn Esc.
+  const popupSelector = 'details.hdr-dropdown[open],details.gd-tools-menu[open],details.export-print-columns[open],details[data-popup][open],.hdr-dropdown.open,[data-popup-open]';
+  function closeOutside(target) {
+    let closed = false;
+    document.querySelectorAll(popupSelector).forEach(element => {
+      if (element.contains(target)) return;
+      if (target?.closest?.('dialog[open]') && !element.closest('dialog')) return;
+      element.removeAttribute('open');
+      element.classList.remove('open');
+      element.removeAttribute('data-popup-open');
+      closed = true;
+    });
+    return closed;
+  }
+  // Đóng khi bấm (click) chứ không phải lúc nhấn chuột xuống, để bố cục không dịch chuyển giữa chừng làm trượt cú bấm.
+  document.addEventListener('click',event => closeOutside(event.target),true);
+  // Rời menu bằng phím Tab cũng đóng; chuột thì đã xử lý ở sự kiện click.
+  let pointerFocus = false;
+  document.addEventListener('pointerdown',() => { pointerFocus = true; setTimeout(() => { pointerFocus = false; },0); },true);
+  document.addEventListener('keydown',event => { if (event.key === 'Tab') pointerFocus = false; },true);
+  document.addEventListener('focusin',event => {
+    if (!pointerFocus && event.target !== document.body && event.target.ownerDocument?.hasFocus()) {
+      if (event.target.matches?.(':focus-visible')) closeOutside(event.target);
+    }
+  });
+  document.addEventListener('keydown',event => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    if (closeMenus()) { event.preventDefault(); event.stopPropagation(); }
+  });
+  // Bấm vùng tối ngoài hộp thoại thì đóng (hộp có thao tác dở dang đặt data-no-backdrop-close).
+  let backdropDown = null;
+  document.addEventListener('pointerdown',event => {
+    const dialog = event.target;
+    backdropDown = dialog?.tagName === 'DIALOG' && dialog.open && !dialog.matches('[data-no-backdrop-close],.crop-dialog') ? dialog : null;
+  },true);
+  document.addEventListener('click',event => {
+    const dialog = event.target;
+    if (dialog !== backdropDown || dialog.tagName !== 'DIALOG' || !dialog.open) return;
+    backdropDown = null;
+    const rect = dialog.getBoundingClientRect();
+    const outside = event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom;
+    if (outside) dialog.close();
+  });
+  document.addEventListener('click',event => {
+    const button = event.target.closest?.('[data-open-library]');
+    if (!button) return;
+    button.closest('details')?.removeAttribute('open');
+    if (window.GDHomeAssets) window.GDHomeAssets.openLibrary();
+    else location.href = '/tools#library';
+  });
   if (typeof window !== 'undefined') {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initHubJobTracker);

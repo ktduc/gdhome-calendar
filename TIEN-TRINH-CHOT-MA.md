@@ -221,3 +221,19 @@ Bước kế tiếp GĐ14A: A5
 - A3: nhóm thiếu việc hoặc độ khớp dưới ngưỡng được tô vàng; chip mở danh sách việc, bộ lọc được lưu theo bảng và không đưa cảnh báo lên bản xuất. Node 36/36, Playwright 35/35.
 
 - A4: xác nhận bằng tên bảng; API kiểm tra tài khoản và phiên bản, giữ biên bản/link khách khi lưu trữ, cho khôi phục. Ảnh chỉ đánh dấu ứng viên dọn sau, phải kiểm tra lại tham chiếu ở cả Chốt mã và Quản lý dự án trước khi xoá khỏi B2. Node 37/37, Playwright 36/36.
+
+
+## Giai đoạn 15 (Claude tự làm, 08/11/2026)
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| 14A | ✅ | Gộp phần GPT làm dở (A1–A4) với phần B của Antigravity; A5: cột 3D và PA mặc định 200 px |
+| 15.1 | ✅ | Menu thả xuống (File, GD HOME Tools, Copy ảnh, Thêm dòng…) đóng khi bấm ra ngoài hoặc Esc ở mọi trang; hộp thoại đóng khi bấm nền tối (trừ hộp nhập công việc bên Lịch) |
+| 15.2 | ✅ | Kho phối cảnh 3D của dự án dùng chung Chốt mã ↔ Quản lý dự án: tải ảnh hoặc PDF nhiều trang (tự tách trang, nén WebP), chọn nhanh khi bấm ô Phối cảnh 3D |
+| 15.3 | ✅ | Vùng nhìn ảnh: kéo/phóng to chọn vùng hiển thị trong ô vuông, không tạo ảnh mới; áp dụng màn hình, xuất ảnh, PDF, trang khách |
+| 15.4 | ✅ | Dữ liệu dùng chung toàn hệ thống (`/api/library`): 17 hạng mục mặc định theo nhóm vật liệu, thêm/đổi tên/xoá hạng mục, tải ảnh (Ctrl+V, kéo thả), chọn nhanh khi bấm ô Mẫu vật liệu/PA theo đúng nhóm |
+| 15.5 | ✅ | Rà giao diện: header không tràn ở điện thoại 375 px, tên nhóm dài có tooltip |
+
+Kiểm tra: `node --test` 42/42. Playwright: 8.1–8.5, 9.1, 9.4–9.6, 10.x, 12.x, 13.1–13.4, 15.1, 15.2 đạt (9.3 lỗi sẵn từ trước, 8.6 dao động ~200 ms trong máy ảo chậm như bản trước).
+
+XONG GĐ15

@@ -79,6 +79,15 @@ function projectSidebar() {
     [['customer','Kính gửi'],['address','Địa chỉ'],['project','Tên dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']]
       .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div><button data-action="project-profile">Sửa hồ sơ</button> <button data-action="notion">Lấy từ Notion</button> <a class="button" href="/du-an?project=' + encodeURIComponent(sheet.projectId || '') + '" target="_blank">📁 Hồ sơ dự án</a>');
 }
+function assetSidebars() {
+  return sidebarSection('renders','🎨 Phối cảnh 3D dự án',
+    '<div class="material-sidebar-actions"><button type="button" data-action="upload-renders" title="Ảnh JPG/PNG hoặc PDF nhiều trang, tự tách và nén">⬆ Tải ảnh / PDF</button>' +
+    '<button type="button" data-action="open-renders">Danh sách</button></div><div class="material-render-strip" data-render-strip></div>' +
+    '<small class="material-library-summary">Bấm ô Phối cảnh 3D để chọn nhanh ảnh. Dùng chung với Quản lý dự án.</small>') +
+    sidebarSection('library','📚 Dữ liệu dùng chung',
+    '<div class="material-sidebar-actions"><button type="button" data-action="open-library">⬆ Upload dữ liệu</button></div>' +
+    '<p class="material-library-summary" data-library-summary></p><small class="material-library-summary">Ảnh mẫu vật liệu theo hạng mục, dùng cho mọi dự án. Bấm ô Mẫu vật liệu / PA để chọn.</small>');
+}
 function materialGroupVisible(group) {
   return !hiddenGroups.has(group.id) && (!onlyUnlinkedGroups || !linkedMaterialTask(group));
 }
@@ -88,7 +97,7 @@ function catalogSidebar() {
     (onlyUnlinkedGroups ? ' checked' : '') + '> Chỉ nhóm chưa liên kết</label>' +
     '<ul class="material-catalog">' + sheet.groups.map(group => '<li data-catalog="' + html(group.id) + '" draggable="true">' +
       '<input type="checkbox" data-group-toggle="' + html(group.id) + '" aria-label="Hiện ' + html(group.name) + '"' +
-      (hiddenGroups.has(group.id) ? '' : ' checked') + '><button data-action="jump-group" data-id="' + html(group.id) + '">' +
+      (hiddenGroups.has(group.id) ? '' : ' checked') + '><button data-action="jump-group" data-id="' + html(group.id) + '" title="' + html(group.name) + '">' +
       html(group.name) + '</button><small>' + group.rows.filter(r => r.chosen != null && r.decision !== 'changed').length + '/' + group.rows.length +
       '</small><span title="Kéo để đổi thứ tự">⋮⋮</span></li>').join('') + '</ul><button data-action="add-group">＋ Thêm danh mục</button> ' +
     '<button data-action="relink-tasks">Tự liên kết lại tất cả</button>');
@@ -124,7 +133,7 @@ function materialKpis() {
     counts(sheet),nearest ? 'Hạn gần nhất ' + nearest : 'Chưa có hạn'].map(value => '<span>' + html(value) + '</span>').join('');
 }
 
-const defaultColumnWidths = {select:46,room:112,render:110,spec:152,pa0:118,pa1:118,pa2:118,qty:104,unit:70,supplier:136,note:156,decision:130,actions:134};
+const defaultColumnWidths = {select:46,room:112,render:200,spec:152,pa0:200,pa1:200,pa2:200,qty:104,unit:70,supplier:136,note:156,decision:130,actions:134};
 const clampColumnWidth = width => Math.round(Math.min(720,Math.max(48,width)));
 
 function columnWidth(key) {
@@ -311,13 +320,14 @@ function renderEditor() {
   const widths = columns.map(([key]) => columnWidth(key));
   renderMaterialHeader();
   box().innerHTML = '<div class="material-workspace"><aside class="material-sidebar shell-sidebar sidebar-compact">' +
-    projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' + (viewAsPrint ? renderMaterialPreview() : renderMaterialTable(columns,widths)) +
+    projectSidebar() + assetSidebars() + catalogSidebar() + displaySidebar() + '</aside>' + (viewAsPrint ? renderMaterialPreview() : renderMaterialTable(columns,widths)) +
     '</div><div id="material-multiselect" class="msp-multisel-bar" hidden></div><dialog id="material-dialog"></dialog>';
 
   const updatedScroll = box().querySelector('.sheet-scroll');
 
   showImages();
   installEditorSidebar();
+  if (typeof fillMaterialAssetSidebar === 'function') fillMaterialAssetSidebar();
   if (!viewAsPrint) refreshRowSelection();
   installMaterialsAi();
   if (!viewAsPrint) {
@@ -347,7 +357,7 @@ function materialColumnHeading(key,label,editing) {
   const subtitle = key === 'qty' ? ' ' + materialQuantityNote : '';
   if (!editing) return html(label) + subtitle;
   return '<span class="material-column-label" data-column-drag="' + key + '" draggable="true" tabindex="0" title="Kéo đổi thứ tự cột · Alt và mũi tên">' +
-    html(label) + subtitle + '</span>';
+    html(label) + subtitle + '</span>' + (key === 'render' ? '<button type="button" class="header-asset-upload" data-action="upload-renders" title="Tải ảnh hoặc PDF phối cảnh 3D của dự án">⬆</button>' : '');
 }
 
 function renderMaterialPaper(current,columns,widths,groups,editing) {
@@ -539,6 +549,8 @@ function imageCell(list, slot, content = '', state = '', removable = false, edit
     '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả."><div class="image-preview">' + photo +
     (!hasImage ? '<small class="paste-cell-hint">Ctrl+V để dán ảnh</small>' : '') +
     (state === 'reserve' ? '<span class="image-state">Dự phòng</span>' : '') +
+    (editing ? '<button type="button" class="image-library-pick" data-action="pick-asset" title="' +
+      (slot === 'render' ? 'Chọn từ phối cảnh 3D của dự án' : 'Chọn từ dữ liệu dùng chung') + '">🖼 Chọn</button>' : '') +
     '</div>' + (list.length > 1 ? '<div class="material-image-thumbs">' +
       list.slice(1).map((image,i) => '<button class="material-image-thumb" data-action="view-image" data-index="' + (i+1) +
         '" aria-label="Xem ảnh ' + (i+2) + '">' + images([image],!editing) + '</button>').join('') + '</div>' : '') + choose + '<button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' +

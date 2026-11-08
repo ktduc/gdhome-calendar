@@ -5,9 +5,12 @@ const HOUR = 3600000;
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const text = (value, length = 500) => typeof value === 'string' ? value.trim().slice(0,length) : '';
 const pick = (source, keys) => Object.fromEntries(keys.map(key => [key,text(source?.[key],key === 'note' ? 2000 : 500)]));
+const { cleanView } = require('./shared-library');
 const assetsOnly = list => (Array.isArray(list) ? list : []).slice(0,8).flatMap(image => {
   if (imageName(image)) return [{ full:image, thumb:image }];
-  return imageName(image?.full) && imageName(image?.thumb) ? [{ full:image.full, thumb:image.thumb }] : [];
+  if (!imageName(image?.full) || !imageName(image?.thumb)) return [];
+  const view = cleanView(image.view);
+  return [{ full:image.full, thumb:image.thumb, ...(view ? { view } : {}) }];
 });
 function error(status,message) { throw Object.assign(new Error(message),{ status }); }
 

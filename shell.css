@@ -534,3 +534,14 @@
 .user-chip-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-chip-email { overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
 @media (max-width: 1650px) { .user-chip .user-chip-email { display: none; } .user-chip:not(.guest-chip) { padding: 4px !important; } }
+
+/* Điện thoại: header xuống 2 hàng, nút chỉ còn biểu tượng để không tràn ngang */
+@media (max-width:760px){
+  .app-header{height:auto;min-height:var(--gd-header-height);flex-wrap:wrap;row-gap:6px;padding:6px 10px}
+  .app-header .header-left{flex:1 1 100%;min-width:0}
+  .app-header .header-right{flex:1 1 100%;min-width:0;flex-wrap:wrap;justify-content:flex-start}
+  .app-header .shell-toolbar{flex-wrap:wrap;row-gap:6px}
+  .app-header .btn:has(svg) .btn-label,.app-header .hdr-caret{display:none}
+  .app-header .app-logo{font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis}
+  .app-header .hdr-dropdown-menu{max-width:calc(100vw - 20px)}
+}

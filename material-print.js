@@ -50,8 +50,9 @@ function printImages(items,base,large = false,interactive = false) {
     const tag = interactive ? 'button' : 'span';
     const extra = interactive ? ' type="button" aria-label="Xem ảnh ' + (index+1) + '" data-review-image="' +
       html(base+asset(image,true)) + '"' : '';
+    const view = typeof image === 'object' && window.GDHomeAssets ? GDHomeAssets.viewStyle(image.view) : '';
     return '<' + tag + ' class="' + cls + '"' + extra + '><img class="print-material" data-print-img="' +
-      html(base+asset(image,large)) + '" alt="Ảnh vật liệu"></' + tag + '>';
+      html(base+asset(image,large)) + '" alt="Ảnh vật liệu"' + view + '></' + tag + '>';
   });
   return slots.length ? slots[0] + (slots.length > 1 ? '<div class="material-image-thumbs">' + slots.slice(1).join('') + '</div>' : '') : '';
 }

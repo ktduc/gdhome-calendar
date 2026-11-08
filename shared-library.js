@@ -1,0 +1,172 @@
+// Thư viện dữ liệu dùng chung (ảnh mẫu vật liệu theo hạng mục) cho mọi công cụ GD HOME.
+// Ảnh nằm trong kho ảnh Chốt mã của tài khoản (/api/materials/assets), nên dùng thẳng cho ô PA mà không cần sao chép.
+const crypto = require('node:crypto');
+const materialTemplate = require('./material-template');
+const { imageName } = require('./material-assets');
+
+const libraryKey = dataKey => 'lib-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+const text = (value, max = 160) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
+const shortName = name => text(name.replace(/\s*\(.*\)\s*$/, ''), 80) || text(name, 80);
+const queues = new Map();
+
+function fail(status, message) {
+  throw Object.assign(new Error(message), { status });
+}
+
+function defaultLibrary() {
+  return {
+    _version: 0,
+    categories: materialTemplate.map(([name], index) => ({ id: 'cat-' + (index + 1), name: shortName(name), source: name })),
+    items: []
+  };
+}
+
+function cleanView(view) {
+  if (!view || typeof view !== 'object') return undefined;
+  const num = (value, low, high, fallback) => Number.isFinite(Number(value)) ? Math.min(high, Math.max(low, Number(value))) : fallback;
+  const result = { x: num(view.x, 0, 1, 0.5), y: num(view.y, 0, 1, 0.5), z: num(view.z, 1, 6, 1) };
+  return result.x === 0.5 && result.y === 0.5 && result.z === 1 ? undefined : result;
+}
+
+function normalize(data) {
+  const base = data && typeof data === 'object' ? data : defaultLibrary();
+  const categories = (Array.isArray(base.categories) ? base.categories : [])
+    .filter(c => c && typeof c.id === 'string' && text(c.name))
+    .slice(0, 200).map(c => ({ id: c.id.slice(0, 60), name: text(c.name, 80), ...(c.source ? { source: text(c.source, 160) } : {}) }));
+  const ids = new Set(categories.map(c => c.id));
+  const items = (Array.isArray(base.items) ? base.items : [])
+    .filter(item => item && imageName(item.full) && imageName(item.thumb))
+    .slice(0, 5000).map(item => ({
+      id: String(item.id || crypto.randomUUID()).slice(0, 60),
+      categoryId: ids.has(item.categoryId) ? item.categoryId : (categories[0]?.id || ''),
+      name: text(item.name, 160),
+      note: text(item.note, 500),
+      full: item.full,
+      thumb: item.thumb,
+      createdAt: Number(item.createdAt) || Date.now(),
+      ...(Number(item.used) > 0 ? { used: Math.min(1e6, Math.floor(Number(item.used))) } : {})
+    }));
+  return { _version: Number(base._version) || 0, categories, items };
+}
+
+// Ghép tên nhóm vật liệu (vd "GẠCH ỐP LÁT (sảnh, WC, logia)") với một hạng mục thư viện.
+function categoryForGroup(library, groupName) {
+  const fold = value => String(value || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase()
+    .replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
+  const target = fold(groupName);
+  if (!target) return null;
+  let best = null, bestScore = 0;
+  for (const category of library.categories) {
+    const names = [category.name, category.source].map(fold).filter(Boolean);
+    for (const name of names) {
+      if (name === target) return category;
+      const a = new Set(name.split(' ')), b = target.split(' ');
+      const overlap = b.filter(word => a.has(word)).length;
+      const score = overlap / Math.max(a.size, b.length);
+      if (score > bestScore) { bestScore = score; best = category; }
+    }
+  }
+  return bestScore >= 0.5 ? best : null;
+}
+
+async function mutate(store, key, change) {
+  const previous = queues.get(key) || Promise.resolve();
+  const run = previous.catch(() => {}).then(async () => {
+    const data = normalize(await store.get(key));
+    const result = await change(data);
+    data._version += 1;
+    await store.put(key, data);
+    return { data, result };
+  });
+  queues.set(key, run);
+  try { return await run; } finally { if (queues.get(key) === run) queues.delete(key); }
+}
+
+async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, sendJson }) {
+  const key = libraryKey(dataKey);
+  if (urlPath === '/api/library' && req.method === 'GET') {
+    const stored = await store.get(key);
+    return sendJson(res, 200, normalize(stored || defaultLibrary()));
+  }
+  if (req.method !== 'POST') fail(405, 'Phương thức không hỗ trợ.');
+  const body = await readJsonBody(req);
+  const ensure = async data => {
+    if (!data.categories.length) Object.assign(data, defaultLibrary(), { _version: data._version, items: data.items });
+  };
+
+  if (urlPath === '/api/library/items') {
+    const list = Array.isArray(body.items) ? body.items : [body];
+    if (!list.length || list.length > 50) fail(400, 'Mỗi lần thêm từ 1 đến 50 ảnh.');
+    const { data, result } = await mutate(store, key, async data => {
+      await ensure(data);
+      const categoryId = data.categories.some(c => c.id === body.categoryId) ? body.categoryId : null;
+      if (!categoryId) fail(400, 'Chọn hạng mục cho ảnh.');
+      const added = [];
+      for (const item of list) {
+        if (!imageName(item.full) || !imageName(item.thumb)) fail(400, 'Ảnh không hợp lệ.');
+        const existing = data.items.find(entry => entry.full === item.full && entry.categoryId === categoryId);
+        if (existing) { added.push(existing); continue; }
+        const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
+          full: item.full, thumb: item.thumb, createdAt: Date.now() };
+        data.items.unshift(entry);
+        added.push(entry);
+      }
+      if (data.items.length > 5000) fail(400, 'Thư viện đã đủ 5.000 ảnh.');
+      return added;
+    });
+    return sendJson(res, 200, { ...data, added: result });
+  }
+  if (urlPath === '/api/library/items/update') {
+    const { data } = await mutate(store, key, data => {
+      const item = data.items.find(entry => entry.id === body.id);
+      if (!item) fail(404, 'Không tìm thấy ảnh.');
+      if (typeof body.name === 'string') item.name = text(body.name, 160);
+      if (typeof body.note === 'string') item.note = text(body.note, 500);
+      if (data.categories.some(c => c.id === body.categoryId)) item.categoryId = body.categoryId;
+      if (body.used === true) item.used = (item.used || 0) + 1;
+    });
+    return sendJson(res, 200, data);
+  }
+  if (urlPath === '/api/library/items/delete') {
+    const ids = new Set(Array.isArray(body.ids) ? body.ids : [body.id]);
+    const { data } = await mutate(store, key, data => { data.items = data.items.filter(item => !ids.has(item.id)); });
+    return sendJson(res, 200, data);
+  }
+  if (urlPath === '/api/library/categories') {
+    const name = text(body.name, 80);
+    if (!name) fail(400, 'Nhập tên hạng mục.');
+    const { data, result } = await mutate(store, key, async data => {
+      await ensure(data);
+      if (body.id) {
+        const category = data.categories.find(c => c.id === body.id);
+        if (!category) fail(404, 'Không tìm thấy hạng mục.');
+        category.name = name;
+        return category;
+      }
+      const existing = data.categories.find(c => c.name.toLocaleLowerCase('vi') === name.toLocaleLowerCase('vi'));
+      if (existing) return existing;
+      const category = { id: 'cat-' + crypto.randomUUID().slice(0, 8), name };
+      data.categories.push(category);
+      return category;
+    });
+    return sendJson(res, 200, { ...data, category: result });
+  }
+  if (urlPath === '/api/library/categories/delete') {
+    const { data } = await mutate(store, key, data => {
+      if (data.items.some(item => item.categoryId === body.id)) fail(409, 'Hạng mục còn ảnh. Chuyển hoặc xoá ảnh trước.');
+      data.categories = data.categories.filter(c => c.id !== body.id);
+    });
+    return sendJson(res, 200, data);
+  }
+  if (urlPath === '/api/library/categories/order') {
+    const order = Array.isArray(body.order) ? body.order : [];
+    const { data } = await mutate(store, key, data => {
+      const rank = new Map(order.map((id, index) => [id, index]));
+      data.categories.sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9));
+    });
+    return sendJson(res, 200, data);
+  }
+  fail(404, 'API thư viện không tồn tại.');
+}
+
+module.exports = { handleLibrary, libraryKey, defaultLibrary, normalize, categoryForGroup, cleanView };

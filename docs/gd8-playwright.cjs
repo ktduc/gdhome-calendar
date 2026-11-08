@@ -345,9 +345,11 @@ cases['9.5'] = async page => {
   assert.equal(await pick.getAttribute('aria-pressed'),'false');
   await page.keyboard.press('ArrowRight');
   assert.equal(await lightbox.locator('output').textContent(),'2 / 2');
-  await lightbox.getByRole('button',{name:'Cắt ảnh'}).click();
-  await page.locator('.crop-dialog').getByRole('button',{name:'Lưu ảnh cắt'}).click();
-  await page.locator('.crop-dialog').waitFor({state:'detached'});
+  await lightbox.getByRole('button',{name:'Chỉnh vùng nhìn'}).click();
+  await page.locator('.asset-view-dialog input[type=range]').fill('2');
+  await page.locator('.asset-view-dialog').getByRole('button',{name:'Lưu vùng nhìn'}).click();
+  await page.locator('.asset-view-dialog').waitFor({state:'detached'});
+  assert.match(await pa.locator('.material-image-thumb img').first().getAttribute('style'),/--view:scale\(2\)/);
   assert.equal(await lightbox.locator('output').textContent(),'2 / 2');
   page.once('dialog',dialog => dialog.accept());
   await lightbox.getByRole('button',{name:'Xoá ảnh'}).click();
@@ -935,6 +937,58 @@ async function openMaterials(page) {
   if (await listButton.isVisible()) await listButton.click();
   await page.locator('[data-row="g1-r1"]').waitFor();
 }
+
+cases['15.1'] = async page => {
+  // Menu thả xuống tự đóng khi bấm ra ngoài hoặc Esc; hộp thoại đóng khi bấm nền tối.
+  await openMaterials(page);
+  for (const selector of ['.gd-tools-menu','details.hdr-dropdown']) {
+    const menu = page.locator(selector).first();
+    await menu.locator('summary').click();
+    assert.equal(await menu.evaluate(d => d.open),true);
+    await page.mouse.click(1000,700);
+    assert.equal(await menu.evaluate(d => d.open),false,selector + ' đóng khi bấm ra ngoài');
+    await menu.locator('summary').click();
+    await page.keyboard.press('Escape');
+    assert.equal(await menu.evaluate(d => d.open),false,selector + ' đóng khi Esc');
+  }
+  await page.locator('.gd-tools-menu summary').click();
+  await page.locator('[data-open-library]').click();
+  const library = page.locator('dialog.asset-library-dialog');
+  await library.waitFor();
+  await page.mouse.click(5,5);
+  await library.waitFor({state:'detached'});
+};
+
+cases['15.2'] = async page => {
+  // Dữ liệu dùng chung: tải ảnh vào hạng mục, chọn nhanh cho ô PA theo nhóm, vùng nhìn lưu lại sau khi tải trang.
+  await openMaterials(page);
+  await page.locator('[data-sidebar=library] [data-action=open-library]').click();
+  const library = page.locator('dialog.asset-library-dialog');
+  await library.waitFor();
+  const file = {name:'mau-go.png',mimeType:'image/png',buffer:Buffer.from(imageFixture,'base64')};
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'),library.locator('.asset-drop').click()]);
+  await chooser.setFiles(file);
+  await library.locator('.asset-card').first().waitFor();
+  await page.keyboard.press('Escape');
+  const pa = page.locator('[data-row="g1-r2"] [data-slot="0"]');
+  await pa.click();
+  const picker = page.locator('.asset-popover');
+  await picker.locator('.asset-card').first().waitFor();
+  await page.keyboard.press('Escape');
+  await picker.waitFor({state:'detached'});
+  await pa.click();
+  await picker.locator('[data-asset-pick]').first().click();
+  await pa.locator('img[src]').first().waitFor();
+  await pa.locator('[data-action=view-image]').first().click();
+  await page.getByRole('button',{name:'Chỉnh vùng nhìn'}).click();
+  await page.locator('.asset-view-dialog input[type=range]').fill('1.6');
+  await page.getByRole('button',{name:'Lưu vùng nhìn'}).click();
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => document.querySelector('#save-label')?.dataset.saveState === 'saved');
+  await page.reload();
+  await pa.locator('img[src]').first().waitFor();
+  assert.match(await pa.locator('img').first().getAttribute('style'),/--view:scale\(1\.6\)/);
+};
 
 cases['13.1'] = async page => {
   await openMaterials(page);
