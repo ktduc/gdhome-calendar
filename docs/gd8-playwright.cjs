@@ -187,7 +187,7 @@ cases['8.6'] = async page => {
   console.log(JSON.stringify(metrics));
   assert.ok(metrics.maxRender < 200,'150 dòng phải render dưới 200 ms');
   assert.ok(metrics.maxInput < 50 && metrics.focusRetained,'Nhập mã không được dựng lại ô');
-  await page.locator('[data-row="g1-r2"] .image-cell[data-slot="0"]').press('Space');
+  await page.locator('[data-row="g1-r2"] .image-cell[data-slot="0"] [data-action="pick-pa"]').click();
   await page.locator('.toast-notification.show').filter({hasText:'Điền thông tin hoặc thêm ảnh'}).waitFor();
 };
 

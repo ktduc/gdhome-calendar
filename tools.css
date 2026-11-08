@@ -37,7 +37,8 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .row-actions button,.image-detail{padding:0;width:20px;height:22px;line-height:1;font-size:13px}
 .image-cell{position:relative;min-width:max(96px,var(--thumb-width));border:1px dashed #bdc8d5;border-radius:4px;min-height:20px}
 .image-preview{position:relative;display:flex;align-items:center;justify-content:center;min-height:18px}
-.image-preview img{display:block;width:min(100%,var(--thumb-width));height:auto;aspect-ratio:1;object-fit:contain;background:#fff;cursor:pointer}
+.image-open{display:block;width:min(100%,var(--thumb-width));padding:0;border:0;border-radius:0;background:#fff}
+.image-open img{display:block;width:100%;height:auto;aspect-ratio:1;object-fit:contain}
 .image-plus{color:#67778b;font-size:12px;line-height:1}
 .image-detail{position:absolute;right:1px;top:0;height:18px;background:#fff}
 .image-count,.image-state{position:absolute;top:1px;left:2px;background:#fff;color:#8f1820;border-radius:3px;padding:0 3px;font-size:10px}
@@ -48,7 +49,11 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .pa-caption input:focus{width:100%;text-align:left}
 .pa-caption input:focus + small{display:none}
 .pa-caption small{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:10px}
-.image-cell.chosen{border-color:#a41d24;background:#fff2f3}.image-cell.reserve img{opacity:.7}
+.image-cell.chosen{border-color:#a41d24;background:#fff2f3}
+.image-pick{position:absolute;top:0;left:1px;height:18px;width:20px;padding:0;line-height:1;color:#465269}
+.image-pick[aria-pressed=true]{background:#a41d24;border-color:#a41d24;color:white}
+.image-state,.image-count{pointer-events:none;top:auto;bottom:1px}
+.image-state{left:auto;right:1px}
 .asset-warning{color:#85272b}.suggestions{position:absolute;z-index:10;display:grid;background:#fff;padding:4px;box-shadow:0 4px 14px #0003}
 dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px)}dialog::backdrop{background:#18202b88}.close-dialog{float:right}
 .detail-images{display:flex;gap:8px;flex-wrap:wrap}.detail-images img{display:block;max-width:min(400px,70vw);max-height:360px;object-fit:contain}.review-page{max-width:900px}fieldset{border:1px solid #c7ced9;margin:9px 0;min-width:0}.review-option{display:block;padding:8px;border:1px solid #c7ced9;border-radius:5px}
@@ -71,6 +76,17 @@ dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px)}dial
   .print-table thead{display:table-header-group}.print-table tr,.print-signatures{break-inside:avoid}.print-terms{break-before:page}
 }.deadline{display:inline-block;background:#fff;color:#273245;border-radius:4px;padding:4px;margin:2px}.deadline.late,.deadline.missing{background:#ffe0e0;color:#921d28}.deadline.soon{background:#fff0c4;color:#694600}
 .sheet-grid .group input[data-field=leadDays]{width:68px}
+
+.material-lightbox{box-sizing:border-box;width:min(96vw,1080px);max-width:none;padding:16px;color:#fff;background:#20262e;border-color:#455367}
+.material-lightbox::backdrop{background:#0d1119df}
+.material-lightbox h2{margin:0 44px 12px 0;font-size:17px}
+.lightbox-close{position:absolute;right:16px;top:10px}
+.lightbox-stage{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:8px}
+.lightbox-stage figure{margin:0;min-height:120px;display:grid;place-items:center;background:#111820}
+.lightbox-stage img{display:block;max-width:100%;max-height:68vh;object-fit:contain}
+.lightbox-stage button:disabled{opacity:.45}
+.lightbox-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px}
+.lightbox-actions output{margin-right:auto}
 
 .crop-dialog{width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box}
 .crop-dialog h2,.crop-dialog p{margin:0 0 8px}
@@ -100,7 +116,7 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-sheet .sheet-scroll{max-height:calc(100dvh - 185px);min-height:220px}
 .material-sheet tbody{scroll-margin-top:32px}
 .row-actions .add-pa{width:auto;padding:0 3px;white-space:nowrap;font-size:11px}
-.remove-pa{position:absolute;left:1px;top:0;padding:0 3px;height:18px;line-height:1}
+.remove-pa{position:absolute;right:24px;top:0;padding:0 3px;height:18px;line-height:1}
 @media(max-width:720px){.material-workspace{grid-template-columns:minmax(0,1fr)}.material-sidebar{max-height:40dvh}.material-sheet .sheet-scroll{max-height:62dvh}}
 .material-sheet .sheet-grid{table-layout:fixed;min-width:0}
 .material-sheet .sheet-grid thead th{padding-right:10px;overflow:hidden;text-overflow:ellipsis}

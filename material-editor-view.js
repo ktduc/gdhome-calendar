@@ -321,15 +321,20 @@ function renderGroup(group,columns,nextNumber) {
 
 function imageCell(list, slot, content = '', state = '', removable = false) {
   const hasImage = list.length > 0;
-  const photo = hasImage ? images(list.slice(0,1)) : '<span class="image-plus" aria-hidden="true">＋</span>';
+  const photo = hasImage ? '<button class="image-open" data-action="view-image" aria-label="Xem ảnh lớn">' +
+    images(list.slice(0,1)) + '</button>' : '<span class="image-plus" aria-hidden="true">＋</span>';
   const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (slot+1);
+  const choose = slot === 'render' ? '' : '<button class="image-pick" data-action="pick-pa" aria-label="Chốt PA' +
+    (slot+1) + '" aria-pressed="' + (state === 'chosen') + '" title="Chốt phương án">✓</button>';
   return '<div class="image-cell ' + state + (hasImage ? ' has-image' : '') + '" tabindex="0" data-slot="' + slot +
-    '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả. Bấm ảnh PA để chốt phương án."><div class="image-preview">' + photo +
+    '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả."><div class="image-preview">' + photo +
     (!hasImage ? '<small class="paste-cell-hint">Ctrl+V để dán ảnh</small>' : '') +
     (list.length > 1 ? '<small class="image-count">+' + (list.length-1) + '</small>' : '') +
-    (state ? '<span class="image-state" aria-label="' + (state === 'chosen' ? 'Đã chọn' : 'Dự phòng') + '">' + (state === 'chosen' ? '✓' : 'Dự phòng') + '</span>' : '') +
-    '</div><button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' + (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
+    (state === 'reserve' ? '<span class="image-state">Dự phòng</span>' : '') +
+    '</div>' + choose + '<button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' +
+    (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
 }
+
 
 function renderRow(row,columns,number) {
   const chosen = row.options[row.chosen];

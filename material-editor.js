@@ -246,7 +246,7 @@ function editDetail(row, slot) {
       if (button.dataset.detail === 'pick') { element.close(); return pick(row,slot); }
       if (button.dataset.detail === 'remove') modify(() => list.splice(i,1),false);
       if (button.dataset.detail === 'left' && i > 0) modify(() => { [list[i-1],list[i]] = [list[i],list[i-1]]; },false);
-      if (button.dataset.detail === 'crop') return cropImage(row,slot,i,element);
+      if (button.dataset.detail === 'crop') return await cropImage(row,slot,i,element,reopen);
       reopen();
     } catch (error) { showError(error); }
   };
@@ -318,14 +318,10 @@ document.addEventListener('click', async event => {
   if (!button) {
     const cell = event.target.closest('.image-cell');
     if (row && cell && !event.target.closest('input,select,textarea,a')) focusMaterialImageCell(cell);
-    if (row && event.target.closest('.image-preview img') && cell && slot !== 'render' && row.options[Number(slot)].images.length) {
-      const rowId = row.id;
-      pick(row,slot);
-      focusMaterialImageCell(box().querySelector('[data-row="' + rowId + '"] [data-slot="' + slot + '"]'));
-    }
     return;
   }
   try {
+
     switch (button.dataset.action) {
       case 'open': openSheet(materials.sheets.find(s => s.id === button.dataset.id)); break;
       case 'new': createSheet(byId('project-filter').value,'Bảng chốt mã mới',makeTemplate()); break;
@@ -378,6 +374,8 @@ document.addEventListener('click', async event => {
       }
       case 'duplicate': modify(() => group.rows.splice(group.rows.indexOf(row)+1,0,duplicate(row))); break;
       case 'detail': editDetail(row,slot); break;
+      case 'view-image': openMaterialLightbox(row,slot); break;
+      case 'pick-pa': pick(row,slot); break;
       case 'undo': undo(false); break;
       case 'redo': undo(true); break;
     }
@@ -469,7 +467,7 @@ document.addEventListener('keydown', event => {
   }
   if (!row) return;
   if (event.key === 'Enter' && target.matches('button,select,input[type=checkbox]')) return;
-  if (target.matches('.image-cell') && event.key === ' ' && slot !== 'render') { event.preventDefault(); pick(row,slot); return; }
+
   const cell = target.closest('td');
   if (!cell) return;
   if (event.key === 'Escape') { if (target.tagName === 'INPUT') {
