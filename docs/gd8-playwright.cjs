@@ -610,6 +610,26 @@ cases['10.5'] = async page => {
   assert.deepEqual(projects.projects[0].profile,{project:'Căn hộ đồng bộ',customer:'Anh Kiểm Thử',address:'88 Đường Mẫu',contract:'HD-DONG-BO'});
 };
 
+cases['10.6'] = async page => {
+  const destination = process.env.GD_SHELL_SCREENSHOTS;
+  for (const width of [1440,1920]) {
+    await page.setViewportSize({width,height:900});
+    for (const [tool,open,sidebar] of [
+      ['lich',async () => { await page.goto('/'); await page.locator('.project-owner-header').first().waitFor(); },'.app-sidebar'],
+      ['chot-ma',() => openMaterials(page),'.material-sidebar']
+    ]) {
+      await open();
+      await page.evaluate(() => document.fonts.ready);
+      for (const [name,selector] of [['header','.app-header'],['sidebar',sidebar]]) {
+        const element = page.locator(selector);
+        const bounds = await element.boundingBox();
+        assert.equal(Math.round(bounds[name === 'header' ? 'height' : 'width']),name === 'header' ? 56 : 262);
+        if (destination) await element.screenshot({path:path.join(destination,tool+'-'+width+'-'+name+'.png'),animations:'disabled'});
+      }
+    }
+  }
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

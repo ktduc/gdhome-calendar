@@ -120,9 +120,9 @@ XONG GĐ9
 | 10.3 | ✅ | đồng bộ thao tác, xuất ảnh PDF và chế độ khách |
 | 10.4 | ✅ | gom màn Kết nối và dùng chung luồng AI |
 | 10.5 | ✅ | hợp nhất hồ sơ theo ID dự án của Tiến độ |
-| 10.6 | ⏳ | Kiểm thử và bàn giao |
+| 10.6 | ✅ | kiểm thử giao diện ở 1440 và 1920 px, cập nhật bàn giao |
 
-Bước kế tiếp GĐ10: 10.6 chạy hồi quy và cập nhật bàn giao.
+Bước kế tiếp GĐ10: Hoàn thành 10.1–10.6. Tiếp tục GĐ12 theo yêu cầu.
 
 - 10.1: tài liệu tích hợp ở `docs/HE-THONG-GIAO-DIEN.md`. Ảnh header và sidebar Lịch ở 1440/1920 px trùng từng byte trước và sau khi tách. Playwright 10.1, 8.3, 9.5 đạt.
 
@@ -133,3 +133,7 @@ Bước kế tiếp GĐ10: 10.6 chạy hồi quy và cập nhật bàn giao.
 - 10.4: cấu hình lưu tại `/api/integrations/settings`. Playwright đổi model/cột ngày ở Lịch, đọc từ Chốt mã, dán ảnh và mở duyệt AI trên cả hai trang với phản hồi giả lập.
 
 - 10.5: `projectOwners[].profile` là hồ sơ dùng chung; tên chuẩn lấy từ `projectOwners[].name`. Playwright sửa hai chiều giữa Lịch và Chốt mã; test API xác nhận cô lập tài khoản, 409 cho dữ liệu Lịch cũ và hồ sơ của bản đã ký giữ nguyên.
+
+- 10.6: Node 23/23 và Playwright 19/19 trên Edge. Chụp header và sidebar Lịch/Chốt mã ở 1440 và 1920 px; các cụm lệnh cùng toạ độ ngang. Kiểm tra lưu trên server, hồ sơ hai chiều, khách, Esc, PDF và cấu hình AI/Notion giả lập. Tài liệu tích hợp ghi tại mục 3p trong `CLAUDE_HANDOVER.md`.
+
+XONG GĐ10

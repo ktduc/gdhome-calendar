@@ -179,6 +179,16 @@
 - Ghi chú mới mặc định trống. Bấm ô hoặc Alt+↓ để tìm và chọn nhiều gợi ý. `material-note-suggestions.js` chứa danh sách mặc định và lấy thêm ghi chú đã dùng ở các hạng mục cùng loại trong bảng nháp của tài khoản. Ghi chú do AI tạo và tham chiếu ảnh nhập lưu trong `noteSuggestions` của bản nháp. Trường Ghi chú nhập trực tiếp từ Excel/CSV vẫn là nội dung của dòng.
 - `docs/gd8-playwright.cjs` kiểm tra GĐ8 và GĐ9 trên Edge với kho tạm. Ca GĐ9 đo ảnh 3D và PA thẳng hàng, kiểm tra canvas PNG, tạo PDF A4 trong bộ nhớ và thử quy trình ghi chú sau khi tải lại. Xem lệnh chạy tại [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
 
+## 3p. Đồng bộ giao diện GD HOME Tools (GĐ10)
+
+- `shell.css` và `shell.js` dùng chung cho các trang. Header 56 px, sidebar 262 px, Roboto, nút File / AI / Copy ảnh / Undo-Redo / nút chính, toast, trạng thái lưu, modal, thanh chọn nhiều và lightbox. Hợp đồng CSS/JS cho Quản lý dự án trong [HE-THONG-GIAO-DIEN.md](docs/HE-THONG-GIAO-DIEN.md).
+- `GET/POST /api/materials/preferences` lưu tùy chọn Chốt mã theo tài khoản. `viewVersion` độc lập với phiên bản bản nháp, cùng hàng đợi ghi trong kho Chốt mã. Bản tạm localStorage giữ thay đổi chưa gửi. Tuỳ chọn nhóm và lọc lưu theo bảng; mật độ, độ đậm, cột, khối menu và phạm vi xuất lưu theo tài khoản.
+- Chốt mã có chế độ khách lưu bản nháp và ảnh trên trình duyệt, dùng chung cờ đăng nhập với Lịch. Có thể chuyển các bảng khách vào tài khoản khi đăng nhập qua Chốt mã. Tính năng kết nối và phát hành dùng phiên tài khoản.
+- Menu **⚙ Kết nối** dùng `integrations-client.js` và `/api/integrations/settings`. `ai-client.js` dùng chung cho chọn/dán ảnh, chuẩn bị tệp và chạy nền; mỗi tool dựng bảng duyệt theo nghiệp vụ.
+- `GET/POST /api/projects` và `projects-client.js` chia sẻ hồ sơ qua `projectOwners[].profile` và tên dự án qua `projectOwners[].name`. Lịch hiện tên khách và địa chỉ ở tiêu đề. Hệ thống đọc hồ sơ Chốt mã cũ khi chưa có trường mới và lưu ảnh chụp hồ sơ theo bản đã phát hành.
+- Lịch có xuất PDF A4 ngang từ vùng đã chọn. Chốt mã hỗ trợ PDF thống kê nhiều trang và biên bản A4. PNG và clipboard dùng chung thông số sọc chìm trong `export-canvas.js`.
+- Chạy `node --test --test-isolation=none` và `node docs/gd8-playwright.cjs`. Dùng `GD_SHELL_SCREENSHOTS` trỏ đến thư mục muốn chụp header/sidebar ở 1440 và 1920 px. Chi tiết trong [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.
