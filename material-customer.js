@@ -13,10 +13,11 @@ function renderCustomer() {
     '</p><button id="customer-print">Xem biên bản A4</button><form id="customer-form">' +
     sheet.groups.map(group => '<section class="panel"><h3>' + html(group.name) + '</h3>' + group.rows.map(row =>
       '<fieldset><legend>' + html(row.name) + (row.room ? ' · '+html(row.room) : '') + '</legend>' +
-      printImages(row.render,reviewApi+'/assets/') + '<div class="cards">' + row.options.map((pa,i) =>
+      '<div class="print-squares">' + printImages(row.render,reviewApi+'/assets/') + '</div><div class="cards">' + row.options.map((pa,i) =>
         (pa.code || pa.brand || pa.finish || pa.size || pa.color || pa.images.length) ? '<label class="review-option"><input type="radio" name="' + row.id +
           '" value="' + i + '" required ' + (customer?'disabled ':'') + ((committed[row.id] ?? row.chosen) === i ? 'checked' : '') +
-          '> PA' + (i+1) + ' · ' + html([pa.brand,pa.code,pa.color,pa.size,pa.finish].filter(Boolean).join(' · ')) + printImages(pa.images,reviewApi+'/assets/') + '</label>' : ''
+          '> PA' + (i+1) + ' · ' + html([pa.brand,pa.code,pa.color,pa.size,pa.finish].filter(Boolean).join(' · ')) +
+          '<div class="print-squares">' + printImages(pa.images,reviewApi+'/assets/') + '</div></label>' : ''
       ).join('') + '</div></fieldset>').join('') + '</section>').join('') +
     (customer ? '' : '<section class="panel">' + signatureForm('customer') + '<p><label><input type="checkbox" id="accepted" required> Tôi đồng ý với các lựa chọn và nội dung biên bản.</label></p><button class="primary">Đồng ý và ký</button></section>') +
     '</form>' + (customer ? '<section class="panel"><h3>Đã nhận xác nhận</h3><div class="print-signatures"><div>Bên A<br>' +

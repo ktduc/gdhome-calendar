@@ -97,6 +97,16 @@ XONG GĐ8
 | 9.4 | ✅ | dùng font Roboto chung với Tiến độ cho bảng và bản in |
 | 9.5 | ✅ | mở ảnh lớn có chuyển, cắt, xoá và tách nút chốt PA |
 | 9.6 | ✅ | giữ ghi chú mới trống và thêm gợi ý theo danh mục |
-| 9.7 | ⏳ | Kiểm tra và bàn giao |
+| 9.7 | ✅ | kiểm thử PNG và A4 trên Edge, cập nhật bàn giao |
 
-Bước kế tiếp GĐ9: 9.7 kiểm tra trên localhost và cập nhật bàn giao.
+Bước kế tiếp GĐ9: Hoàn thành 9.1–9.7. Chờ review trước khi triển khai.
+
+### Kiểm tra GĐ9
+
+- `node --test --test-isolation=none` đạt 23/23.
+- `node docs/gd8-playwright.cjs` đạt 12/12 trên Edge với dữ liệu tạm. Có thể truyền `9.1 9.2 9.3 9.4 9.5 9.6` để chỉ chạy GĐ9, và dùng biến `PLAYWRIGHT_PATH` để trỏ đến Playwright cài ngoài dự án.
+- Ở màn hình 1050 px, hai khung 3D và PA đều 92×92 px, cùng tọa độ mép trên. Kiểm tra thêm ở 375 px, chế độ in và ca PA1 chỉ có mã còn PA2 có ảnh. Logo bản thống kê rộng 224 px. PNG được vẽ bằng html2canvas và kiểm tra điểm ảnh, PDF A4 được tạo trong bộ nhớ.
+- Xác nhận font Roboto trên Tiến độ, bảng nhập, trang duyệt và biên bản. Thử chuyển, cắt, xoá ảnh trong lightbox và chốt PA bằng ✓. Gợi ý ghi chú theo loại hạng mục, ghi chú AI và ghi chú đã dùng đều hiện sau khi tải lại.
+- Hướng dẫn và phạm vi thay đổi đã cập nhật ở mục 3o của `CLAUDE_HANDOVER.md`.
+
+XONG GĐ9

@@ -1,4 +1,4 @@
-// node docs/gd8-playwright.cjs [8.1 ...]
+// node docs/gd8-playwright.cjs [8.1 ... 9.6]
 // PLAYWRIGHT_PATH may point to a local Playwright installation. Uses installed Edge.
 const assert = require('node:assert/strict');
 const { mkdtemp,rm } = require('node:fs/promises');
@@ -191,6 +191,223 @@ cases['8.6'] = async page => {
   await page.locator('.toast-notification.show').filter({hasText:'Điền thông tin hoặc thêm ảnh'}).waitFor();
 };
 
+cases['9.1'] = async page => {
+  await openMaterials(page);
+  await page.locator('[data-group-toggle="g2"]').uncheck();
+  const form = await openImageScope(page);
+  assert.equal(await form.locator('[name="groups"] option:checked').textContent(),'Chỉ nhóm đang bật');
+  assert.equal(await form.locator('[name="rows"]').inputValue(),'all');
+  assert.equal(await form.locator('[name="room"]').inputValue(),'');
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  assert.equal(await page.locator('#print-sheet .print-group').count(),9);
+  assert.equal(await page.locator('#print-sheet .print-group').getByText('Nhóm 2',{exact:true}).count(),0);
+  await page.locator('#close-print').click();
+  await openImageScope(page);
+  await form.locator('[name="groups"]').selectOption('all');
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  assert.equal(await page.locator('#print-sheet .print-group').count(),10);
+  await openMaterials(page);
+  await openImageScope(page);
+  assert.equal(await form.locator('[name="groups"]').inputValue(),'all','Nhớ lựa chọn sau khi tải lại');
+};
+
+cases['9.2'] = async page => {
+  await openMaterials(page);
+  await addFixtureImage(page,'render');
+  await addFixtureImage(page,'0');
+  await page.evaluate(() => modify(() => {
+    const row = sheet.groups[0].rows[0];
+    row.qty = '141,90';
+    row.unit = 'm2';
+    row.options[0].code = 'TEST-01';
+    sheet.groups = [{ ...sheet.groups[0],rows:[row] }];
+  }));
+  const form = await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  const measure = () => page.locator('#print-sheet').evaluate(root => {
+    const images = [...root.querySelectorAll('.print-square img')];
+    const bounds = node => {
+      const {top,width,height} = node.getBoundingClientRect();
+      return {top,width,height};
+    };
+    return { slots:images.map(img => bounds(img.parentElement)),images:images.map(bounds),
+      originals:images.map(img => img.naturalWidth/img.naturalHeight),logo:bounds(root.querySelector('.print-heading img')).width };
+  });
+  function verifyFit(metrics) {
+    assert.equal(metrics.slots.length,2);
+    assert.deepEqual(metrics.slots[0],metrics.slots[1]);
+    assert.equal(metrics.slots[0].width,metrics.slots[0].height);
+    assert.deepEqual(metrics.images[0],metrics.images[1]);
+    metrics.images.forEach((img,i) => assert.ok(Math.abs(img.width/img.height-metrics.originals[i]) < 0.01));
+  }
+  const desktop = await measure();
+  verifyFit(desktop);
+  assert.ok(desktop.logo >= 120*1.8);
+  assert.equal(await page.locator('.print-qty').textContent(),'141,90 m²');
+  assert.equal(await page.locator('.print-option-caption').textContent(),'TEST-01');
+  await page.evaluate(() => {
+    window.downloadCanvas = canvas => {
+      const root = document.querySelector('#print-sheet').getBoundingClientRect();
+      const slot = document.querySelector('.print-square').getBoundingClientRect();
+      const pixel = (x,y) => [...canvas.getContext('2d').getImageData(Math.round(x*2),Math.round(y*2),1,1).data];
+      const x = slot.left-root.left+slot.width/2;
+      window.gd9Png = { width:canvas.width,top:pixel(x,slot.top-root.top+4),center:pixel(x,slot.top-root.top+slot.height/2) };
+    };
+  });
+  await page.locator('#stats-download').click();
+  await page.waitForFunction(() => window.gd9Png || document.querySelector('#export-image-status')?.textContent,{},{timeout:20000});
+  const png = await page.evaluate(() => window.gd9Png);
+  assert.ok(png,(await page.locator('#export-image-status').textContent()) || 'Thiếu canvas PNG');
+  assert.ok(png.width > 1400);
+  assert.deepEqual(png.top,[255,255,255,255],'PNG có khoảng trắng giữ tỷ lệ ảnh');
+  assert.notDeepEqual(png.center,png.top,'PNG chứa ảnh thật trong khung');
+
+  await page.setViewportSize({width:375,height:720});
+  verifyFit(await measure());
+  await page.setViewportSize({width:1050,height:720});
+  await page.emulateMedia({media:'print'});
+  const print = await measure();
+  verifyFit(print);
+  assert.ok(print.logo >= 120*1.8);
+  assert.ok((await page.pdf({preferCSSPageSize:true})).length > 1000);
+  await page.emulateMedia({media:'screen'});
+  await page.locator('#close-print').click();
+  await page.evaluate(() => modify(() => {
+    const row = sheet.groups[0].rows[0];
+    row.options[1].images = row.options[0].images.splice(0);
+  }));
+  await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  verifyFit(await measure());
+  assert.deepEqual(await page.locator('.print-option-caption').allTextContents(),['PA2 ','PA1 TEST-01']);
+  console.log('Khung ảnh ' + desktop.slots[0].width + '×' + desktop.slots[0].height + ' px, logo ' + desktop.logo + ' px');
+};
+
+cases['9.3'] = async page => {
+  await openMaterials(page);
+  await addFixtureImage(page,'render');
+  await addFixtureImage(page,'0');
+  const columns = ['select','name','render','pa0','qty','note'];
+  const headers = await page.locator('.sheet-grid thead th').evaluateAll((cells,keys) =>
+    cells.filter(cell => keys.includes(cell.dataset.column)).map(cell => cell.textContent.trim()),columns);
+  const row = page.locator('[data-row="g1-r1"]');
+  const images = await row.locator('.image-open img').evaluateAll(nodes => nodes.map(node => {
+    const {top,width,height} = node.getBoundingClientRect();
+    return {top,width,height,fit:getComputedStyle(node).objectFit};
+  }));
+  assert.equal(images.length,2);
+  assert.deepEqual(images[0],images[1]);
+  assert.equal(images[0].width,images[0].height);
+  assert.equal(images[0].fit,'contain');
+  const groupColor = await page.locator('.sheet-grid .group th').first().evaluate(el => getComputedStyle(el).backgroundColor);
+  const form = await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  assert.deepEqual(await page.locator('#print-sheet thead th').allTextContents(),headers);
+  assert.equal(await page.locator('#print-sheet .print-group th').first().evaluate(el => getComputedStyle(el).backgroundColor),groupColor);
+};
+
+cases['9.4'] = async page => {
+  await page.goto('/');
+  const bodyFont = () => page.locator('body').evaluate(el => getComputedStyle(el).fontFamily);
+  const scheduleFont = await bodyFont();
+  assert.match(scheduleFont,/Roboto/);
+  await openMaterials(page);
+  assert.equal(await bodyFont(),scheduleFont);
+  await addFixtureImage(page,'0');
+  await page.locator('[data-header-command="file"]').click();
+  await page.locator('#material-publish').click();
+  const issued = await page.locator('#issued-link').inputValue();
+  await page.goto(issued);
+  await page.locator('#customer-print').click();
+  await page.locator('#do-print:enabled').waitFor();
+  assert.equal(await bodyFont(),scheduleFont);
+  assert.equal(await page.locator('#print-sheet').evaluate(el => getComputedStyle(el).fontFamily),scheduleFont);
+  assert.ok((await page.locator('.print-heading img').boundingBox()).width >= 120*1.8);
+  assert.doesNotMatch(await page.locator('#print-sheet').textContent(),/CỘNG HÒA XÃ HỘI CHỦ NGHĨA/);
+};
+
+cases['9.5'] = async page => {
+  await openMaterials(page);
+  await addFixtureImage(page,'0');
+  await addFixtureImage(page,'0');
+  const pa = page.locator('[data-row="g1-r1"] [data-slot="0"]');
+  const pick = pa.getByRole('button',{name:'Chốt PA1'});
+  const photo = pa.getByRole('button',{name:'Xem ảnh lớn'});
+  await photo.click();
+  const lightbox = page.locator('dialog.material-lightbox');
+  assert.equal(await lightbox.locator('output').textContent(),'1 / 2');
+  assert.equal(await pick.getAttribute('aria-pressed'),'false');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await lightbox.locator('output').textContent(),'2 / 2');
+  await lightbox.getByRole('button',{name:'Cắt ảnh'}).click();
+  await page.locator('.crop-dialog').getByRole('button',{name:'Lưu ảnh cắt'}).click();
+  await page.locator('.crop-dialog').waitFor({state:'detached'});
+  assert.equal(await lightbox.locator('output').textContent(),'2 / 2');
+  page.once('dialog',dialog => dialog.accept());
+  await lightbox.getByRole('button',{name:'Xoá ảnh'}).click();
+  assert.equal(await lightbox.locator('output').textContent(),'1 / 1');
+  await page.keyboard.press('Escape');
+  await lightbox.waitFor({state:'detached'});
+  await photo.click();
+  await page.mouse.click(0,0);
+  await lightbox.waitFor({state:'detached'});
+  await pick.click();
+  assert.equal(await pick.getAttribute('aria-pressed'),'true');
+};
+
+cases['9.6'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => modify(() => {
+    const group = sheet.groups[0];
+    group.name = 'Sơn tường';
+    group.rows[1].note = 'Sơn mẫu tại phòng khách';
+    mergeAiRows(sheet.groups,[{group:'Sơn tường',name:'Sơn trần',room:'',note:'So khớp mẫu dưới ánh sáng tự nhiên'}]);
+  }));
+  const newRow = page.locator('tr[data-row]').filter({has:page.locator('input[data-field="name"][value="Sơn trần"]')});
+  const note = newRow.locator('input[data-field="note"]');
+  assert.equal(await note.inputValue(),'');
+  await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
+  await openMaterials(page);
+  assert.equal(await note.inputValue(),'','Ghi chú AI chỉ là gợi ý sau khi tải lại');
+  await note.click();
+  const notes = page.locator('.material-notes-form');
+  const find = notes.getByRole('searchbox',{name:'Tìm gợi ý'});
+  await find.fill('nuoc phu');
+  await notes.getByRole('checkbox',{name:'Sơn 2 nước phủ'}).check();
+  await find.fill('anh sang');
+  await notes.getByRole('checkbox',{name:'So khớp mẫu dưới ánh sáng tự nhiên'}).check();
+  await find.fill('phong khach');
+  await notes.getByRole('checkbox',{name:'Sơn mẫu tại phòng khách'}).check();
+  await notes.getByRole('button',{name:'Lưu ghi chú'}).click();
+  const expected = 'So khớp mẫu dưới ánh sáng tự nhiên; Sơn 2 nước phủ; Sơn mẫu tại phòng khách';
+  assert.equal(await note.inputValue(),expected);
+  await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
+  await openMaterials(page);
+  assert.equal(await note.inputValue(),expected);
+};
+
+async function openImageScope(page) {
+  await page.locator('#material-copy').click();
+  const form = page.locator('#material-image-scope');
+  await form.waitFor();
+  return form;
+}
+
+async function addFixtureImage(page,slot) {
+  const cell = page.locator('[data-row="g1-r1"] [data-slot="' + slot + '"]');
+  const previous = await cell.locator('.image-count').count() ? Number(await cell.locator('.image-count').textContent())+1 :
+    await cell.locator('img').count();
+  await cell.focus();
+  assert.equal(await pasteFixture(page,'items'),true);
+  if (previous) await cell.locator('.image-count').getByText('+' + previous,{exact:true}).waitFor();
+  else await cell.locator('img[src]').waitFor();
+}
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
@@ -227,7 +444,13 @@ async function main() {
       await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; return {}; });
       const page = await browser.newPage({ baseURL:'http://127.0.0.1:'+server.address().port,viewport:{width:1050,height:720},acceptDownloads:false });
       page.setDefaultTimeout(4000);
-      try { await cases[key](page); console.log(key+' đạt'); }
+      const pageErrors = [];
+      page.on('pageerror',error => pageErrors.push(error.message));
+      try {
+        await cases[key](page);
+        assert.deepEqual(pageErrors,[],'Lỗi JavaScript trên trang');
+        console.log(key+' đạt');
+      }
       finally { await page.close(); }
     }
   } finally {

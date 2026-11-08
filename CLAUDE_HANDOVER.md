@@ -170,6 +170,15 @@
 - Dán ảnh trực tiếp bằng `clipboardData.items`, `files`, ảnh trong HTML hoặc `navigator.clipboard.read()`. Link ảnh phụ thuộc quyền đọc từ trang nguồn. Khi trang nguồn chặn, có thể sao chép ảnh dưới dạng bitmap hoặc kéo tệp vào ô.
 - Test Node đạt 23/23. Kịch bản Playwright tại `docs/gd8-playwright.cjs` kiểm tra cả sáu bước với 150 dòng mẫu trên Edge. Xem cách chạy và số đo tại [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
 
+## 3o. Chốt mã GĐ9
+
+- Hộp Copy ảnh mặc định lấy nhóm đang bật, mọi dòng và mọi phòng. Lựa chọn đã áp dụng lưu theo Gmail trên trình duyệt hoặc theo phiên bản dùng chung khi không có Gmail.
+- Bảng nhập và bản thống kê dùng cùng tên, thứ tự cột chính và màu đầu nhóm. Bản thống kê và biên bản A4 dùng Roboto chung với Tiến độ. Trên desktop, logo rộng 224 px và khung ảnh rộng 92 px. Nhãn PA nằm dưới ảnh, tự ẩn khi chỉ có PA1. Bản thống kê xếp các PA có ảnh lên trước các PA chỉ có thông tin để ảnh luôn bắt đầu ngang với cột phối cảnh.
+- `material-print.js` đặt ảnh giữ tỷ lệ trong khung vuông để bản xem trước, PNG và A4 có cùng bố cục. PNG dùng kích thước ảnh thực vì html2canvas không hỗ trợ `object-fit`. [Danh sách CSS của html2canvas](https://html2canvas.hertzen.com/features)
+- Bấm ảnh để xem ảnh lớn trong `material-image-ui.js`. Dùng mũi tên để chuyển ảnh trong ô, Esc hoặc bấm nền tối để đóng. Có thể cắt và xoá ảnh tại đây. Nút ✓ riêng chốt PA.
+- Ghi chú mới mặc định trống. Bấm ô hoặc Alt+↓ để tìm và chọn nhiều gợi ý. `material-note-suggestions.js` chứa danh sách mặc định và lấy thêm ghi chú đã dùng ở các hạng mục cùng loại trong bảng nháp của tài khoản. Ghi chú do AI tạo và tham chiếu ảnh nhập lưu trong `noteSuggestions` của bản nháp. Trường Ghi chú nhập trực tiếp từ Excel/CSV vẫn là nội dung của dòng.
+- `docs/gd8-playwright.cjs` kiểm tra GĐ8 và GĐ9 trên Edge với kho tạm. Ca GĐ9 đo ảnh 3D và PA thẳng hàng, kiểm tra canvas PNG, tạo PDF A4 trong bộ nhớ và thử quy trình ghi chú sau khi tải lại. Xem lệnh chạy tại [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

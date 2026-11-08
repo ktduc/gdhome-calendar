@@ -45,7 +45,7 @@ function signatureMark(record) {
 function printImages(items, base, large = false) {
   return (items || []).map(image => {
     const name = typeof image === 'string' ? image : (large ? image.full : image.thumb);
-    return /^[a-f0-9]{64}\.webp$/.test(name) ? '<img class="print-material" data-print-img="' + html(base + name) + '" alt="Mẫu vật liệu">' : '';
+    return /^[a-f0-9]{64}\.webp$/.test(name) ? '<div class="print-square"><img class="print-material" data-print-img="' + html(base + name) + '" alt="Mẫu vật liệu"></div>' : '';
   }).join('');
 }
 async function loadPrintImages(root, headers = {}) {
@@ -89,7 +89,8 @@ function rowsForPrint(view, base, stats) {
       const options = row.options.filter(hasPrintOption);
       const name = html(row.name) + (row.room ? '<br><small>' + html(row.room) + '</small>' : '');
       if (stats) {
-        const samples = options.map(option => printMaterialSample(row,option,row.options.indexOf(option),option === pa,base)).join('');
+        const samples = options.toSorted((a,b) => Number(!!b.images?.length)-Number(!!a.images?.length))
+          .map(option => printMaterialSample(row,option,row.options.indexOf(option),option === pa,base)).join('');
         return '<tr><td class="print-number">' + (++i) + '</td><td>' + name + '</td><td><div class="print-squares">' +
           printImages(row.render,base) + '</div></td><td>' + (samples || html(row.spec)) +
           '</td><td class="print-qty">' + html(formatMaterialQuantity(row.qty,row.unit)) + '</td><td>' + html(row.note) + '</td></tr>';

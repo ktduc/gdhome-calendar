@@ -82,7 +82,7 @@ function columnWidth(key) {
   if (manual) return manual;
   if (key === 'name') {
     const context = document.createElement('canvas').getContext('2d');
-    context.font = '13px system-ui';
+    context.font = '13px ' + getComputedStyle(document.body).fontFamily;
     const longest = Math.max(0,...sheet.groups.flatMap(g => g.rows.map(row => context.measureText(row.name).width)));
     return Math.ceil(Math.min(460,Math.max(148,longest+24)));
   }
