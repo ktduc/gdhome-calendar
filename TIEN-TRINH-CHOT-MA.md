@@ -92,11 +92,11 @@ XONG GĐ8
 | Bước | Trạng thái | Kết quả |
 |---|---|---|
 | 9.1 | ✅ | mặc định nhóm đang bật và nhớ phạm vi xuất |
-| 9.2 | ⏳ | Bố cục ảnh và A4 |
+| 9.2 | ✅ | nới bảng in và căn ảnh vuông ngang hàng |
 | 9.3 | ⏳ | Bảng nhập và bản in |
 | 9.4 | ⏳ | Font Tiến độ |
 | 9.5 | ⏳ | Xem ảnh và chốt PA |
 | 9.6 | ⏳ | Gợi ý ghi chú |
 | 9.7 | ⏳ | Kiểm tra và bàn giao |
 
-Bước kế tiếp GĐ9: 9.2 căn bảng, ảnh và logo bản xuất.
+Bước kế tiếp GĐ9: 9.3 đồng bộ bố cục bảng nhập với bản xuất.

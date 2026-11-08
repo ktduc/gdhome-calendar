@@ -63,21 +63,42 @@ function formatTerms(value) {
   return value.split(/\n\s*\n/).map(paragraph => '<p>' + html(paragraph).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
     .replace(/\*([^*\n]+)\*/g,'<em>$1</em>').replace(/\r?\n/g,'<br>') + '</p>').join('');
 }
+const materialPrintColumns = [['number','STT'],['name','Danh mục'],['render','Phối cảnh 3D'],
+  ['sample','Mẫu vật liệu'],['qty','Khối lượng'],['note','Ghi chú']];
+function formatMaterialQuantity(quantity,unit) {
+  const normalizedUnit = String(unit || '').trim().replace(/^m\^?2$/i,'m²').replace(/^m\^?3$/i,'m³');
+  return [quantity,normalizedUnit].filter(value => value !== '' && value != null).join(' ');
+}
+function printMaterialSample(row,option,index,selected,base) {
+  const showLabel = row.options.filter(hasPrintOption).length > 1 || index > 0;
+  const description = [option.brand,option.code,option.color,option.size,option.finish || row.spec].filter(Boolean).join(' · ');
+  return '<div class="print-option"><div class="print-squares">' + printImages(option.images,base) +
+    '</div><div class="print-option-caption">' + (showLabel ? '<strong>PA' + (index+1) + '</strong> ' : '') +
+    (selected ? '<span aria-label="Đã chốt">✓</span> ' : '') + html(description) + '</div></div>';
+}
+function hasPrintOption(option) {
+  return !!(option.code || option.brand || option.finish || option.color || option.size || option.images?.length);
+}
+
 function rowsForPrint(view, base, stats) {
   let i = 0;
   return view.sheet.groups.map(group => '<tr class="print-group"><th colspan="' + (stats ? 6 : 5) + '">' + html(group.name) + '</th></tr>' +
     group.rows.map(row => {
       const index = view.customer?.choices?.[row.id] ?? row.chosen;
       const pa = row.options[index];
-      const options = row.options.filter(o => o.code || o.brand || o.finish || o.color || o.size || o.images?.length);
+      const options = row.options.filter(hasPrintOption);
       const name = html(row.name) + (row.room ? '<br><small>' + html(row.room) + '</small>' : '');
-      if (stats) return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td>' + printImages(row.render,base) + '</td><td>' +
-        options.map(o => '<div><strong>PA' + (row.options.indexOf(o)+1) + (o === pa ? ' ✓' : '') + '</strong> ' + html([o.brand,o.code,o.color,o.size,o.finish].filter(Boolean).join(' · ')) +
-          '<br>' + printImages(o.images,base) + '</div>').join('') + '</td><td>' + html([row.qty,row.unit].filter(Boolean).join(' ')) + '</td><td>' + html(row.note) + '</td></tr>';
+      if (stats) {
+        const samples = options.map(option => printMaterialSample(row,option,row.options.indexOf(option),option === pa,base)).join('');
+        return '<tr><td class="print-number">' + (++i) + '</td><td>' + name + '</td><td><div class="print-squares">' +
+          printImages(row.render,base) + '</div></td><td>' + (samples || html(row.spec)) +
+          '</td><td class="print-qty">' + html(formatMaterialQuantity(row.qty,row.unit)) + '</td><td>' + html(row.note) + '</td></tr>';
+      }
+
       return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td>' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
         (pa ? '<br><small>' + html(options.filter(o => o !== pa && o.code).map(o => 'Dự phòng: '+o.code).join(' · ')) + '</small>' : '') +
-        '</td><td>' + html(row.note) + '<br>' + printImages(pa?.images,base) + '</td></tr>';
+        '</td><td>' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base) + '</div></td></tr>';
     }).join('')).join('');
 }
 function printable(view, base, stats = false) {
@@ -88,8 +109,9 @@ function printable(view, base, stats = false) {
   const parts = Object.fromEntries(date.map(p => [p.type,p.value]));
   const day = 'ngày ' + parts.day + ' tháng ' + parts.month + ' năm ' + parts.year;
   const heading = '<div class="print-heading"><img src="/gdhome-logo.png" alt="GD HOME"><i>Hà Nội, ' + day + '</i></div>';
-  const table = '<table class="print-table"><thead><tr>' + (stats ?
-    ['STT','Danh mục','Phối cảnh 3D','Mẫu vật liệu','Khối lượng','Ghi chú'] :
+  const colgroup = stats ? '<colgroup>' + materialPrintColumns.map(([key]) => '<col class="print-col-' + key + '">').join('') + '</colgroup>' : '';
+  const table = '<table class="print-table' + (stats ? ' material-print-grid' : '') + '">' + colgroup + '<thead><tr>' + (stats ?
+    materialPrintColumns.map(([,label]) => label) :
     ['STT','Hạng mục','Chất liệu / Quy cách','Màu / Mã / Kích thước','Ghi chú / Hình ảnh minh hoạ']).map(t => '<th>' + t + '</th>').join('') +
     '</tr></thead><tbody>' + rowsForPrint(view,base,stats) + '</tbody></table>';
   if (stats) {

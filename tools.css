@@ -57,14 +57,14 @@ dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px)}dial
 .signature-mark{display:block;margin:auto;width:min(100%,300px);height:auto;aspect-ratio:600/190}.stack label,.stack input,.stack textarea{display:block;width:100%}
 #print-preview{position:fixed;inset:0;overflow:auto;background:#e5eaf0;z-index:9999}
 .print-actions{position:sticky;top:0;z-index:1;padding:8px;background:#fff;text-align:center}
-#print-sheet{width:210mm;max-width:100%;margin:14px auto;padding:13mm;background:#fff;font:14px/1.35 Georgia,serif;color:#111;box-sizing:border-box}
+#print-sheet{width:210mm;max-width:100%;margin:14px auto;padding:6mm;background:#fff;font:14px/1.35 Georgia,serif;color:#111;box-sizing:border-box}
 #print-sheet h1,.print-center{text-align:center}#print-sheet h1{font-size:23px}
-.print-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.print-heading img{width:120px}
-.print-table{border-collapse:collapse;width:100%;font-size:12px}.print-table th,.print-table td{padding:5px;border:1px solid #72879a;vertical-align:top}
+.print-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.print-heading img{width:min(224px,45%);height:auto}
+.print-table{border-collapse:collapse;width:100%;font-size:13px}.print-table th,.print-table td{padding:6px;border:1px solid #a7b5c5;vertical-align:top;overflow-wrap:anywhere}
 .print-table thead th{background:#dceaf6}.print-group th{text-align:left;background:#eef2f5}
 .print-material{max-width:115px;max-height:95px;object-fit:contain}.print-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));text-align:center;gap:10px;margin:22px 0}
 .watermark{background-image:repeating-linear-gradient(135deg,transparent 0 3px,#1a243608 3px 4px)!important}
-@page{size:A4;margin:14mm}
+@page{size:A4;margin:9mm}
 @media print{
   body.printing-material > :not(#print-preview),.print-actions{display:none!important}
   #print-preview{position:static;overflow:visible;background:white}#print-sheet{width:auto;margin:0;padding:0;border:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
@@ -156,3 +156,17 @@ body:has(.material-header){font-family:var(--gd-font)}
 #material-image-scope select{width:100%;min-width:0;box-sizing:border-box}
 #material-image-scope [role=status]{margin:0}
 #material-image-scope button{justify-self:start}
+:root{--material-square:92px;--material-group-fill:#eef2f5;--material-column-fill:#dceaf6}
+.material-print-grid{table-layout:fixed}
+.material-print-grid .print-col-number{width:6%}.material-print-grid .print-col-name{width:22%}
+.material-print-grid .print-col-render{width:16%}.material-print-grid .print-col-sample{width:25%}
+.material-print-grid .print-col-qty{width:14%}.material-print-grid .print-col-note{width:17%}
+.print-number{text-align:center}.print-qty{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.print-squares{display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px}
+.print-squares:empty,.print-option-caption:empty{display:none}
+.print-squares .print-material{display:block;width:min(100%,var(--material-square));height:auto;aspect-ratio:1;
+  max-width:none;max-height:none;object-fit:contain;background:#fff}
+.print-option + .print-option{margin-top:8px}
+.print-option-caption{margin-top:3px}
+@media(max-width:640px){#print-sheet{--material-square:52px}.material-print-grid{font-size:11px}.material-print-grid th,.material-print-grid td{padding:3px}}
+@media print{#print-sheet{--material-square:92px}.material-print-grid{font-size:13px}.material-print-grid th,.material-print-grid td{padding:6px}}
