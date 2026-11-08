@@ -31,6 +31,11 @@ test('Object Storage: Cấu hình Backblaze B2 & Cloudflare R2 và chuẩn hoá 
     delete process.env.S3_ACCESS_KEY_ID;
     delete process.env.S3_SECRET_ACCESS_KEY;
     delete process.env.S3_BUCKET;
+    delete process.env.B2_ENDPOINT;
+    delete process.env.B2_REGION;
+    delete process.env.B2_KEY_ID;
+    delete process.env.B2_APP_KEY;
+    delete process.env.B2_BUCKET;
     delete process.env.R2_ACCOUNT_ID;
     delete process.env.R2_ACCESS_KEY_ID;
     delete process.env.R2_SECRET_ACCESS_KEY;
@@ -39,7 +44,7 @@ test('Object Storage: Cấu hình Backblaze B2 & Cloudflare R2 và chuẩn hoá 
     assert.equal(getStorageKind(), 'temp');
     assert.equal(isConfigured(), false);
 
-    // 2. Kiểm tra Backblaze B2 (chuẩn S3 AWS SigV4)
+    // 2. Kiểm tra Backblaze B2 bộ tên S3_*
     process.env.S3_ENDPOINT = 'https://s3.us-west-004.backblazeb2.com';
     process.env.S3_ACCESS_KEY_ID = '004abc123';
     process.env.S3_SECRET_ACCESS_KEY = 'K004secretKey';
@@ -54,11 +59,34 @@ test('Object Storage: Cấu hình Backblaze B2 & Cloudflare R2 và chuẩn hoá 
     assert.equal(getStorageKind(), 'b2');
     assert.equal(isConfigured(), true);
 
-    // 3. Kiểm tra tương thích Cloudflare R2 cũ khi không có S3_*
+    // 2b. Kiểm tra Backblaze B2 bộ tên B2_* (B2_ENDPOINT không có https://, B2_KEY_ID, B2_APP_KEY, B2_BUCKET)
     delete process.env.S3_ENDPOINT;
     delete process.env.S3_ACCESS_KEY_ID;
     delete process.env.S3_SECRET_ACCESS_KEY;
     delete process.env.S3_BUCKET;
+
+    process.env.B2_ENDPOINT = 's3.us-west-004.backblazeb2.com';
+    process.env.B2_KEY_ID = '004b2keyid';
+    process.env.B2_APP_KEY = 'K004b2appkey';
+    process.env.B2_BUCKET = 'gdhome-files';
+    delete process.env.B2_REGION;
+
+    const b2AltConfig = resolveStorageConfig();
+    assert.equal(b2AltConfig.kind, 'b2');
+    assert.equal(b2AltConfig.endpoint, 'https://s3.us-west-004.backblazeb2.com');
+    assert.equal(b2AltConfig.host, 's3.us-west-004.backblazeb2.com');
+    assert.equal(b2AltConfig.region, 'us-west-004');
+    assert.equal(b2AltConfig.accessKey, '004b2keyid');
+    assert.equal(b2AltConfig.secretKey, 'K004b2appkey');
+    assert.equal(b2AltConfig.bucket, 'gdhome-files');
+    assert.equal(getStorageKind(), 'b2');
+    assert.equal(isConfigured(), true);
+
+    // 3. Kiểm tra tương thích Cloudflare R2 cũ khi không có S3_* và B2_*
+    delete process.env.B2_ENDPOINT;
+    delete process.env.B2_KEY_ID;
+    delete process.env.B2_APP_KEY;
+    delete process.env.B2_BUCKET;
     process.env.R2_ACCOUNT_ID = 'acc987';
     process.env.R2_ACCESS_KEY_ID = 'r2key';
     process.env.R2_SECRET_ACCESS_KEY = 'r2secret';
@@ -72,12 +100,20 @@ test('Object Storage: Cấu hình Backblaze B2 & Cloudflare R2 và chuẩn hoá 
     assert.equal(getStorageKind(), 'r2');
     assert.equal(isConfigured(), true);
 
-    // 4. Kiểm tra ưu tiên B2 hơn R2 nếu cả hai cùng có
+    // 4. Kiểm tra thứ tự ưu tiên: S3_* > B2_* > R2_*
+    process.env.B2_ENDPOINT = 's3.us-west-004.backblazeb2.com';
+    process.env.B2_KEY_ID = '004b2keyid';
+    process.env.B2_APP_KEY = 'K004b2appkey';
+    process.env.B2_BUCKET = 'gdhome-b2';
+    // B2_* có quyền ưu tiên hơn R2_*
+    assert.equal(resolveStorageConfig().accessKey, '004b2keyid');
+
     process.env.S3_ENDPOINT = 'https://s3.us-west-004.backblazeb2.com';
-    process.env.S3_ACCESS_KEY_ID = '004abc123';
-    process.env.S3_SECRET_ACCESS_KEY = 'K004secretKey';
-    process.env.S3_BUCKET = 'gdhome-files';
-    assert.equal(getStorageKind(), 'b2');
+    process.env.S3_ACCESS_KEY_ID = '004s3key';
+    process.env.S3_SECRET_ACCESS_KEY = 'K004s3secret';
+    process.env.S3_BUCKET = 'gdhome-s3';
+    // S3_* có quyền ưu tiên hơn B2_*
+    assert.equal(resolveStorageConfig().accessKey, '004s3key');
 
     // 5. Kiểm tra hàm chuẩn hoá path-style URI
     const uri1 = canonicalUri('gdhome-files', 'project-files/a1b2/ban-ve.pdf');
@@ -305,11 +341,25 @@ test('Object Storage: /api/health trả objectStorage đúng chuẩn ("b2" | "r2
     const config1 = await checkConfig();
     assert.equal(config1.objectStorage, 'b2');
 
-    // 2. Chế độ R2
+    // 1b. Chế độ B2 với bộ biến B2_*
     delete process.env.S3_ENDPOINT;
     delete process.env.S3_ACCESS_KEY_ID;
     delete process.env.S3_SECRET_ACCESS_KEY;
     delete process.env.S3_BUCKET;
+    process.env.B2_ENDPOINT = 's3.us-west-004.backblazeb2.com';
+    process.env.B2_KEY_ID = 'B2_KEY_ID_VAL';
+    process.env.B2_APP_KEY = 'B2_APP_KEY_SECRET';
+    process.env.B2_BUCKET = 'gdhome-files';
+
+    const health1b = await checkHealth();
+    assert.equal(health1b.objectStorage, 'b2');
+    assert.equal(JSON.stringify(health1b).includes('B2_APP_KEY_SECRET'), false, 'Không lộ B2_APP_KEY');
+
+    // 2. Chế độ R2
+    delete process.env.B2_ENDPOINT;
+    delete process.env.B2_KEY_ID;
+    delete process.env.B2_APP_KEY;
+    delete process.env.B2_BUCKET;
     process.env.R2_ACCOUNT_ID = 'acc_test';
     process.env.R2_ACCESS_KEY_ID = 'r2_key';
     process.env.R2_SECRET_ACCESS_KEY = 'r2_secret';

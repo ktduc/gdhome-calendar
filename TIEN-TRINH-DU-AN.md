@@ -154,8 +154,8 @@
 
 - [x] **1. Module dùng chung `object-storage.js`**
   - Hỗ trợ chuẩn AWS Signature Version 4 (Query string auth) cho mọi dịch vụ S3-compatible.
-  - Đọc cấu hình `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` (chuẩn Backblaze B2).
-  - Tự động nhận diện region từ endpoint URL (vd `s3.us-west-004.backblazeb2.com` -> `us-west-004`).
+  - Đọc cấu hình `S3_*` (`S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET`) và `B2_*` (`B2_ENDPOINT`, `B2_REGION`, `B2_KEY_ID`, `B2_APP_KEY`, `B2_BUCKET`), ưu tiên `S3_*` -> `B2_*` -> `R2_*`.
+  - Tự động nhận diện region từ endpoint URL (vd `s3.us-west-004.backblazeb2.com` -> `us-west-004`), tự bổ sung `https://` nếu thiếu.
   - Duy trì hỗ trợ tương thích ngược cho Cloudflare R2 (`R2_*`).
   - Cung cấp path-style URL, các hàm `putObject`, `getObject`, `headObject`, `deleteObject` với `AbortSignal.timeout`.
 - [x] **2. Tích hợp `material-assets.js` và `project-hub.js` dùng chung module**

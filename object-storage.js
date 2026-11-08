@@ -7,11 +7,13 @@ const mac = (key, value) => crypto.createHmac('sha256', key).update(value).diges
 
 /**
  * Đọc cấu hình Object Storage từ biến môi trường:
- * 1. Ưu tiên Backblaze B2 (chuẩn S3 tương thích):
+ * 1. Ưu tiên Backblaze B2 chuẩn S3 (bộ tên S3_*):
  *    S3_ENDPOINT, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_BUCKET
- * 2. Tương thích ngược Cloudflare R2 cũ:
+ * 2. Tiếp theo Backblaze B2 (bộ tên B2_*):
+ *    B2_ENDPOINT, B2_REGION, B2_KEY_ID, B2_APP_KEY, B2_BUCKET
+ * 3. Tương thích ngược Cloudflare R2 cũ:
  *    R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET
- * 3. Fallback: 'temp' (lưu đĩa cục bộ DATA_DIR)
+ * 4. Fallback: 'temp' (lưu đĩa cục bộ DATA_DIR)
  */
 function resolveStorageConfig() {
   const s3Endpoint = (process.env.S3_ENDPOINT || '').trim();
@@ -39,6 +41,34 @@ function resolveStorageConfig() {
       accessKey: s3Access,
       secretKey: s3Secret,
       bucket: s3Bucket
+    };
+  }
+
+  const b2Endpoint = (process.env.B2_ENDPOINT || '').trim();
+  const b2KeyId = (process.env.B2_KEY_ID || '').trim();
+  const b2AppKey = (process.env.B2_APP_KEY || '').trim();
+  const b2Bucket = (process.env.B2_BUCKET || '').trim();
+  let b2Region = (process.env.B2_REGION || '').trim();
+
+  if (b2Endpoint && b2KeyId && b2AppKey && b2Bucket) {
+    let cleanEndpoint = b2Endpoint;
+    if (!/^https?:\/\//i.test(cleanEndpoint)) {
+      cleanEndpoint = 'https://' + cleanEndpoint;
+    }
+    const url = new URL(cleanEndpoint);
+    const host = url.host;
+    if (!b2Region) {
+      const m = host.match(/^s3[.-]([a-z0-9-]+)\.backblazeb2\.com/i) || host.match(/^s3[.-]([a-z0-9-]+)\.amazonaws\.com/i);
+      b2Region = m ? m[1] : 'us-east-1';
+    }
+    return {
+      kind: 'b2',
+      endpoint: url.origin,
+      host,
+      region: b2Region,
+      accessKey: b2KeyId,
+      secretKey: b2AppKey,
+      bucket: b2Bucket
     };
   }
 

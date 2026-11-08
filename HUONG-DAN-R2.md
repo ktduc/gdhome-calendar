@@ -32,14 +32,24 @@ Anh Đức và đội ngũ nên dùng **Backblaze B2** vì:
    - `keyID` (chính là S3 Access Key ID)
    - `applicationKey` (chính là S3 Secret Access Key)
 
-### Bước 4: Cài đặt 5 biến môi trường trên Render.com
+### Bước 4: Cài đặt biến môi trường trên Render.com
 1. Mở trang quản lý dịch vụ GD HOME trên **Render.com** -> chọn mục **Environment**.
-2. Thêm hoặc cập nhật 5 biến môi trường sau:
-   - `S3_ENDPOINT`: `https://s3.us-west-004.backblazeb2.com` (thay bằng endpoint hiển thị ở Bước 2)
-   - `S3_REGION`: `us-west-004` (vùng tương ứng trên endpoint, hoặc có thể bỏ trống vì server tự động nhận diện từ endpoint)
-   - `S3_ACCESS_KEY_ID`: dán mã `keyID` ở Bước 3
-   - `S3_SECRET_ACCESS_KEY`: dán mã `applicationKey` ở Bước 3
-   - `S3_BUCKET`: `gdhome-files` (tên bucket đã tạo ở Bước 2)
+2. Thêm các biến môi trường theo **MỘT TRONG HAI BỘ TÊN** sau (hệ thống tự động nhận diện cả hai):
+
+#### Cách A: Dùng bộ tên Backblaze B2 (`B2_*`) — Khuyên dùng vì trực quan:
+- `B2_ENDPOINT`: `https://s3.us-west-004.backblazeb2.com` (hoặc `s3.us-west-004.backblazeb2.com`, hệ thống tự bổ sung https:// nếu thiếu)
+- `B2_REGION`: `us-west-004` (tuỳ chọn, có thể bỏ trống vì server tự động nhận diện từ endpoint)
+- `B2_KEY_ID`: dán mã `keyID` lấy ở Bước 3
+- `B2_APP_KEY`: dán mã `applicationKey` lấy ở Bước 3
+- `B2_BUCKET`: `gdhome-files` (tên bucket đã tạo ở Bước 2)
+
+#### Cách B: Dùng bộ tên chuẩn S3 (`S3_*`):
+- `S3_ENDPOINT`: `https://s3.us-west-004.backblazeb2.com`
+- `S3_REGION`: `us-west-004` (tuỳ chọn)
+- `S3_ACCESS_KEY_ID`: dán mã `keyID` lấy ở Bước 3
+- `S3_SECRET_ACCESS_KEY`: dán mã `applicationKey` lấy ở Bước 3
+- `S3_BUCKET`: `gdhome-files`
+
 3. Bấm **Save Changes**. Render sẽ tự động khởi động lại dịch vụ trong ~30 giây.
 
 ---
