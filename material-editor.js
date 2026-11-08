@@ -128,9 +128,67 @@ function materialKpis() {
     counts(sheet),nearest ? 'Hạn gần nhất ' + nearest : 'Chưa có hạn'].map(value => '<span>' + html(value) + '</span>').join('');
 }
 
+const defaultColumnWidths = {room:112,render:110,spec:152,pa0:118,pa1:118,pa2:118,qty:68,unit:75,supplier:136,note:156,decision:130,actions:134};
+const clampColumnWidth = width => Math.round(Math.min(720,Math.max(48,width)));
+
+function columnWidth(key) {
+  const manual = materials.columnWidths?.[key];
+  if (manual) return manual;
+  if (key === 'name') {
+    const context = document.createElement('canvas').getContext('2d');
+    context.font = '13px system-ui';
+    const longest = Math.max(0,...sheet.groups.flatMap(g => g.rows.map(row => context.measureText(row.name).width)));
+    return Math.ceil(Math.min(460,Math.max(148,longest+24)));
+  }
+  if (density === 'lon' && (key === 'render' || /^pa[012]$/.test(key))) return 176;
+  return defaultColumnWidths[key];
+}
+
+function installColumnResize(table) {
+  const apply = (key,width) => {
+    table.querySelector('col[data-column="' + key + '"]').style.width = width + 'px';
+    table.style.width = [...table.querySelectorAll('col')].reduce((sum,col) => sum+parseInt(col.style.width,10),0) + 'px';
+  };
+  const save = (key,width) => {
+    materials.columnWidths ||= {};
+    if (width == null) delete materials.columnWidths[key];
+    else materials.columnWidths[key] = width;
+    queueSave();
+  };
+  table.querySelectorAll('[data-resize]').forEach(handle => {
+    const key = handle.dataset.resize;
+    handle.onpointerdown = event => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      const start = event.clientX;
+      const initial = columnWidth(key);
+      let width = initial;
+      handle.setPointerCapture(event.pointerId);
+      handle.onpointermove = move => {
+        width = clampColumnWidth(initial + move.clientX-start);
+        apply(key,width);
+      };
+      handle.onpointerup = () => { if (width !== initial) save(key,width); };
+      handle.onlostpointercapture = () => {
+        handle.onpointermove = null;
+        handle.onpointerup = null;
+        apply(key,columnWidth(key));
+      };
+    };
+    handle.ondblclick = () => { save(key,null); apply(key,columnWidth(key)); };
+    handle.onkeydown = event => {
+      if (!['ArrowLeft','ArrowRight','Home'].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      save(key,event.key === 'Home' ? null : clampColumnWidth(columnWidth(key) + (event.key === 'ArrowLeft' ? -12 : 12)));
+      apply(key,columnWidth(key));
+    };
+  });
+}
 function renderEditor() {
   const scroll = box().querySelector('.sheet-scroll');
   const columns = visibleColumns();
+  const widths = columns.map(([key]) => columnWidth(key));
   box().innerHTML = '<div class="material-toolbar"><details class="material-export"><summary>File ▾</summary><div>' +
     '<button data-action="back">Danh sách bảng</button><span id="release-actions"></span></div></details>' +
     '<span id="image-actions"></span><span id="ai-actions"></span><button data-action="undo" title="Ctrl+Z">↶ Hoàn tác</button>' +
@@ -141,14 +199,18 @@ function renderEditor() {
     html(sheet.meta?.project || materials.projects.find(p => p.id === sheet.projectId)?.name || sheet.title) +
     '</h1><div id="material-count">' + materialKpis() + '</div></div>' +
     (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm.</p>') +
-    '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid"><thead><tr>' +
-    columns.map(([key,label]) => '<th data-column="' + key + '">' + label + '</th>').join('') +
+    '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid" style="width:' + widths.reduce((sum,w) => sum+w,0) +
+    'px"><colgroup>' + columns.map(([key],i) => '<col data-column="' + key + '" style="width:' + widths[i] + 'px">').join('') + '</colgroup><thead><tr>' +
+    columns.map(([key,label]) => '<th data-column="' + key + '">' + label +
+      '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
+      label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span></th>').join('') +
     '</tr></thead>' + sheet.groups.filter(g => !hiddenGroups.has(g.id)).map(g => renderGroup(g,columns)).join('') +
     '</table></div></section></div><dialog id="material-dialog"></dialog>';
   const updatedScroll = box().querySelector('.sheet-scroll');
   if (scroll) { updatedScroll.scrollTop = scroll.scrollTop; updatedScroll.scrollLeft = scroll.scrollLeft; }
   showImages();
   installEditorSidebar();
+  installColumnResize(updatedScroll.querySelector('table'));
   if (typeof installRelease === 'function') installRelease();
 }
 
@@ -282,11 +344,15 @@ async function flushSave() {
   saving = true;
   dirty = false;
   try {
-    const result = await post('/api/materials', { _version:materials._version, sheet });
+    const result = await post('/api/materials', { _version:materials._version, sheet, columnWidths:materials.columnWidths });
     materials._version = result._version;
     materials.library = result.library || materials.library;
     materials.presets = result.presets || materials.presets;
-    if (!sheet.id) sheet.id = result.sheet.id;
+    if (!sheet.id) {
+      sheet.id = result.sheet.id;
+      const selector = byId('editor-sheet');
+      if (selector?.options[0]) { selector.options[0].value = sheet.id; selector.options[0].textContent = sheet.title; }
+    }
     const index = materials.sheets.findIndex(s => s.id === sheet.id);
     if (index < 0) materials.sheets.push(result.sheet);
     else materials.sheets[index] = result.sheet;

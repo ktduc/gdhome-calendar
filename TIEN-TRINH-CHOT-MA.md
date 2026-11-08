@@ -44,9 +44,9 @@ XONG GĐ6
 | Bước | Trạng thái | Kết quả |
 |---|---|---|
 | 7.1 | ✅ | bố cục, danh mục và phương án theo dòng |
-| 7.2 | ⏳ | Độ rộng cột |
+| 7.2 | ✅ | kéo và lưu độ rộng cột |
 | 7.3 | ⏳ | Hồ sơ và Notion |
 | 7.4 | ⏳ | Xuất ảnh |
 | 7.5 | ⏳ | AI và duyệt |
 
-Bước kế tiếp GĐ7: 7.2 kéo và lưu độ rộng cột theo tài khoản.
+Bước kế tiếp GĐ7: 7.3 hồ sơ dùng chung và đọc Notion.

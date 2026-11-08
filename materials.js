@@ -10,6 +10,11 @@ function fail(status, message) {
 const id = () => crypto.randomUUID();
 const blank = () => ({ _version: 0, sheets: [], presets: {}, library: [], settings: {}, revisions: [], approvals: [], audit: [] });
 const queues = new Map();
+const widthKeys = new Set(['name','room','render','spec','pa0','pa1','pa2','qty','unit','supplier','note','decision','actions']);
+function cleanColumnWidths(widths) {
+  return Object.fromEntries(Object.entries(widths).filter(([key,value]) => widthKeys.has(key) && Number.isFinite(value))
+    .map(([key,value]) => [key,Math.min(720,Math.max(48,Math.round(value)))]));
+}
 
 class MaterialStore {
   constructor(store, account, explicitKey) {
@@ -80,12 +85,13 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   if (url === '/api/materials' && req.method === 'GET') {
     const data = await materials.get();
     const { _version, sheets, presets, library, settings } = data;
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, schedule:scheduleInfo(data,schedule) });
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, columnWidths:data.columnWidths || {}, schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);
     if (!Number.isSafeInteger(body?._version)) fail(400, 'Thiếu phiên bản dữ liệu.');
     const saved = await materials.update(body._version, data => {
+      if (body.columnWidths && typeof body.columnWidths === 'object') data.columnWidths = cleanColumnWidths(body.columnWidths);
       const sheet = body.sheet;
       if (!sheet || typeof sheet.title !== 'string' || !sheet.title.trim() || !Array.isArray(sheet.groups)) fail(400, 'Bảng không hợp lệ.');
       const index = sheet.id ? data.sheets.findIndex(s => s.id === sheet.id) : -1;

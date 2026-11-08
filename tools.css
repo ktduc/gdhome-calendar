@@ -115,3 +115,11 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .row-actions .add-pa{width:auto;padding:0 3px;white-space:nowrap;font-size:11px}
 .remove-pa{position:absolute;left:1px;top:0;padding:0 3px;height:18px;line-height:1}
 @media(max-width:720px){.material-workspace{grid-template-columns:minmax(0,1fr)}.material-sidebar{max-height:40dvh}.material-sheet .sheet-scroll{max-height:62dvh}}
+.material-sheet .sheet-grid{table-layout:fixed;min-width:0}
+.material-sheet .sheet-grid thead th{padding-right:10px;overflow:hidden;text-overflow:ellipsis}
+.material-sheet .sheet-grid tbody td input,.material-sheet .sheet-grid tbody td select{min-width:0;max-width:100%}
+.material-sheet .sheet-grid td:first-child input{min-width:0}
+.material-sheet .image-cell{min-width:0}.material-sheet .image-preview img{max-width:100%}
+.material-sheet .row-actions{overflow:hidden}
+.material-sheet .msp-col-resizer{position:absolute;inset:0 0 0 auto;width:8px;cursor:col-resize;touch-action:none;border-right:2px solid transparent}
+.material-sheet .msp-col-resizer:hover,.material-sheet .msp-col-resizer:focus{border-right-color:#a41d24}
