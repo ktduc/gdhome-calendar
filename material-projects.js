@@ -1,3 +1,50 @@
+let projectSave = Promise.resolve();
+
+function applyMaterialProjects(projects) {
+  materials.projects = projects;
+  for (const project of projects) if (project.profile) materials.profiles[project.id] = project.profile;
+  if (!sheet) return;
+  const profile = materials.profiles[sheet.projectId];
+  if (!profile || projectFields.every(key => sheet.meta?.[key] === profile[key])) return;
+  sheet.meta = {...sheet.meta,...profile};
+  renderEditor();
+}
+
+function saveMaterialProfile(profile,{projectId = sheet?.projectId,create = false} = {}) {
+  const pending = projectSave.catch(() => {}).then(async () => {
+    let result;
+    if (materialGuest) {
+      const projects = guestMaterialProjects();
+      const owner = projects.find(entry => entry.id === projectId);
+      if (!owner) throw new Error('Chọn dự án trước khi lưu hồ sơ.');
+      const {project:name = owner.name,...contact} = profile;
+      if (!name.trim()) throw new Error('Tên dự án không được trống.');
+      owner.name = name.trim();
+      owner.profile = {...owner.profile,...contact};
+      saveGuestProjectOwners(projects);
+      result = {project:{id:owner.id,name:owner.name,profile:{...owner.profile,project:owner.name}}};
+    } else {
+      result = await GDHomeProjects.save({projectId,profile,create});
+    }
+    const projects = materials.projects.filter(project => project.id !== result.project.id);
+    const index = materials.projects.findIndex(project => project.id === result.project.id);
+    projects.splice(index < 0 ? projects.length : index,0,result.project);
+    applyMaterialProjects(projects);
+    return result;
+  });
+  projectSave = pending;
+  return pending;
+}
+
+function refreshMaterialProjects() {
+  if (!materials || materialGuest || document.querySelector('dialog[open]')) return;
+  GDHomeProjects.list().then(({projects}) => {
+    if (materials && !materialGuest) applyMaterialProjects(projects);
+  }).catch(() => {});
+}
+window.addEventListener('focus',refreshMaterialProjects);
+window.addEventListener('storage',event => { if (event.key === 'gdhome-project-update') refreshMaterialProjects(); });
+
 const notionFieldLabels = { project:'Dự án',address:'Địa chỉ',customer:'Tên khách',phone:'SĐT',email:'Email',contract:'Số hợp đồng' };
 
 async function openNotionCustomers() {
@@ -72,24 +119,16 @@ async function openNotionCustomers() {
       const calendarName = materials.projects.find(p => p.id === selectedProject)?.name;
       if (create && !profile.project?.trim()) { message.textContent = 'Ghép cột Dự án và chọn dòng có tên.'; return; }
       if (!create && profile.project && profile.project !== calendarName &&
-          !confirm('Dùng tên từ Notion trong hồ sơ và biên bản? Tên bên Lịch giữ nguyên.')) return;
+          !confirm('Đổi tên dự án dùng chung theo tên trong Notion?')) return;
       button.disabled = true;
       try {
         await flushSave();
         if (dirty || saving) throw new Error('Cần lưu bảng hiện tại trước.');
-        const result = await post('/api/materials/profile',{
-          _version:materials._version,projectId:selectedProject,profile,create
-        });
-        materials._version = result._version;
-        materials.profiles ||= {};
-        materials.profiles[result.project.id] = result.profile;
-        if (!materials.projects.some(p => p.id === result.project.id)) materials.projects.push(result.project);
-        element.close();
-        if (sheet?.projectId === result.project.id) {
-          sheet.meta = { ...sheet.meta,...result.profile };
-          renderEditor();
-        } else {
+        const result = await saveMaterialProfile(profile,{projectId:selectedProject,create});
+        if (element.open) element.close();
+        if (sheet?.projectId !== result.project.id) {
           sheet = null;
+          setMaterialView({projectId:result.project.id,sheetId:null});
           renderMaterialApp(result.project.id);
         }
         say('Đã cập nhật hồ sơ ' + result.project.name + '.');

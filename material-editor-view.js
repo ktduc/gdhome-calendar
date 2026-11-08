@@ -42,7 +42,7 @@ function projectSidebar() {
       .map(s => option(s.id,s.id === sheet.id ? sheet.title : s.title,sheet.id)).join('') + '</select></label>' +
     '<div class="material-meta-fields">' + labeledInput('title',sheet.title,'Tên bảng') +
     [['customer','Kính gửi'],['address','Địa chỉ'],['project','Tên dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']]
-      .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div><button data-action="notion">Lấy từ Notion</button>');
+      .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div><button data-action="project-profile">Sửa hồ sơ</button> <button data-action="notion">Lấy từ Notion</button>');
 }
 function catalogSidebar() {
   return sidebarSection('catalog','📋 Danh mục',

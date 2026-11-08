@@ -586,6 +586,30 @@ cases['10.4'] = async page => {
   await page.locator('#ai-review-body tr').first().waitFor();
 };
 
+cases['10.5'] = async page => {
+  await openMaterials(page);
+  await page.locator('[data-action="project-profile"]').click();
+  const form = page.locator('.project-profile-form');
+  await form.locator('[name=project]').fill('Căn hộ đồng bộ');
+  await form.locator('[name=customer]').fill('Anh Kiểm Thử');
+  await form.locator('[name=address]').fill('88 Đường Mẫu');
+  await form.getByRole('button',{name:'Lưu hồ sơ'}).click();
+  await form.waitFor({state:'detached'});
+  assert.equal(await page.locator('.material-meta-fields [data-field=customer]').inputValue(),'Anh Kiểm Thử');
+  await page.goto('/');
+  await page.locator('[data-project-summary]:visible').getByText('Anh Kiểm Thử · 88 Đường Mẫu').waitFor();
+  await page.locator('#btn-project-settings').click();
+  await page.locator('#btn-project-profile').click();
+  assert.equal(await form.locator('[name=project]').inputValue(),'Căn hộ đồng bộ');
+  await form.locator('[name=contract]').fill('HD-DONG-BO');
+  await form.getByRole('button',{name:'Lưu hồ sơ'}).click();
+  await form.waitFor({state:'detached'});
+  await openMaterials(page);
+  assert.equal(await page.locator('.material-meta-fields [data-field=contract]').inputValue(),'HD-DONG-BO');
+  const projects = await page.evaluate(() => fetch('/api/projects').then(response => response.json()));
+  assert.deepEqual(projects.projects[0].profile,{project:'Căn hộ đồng bộ',customer:'Anh Kiểm Thử',address:'88 Đường Mẫu',contract:'HD-DONG-BO'});
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
@@ -622,6 +646,7 @@ async function main() {
     })) };
     browser = await chromium.launch({ channel:'msedge',headless:true });
     for (const key of process.argv.length > 2 ? process.argv.slice(2) : Object.keys(cases)) {
+      await getStore().put('shared',structuredClone(schedule));
       await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; data.viewSettings = {}; return {}; });
       const page = await browser.newPage({ baseURL:'http://127.0.0.1:'+server.address().port,viewport:{width:1050,height:720},acceptDownloads:false });
       page.setDefaultTimeout(4000);

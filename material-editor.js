@@ -132,18 +132,11 @@ async function flushSave() {
   setMaterialSaveStatus('saving');
   dirty = false;
   try {
-    const savedMeta = materials.sheets.find(s => s.id === sheet.id)?.meta || {};
-    const baseline = { ...savedMeta,...materials.profiles?.[sheet.projectId] };
-    const profilePatch = Object.fromEntries(projectFields.filter(key => sheet.meta?.[key] !== undefined && sheet.meta[key] !== baseline[key])
-      .map(key => [key,sheet.meta[key]]));
-    const changes = Object.keys(profilePatch).length ? profilePatch : undefined;
-    const result = materialGuest ? saveGuestMaterial(sheet,changes) : await post('/api/materials',{
-      _version:materials._version,sheet,...(changes ? {profilePatch:changes} : {})
-    });
+    const result = materialGuest ? saveGuestMaterial(sheet) : await post('/api/materials',{_version:materials._version,sheet});
     materials._version = result._version;
     materials.library = result.library || materials.library;
     materials.presets = result.presets || materials.presets;
-    materials.profiles = result.profiles || materials.profiles;
+    if (result.profile) materials.profiles[sheet.projectId] = result.profile;
     if (!sheet.id) {
       sheet.id = result.sheet.id;
       setMaterialView({projectId:sheet.projectId,sheetId:sheet.id});
@@ -354,6 +347,9 @@ document.addEventListener('click', async event => {
         break;
       }
       case 'notion': await openNotionCustomers(); break;
+      case 'project-profile':
+        GDHomeProjects.open({...sheet.meta},patch => saveMaterialProfile(patch));
+        break;
       case 'back': await leaveSheet(); break;
       case 'add-pa': modify(() => { row.paCount = Math.min(3,rowPaCount(row)+1); }); break;
       case 'remove-pa': modify(() => { row.paCount = Number(slot); }); break;
@@ -432,9 +428,8 @@ document.addEventListener('change', event => {
     field.defaultValue = value;
     return;
   }
-  if (!row && !group && key === 'project' && value !== sheet.meta.project &&
-      !confirm('Đổi tên hiển thị trong hồ sơ Chốt mã và biên bản? Tên bên Lịch giữ nguyên.')) {
-    field.value = sheet.meta.project;
+  if (!row && !group && projectFields.includes(key)) {
+    saveMaterialProfile({[key]:value}).catch(error => { field.value = sheet?.meta?.[key] || ''; showError(error); });
     return;
   }
   modify(() => {

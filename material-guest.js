@@ -15,11 +15,21 @@ function guestMaterialProjects() {
   return [{id:'owner-1',name:'DỰ ÁN MỚI'}];
 }
 
+function saveGuestProjectOwners(projectOwners) {
+  let schedule;
+  try { schedule = JSON.parse(localStorage.getItem('timeline_calendar_state::guest')); } catch { /* Use defaults. */ }
+  schedule ||= {tasks:[],calendars:[{id:'cal-1',ownerId:'owner-1',name:'GIAI ĐOẠN 1',visible:true,color:'#cc0000'}],activeCalendarId:'cal-1'};
+  localStorage.setItem('timeline_calendar_state::guest',JSON.stringify({...schedule,projectOwners}));
+}
+
 function openGuestMaterials() {
   materialGuest = true;
   localStorage.setItem(guestFlagKey,'1');
-  return { _version:0,sheets:[],presets:{},library:[],profiles:{},columnWidths:{},viewSettings:{},
-    ...guestMaterialState(),projects:guestMaterialProjects(),r2:false,schedule:{tasks:[]},signedRows:{} };
+  const projects = guestMaterialProjects();
+  const state = guestMaterialState();
+  const profiles = {...state.profiles,...Object.fromEntries(projects.map(project => [project.id,{...project.profile,project:project.name}]))};
+  return { _version:0,sheets:[],presets:{},library:[],columnWidths:{},viewSettings:{},
+    ...state,projects,profiles,r2:false,schedule:{tasks:[]},signedRows:{} };
 }
 
 function saveGuestView(settings) {
@@ -69,8 +79,7 @@ async function importGuestMaterials() {
     const name = guestMaterialProjects().find(project => project.id === draft.projectId)?.name || profile.project || draft.title;
     let project = materials.projects.find(item => item.name.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase());
     if (!project) {
-      const created = await post('/api/materials/profile',{_version:materials._version,create:true,profile:{...profile,project:name}});
-      materials._version = created._version;
+      const created = await GDHomeProjects.save({create:true,profile:{...profile,project:name}});
       project = created.project;
       materials.projects.push(project);
     }

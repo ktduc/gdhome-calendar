@@ -1,4 +1,6 @@
 /* Reset & Base */
+.project-summary{display:block;color:#475569;font-size:12px;line-height:1.4;text-align:center;white-space:normal}
+.project-summary[hidden]{display:none}
 * {
   box-sizing: border-box;
   margin: 0;

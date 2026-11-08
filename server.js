@@ -22,6 +22,7 @@ const os = require('os');
 const crypto = require('crypto');
 const integrations = require('./integrations');
 const { handleMaterials, MaterialStore } = require('./materials');
+const {projectList,writeProjectProfile,withScheduleWrite} = require('./project-profiles');
 const { handlePublicReview } = require('./material-review');
 
 const PORT = process.env.PORT || 3000;
@@ -55,7 +56,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-timeline.js', 'export-canvas.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-timeline.js', 'export-canvas.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -461,6 +462,21 @@ async function handleApi(req, res, urlPath) {
     return;
   }
 
+  if (urlPath === '/api/projects') {
+    const legacy = await store.get(new MaterialStore(store,dataKey).key) || {};
+    if (req.method === 'GET') {
+      const schedule = await store.get(dataKey) || defaultData();
+      return sendJson(res,200,{projects:projectList(schedule,legacy),version:schedule._version || 0});
+    }
+    if (req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (!body || typeof body.profile !== 'object' || !body.profile) {
+        return sendJson(res,400,{message:'Thiếu hồ sơ dự án.'});
+      }
+      return sendJson(res,200,await writeProjectProfile(store,dataKey,body,defaultData,legacy));
+    }
+  }
+
   if (urlPath === '/api/materials' || urlPath.startsWith('/api/materials/')) {
     return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET, defaultSchedule: defaultData });
   }
@@ -490,42 +506,38 @@ async function handleApi(req, res, urlPath) {
 
   if (urlPath === '/api/schedule' && req.method === 'GET') {
     const data = (await store.get(dataKey)) || defaultData();
-    sendJson(res, 200, { success: true, data, version: data._version || 0, storage: store.kind });
+    const legacy = await store.get(new MaterialStore(store,dataKey).key) || {};
+    const profiles = new Map(projectList(data,legacy).map(project => [project.id,project.profile]));
+    const projectOwners = (data.projectOwners || []).map(owner => ({...owner,profile:profiles.get(owner.id)}));
+    sendJson(res, 200, { success: true, data:{...data,projectOwners}, version: data._version || 0, storage: store.kind });
     return;
   }
 
   if (urlPath === '/api/schedule' && req.method === 'POST') {
     const body = await readJsonBody(req);
-    const current = (await store.get(dataKey)) || defaultData();
-    const currentVersion = current._version || 0;
-    const baseVersion = body._baseVersion;
-
-    // Máy khác đã lưu sau lần cuối máy này tải về -> báo xung đột, không ghi đè
-    if (typeof baseVersion === 'number' && baseVersion !== currentVersion && !body._force) {
-      sendJson(res, 409, {
-        success: false,
-        message: 'Dữ liệu trên server đã được cập nhật từ máy khác',
-        data: current,
-        version: currentVersion
-      });
-      return;
-    }
-    if (!Array.isArray(body.tasks)) {
-      sendJson(res, 400, { success: false, message: 'Thiếu danh sách công việc (tasks)' });
-      return;
-    }
-
-    const updated = Object.assign({}, current);
-    delete updated._baseVersion;
-    delete updated._force;
-    ALLOWED_KEYS.forEach(k => {
-      if (body[k] !== undefined) updated[k] = body[k];
+    return withScheduleWrite(dataKey,async () => {
+      const current = await store.get(dataKey) || defaultData();
+      const currentVersion = current._version || 0;
+      if (typeof body._baseVersion === 'number' && body._baseVersion !== currentVersion && !body._force) {
+        return sendJson(res,409,{success:false,message:'Dữ liệu trên server đã được cập nhật từ máy khác',data:current,version:currentVersion});
+      }
+      if (!Array.isArray(body.tasks)) return sendJson(res,400,{success:false,message:'Thiếu danh sách công việc (tasks)'});
+      const updated = {...current};
+      delete updated._baseVersion;
+      delete updated._force;
+      ALLOWED_KEYS.forEach(key => { if (body[key] !== undefined) updated[key] = body[key]; });
+      if (Array.isArray(body.projectOwners)) {
+        const existing = new Map((current.projectOwners || []).map(owner => [owner.id,owner.profile]));
+        updated.projectOwners = body.projectOwners.map(owner => {
+          const {profile,...fields} = owner;
+          return existing.get(owner.id) ? {...fields,profile:existing.get(owner.id)} : fields;
+        });
+      }
+      updated._version = currentVersion+1;
+      updated._updatedAt = new Date().toISOString();
+      await store.put(dataKey,updated);
+      return sendJson(res,200,{success:true,message:'Đã lưu tiến độ thành công!',version:updated._version,storage:store.kind});
     });
-    updated._version = currentVersion + 1;
-    updated._updatedAt = new Date().toISOString();
-    await store.put(dataKey, updated);
-    sendJson(res, 200, { success: true, message: 'Đã lưu tiến độ thành công!', version: updated._version, storage: store.kind });
-    return;
   }
 
   sendJson(res, 404, { success: false, message: 'API không tồn tại' });

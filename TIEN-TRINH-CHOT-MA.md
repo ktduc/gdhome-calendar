@@ -119,10 +119,10 @@ XONG GĐ9
 | 10.2 | ✅ | lưu cài đặt Chốt mã theo tài khoản và khôi phục bảng đang mở |
 | 10.3 | ✅ | đồng bộ thao tác, xuất ảnh PDF và chế độ khách |
 | 10.4 | ✅ | gom màn Kết nối và dùng chung luồng AI |
-| 10.5 | ⏳ | Hồ sơ dự án chung |
+| 10.5 | ✅ | hợp nhất hồ sơ theo ID dự án của Tiến độ |
 | 10.6 | ⏳ | Kiểm thử và bàn giao |
 
-Bước kế tiếp GĐ10: 10.5 hợp nhất hồ sơ theo ID dự án.
+Bước kế tiếp GĐ10: 10.6 chạy hồi quy và cập nhật bàn giao.
 
 - 10.1: tài liệu tích hợp ở `docs/HE-THONG-GIAO-DIEN.md`. Ảnh header và sidebar Lịch ở 1440/1920 px trùng từng byte trước và sau khi tách. Playwright 10.1, 8.3, 9.5 đạt.
 
@@ -131,3 +131,5 @@ Bước kế tiếp GĐ10: 10.5 hợp nhất hồ sơ theo ID dự án.
 - 10.3: Playwright kiểm tra cụm nút thẳng hàng ở 1440/1920 px, Esc, độ đậm, ghi nhớ sọc chìm, PDF A4 và dán ảnh ở chế độ khách không gọi API Chốt mã. Bảng đối chiếu nằm trong `docs/HE-THONG-GIAO-DIEN.md`.
 
 - 10.4: cấu hình lưu tại `/api/integrations/settings`. Playwright đổi model/cột ngày ở Lịch, đọc từ Chốt mã, dán ảnh và mở duyệt AI trên cả hai trang với phản hồi giả lập.
+
+- 10.5: `projectOwners[].profile` là hồ sơ dùng chung; tên chuẩn lấy từ `projectOwners[].name`. Playwright sửa hai chiều giữa Lịch và Chốt mã; test API xác nhận cô lập tài khoản, 409 cho dữ liệu Lịch cũ và hồ sơ của bản đã ký giữ nguyên.

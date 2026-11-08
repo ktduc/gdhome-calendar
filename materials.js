@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const { scheduleInfo, tasksFor } = require('./material-schedule');
 const { MaterialAssets, r2 } = require('./material-assets');
 const { cleanSheet, handleInternalReview } = require('./material-review');
+const {projectList,profileFor,writeProjectProfile} = require('./project-profiles');
 
 function fail(status, message) {
   throw Object.assign(new Error(message), { status });
@@ -111,19 +112,14 @@ function signedRowsBySheet(data) {
   return rows;
 }
 
-const profileKeys = ['project','address','customer','phone','email','contract'];
-function cleanProfile(profile) {
-  return Object.fromEntries(profileKeys.filter(key => typeof profile?.[key] === 'string')
-    .map(key => [key,profile[key].trim().slice(0,500)]));
-}
-function updateProfile(data,projectId,profile) {
-  const updated = { ...data.profiles?.[projectId], ...cleanProfile(profile) };
-  data.profiles = { ...data.profiles,[projectId]:updated };
-  return updated;
-}
+
 async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res, dataDir, secret, defaultSchedule }) {
   const materials = new MaterialStore(store, dataKey);
   const assets = new MaterialAssets(dataDir, materials.key);
+  const resolveProfile = async (sheet,legacy) => {
+    const owner = (await store.get(dataKey))?.projectOwners?.find(project => project.id === sheet.projectId);
+    return owner ? profileFor(owner,legacy) : legacy.profiles?.[sheet.projectId];
+  };
   if (url === '/api/materials/assets' && req.method === 'POST') {
     const body = await readJsonBody(req);
     return sendJson(res, 200, { name: await assets.save(body.image) });
@@ -132,7 +128,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
     return assets.send(res, url.split('/').at(-1));
   }
   if (url.includes('/review') || url === '/api/materials/settings') {
-    const result = await handleInternalReview(req,url,{ res,repo:materials,account:dataKey,readJsonBody,sendJson,secret });
+    const result = await handleInternalReview(req,url,{ res,repo:materials,account:dataKey,readJsonBody,sendJson,secret,resolveProfile });
     if (result === false) fail(404, 'Không tìm thấy API duyệt.');
     return;
   }
@@ -141,24 +137,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   if (url === '/api/materials/profile' && req.method === 'POST') {
     const body = await readJsonBody(req);
     if (!Number.isSafeInteger(body?._version)) fail(400,'Thiếu phiên bản dữ liệu.');
-    const result = await materials.update(body._version,async data => {
-      let project = projects.find(p => p.id === body.projectId);
-      if (body.create === true) {
-        const name = cleanProfile(body.profile).project?.slice(0,200);
-        if (!name) fail(400,'Nhập tên dự án trước khi tạo.');
-        const current = await store.get(dataKey) || defaultSchedule();
-        const owners = current.projectOwners || [];
-        project = owners.find(p => p.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
-        if (!project) {
-          project = { id:'owner_'+id(),name,collapsed:false };
-          const stage = { id:'cal_'+id(),ownerId:project.id,name:'GIAI ĐOẠN 1',visible:true,color:'#cc0000' };
-          await store.put(dataKey,{ ...current,projectOwners:[...owners,project],calendars:[...(current.calendars || []),stage],
-            _version:(current._version || 0)+1,_updatedAt:new Date().toISOString() });
-        }
-      }
-      if (!project) fail(404,'Không tìm thấy dự án Tiến độ.');
-      return { project:{id:project.id,name:project.name},profile:updateProfile(data,project.id,body.profile) };
-    });
+    const result = await materials.update(body._version,data => writeProjectProfile(store,dataKey,body,defaultSchedule,data));
     return sendJson(res,200,result);
   }
   if (url === '/api/materials/timeline' && req.method === 'GET') {
@@ -185,12 +164,13 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   if (url === '/api/materials' && req.method === 'GET') {
     const data = await materials.get();
     const { _version, sheets, presets, library, settings } = data;
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, viewVersion:data.viewVersion || 0, viewSettings:data.viewSettings || {}, columnWidths:data.columnWidths || {}, profiles:data.profiles || {}, signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
+    const sharedProjects = projectList(schedule,data);
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, viewVersion:data.viewVersion || 0, viewSettings:data.viewSettings || {}, columnWidths:data.columnWidths || {}, profiles:Object.fromEntries(sharedProjects.map(project => [project.id,project.profile])), signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);
     if (!Number.isSafeInteger(body?._version)) fail(400, 'Thiếu phiên bản dữ liệu.');
-    const saved = await materials.update(body._version, data => {
+    const saved = await materials.update(body._version, async data => {
       if (body.columnWidths && typeof body.columnWidths === 'object') data.columnWidths = cleanColumnWidths(body.columnWidths);
       const sheet = body.sheet;
       if (!sheet || typeof sheet.title !== 'string' || !sheet.title.trim() || !Array.isArray(sheet.groups)) fail(400, 'Bảng không hợp lệ.');
@@ -204,7 +184,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
         for (const value of values) if (typeof value === 'string' && value.trim()) merged.set(value.trim().toLocaleLowerCase(), value.trim().slice(0,200));
         data.presets[key] = [...merged.values()].slice(-250);
       }
-      if (body.profilePatch) updateProfile(data,updated.projectId,body.profilePatch);
+
       const tasks = new Map(tasksFor(schedule).map(task => [task.id,task]));
       for (const group of updated.groups) {
         if (!group.taskId) { group.calendarId = ''; continue; }
@@ -242,7 +222,9 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
         if (existing < 0) data.library.push(entry);
         else data.library[existing] = entry;
       }
-      return { sheet: updated, library: data.library, presets: data.presets, profiles:data.profiles || {} };
+      if (body.profilePatch) await writeProjectProfile(store,dataKey,{projectId:updated.projectId,profile:body.profilePatch},defaultSchedule,data);
+      const profile = await resolveProfile(updated,data);
+      return {sheet:updated,library:data.library,presets:data.presets,profile};
     });
     return sendJson(res, 200, saved);
   }

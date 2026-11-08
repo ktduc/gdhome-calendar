@@ -183,7 +183,7 @@ async function handlePublicReview(req,url,{ res, store, MaterialStore, dataDir, 
   error(404,'Không tìm thấy.');
 }
 
-async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, sendJson, secret }) {
+async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, sendJson, secret, resolveProfile }) {
   if (url === '/api/materials/settings' && req.method === 'GET') {
     const data = await repo.get();
     return sendJson(res,200,{ _version:data._version, settings:settingsFor(data) });
@@ -214,11 +214,11 @@ async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, 
   if (req.method !== 'POST') return false;
   const body = await readJsonBody(req);
   requireVersion(body);
-  const saved = await repo.update(body._version,data => {
+  const saved = await repo.update(body._version,async data => {
     const sheet = data.sheets.find(entry => entry.id === sheetId);
     if (!sheet) error(404,'Không tìm thấy bảng.');
     if (body.action === 'publish') {
-      const snapshot = publicSheet({ ...sheet,meta:{ ...sheet.meta,...data.profiles?.[sheet.projectId] } });
+      const snapshot = publicSheet({ ...sheet,meta:{ ...sheet.meta,...await resolveProfile(sheet,data) } });
       if (!snapshot.groups.length) error(400,'Điền ít nhất một phương án trước khi phát hành.');
       const token = encryptToken(repo.key,secret);
       const publishedAt = Date.now();

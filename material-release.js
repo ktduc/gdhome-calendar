@@ -32,6 +32,7 @@ function replaceSaved(result) {
   if (!result.sheet) return;
   materials.sheets[materials.sheets.findIndex(s => s.id === result.sheet.id)] = result.sheet;
   sheet = structuredClone(result.sheet);
+  sheet.meta = {...sheet.meta,...materials.profiles?.[sheet.projectId]};
 }
 async function publish() {
   const result = await post(releasePath(),{ _version:materials._version,action:'publish' });

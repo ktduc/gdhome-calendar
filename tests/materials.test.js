@@ -78,6 +78,14 @@ test('Chốt mã: phiên bản, quyền Gmail, ảnh riêng và hồ sơ ký b�
   assert.match(removed.data.message,/đã ký/);
   assert.equal((await call('/api/materials')).data.sheets[0].groups[0].rows[0].id,'r1');
   assert.deepEqual(await getStore().get(email),schedule);
+  assert.equal((await call('/api/projects',null,null)).status,401);
+  assert.equal((await call('/api/projects',{projectId:'project',profile:{customer:'Sai tài khoản'}},other)).status,404);
+  const profile = await call('/api/projects',{projectId:'project',profile:{customer:'Khách mới',address:'Hà Nội'}});
+  assert.equal(profile.status,200);
+  assert.equal((await call('/api/schedule')).data.data.projectOwners[0].profile.customer,'Khách mới');
+  assert.equal((await call('/api/materials')).data.profiles.project.address,'Hà Nội');
+  assert.equal((await call('/api/schedule',{_baseVersion:7,tasks:[]})).status,409);
+  assert.equal((await call(publicApi,null,null)).data.sheet.meta.customer,'Khách A');
   assert.equal((await call(endpoint,{ _version:change.data._version,revisionId:view.data.id,action:'revoke' })).status,200);
   assert.equal((await call(publicApi,null,null)).status,410);
 });

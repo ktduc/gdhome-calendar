@@ -25,6 +25,11 @@
 .connection-dialog :is(input,select){box-sizing:border-box;width:100%;font:inherit;padding:6px;border:1px solid var(--gd-section-border);border-radius:var(--gd-radius)}
 .connection-dialog .close-dialog{background:white;border:1px solid var(--gd-section-border);border-radius:var(--gd-radius);padding:4px 8px;cursor:pointer}
 .connection-actions{display:flex;flex-wrap:wrap;gap:6px}
+.project-profile-dialog{box-sizing:border-box;width:min(92vw,520px)}
+.project-profile-form{display:grid;gap:8px}
+.project-profile-form label{display:grid;gap:3px;font-size:13px}
+.project-profile-form input{box-sizing:border-box;width:100%;padding:7px;border:1px solid var(--gd-section-border);border-radius:var(--gd-radius);font:inherit}
+.project-profile-form .btn{justify-self:start}
 .msp-material-badge{flex:none;font:700 13px/1 system-ui,sans-serif;text-decoration:none;background:#fff0c4;color:#694600;padding:3px;border-radius:4px}
 .msp-material-badge.done{background:#dff2e5;color:#175938}
 .app-header {
