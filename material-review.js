@@ -217,7 +217,7 @@ async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, 
     const sheet = data.sheets.find(entry => entry.id === sheetId);
     if (!sheet) error(404,'Không tìm thấy bảng.');
     if (body.action === 'publish') {
-      const snapshot = publicSheet(sheet);
+      const snapshot = publicSheet({ ...sheet,meta:{ ...sheet.meta,...data.profiles?.[sheet.projectId] } });
       if (!snapshot.groups.length) error(400,'Điền ít nhất một phương án trước khi phát hành.');
       const token = encryptToken(repo.key,secret);
       const publishedAt = Date.now();

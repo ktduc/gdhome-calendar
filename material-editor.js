@@ -46,9 +46,10 @@ function renderMaterialApp(selectedProject) {
   const requested = selectedProject || byId('project-filter')?.value || query.get('project');
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
   box().innerHTML = '<div class="panel"><label>Dự án <select id="project-filter">' + materials.projects.map(p => option(p.id,p.name,projectId)).join('') +
-    '</select></label> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span></div>' +
+    '</select></label> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span> <button data-action="notion">Lấy từ Notion</button></div>' +
     materials.sheets.filter(s => s.projectId === projectId || !materials.projects.some(p => p.id === s.projectId)).map(s => '<article><button data-action="open" data-id="' + html(s.id) + '">' + html(s.title) + '</button> · ' + counts(s) + '</article>').join('') +
     (!materials.projects.length ? '<p>Tạo và lưu dự án trong Tiến độ trước.</p>' : '');
+  box().insertAdjacentHTML('beforeend','<dialog id="material-dialog"></dialog>');
   byId('project-filter').onchange = event => renderMaterialApp(event.target.value);
   if (typeof installImport === 'function') installImport();
 }
@@ -99,7 +100,7 @@ function projectSidebar() {
       .map(s => option(s.id,s.id === sheet.id ? sheet.title : s.title,sheet.id)).join('') + '</select></label>' +
     '<div class="material-meta-fields">' + labeledInput('title',sheet.title,'Tên bảng') +
     [['customer','Kính gửi'],['address','Địa chỉ'],['project','Tên dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']]
-      .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div>');
+      .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div><button data-action="notion">Lấy từ Notion</button>');
 }
 function catalogSidebar() {
   return sidebarSection('catalog','Danh mục',
@@ -344,10 +345,16 @@ async function flushSave() {
   saving = true;
   dirty = false;
   try {
-    const result = await post('/api/materials', { _version:materials._version, sheet, columnWidths:materials.columnWidths });
+    const savedMeta = materials.sheets.find(s => s.id === sheet.id)?.meta || {};
+    const baseline = { ...savedMeta,...materials.profiles?.[sheet.projectId] };
+    const profilePatch = Object.fromEntries(projectFields.filter(key => sheet.meta?.[key] !== undefined && sheet.meta[key] !== baseline[key])
+      .map(key => [key,sheet.meta[key]]));
+    const result = await post('/api/materials', { _version:materials._version, sheet, columnWidths:materials.columnWidths,
+      ...(Object.keys(profilePatch).length ? {profilePatch} : {}) });
     materials._version = result._version;
     materials.library = result.library || materials.library;
     materials.presets = result.presets || materials.presets;
+    materials.profiles = result.profiles || materials.profiles;
     if (!sheet.id) {
       sheet.id = result.sheet.id;
       const selector = byId('editor-sheet');
@@ -381,8 +388,13 @@ function saveDraft() {
   setTimeout(() => URL.revokeObjectURL(url),1000);
 }
 
+const projectFields = ['project','address','customer','phone','email','contract'];
 function openSheet(value) {
+  if (!value) return;
   sheet = structuredClone(value);
+  const project = materials.projects.find(p => p.id === sheet.projectId);
+  sheet.meta = { project:project?.name || '',...sheet.meta,...materials.profiles?.[sheet.projectId] };
+  sheetStatus = '';
   before = [];
   after = [];
   sheetRoom = '';
@@ -549,6 +561,7 @@ document.addEventListener('click', async event => {
         })));
         break;
       }
+      case 'notion': await openNotionCustomers(); break;
       case 'back': await leaveSheet(); break;
       case 'add-pa': modify(() => { row.paCount = Math.min(3,rowPaCount(row)+1); }); break;
       case 'remove-pa': modify(() => { row.paCount = Number(slot); }); break;
@@ -603,6 +616,11 @@ document.addEventListener('change', event => {
   if (key === 'code' && row?.options[Number(slot)]) {
     updateInlineCode(field,row.options[Number(slot)]);
     field.defaultValue = value;
+    return;
+  }
+  if (!row && !group && key === 'project' && value !== sheet.meta.project &&
+      !confirm('Đổi tên hiển thị trong hồ sơ Chốt mã và biên bản? Tên bên Lịch giữ nguyên.')) {
+    field.value = sheet.meta.project;
     return;
   }
   modify(() => {

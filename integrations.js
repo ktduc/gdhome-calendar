@@ -141,6 +141,52 @@ async function resolveDatabaseId(token, rawId) {
   }
 }
 
+const customerFields = ['project','address','customer','phone','email','contract'];
+const customerTypes = new Set(['title','rich_text','phone_number','email','number','select','formula']);
+const normalizeCustomer = value => String(value || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu,'').replace(/đ/g,'d').trim();
+function notionCustomerValue(prop) {
+  const value = prop?.[prop.type];
+  if (Array.isArray(value)) return plain(value).slice(0,500);
+  if (prop?.type === 'select') return value?.name || '';
+  if (prop?.type === 'formula') return ['string','number'].includes(value?.type) ? String(value[value.type] ?? '').slice(0,500) : '';
+  return String(value ?? '').slice(0,500);
+}
+function customerMap(body) {
+  return Object.fromEntries(customerFields.filter(key => typeof body?.[key] === 'string').map(key => [key,body[key].slice(0,200)]));
+}
+async function notionCustomers(cfg,params) {
+  const token = cfg.notionToken || ENV.notionToken;
+  const dbId = cfg.notionCustomerDbId || parseNotionId(cfg.notionCustomerDb);
+  if (!token || !dbId) throw httpError(400,'Chọn Link database Khách hàng / Dự án và dùng kết nối Notion đã lưu.');
+  const connection = { token,dbId };
+  const db = await notionApi(connection,'GET','/databases/'+dbId);
+  const columns = Object.entries(db.properties || {}).filter(([,prop]) => customerTypes.has(prop.type))
+    .map(([name,prop]) => ({name,type:prop.type}));
+  const map = cfg.notionCustomerMap || {};
+  const q = normalizeCustomer(params.get('q')).slice(0,200);
+  const phone = /^\+?[\d ().-]+$/.test(q) ? q.replace(/\D/g,'') : '';
+  const filterColumns = ['project','address','customer','phone'].map(key => map[key]).filter(Boolean);
+  let cursor = (params.get('cursor') || '').slice(0,200);
+  const items = [];
+  // Notion doesn't support one contains filter across every property type. Filter bounded pages locally.
+  for (let page = 0; page < (q ? 4 : 1); page++) {
+    const result = await notionApi(connection,'POST','/databases/'+dbId+'/query',{
+      page_size:50,...(cursor ? {start_cursor:cursor} : {})
+    });
+    for (const row of result.results || []) {
+      if (row.object !== 'page' || row.archived || row.in_trash) continue;
+      const values = Object.fromEntries(columns.map(col => [col.name,notionCustomerValue(row.properties?.[col.name])]));
+      const searchable = filterColumns.length ? filterColumns.map(name => values[name]) : Object.values(values);
+      if (!q || searchable.some(value => normalizeCustomer(value).includes(q) || (phone && String(value || '').replace(/\D/g,'').includes(phone)))) {
+        items.push({ id:row.id, values });
+      }
+    }
+    cursor = result.has_more ? result.next_cursor : '';
+    if (!cursor || items.length) break;
+  }
+  return { columns,items,nextCursor:cursor || null,map };
+}
+
 const _schemaCache = new Map();
 async function getNotionSchema(nc) {
   const ck = nc.dbId + '|' + (nc.dateProp || '');
@@ -432,6 +478,7 @@ function settingsView(cfg) {
       dbTitle: cfg.notionDbTitle || '', dateProps: cfg.notionDateProps || [], dateProp: cfg.notionDateProp || ''
     } : { configured: false },
     ai: ai ? { configured: true, source: ai.source, provider: ai.provider, providerLabel: PROVIDER_LABEL[ai.provider], keyMasked: ai.source === 'user' ? mask(cfg.aiKey) : '', model: ai.model || '' } : { configured: false },
+    notionCustomerDb:cfg.notionCustomerDb || '', notionCustomerMap:cfg.notionCustomerMap || {},
     providers: PROVIDERS.map(id => ({ id, label: PROVIDER_LABEL[id] }))
   };
 }
@@ -467,6 +514,19 @@ async function updateSettings(store, dataKey, body) {
     Object.assign(cfg, { aiProvider: provider, aiKey: key, aiModel: model });
     _modelCache.delete(provider + '|' + key.slice(-6));
   }
+  if (body.notionCustomerDb !== undefined) {
+    const link = String(body.notionCustomerDb || '').trim().slice(0,1000);
+    if (!link) { delete cfg.notionCustomerDb; delete cfg.notionCustomerDbId; delete cfg.notionCustomerMap; }
+    else if (link !== cfg.notionCustomerDb || !cfg.notionCustomerDbId) {
+      const token = cfg.notionToken || ENV.notionToken;
+      const id = parseNotionId(link);
+      if (!token || !id) throw httpError(400,'Cần kết nối Notion và link database Khách hàng / Dự án hợp lệ.');
+      cfg.notionCustomerDbId = await resolveDatabaseId(token,id);
+      cfg.notionCustomerDb = link;
+      delete cfg.notionCustomerMap;
+    }
+  }
+  if (body.notionCustomerMap !== undefined) cfg.notionCustomerMap = customerMap(body.notionCustomerMap);
   await saveUserCfg(store, dataKey, cfg);
   return settingsView(cfg);
 }
@@ -490,6 +550,11 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     if (!nc) throw httpError(400, 'Chưa kết nối Notion. Bấm "⚙ Kết nối Notion" để dán mã và link database.');
     return nc;
   };
+  if (urlPath === '/api/notion/customers' && req.method === 'GET') {
+    const params = new URL(req.url,'http://localhost').searchParams;
+    sendJson(res,200,{ success:true,...await notionCustomers(await loadUserCfg(store,dataKey),params) });
+    return true;
+  }
   if (urlPath === '/api/notion/pull' && req.method === 'GET') {
     sendJson(res, 200, { success: true, ...(await notionPull(await needNotion())) });
     return true;

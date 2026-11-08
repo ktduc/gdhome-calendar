@@ -61,7 +61,17 @@ class MaterialStore {
   }
 }
 
-async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res, dataDir, secret }) {
+const profileKeys = ['project','address','customer','phone','email','contract'];
+function cleanProfile(profile) {
+  return Object.fromEntries(profileKeys.filter(key => typeof profile?.[key] === 'string')
+    .map(key => [key,profile[key].trim().slice(0,500)]));
+}
+function updateProfile(data,projectId,profile) {
+  const updated = { ...data.profiles?.[projectId], ...cleanProfile(profile) };
+  data.profiles = { ...data.profiles,[projectId]:updated };
+  return updated;
+}
+async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res, dataDir, secret, defaultSchedule }) {
   const materials = new MaterialStore(store, dataKey);
   const assets = new MaterialAssets(dataDir, materials.key);
   if (url === '/api/materials/assets' && req.method === 'POST') {
@@ -78,6 +88,29 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   }
   const schedule = await store.get(dataKey) || {};
   const projects = (schedule.projectOwners || []).map(({ id, name }) => ({ id, name }));
+  if (url === '/api/materials/profile' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    if (!Number.isSafeInteger(body?._version)) fail(400,'Thiếu phiên bản dữ liệu.');
+    const result = await materials.update(body._version,async data => {
+      let project = projects.find(p => p.id === body.projectId);
+      if (body.create === true) {
+        const name = cleanProfile(body.profile).project?.slice(0,200);
+        if (!name) fail(400,'Nhập tên dự án trước khi tạo.');
+        const current = await store.get(dataKey) || defaultSchedule();
+        const owners = current.projectOwners || [];
+        project = owners.find(p => p.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+        if (!project) {
+          project = { id:'owner_'+id(),name,collapsed:false };
+          const stage = { id:'cal_'+id(),ownerId:project.id,name:'GIAI ĐOẠN 1',visible:true,color:'#cc0000' };
+          await store.put(dataKey,{ ...current,projectOwners:[...owners,project],calendars:[...(current.calendars || []),stage],
+            _version:(current._version || 0)+1,_updatedAt:new Date().toISOString() });
+        }
+      }
+      if (!project) fail(404,'Không tìm thấy dự án Tiến độ.');
+      return { project:{id:project.id,name:project.name},profile:updateProfile(data,project.id,body.profile) };
+    });
+    return sendJson(res,200,result);
+  }
   if (url === '/api/materials/timeline' && req.method === 'GET') {
     const data = await materials.get();
     return sendJson(res,200,{ badges:scheduleInfo(data,schedule).badges });
@@ -85,7 +118,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   if (url === '/api/materials' && req.method === 'GET') {
     const data = await materials.get();
     const { _version, sheets, presets, library, settings } = data;
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, columnWidths:data.columnWidths || {}, schedule:scheduleInfo(data,schedule) });
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, columnWidths:data.columnWidths || {}, profiles:data.profiles || {}, schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);
@@ -104,6 +137,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
         for (const value of values) if (typeof value === 'string' && value.trim()) merged.set(value.trim().toLocaleLowerCase(), value.trim().slice(0,200));
         data.presets[key] = [...merged.values()].slice(-250);
       }
+      if (body.profilePatch) updateProfile(data,updated.projectId,body.profilePatch);
       const tasks = new Map(tasksFor(schedule).map(task => [task.id,task]));
       for (const group of updated.groups) {
         if (!group.taskId) { group.calendarId = ''; continue; }
@@ -136,7 +170,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
         if (existing < 0) data.library.push(entry);
         else data.library[existing] = entry;
       }
-      return { sheet: updated, library: data.library, presets: data.presets };
+      return { sheet: updated, library: data.library, presets: data.presets, profiles:data.profiles || {} };
     });
     return sendJson(res, 200, saved);
   }

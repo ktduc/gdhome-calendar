@@ -7963,6 +7963,8 @@ function renderIntegrationStatus() {
   const st = _intSettings || {};
   const ai = st.ai || {};
   const nt = st.notion || {};
+  const customerDb = document.getElementById('notion-customer-db');
+  if (customerDb) customerDb.value = st.notionCustomerDb || '';
   const aiEl = document.getElementById('ai-conn-status');
   if (aiEl) {
     aiEl.textContent = ai.configured
@@ -8621,6 +8623,7 @@ function setupIntegrationsUI() {
     }, 'notion-conn-msg');
     if (ok) document.getElementById('notion-token').value = '';
   });
+  on('btn-notion-customer-db', () => saveIntegrationSettings({ notionCustomerDb: document.getElementById('notion-customer-db').value.trim() }, 'notion-conn-msg'));
   on('btn-notion-clear-conn', () => saveIntegrationSettings({ clear: 'notion' }, 'notion-conn-msg'));
   const dpSel = document.getElementById('notion-date-prop');
   if (dpSel) dpSel.addEventListener('change', () => saveIntegrationSettings({ notionDateProp: dpSel.value }, 'notion-conn-msg'));
