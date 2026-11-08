@@ -1,0 +1,27 @@
+{
+  "source": "Jotun Global Interior Color Card - public references",
+  "date": "2026-11-09",
+  "brand": "Jotun",
+  "colors": [
+    { "code": "9918", "name": "Classic White", "hex": "#f5f6f4" },
+    { "code": "1624", "name": "Skylight", "hex": "#f4f1ea" },
+    { "code": "1001", "name": "Egg White", "hex": "#f0ebe1" },
+    { "code": "1453", "name": "Vanilla", "hex": "#ede2cb" },
+    { "code": "1024", "name": "Timeless", "hex": "#e7e5dc" },
+    { "code": "10679", "name": "Washed Linen", "hex": "#cec8be" },
+    { "code": "0394", "name": "Soft Grey", "hex": "#bdbbb4" },
+    { "code": "1352", "name": "Form", "hex": "#9c968c" },
+    { "code": "1140", "name": "Sand", "hex": "#d3c4ae" },
+    { "code": "1931", "name": "Cashew", "hex": "#cbbda7" },
+    { "code": "12075", "name": "Soothing Beige", "hex": "#d2c7b8" },
+    { "code": "12076", "name": "Modern Khaki", "hex": "#b6ab9a" },
+    { "code": "8470", "name": "Smooth White", "hex": "#dbdad5" },
+    { "code": "8282", "name": "White Grey", "hex": "#cfcfcb" },
+    { "code": "7628", "name": "Treasure", "hex": "#b8c3be" },
+    { "code": "7629", "name": "Antique Green", "hex": "#6c7a72" },
+    { "code": "5030", "name": "St. Pauls Blue", "hex": "#667276" },
+    { "code": "4618", "name": "Evening Light", "hex": "#8c96a0" },
+    { "code": "4638", "name": "Busty Blue", "hex": "#4e6070" },
+    { "code": "9938", "name": "Blackened Black", "hex": "#28292b" }
+  ]
+}

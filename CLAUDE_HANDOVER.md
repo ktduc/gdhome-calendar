@@ -222,3 +222,14 @@ Khi chuyển sang Claude, hãy gửi đoạn tóm tắt dưới đây để Clau
 - Ảnh trong ô có thể có `view:{x,y,z}` (tâm vùng nhìn 0–1, phóng 1–6). `material-review.js` giữ trường này; hiển thị bằng `--view` (transform) chỉ khi khung ảnh = Fill.
 - `shell.js`: đóng menu khi click ra ngoài/Esc/Tab (đóng ở sự kiện click để không trượt cú bấm), đóng `<dialog>` khi bấm nền tối (trừ `[data-no-backdrop-close]`, `.crop-dialog`), menu GD HOME Tools có "📚 Dữ liệu dùng chung". `app.js`: modal Lịch đóng khi bấm nền (trừ `task-modal`).
 - Test: `tests/shared-library.test.js`, Playwright 9.5 (vùng nhìn), 15.1, 15.2.
+
+## 3t. GĐ16 – Ô ảnh gọn, Xuất ảnh fill + tag mã, Cài đặt xuất, Màu sơn Dulux/Jotun & Mã gỗ An Cường, Tìm Google (09/11/2026)
+
+- Ô ảnh gọn (16.1): ô trống chữ mờ "Bấm để chọn · Ctrl+V để dán". Ô có ảnh chỉ còn 1 nút ⋯ góc trên phải (chọn thư viện/3D/màu sơn/mã gỗ, tải ảnh, chỉnh vùng nhìn, xoá ảnh, chốt PA). Ctrl+V chạy mọi trường hợp (kể cả khi popover thư viện đang mở).
+- Chốt PA (16.2): nhãn "✓ Đã chốt", bấm lần nữa bỏ chốt (có hoàn tác), có trong menu ⋯ và chi tiết PA. Bản xuất giữ viền đỏ PA đã chốt.
+- Xuất fill + tag mã (16.3): ảnh xuất PNG/PDF fill đầy ô vuông không viền trắng kể cả khi dùng vùng nhìn `--view`. Tag mã vật liệu đè cạnh dưới ảnh (chữ trắng viền tối).
+- Cài đặt xuất (16.4): "Copy ảnh" / "Tải PNG" / "Tải PDF A4" chạy ngay với cài đặt đã lưu. Thêm "⚙ Cài đặt xuất…" trong menu ▾ cạnh Copy ảnh. Tuỳ chọn Fill/Vừa và Hiện mã trên ảnh lưu theo tài khoản (`viewSettings.export`).
+- Bảng màu sơn Dulux / Jotun (16.5): nhóm SƠN nạp từ `data/paint-dulux.json` và `data/paint-jotun.json`. Tìm theo mã/tên, tự điền mã + hãng, render khối màu swatch hex trong ô và bản xuất, lưu vào Dữ liệu dùng chung.
+- Mã gỗ An Cường (16.6): nhóm MÃ GỖ nạp từ `data/wood-ancuong.json`. Tìm theo mã/tên, tự điền mã + tên + dòng sản phẩm vào quy cách.
+- Popover rộng 560 px, cao 70vh, nền be-ghi `#f4f1ec`, lưới 120 px (16.7): tìm không ra hiện fallback Google Ảnh. API key & cx nhập trong ⚙ Kết nối. Server proxy tải ảnh qua `/api/google/proxy-image` (chống SSRF, ≤ 8 MB, đúng MIME ảnh, timeout) nén WebP 1600 px lưu vào ô và Dữ liệu dùng chung. Chưa có key hiện nút mở tab mới kèm hướng dẫn copy & Ctrl+V.
+- Test: `tests/google-proxy.test.js` (SSRF, quá cỡ, sai MIME), `node --test` 45/45, Playwright 16.1–16.7 đạt 100%.

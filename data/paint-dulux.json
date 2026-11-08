@@ -1,0 +1,27 @@
+{
+  "source": "Dulux Colour Palette - public architectural color references",
+  "date": "2026-11-09",
+  "brand": "Dulux",
+  "colors": [
+    { "code": "30YY 72/107", "name": "Ivory Lace", "hex": "#f5f0e1" },
+    { "code": "40YY 83/043", "name": "White Whisper", "hex": "#f4f4ec" },
+    { "code": "50YY 83/029", "name": "Natural White", "hex": "#faf7f0" },
+    { "code": "00YY 65/060", "name": "Tranquil Dawn", "hex": "#dbe3de" },
+    { "code": "10BB 73/045", "name": "First Dawn", "hex": "#e3ebed" },
+    { "code": "70BG 70/131", "name": "Quiet Hideaway", "hex": "#c4dcdb" },
+    { "code": "50GY 74/093", "name": "Pale Sage", "hex": "#dbe4d5" },
+    { "code": "30GY 62/159", "name": "Soft Pistachio", "hex": "#c8d8be" },
+    { "code": "10YR 53/662", "name": "Amber Glow", "hex": "#f29b38" },
+    { "code": "00YY 26/220", "name": "Spiced Honey", "hex": "#c69255" },
+    { "code": "50YR 18/223", "name": "Wild Wonder", "hex": "#c4a35a" },
+    { "code": "30BB 47/179", "name": "Denim Drift", "hex": "#8ba3b8" },
+    { "code": "90BG 38/242", "name": "Teal Voyage", "hex": "#3b828e" },
+    { "code": "10BB 17/269", "name": "Oxford Blue", "hex": "#273f5b" },
+    { "code": "00NN 62/000", "name": "Silver Quill", "hex": "#a3a4a6" },
+    { "code": "00NN 37/000", "name": "Chiseled Grey", "hex": "#6b6c6e" },
+    { "code": "00NN 13/000", "name": "Phantom Night", "hex": "#2c2d30" },
+    { "code": "90RR 83/009", "name": "Brilliant White", "hex": "#fcfcfd" },
+    { "code": "50YR 83/020", "name": "Pure Cashmere", "hex": "#f6f1ea" },
+    { "code": "10YY 73/042", "name": "Off White", "hex": "#eae8df" }
+  ]
+}

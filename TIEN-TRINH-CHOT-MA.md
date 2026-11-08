@@ -256,3 +256,19 @@ XONG GĐ15
 - Dữ liệu dùng chung báo "Cannot read properties of undefined (reading 'authMode')" khi bảng hiện từ bản lưu trên máy trước lúc tải xong cấu hình: `authHeaders()` không còn phụ thuộc cấu hình đã tải.
 - Độ đậm chữ: bảng nhập, ảnh/PDF xuất, biên bản A4 và bản in dùng chung một quy tắc font-weight (Mảnh 300/600, Thường 400/700–800, Đậm 600/800, Rất đậm 800/900). Nạp thêm Roboto 600/800. Playwright 15.3.
 - Nút ⬆ tải 3D trên đầu cột không làm lệch bố cục bảng so với bản xuất (13.5).
+
+## Giai đoạn 16 (09/11/2026)
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| 16.1 | ✅ | Ô ảnh gọn: ô trống chữ mờ "Bấm để chọn · Ctrl+V để dán", ô có ảnh chỉ 1 nút ⋯ góc trên phải mở menu tuỳ chọn, Ctrl+V dán mọi lúc (kể cả khi popover đang mở) |
+| 16.2 | ✅ | Nút đỏ ✓ đổi thành nhãn "✓ Đã chốt", bấm lần nữa bỏ chốt (có hoàn tác), đưa vào menu ⋯ và chi tiết PA; bản xuất giữ viền đỏ PA đã chốt |
+| 16.3 | ✅ | Ảnh xuất fill đầy ô vuông không viền trắng kể cả khi dùng vùng nhìn (--view); mã vật liệu đè lên ảnh ở cạnh dưới (chữ trắng viền tối) |
+| 16.4 | ✅ | "Copy ảnh" / "Tải PNG" / "Tải PDF A4" chạy ngay với cài đặt đã lưu; thêm "⚙ Cài đặt xuất…" trong menu ▾ cạnh Copy ảnh; tuỳ chọn Fill/Vừa và Hiện mã trên ảnh lưu theo tài khoản |
+| 16.5 | ✅ | Bảng màu sơn Dulux / Jotun: nạp từ `data/paint-dulux.json` và `data/paint-jotun.json`, tìm theo mã hoặc tên, tự điền mã + hãng + swatch màu hex trong ô PA và bản xuất, lưu vào Dữ liệu dùng chung |
+| 16.6 | ✅ | Mã gỗ An Cường: nạp từ `data/wood-ancuong.json`, tìm theo mã hoặc tên, tự điền mã + tên + dòng sản phẩm vào quy cách |
+| 16.7 | ✅ | Popover chọn to hơn (rộng ~560 px, cao tối đa 70vh, nền be-ghi #f4f1ec, lưới ~120 px); tìm không có kết quả hiển thị fallback Google Ảnh (API qua proxy bảo mật chống SSRF, giới hạn ≤ 8 MB, hoặc nút mở tab mới kèm hướng dẫn Ctrl+V) |
+
+Kiểm tra: `node --test` 45/45. Playwright: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7 đạt 100%.
+
+XONG GĐ16

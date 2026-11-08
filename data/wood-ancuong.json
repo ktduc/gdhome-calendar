@@ -1,0 +1,24 @@
+{
+  "source": "An Cuong Wood Working - public surface decor product list",
+  "date": "2026-11-09",
+  "brand": "An Cường",
+  "woods": [
+    { "code": "MFC 7241 T", "name": "Sồi Đậm Natural Oak", "collection": "Melamine MFC" },
+    { "code": "MFC 388 EV", "name": "Óc Chó Walnut Elegance", "collection": "Melamine MFC" },
+    { "code": "MFC 333 T", "name": "Sồi Trắng White Oak", "collection": "Melamine MFC" },
+    { "code": "MFC 612 T", "name": "Gỗ Tần Bì Ash Wood", "collection": "Melamine MFC" },
+    { "code": "MFC 104 SH", "name": "Trắng Sứ Solid White", "collection": "Melamine Đơn Sắc" },
+    { "code": "MFC 201 SH", "name": "Xám Khói Smoke Grey", "collection": "Melamine Đơn Sắc" },
+    { "code": "MFC 202 SH", "name": "Xám Đậm Dark Grey", "collection": "Melamine Đơn Sắc" },
+    { "code": "MDF 401 PL", "name": "Vân Gỗ Teak Cổ Điển", "collection": "Melamine MDF" },
+    { "code": "MDF 405 RM", "name": "Óc Chó Bắc Mỹ Walnut", "collection": "Melamine MDF" },
+    { "code": "MDF 410 EV", "name": "Sồi Châu Âu Euro Oak", "collection": "Melamine MDF" },
+    { "code": "LAM 2120 G", "name": "Laminate Gỗ Mun Ebony", "collection": "Laminate Kingdom" },
+    { "code": "LAM 3045 W", "name": "Laminate Sồi Rạn Rustic Oak", "collection": "Laminate Kingdom" },
+    { "code": "ACR 01", "name": "Acrylic Trắng Bóng Gương", "collection": "Acrylic Bóng Gương" },
+    { "code": "ACR 03", "name": "Acrylic Đen Huyền Bí", "collection": "Acrylic Bóng Gương" },
+    { "code": "ACR 18", "name": "Acrylic Xám Bạc Metal", "collection": "Acrylic Bóng Gương" },
+    { "code": "VNR Oak 01", "name": "Veneer Sồi Tự Nhiên", "collection": "Veneer Gỗ Tự Nhiên" },
+    { "code": "VNR Walnut 02", "name": "Veneer Óc Chó Tự Nhiên", "collection": "Veneer Gỗ Tự Nhiên" }
+  ]
+}

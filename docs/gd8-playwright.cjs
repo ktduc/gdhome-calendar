@@ -116,7 +116,7 @@ const imageFixture = 'iVBORw0KGgoAAAANSUhEUgAAAMAAAAB4CAIAAAArJ2pIAAABCUlEQVR42u
 cases['8.5'] = async page => {
   await openMaterials(page);
   const cell = page.locator('[data-row="g1-r1"] [data-slot="0"]');
-  await cell.locator('.image-plus').click();
+  await (cell.locator('.image-plus').or(cell)).first().click();
   assert.equal(await pasteFixture(page,'items'),true,'paste vào ô đã focus');
   await cell.locator('img').waitFor().catch(async error => { throw new Error((await page.locator('#notice').textContent()) || error.message); });
   await pasteFixture(page,'html');
@@ -129,7 +129,7 @@ cases['8.5'] = async page => {
   await view.locator('img').waitFor();
 
   const fallback = page.locator('[data-row="g1-r3"] [data-slot="render"]');
-  await fallback.locator('.image-plus').click();
+  await (fallback.locator('.image-plus').or(fallback)).first().click();
   await page.evaluate(base64 => {
     const blob = new Blob([Uint8Array.from(atob(base64),c => c.charCodeAt(0))],{type:'image/png'});
     Object.defineProperty(navigator.clipboard,'read',{configurable:true,value:async () => [
@@ -226,6 +226,7 @@ cases['9.2'] = async page => {
     sheet.groups = [{ ...sheet.groups[0],rows:[row] }];
   }));
   const form = await openImageScope(page);
+  await form.locator('select[name="imageFit"]').selectOption('fit');
   await form.getByRole('button',{name:'Xem trước'}).click();
   await page.locator('#stats-copy').waitFor();
   const measure = () => page.locator('#print-sheet').evaluate(root => {
@@ -1419,6 +1420,81 @@ cases['16.4'] = async page => {
   assert.equal(await form.locator('select[name="imageFit"]').inputValue(), 'fit');
   assert.equal(await form.locator('input[name="showCodeOnImage"]').isChecked(), false);
   await page.locator('#material-dialog').press('Escape');
+};
+
+cases['16.5'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => modify(() => {
+    sheet.groups[0].name = 'SƠN TƯỜNG + TRẦN';
+  }));
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  await cell.click();
+  const popover = page.locator('.asset-popover');
+  await popover.waitFor();
+  assert.ok(await popover.getByText('Chọn màu sơn').isVisible(), 'Mở bảng chọn màu sơn');
+
+  const searchInput = popover.locator('input[type="search"]');
+  await searchInput.fill('30YY');
+  await page.waitForTimeout(300);
+  const card = popover.locator('[data-paint-code="30YY 72/107"]');
+  await card.waitFor();
+  await card.click();
+
+  await cell.locator('.paint-swatch-box').waitFor();
+  assert.ok(await cell.locator('.image-code-tag').getByText('30YY 72/107').isVisible(), 'Có tag mã màu sơn trên swatch');
+  const codeVal = await page.locator('[data-row="g1-r1"] input[data-field="code"]').first().inputValue();
+  assert.equal(codeVal, '30YY 72/107', 'Tự điền mã sơn vào ô mã PA');
+
+  // Kiểm tra bảng xuất có khối màu
+  await page.locator('#material-print-view').check();
+  await page.locator('#material-table-preview').waitFor();
+  assert.ok(await page.locator('#material-table-preview .paint-swatch-box').count() > 0, 'Bản xuất có khối màu sơn');
+};
+
+cases['16.6'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => modify(() => {
+    sheet.groups[0].name = 'MÃ GỖ (Melamine, PVC…)';
+  }));
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  await cell.click();
+  const popover = page.locator('.asset-popover');
+  await popover.waitFor();
+  assert.ok(await popover.getByText('Mã gỗ An Cường').isVisible(), 'Mở bảng chọn mã gỗ An Cường');
+
+  const searchInput = popover.locator('input[type="search"]');
+  await searchInput.fill('7241');
+  await page.waitForTimeout(300);
+  const card = popover.locator('[data-wood-code="MFC 7241 T"]');
+  await card.waitFor();
+  await card.click();
+
+  const codeVal = await page.locator('[data-row="g1-r1"] input[data-field="code"]').first().inputValue();
+  assert.equal(codeVal, 'MFC 7241 T', 'Tự điền mã gỗ');
+  const specVal = await page.locator('[data-row="g1-r1"] [data-field="spec"]').inputValue();
+  assert.equal(specVal, 'Melamine MFC', 'Tự điền dòng sản phẩm vào quy cách');
+};
+
+cases['16.7'] = async page => {
+  await openMaterials(page);
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  await cell.click();
+  const popover = page.locator('.asset-popover');
+  await popover.waitFor();
+
+  const box = await popover.boundingBox();
+  assert.ok(box.width >= 550 && box.width <= 570, 'Chiều rộng popover ~560px (thực tế: ' + box.width + ')');
+  const bg = await popover.evaluate(el => getComputedStyle(el).backgroundColor);
+  assert.ok(bg.includes('244, 241, 236') || bg.includes('#f4f1ec'), 'Màu nền popover là be-ghi nhạt #f4f1ec');
+
+  const searchInput = popover.locator('input[type="search"]');
+  await searchInput.fill('KhongTonTai9999');
+  await page.waitForTimeout(300);
+  const fallback = popover.locator('.asset-google-fallback');
+  await fallback.waitFor();
+  assert.ok(await fallback.getByText('Mở Google Ảnh "KhongTonTai9999"').isVisible(), 'Hiện nút mở Google Ảnh kèm từ khoá');
+  assert.ok(await fallback.getByText('Ctrl+V').isVisible(), 'Có hướng dẫn dán Ctrl+V');
+  await page.keyboard.press('Escape');
 };
 
 async function main() {

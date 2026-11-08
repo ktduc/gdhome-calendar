@@ -46,7 +46,14 @@ window.GDHomeConnections = (() => {
       '<label>API key<input type="password" name="aiKey" autocomplete="off" placeholder="' + html(aiHint) + '"></label>' +
       '<label>Model<input name="aiModel" value="' + html(ai.source === 'user' ? ai.model : '') + '" placeholder="Để trống để tự chọn"></label>' +
       '<div class="connection-actions"><button class="btn btn-primary">Lưu &amp; kiểm tra</button>' +
-      '<button type="button" class="btn btn-outline" data-clear-connection="ai">Gỡ kết nối</button></div></form></section>';
+      '<button type="button" class="btn btn-outline" data-clear-connection="ai">Gỡ kết nối</button></div></form></section>' +
+      '<section data-connection-section="google"><h3>Google Tìm kiếm hình ảnh</h3><p>' +
+      html(data.googleSearch?.configured ? 'Đã kết nối Google Custom Search' : 'Chưa kết nối tìm kiếm Google') + '</p>' +
+      '<form data-connection-form="google"><label>Google Search API Key<input type="password" name="googleSearchKey" autocomplete="off" placeholder="' +
+      html(data.googleSearch?.keyMasked ? 'Mã hiện tại: ' + data.googleSearch.keyMasked : 'API key') + '"></label>' +
+      '<label>Search Engine ID (cx)<input name="googleSearchCx" value="' + html(data.googleSearch?.cx || '') + '" placeholder="cx (vd: a1b2c3d4...)"></label>' +
+      '<div class="connection-actions"><button class="btn btn-primary">Lưu kết nối</button>' +
+      '<button type="button" class="btn btn-outline" data-clear-connection="googleSearch">Gỡ kết nối</button></div></form></section>';
     const status = root.querySelector('.connection-message');
     async function save(patch,section) {
       const controls = [...root.querySelectorAll('input,select,button:not(.close-dialog)')];
@@ -63,7 +70,7 @@ window.GDHomeConnections = (() => {
     root.querySelectorAll('[data-connection-form]').forEach(form => {
       form.onsubmit = event => {
         event.preventDefault();
-        save(Object.fromEntries(new FormData(form)),form.dataset.connectionForm === 'ai' ? 'ai' : 'notion');
+        save(Object.fromEntries(new FormData(form)),form.dataset.connectionForm);
       };
     });
     root.querySelectorAll('[data-clear-connection]').forEach(button => {

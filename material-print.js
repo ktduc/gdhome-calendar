@@ -123,7 +123,7 @@ function rowsForPrint(view, base) {
       return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td class="material-copy-secondary">' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
         (pa ? '<br><small>' + html(options.filter(o => o !== pa && o.code).map(o => 'Dự phòng: '+o.code).join(' · ')) + '</small>' : '') +
-        '</td><td data-column="qty">' + html(displayMaterialQuantity(row)) + '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base,true,false,pa?.code) + '</div></td></tr>';
+        '</td><td data-column="qty">' + html(displayMaterialQuantity(row)) + '</td><td class="material-copy-secondary">' + html(row.note) + (pa?.paint && (!pa?.images || !pa.images.length) ? '<div class="print-squares"><span class="print-square"><span class="paint-swatch" style="display:inline-block;width:100%;height:100%;background-color:' + html(pa.paint.hex) + ';border-radius:4px;"></span>' + (pa.code ? '<span class="image-code-tag">' + html(pa.code) + '</span>' : '') + '</span></div>' : '<div class="print-squares">' + printImages(pa?.images,base,true,false,pa?.code) + '</div>') + '</td></tr>';
     }).join('')).join('');
 }
 function printable(view,base) {

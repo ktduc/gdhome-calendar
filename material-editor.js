@@ -484,6 +484,7 @@ document.addEventListener('click', async event => {
   try {
 
     switch (button.dataset.action) {
+      case 'open-paint': if (row && slot != null) openAssetPicker(button.closest('.image-cell'), row, group, slot); break;
       case 'open': openSheet(materials.sheets.find(s => s.id === button.dataset.id)); break;
       case 'remove-sheet':
         if (button.closest('.hdr-dropdown')) button.closest('.hdr-dropdown').open = false;
@@ -819,7 +820,10 @@ function openImageCellMenu(anchor, row, group, slot) {
       openAssetPicker(cell, row, group, slot);
     });
   } else {
-    addItem('🖼', 'Chọn từ thư viện', () => {
+    let pickLabel = 'Chọn từ thư viện';
+    if (isPaintGroup(group?.name)) pickLabel = 'Chọn màu sơn (Dulux, Jotun)';
+    else if (isWoodGroup(group?.name)) pickLabel = 'Chọn mã gỗ (An Cường)';
+    addItem('🖼', pickLabel, () => {
       const cell = anchor.closest('.image-cell');
       focusMaterialImageCell(cell);
       openAssetPicker(cell, row, group, slot);
@@ -838,6 +842,15 @@ function openImageCellMenu(anchor, row, group, slot) {
     });
     addItem('🗑', 'Xoá ảnh', () => {
       modify(() => { list.splice(0, 1); }, false);
+    }, true);
+  } else if (pa?.paint) {
+    addItem('🗑', 'Xoá màu sơn', () => {
+      modify(() => {
+        pa.paint = null;
+        pa.brand = '';
+        pa.code = '';
+        pa.color = '';
+      }, false);
     }, true);
   }
 
@@ -875,13 +888,83 @@ function openImageCellMenu(anchor, row, group, slot) {
   setTimeout(() => document.addEventListener('pointerdown', onDocClick, true), 0);
 }
 
+function isPaintGroup(name) {
+  return /SƠN/i.test(name || '');
+}
+function isWoodGroup(name) {
+  return /MÃ GỖ|MA GO/i.test(name || '');
+}
+
 function openAssetPicker(cell,row,group,slot) {
   if (!window.GDHomeAssets || !row) return;
   if (slot === 'render') {
     GDHomeAssets.pickRender(cell,{projectId:sheet.projectId,onPick:item => addPickedImage(row,'render',item)});
+  } else if (isPaintGroup(group?.name)) {
+    GDHomeAssets.pickPaint(cell,{groupName:group?.name,onPick:paint => {
+      if (paint.kind === 'paint') paintPicked(row,slot,paint);
+      else addPickedImage(row,slot,paint);
+    }});
+  } else if (isWoodGroup(group?.name)) {
+    GDHomeAssets.pickWood(cell,{groupName:group?.name,onPick:wood => {
+      if (wood.kind === 'wood') woodPicked(row,slot,wood);
+      else addPickedImage(row,slot,wood);
+    }});
   } else {
     GDHomeAssets.pickLibrary(cell,{groupName:group?.name,onPick:item => libraryPicked(row,slot,item)});
   }
+}
+
+function paintPicked(row,slot,paint) {
+  const pa = row.options[Number(slot)];
+  if (!pa) return;
+  modify(() => {
+    pa.paint = paint;
+    pa.brand = paint.brand;
+    pa.code = paint.code;
+    pa.color = paint.name;
+  });
+  savePaintToSharedLibrary(paint);
+}
+
+async function savePaintToSharedLibrary(paint) {
+  if (!window.GDHomeAssets || !paint) return;
+  try {
+    const data = await GDHomeAssets.loadLibrary();
+    const cat = GDHomeAssets.categoryFor(data, 'SƠN') || data.categories[0];
+    if (!cat) return;
+    const label = paint.brand + ' ' + paint.code + ' – ' + paint.name;
+    const existing = data.items.find(item => item.categoryId === cat.id && item.name === label);
+    if (existing) {
+      await GDHomeAssets.updateItem({ id: existing.id, used: true });
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = 64; canvas.height = 64;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = paint.hex || '#ffffff';
+    ctx.fillRect(0, 0, 64, 64);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.8));
+    if (!blob) return;
+    const assetName = await GDHomeAssets.storeAsset(blob);
+    await GDHomeAssets.addItems(cat.id, [{
+      full: assetName,
+      thumb: assetName,
+      name: label
+    }]);
+  } catch (err) {
+    console.warn('savePaintToSharedLibrary:', err);
+  }
+}
+
+function woodPicked(row,slot,wood) {
+  const pa = row.options[Number(slot)];
+  if (!pa) return;
+  modify(() => {
+    pa.brand = 'An Cường';
+    pa.code = wood.code;
+    if (!pa.color) pa.color = wood.name;
+    if (!row.spec) row.spec = wood.collection;
+  });
 }
 async function uploadProjectRenders() {
   const files = await GDHomeAssets.filePicker('image/*,application/pdf');

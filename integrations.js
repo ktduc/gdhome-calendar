@@ -9,6 +9,7 @@
 //     AI_DAILY_LIMIT (mặc định 40 lượt/người/ngày, chỉ áp dụng khoá chung), AI_ALLOWED_EMAILS
 // =========================================================================
 const crypto = require('crypto');
+const { proxyDownloadImage, googleImageSearch } = require('./google-search');
 
 const ENV = {
   notionToken: (process.env.NOTION_TOKEN || '').trim(),
@@ -516,6 +517,7 @@ function settingsView(cfg) {
       dbTitle: cfg.notionDbTitle || '', dateProps: cfg.notionDateProps || [], dateProp: cfg.notionDateProp || ''
     } : { configured: false },
     ai: ai ? { configured: true, source: ai.source, provider: ai.provider, providerLabel: PROVIDER_LABEL[ai.provider], keyMasked: ai.source === 'user' ? mask(cfg.aiKey) : '', model: ai.model || '' } : { configured: false },
+    googleSearch: (cfg.googleSearchKey && cfg.googleSearchCx) ? { configured: true, keyMasked: mask(cfg.googleSearchKey), cx: cfg.googleSearchCx } : { configured: false },
     notionCustomerDb:cfg.notionCustomerDb || '', notionCustomerMap:cfg.notionCustomerMap || {},
     providers: PROVIDERS.map(id => ({ id, label: PROVIDER_LABEL[id] }))
   };
@@ -529,6 +531,7 @@ async function updateSettings(store, dataKey, body) {
     cfg.notionDateProp = body.notionDateProp;
   }
   if (body.clear === 'ai') { delete cfg.aiProvider; delete cfg.aiKey; delete cfg.aiModel; }
+  if (body.clear === 'googleSearch') { delete cfg.googleSearchKey; delete cfg.googleSearchCx; }
   if (body.notionToken !== undefined || body.notionDb !== undefined) {
     const token = String(body.notionToken || '').trim() || cfg.notionToken;
     const dbRaw = String(body.notionDb || '').trim() || cfg.notionDb;
@@ -565,6 +568,16 @@ async function updateSettings(store, dataKey, body) {
     }
   }
   if (body.notionCustomerMap !== undefined) cfg.notionCustomerMap = customerMap(body.notionCustomerMap);
+  if (body.googleSearchKey !== undefined || body.googleSearchCx !== undefined) {
+    const key = String(body.googleSearchKey || '').trim() || cfg.googleSearchKey;
+    const cx = String(body.googleSearchCx || '').trim() || cfg.googleSearchCx;
+    if (body.clear !== 'googleSearch') {
+      if (!key) throw httpError(400, 'Cần Google API Key');
+      if (!cx) throw httpError(400, 'Cần Google Search Engine ID (cx)');
+      cfg.googleSearchKey = key;
+      cfg.googleSearchCx = cx;
+    }
+  }
   await saveUserCfg(store, dataKey, cfg);
   return settingsView(cfg);
 }
@@ -609,6 +622,31 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     const body = await readJsonBody(req);
     const planner = urlPath === '/api/ai/materials' ? aiMaterials : aiSchedule;
     sendJson(res, 200, { success: true, plan: await planner(ai, body || {}, dataKey) });
+    return true;
+  }
+  if (urlPath === '/api/google/search' && req.method === 'GET') {
+    const params = new URL(req.url, 'http://localhost').searchParams;
+    const q = String(params.get('q') || '').trim();
+    const cfg = await loadUserCfg(store, dataKey);
+    if (!cfg.googleSearchKey || !cfg.googleSearchCx) {
+      sendJson(res, 200, { success: false, configured: false, items: [] });
+      return true;
+    }
+    const items = await googleImageSearch(cfg.googleSearchKey, cfg.googleSearchCx, q);
+    sendJson(res, 200, { success: true, configured: true, items });
+    return true;
+  }
+  if (urlPath === '/api/google/proxy-image' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const targetUrl = String(body.url || '').trim();
+    if (!targetUrl) throw httpError(400, 'Thiếu URL ảnh.');
+    const { buffer, contentType } = await proxyDownloadImage(targetUrl);
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': buffer.length,
+      'Cache-Control': 'no-store'
+    });
+    res.end(buffer);
     return true;
   }
   return false;

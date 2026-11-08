@@ -388,9 +388,11 @@ function materialPaperForExport(current) {
   paper.dataset.imageFit = (typeof savedMaterialExportScope === 'function' ? savedMaterialExportScope().imageFit : null) === 'fit' ? 'fit' : 'fill';
   for (const imageButton of paper.querySelectorAll('.image-open,.material-image-thumb')) {
     const slot = document.createElement('span');
-    slot.className = imageButton.className;
-    slot.append(...imageButton.childNodes);
-    imageButton.replaceWith(slot);
+    if (imageButton.tagName === 'BUTTON') {
+      slot.className = imageButton.className;
+      slot.append(...imageButton.childNodes);
+      imageButton.replaceWith(slot);
+    }
   }
   paper.querySelectorAll('button,input[type="checkbox"],[data-resize],.image-plus,.paste-cell-hint,.image-count,.material-group-controls')
     .forEach(element => element.remove());
@@ -413,7 +415,7 @@ function materialPaperForExport(current) {
           if (!pa?.code) continue;
           const cell = rowEl.querySelector('.image-cell[data-slot="' + i + '"]');
           const preview = cell?.querySelector('.image-preview');
-          if (preview && preview.querySelector('img') && !preview.querySelector('.image-code-tag')) {
+          if (preview && (preview.querySelector('img') || preview.querySelector('.paint-swatch-box')) && !preview.querySelector('.image-code-tag')) {
             const tag = document.createElement('div');
             tag.className = 'image-code-tag';
             tag.title = pa.code;
@@ -561,7 +563,30 @@ function renderGroup(group,columns,nextNumber,editing) {
   return '<tbody data-group="' + html(group.id) + '">' + heading + rows + add + '</tbody>';
 }
 
-function imageCell(list, slot, content = '', state = '', removable = false, editing = true) {
+function imageCell(list, slot, content = '', state = '', removable = false, editing = true, pa = null) {
+  const hasImage = list && list.length > 0;
+  const isPaint = !hasImage && !!pa?.paint;
+  let photo = '';
+  if (hasImage) {
+    photo = '<button class="image-open" data-action="view-image" aria-label="Xem ảnh lớn">' +
+      images(list.slice(0,1),!editing) + '</button>';
+  } else if (isPaint) {
+    photo = '<div class="image-open paint-swatch-box" data-action="open-paint" title="Màu sơn: ' + html(pa.paint.brand + ' ' + pa.paint.code + ' – ' + pa.paint.name) + '" style="background-color:' + html(pa.paint.hex) + ';width:100%;height:100%;border-radius:4px;display:flex;align-items:flex-end;justify-content:center;padding:2px;box-sizing:border-box;cursor:pointer;"><span class="image-code-tag">' + html(pa.paint.code || pa.paint.hex) + '</span></div>';
+  }
+  const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (Number(slot)+1);
+  const isChosen = state === 'chosen';
+  const choose = slot === 'render' ? '' : '<button type="button" class="image-pick' + (isChosen ? ' chosen' : '') + '" data-action="pick-pa" aria-label="' + (isChosen ? 'Bỏ chốt PA' : 'Chốt PA') + (Number(slot)+1) + '" aria-pressed="' + isChosen + '" title="' + (isChosen ? 'Phương án đã chốt · Bấm để bỏ chốt' : 'Chốt phương án') + '">' + (isChosen ? '✓ Đã chốt' : '✓') + '</button>';
+
+  return '<div class="image-cell ' + state + (hasImage ? ' has-image' : isPaint ? ' has-paint has-image' : '') + '" tabindex="0" data-slot="' + slot +
+    '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả."><div class="image-preview">' + photo +
+    (!hasImage && !isPaint ? '<div class="image-empty-hint">Bấm để chọn<br>·<br>Ctrl+V để dán</div>' : '') +
+    (state === 'reserve' ? '<span class="image-state">Dự phòng</span>' : '') +
+    '</div>' + (list && list.length > 1 ? '<div class="material-image-thumbs">' +
+      list.slice(1).map((image,i) => '<button class="material-image-thumb" data-action="view-image" data-index="' + (i+1) +
+        '" aria-label="Xem ảnh ' + (i+2) + '">' + images([image],!editing) + '</button>').join('') + '</div>' : '') + choose + '<button type="button" class="image-detail" data-action="cell-menu" aria-label="' + label + '" title="Tuỳ chọn ô ảnh">⋯</button>' +
+    (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
+}
+function _oldImageCell_disabled() {
   const hasImage = list.length > 0;
   const photo = hasImage ? '<button class="image-open" data-action="view-image" aria-label="Xem ảnh lớn">' +
     images(list.slice(0,1),!editing) + '</button>' : '';
@@ -625,7 +650,7 @@ function renderRow(row,columns,number,editing) {
     const code = '<div class="pa-caption">' + input('code',pa.code,'Mã PA' + (i+1)) +
       (detail ? '<small title="' + html(detail) + '"> · ' + html(detail) + '</small>' : '') + '</div>';
     const canRemove = i > 0 && i === count-1 && !paHasData(pa) && row.chosen !== i;
-    cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove,editing);
+    cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove,editing,pa);
   }
   return '<tr data-row="' + html(row.id) + '">' + columns.map(([key]) => '<td data-column="' + key + '"' + materialColumnClass(key,editing) + '>' + cells[key] + '</td>').join('') + '</tr>';
 }
