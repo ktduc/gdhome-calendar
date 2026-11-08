@@ -969,7 +969,7 @@ cases['15.1'] = async page => {
 cases['15.2'] = async page => {
   // Dữ liệu dùng chung: tải ảnh vào hạng mục, chọn nhanh cho ô PA theo nhóm, vùng nhìn lưu lại sau khi tải trang.
   await openMaterials(page);
-  await page.locator('[data-sidebar=library] [data-action=open-library]').click();
+  await page.locator('[data-sidebar=library] .material-sidebar-actions [data-action=open-library]').click();
   const library = page.locator('dialog.asset-library-dialog');
   await library.waitFor();
   const file = {name:'mau-go.png',mimeType:'image/png',buffer:Buffer.from(imageFixture,'base64')};
@@ -1556,7 +1556,7 @@ cases['17.0'] = async page => {
   },asset);
   assert.equal(data.added.length,1);
   await page.locator('[data-library-summary]').filter({hasText:'1 ảnh mẫu'}).waitFor();
-  await page.locator('[data-action=open-library]').click();
+  await page.locator('.material-sidebar-actions [data-action=open-library]').click();
   page.on('dialog',dialog => dialog.accept());
   await page.locator('.asset-library-dialog [data-asset-remove]').click();
   await page.locator('.asset-library-dialog').getByText('Chưa có ảnh trong hạng mục này.').waitFor();
@@ -1592,6 +1592,27 @@ cases['17.1'] = async page => {
   await form.locator('[value=quote]').check();
   await send.click();
   await page.getByRole('button',{name:'Duyệt đề xuất'}).waitFor();
+};
+
+cases['17.4'] = async page => {
+  const asset = 'a'.repeat(64) + '.webp';
+  const documents = Array.from({length:7},(_,i) => ({id:'render-' + i,name:'Mẫu ' + i,type:'render',assetKey:'render-' + asset}));
+  await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents}}}}));
+  await page.route('**/api/materials/assets/' + asset,route => route.fulfill({status:404}));
+  await openMaterials(page);
+  const strip = page.locator('[data-render-strip]');
+  await strip.getByText('+2',{exact:true}).waitFor();
+  assert.equal(await strip.locator('img').count(),5);
+  const boxes = await strip.locator('button').evaluateAll(items => items.map(item => item.getBoundingClientRect().toJSON()));
+  assert.ok(boxes.every(box => box.width <= 44 && box.height <= 44 && box.y === boxes[0].y));
+  const display = page.locator('[data-sidebar=display]');
+  if (await display.getAttribute('open') === null) await display.locator('summary').click();
+  await display.locator('[data-action=toggle-asset-previews]').click();
+  await strip.locator('img').first().waitFor({state:'detached'});
+  await page.waitForFunction(async () => (await fetch('/api/materials/preferences').then(r => r.json())).viewSettings.hideAssetPreviews === true);
+  await page.reload();
+  await page.locator('[data-render-summary]').filter({hasText:'7 ảnh 3D'}).waitFor();
+  assert.equal(await strip.locator('img').count(),0);
 };
 
 async function main() {

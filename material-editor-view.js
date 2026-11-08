@@ -81,12 +81,12 @@ function projectSidebar() {
 }
 function assetSidebars() {
   return sidebarSection('renders','🎨 Phối cảnh 3D dự án',
-    '<div class="material-sidebar-actions"><button type="button" data-action="upload-renders" title="Ảnh JPG/PNG hoặc PDF nhiều trang, tự tách và nén">⬆ Tải ảnh / PDF</button>' +
-    '<button type="button" data-action="open-renders">Danh sách</button></div><div class="material-render-strip" data-render-strip></div>' +
-    '<small class="material-library-summary">Bấm ô Phối cảnh 3D để chọn nhanh ảnh. Dùng chung với Quản lý dự án.</small>') +
+    '<div class="material-sidebar-actions">' + (materialView.hideAssetPreviews ? '' : '<button type="button" data-action="upload-renders" title="Ảnh JPG/PNG hoặc PDF nhiều trang, tự tách và nén">⬆ Tải ảnh / PDF</button>') +
+    '<button type="button" data-action="open-renders">Danh sách</button></div><div class="material-render-strip" data-render-strip></div><p class="material-library-summary" data-render-summary></p>' +
+    (materialView.hideAssetPreviews ? '' : '<small class="material-library-summary">Bấm ô Phối cảnh 3D để chọn nhanh ảnh. Dùng chung với Quản lý dự án.</small>')) +
     sidebarSection('library','📚 Dữ liệu dùng chung',
-    '<div class="material-sidebar-actions"><button type="button" data-action="open-library">⬆ Upload dữ liệu</button></div>' +
-    '<p class="material-library-summary" data-library-summary></p><small class="material-library-summary">Ảnh mẫu vật liệu theo hạng mục, dùng cho mọi dự án. Bấm ô Mẫu vật liệu / PA để chọn.</small>');
+    '<div class="material-sidebar-actions"><button type="button" data-action="open-library">Danh sách</button></div><div class="material-render-strip" data-library-strip></div>' +
+    '<p class="material-library-summary" data-library-summary></p>' + (materialView.hideAssetPreviews ? '' : '<small class="material-library-summary">Ảnh mẫu vật liệu theo hạng mục, dùng cho mọi dự án. Bấm ô Mẫu vật liệu / PA để chọn.</small>'));
 }
 function materialGroupVisible(group) {
   return !hiddenGroups.has(group.id) && (!onlyUnlinkedGroups || !linkedMaterialTask(group));
@@ -104,6 +104,7 @@ function catalogSidebar() {
 }
 function displaySidebar() {
   return sidebarSection('display','⚙ Hiển thị',
+    '<button type="button" data-action="toggle-asset-previews" aria-pressed="' + !!materialView.hideAssetPreviews + '">' + (materialView.hideAssetPreviews ? 'Hiện ảnh xem trước sidebar' : 'Ẩn ảnh xem trước sidebar') + '</button>' +
     '<div class="sb-row-label">Mật độ dòng</div><div class="sb-seg-btns material-density">' +
     Object.entries({xs:'XS',s:'S',m:'M',l:'L'}).map(([key,label]) =>
       '<button data-action="density" data-id="' + key + '" aria-pressed="' + (key === density) + '">' + label + '</button>').join('') + '</div>' +

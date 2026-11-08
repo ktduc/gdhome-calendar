@@ -588,11 +588,15 @@ document.addEventListener('click', async event => {
         openAssetPicker(cell,row,group,slot);
         break;
       }
+      case 'toggle-asset-previews':
+        setMaterialView({hideAssetPreviews:!materialView.hideAssetPreviews});
+        renderEditor();
+        break;
       case 'upload-renders': await uploadProjectRenders(); break;
       case 'open-renders':
         GDHomeAssets.openRenders({projectId:sheet.projectId,projectName:materialProjectName(),onPick:pickedRenderForSelection()});
         break;
-      case 'open-library': GDHomeAssets.openLibrary({onPick:pickedLibraryForSelection()}); break;
+      case 'open-library': GDHomeAssets.openLibrary({categoryId:button.dataset.category,onPick:pickedLibraryForSelection()}); break;
       case 'render-strip': {
         const items = await GDHomeAssets.loadRenders(sheet.projectId);
         const item = items.find(entry => entry.id === button.dataset.id);
@@ -973,26 +977,38 @@ async function uploadProjectRenders() {
   say(result.message);
   fillMaterialAssetSidebar(true);
 }
+let assetSidebarRevision = 0;
 async function fillMaterialAssetSidebar(force = false) {
+  const revision = ++assetSidebarRevision;
+  const renderSummary = box().querySelector('[data-render-summary]');
   const strip = box().querySelector('[data-render-strip]');
   if (strip && sheet) {
     try {
       const items = await GDHomeAssets.loadRenders(sheet.projectId,force);
-      if (!strip.isConnected) return;
-      strip.innerHTML = items.slice(0,7).map(item => '<button type="button" data-action="render-strip" data-id="' + html(item.id) +
+      if (!strip.isConnected || revision !== assetSidebarRevision) return;
+      if (renderSummary) renderSummary.textContent = items.length + ' ảnh 3D';
+      strip.innerHTML = materialView.hideAssetPreviews ? '' : items.slice(0,5).map(item => '<button type="button" data-action="render-strip" data-id="' + html(item.id) +
         '" title="' + html((item.page ? 'Trang ' + item.page + ' · ' : '') + (item.room || item.name)) + ' — bấm để gắn vào ô 3D đang chọn"><img data-lib-asset="' + html(item.thumb) + '" alt=""></button>').join('') +
-        (items.length > 7 ? '<button type="button" class="more" data-action="open-renders">+' + (items.length-7) + '</button>' : '') +
-        (!items.length ? '<small class="material-library-summary" style="grid-column:1/-1">Chưa có ảnh 3D. Tải ảnh hoặc PDF cả nhà lên.</small>' : '');
+        (items.length > 5 ? '<button type="button" class="more" data-action="open-renders">+' + (items.length-5) + '</button>' : '') +
+        '';
       GDHomeAssets.hydrate(strip);
     } catch (error) {
-      strip.innerHTML = '<small class="material-library-summary" style="grid-column:1/-1">' + html(error.message) + '</small>';
+      if (revision === assetSidebarRevision && renderSummary) renderSummary.textContent = error.message;
     }
   }
   const summary = box().querySelector('[data-library-summary]');
   if (summary) {
     try {
       const data = await GDHomeAssets.loadLibrary();
-      if (summary.isConnected) summary.textContent = data.items.length + ' ảnh mẫu · ' + data.categories.length + ' hạng mục';
+      if (!summary.isConnected || revision !== assetSidebarRevision) return;
+      summary.textContent = data.items.length + ' ảnh mẫu · ' + data.categories.length + ' hạng mục';
+      const preview = box().querySelector('[data-library-strip]');
+      if (!preview) return;
+      preview.innerHTML = materialView.hideAssetPreviews ? '' : data.items.slice(0,5).map(item =>
+        '<button type="button" data-action="open-library" data-category="' + html(item.categoryId) + '" title="' + html(item.name) +
+        '"><img data-lib-asset="' + html(item.thumb) + '" alt="' + html(item.name || 'Ảnh mẫu') + '"></button>').join('') +
+        (data.items.length > 5 ? '<button type="button" class="more" data-action="open-library">+' + (data.items.length-5) + '</button>' : '');
+      GDHomeAssets.hydrate(preview);
     } catch (error) { summary.textContent = error.message; }
   }
 }

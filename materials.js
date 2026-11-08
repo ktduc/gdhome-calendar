@@ -45,6 +45,7 @@ function cleanMaterialView(patch,previous = {},sheets = [],archived = []) {
   if (['light','normal','bold','heavy'].includes(patch.fontWeight)) result.fontWeight = patch.fontWeight;
   if (Object.hasOwn(patch,'hiddenColumns')) result.hiddenColumns = flags(patch.hiddenColumns,['render','spec','qty','unit','supplier','note','decision']);
   if (Object.hasOwn(patch,'forcedPA')) result.forcedPA = flags(patch.forcedPA,['pa1','pa2']);
+  if (typeof patch.hideAssetPreviews === 'boolean') result.hideAssetPreviews = patch.hideAssetPreviews;
   if (['fill','fit'].includes(patch.imageFit)) result.imageFit = patch.imageFit;
   if (Object.hasOwn(patch,'columnOrder')) result.columnOrder = flags(patch.columnOrder,['select',...widthKeys]);
   if (Object.hasOwn(patch,'printHidden')) result.printHidden = flags(patch.printHidden,['select',...widthKeys].filter(key => key !== 'actions'));
