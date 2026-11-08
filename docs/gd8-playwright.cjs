@@ -1214,15 +1214,15 @@ cases['13.4'] = async page => {
   await page.getByRole('heading',{name:'Căn hộ mẫu GĐ8',exact:true}).waitFor();
   const fileInput = page.locator('#file-input');
   await fileInput.setInputFiles({name:'Test phối cảnh GĐ13.png',mimeType:'image/png',buffer:Buffer.from(largePng,'base64')});
-  const row = page.locator('#documents-tbody tr').filter({hasText:'Test phối cảnh GĐ13.png'});
+  // GĐ18B.2: ảnh 3D hiện ở lưới #renders-gallery-container, bấm ảnh mở lightbox chung.
+  const row = page.locator('#renders-gallery-container [data-render-doc-id]').filter({hasText:'Test phối cảnh GĐ13.png'});
   await row.waitFor({timeout:15000});
   await row.scrollIntoViewIfNeeded();
-  await page.waitForFunction(() => document.querySelector('img[data-hub-thumbnail]')?.naturalWidth === 480);
+  await page.waitForFunction(() => document.querySelector('#renders-gallery-container img[data-hub-thumbnail]')?.naturalWidth === 480);
   assert.equal(await row.locator('img').evaluate(img => img.naturalWidth),480);
   assert.equal(await row.locator('img').getAttribute('data-hub-thumbnail'),'render-'+stored.image.thumb);
-  await row.getByRole('button',{name:'Xem',exact:true}).click();
-  await page.locator('#preview-body img').waitFor();
-  await page.waitForFunction(() => document.querySelector('#preview-body img')?.naturalWidth === 1600);
+  await row.locator('.render-card-thumb-wrap').click();
+  await page.waitForFunction(() => [...document.querySelectorAll('dialog[open] img')].some(img => img.naturalWidth === 1600),null,{timeout:15000});
   await page.keyboard.press('Escape');
   const {PDFDocument} = require('pdf-lib');
   const pdf = await PDFDocument.create();
