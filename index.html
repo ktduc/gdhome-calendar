@@ -84,9 +84,14 @@
         </div>
       </div>
 
-      <button type="button" class="btn btn-outline hdr-ai-btn" id="btn-open-ai-planner" data-shell-slot="ai" title="AI lập tiến độ từ ảnh / file Excel">
-        <i data-lucide="sparkles"></i><span class="btn-label">AI</span>
-      </button>
+      <details class="hdr-dropdown" data-shell-slot="ai" id="schedule-ai-menu">
+        <summary class="btn btn-outline hdr-ai-btn"><i data-lucide="sparkles"></i><span class="btn-label">AI</span></summary>
+        <div class="hdr-dropdown-menu">
+          <button type="button" class="hdr-menu-item" id="btn-open-ai-planner">Lập tiến độ…</button>
+          <button type="button" class="hdr-menu-item" id="btn-ai-review-timeline">Soát tiến độ</button>
+        </div>
+      </details>
+      <dialog id="ai-timeline-review-dialog" aria-label="AI soát tiến độ"></dialog>
 
       <!-- 2. Nhóm Ảnh: nút chính "Copy ảnh" + mũi tên "▾" -->
       <div class="hdr-dropdown hdr-split-group" id="hdr-image-dropdown" data-shell-slot="copy">

@@ -8505,12 +8505,114 @@ async function runNotionAction(kind) {
   }
 }
 
+const timelineReview = {running:false,plan:null,error:'',job:null};
+const timelineReviewCategories = {
+  sequence:'Trình tự và chồng chéo',
+  missing:'Hạng mục có thể còn thiếu',
+  preparation:'Việc cần chuẩn bị trước',
+  risk:'Rủi ro tiến độ'
+};
+const timelineReviewSeverity = {high:'Cao',medium:'Trung bình',info:'Lưu ý'};
+
+function timelineReviewNotice() {
+  const state = timelineReview.running ? 'running' : timelineReview.error ? 'error' : 'done';
+  const status = timelineReview.running
+    ? (timelineReview.job?.step || 'Đang chuẩn bị dữ liệu Lịch…') + ' (' + (timelineReview.job?.progress || 0) + '%)'
+    : timelineReview.error || 'AI đã soát tiến độ và trả về ' + timelineReview.plan.findings.length + ' mục.';
+  GDHomeShell.aiNotice('ai-timeline-review-notice',{
+    state,body:escapeHtmlAi(status),label:timelineReview.running ? '' : timelineReview.error ? 'Thử lại' : 'Xem kết quả',
+    onAction:() => timelineReview.error ? openTimelineReview(timelineReview.projectId) : showTimelineReview()
+  });
+}
+
+function openTimelineReview(projectId = getActiveCalendar()?.ownerId) {
+  if (timelineReview.running) return timelineReviewNotice();
+  const project = AppState.projectOwners.find(owner => owner.id === projectId);
+  const reason = integrationBlockedReason() || (!project ? 'Chọn một dự án trong Lịch để soát.' : '');
+  if (reason) return showToast(reason);
+  const dialog = document.getElementById('ai-timeline-review-dialog');
+  if (dialog.open) dialog.close();
+  GDHomeShell.dialog(dialog,'<h2>AI soát tiến độ</h2><p>' + escapeHtmlAi(project.name) + '</p>' +
+    '<form id="ai-timeline-review-form"><label>Loại công trình <select name="projectType">' +
+    '<option value="">Chưa xác định</option><option>nhà phố</option><option>chung cư</option><option>văn phòng nhỏ</option>' +
+    '</select></label> <button class="btn btn-primary">Bắt đầu soát</button></form>' +
+    '<p>AI đọc các giai đoạn, công việc và liên kết Chốt mã của dự án đang chọn.</p>' +
+    '<button type="button" class="btn btn-outline" data-open-connections="ai">⚙ Kết nối AI</button>');
+  const form = dialog.querySelector('#ai-timeline-review-form');
+  form.elements.projectType.value = timelineReview.projectId === projectId ? timelineReview.projectType || '' : '';
+  form.onsubmit = event => {
+    event.preventDefault();
+    const projectType = form.elements.projectType.value;
+    dialog.close();
+    runTimelineReview(projectId,projectType);
+  };
+}
+
+function runTimelineReview(projectId,projectType) {
+  return GDHomeAI.run(timelineReview,{
+    onStart() {
+      Object.assign(timelineReview,{projectId,projectType,plan:null,error:'',job:null});
+      timelineReviewNotice();
+    },
+    async request() {
+      if (_pendingSync) await flushSaveToBackend();
+      if (_pendingSync || !_scheduleReady) throw new Error('Cần lưu tiến độ lên máy chủ trước khi soát.');
+      return GDHomeAI.startJob({kind:'review-timeline',projectId,projectType,version:_serverVersion},{
+        onProgress(job) { timelineReview.job = job; timelineReviewNotice(); }
+      });
+    },
+    onDone(plan) { timelineReview.plan = plan; },
+    onError(error) { timelineReview.error = error.message; },
+    onFinish:timelineReviewNotice
+  });
+}
+
+function showTimelineReview() {
+  const plan = timelineReview.plan;
+  if (!plan) return;
+  const dialog = document.getElementById('ai-timeline-review-dialog');
+  if (dialog.open) dialog.close();
+  const groups = Object.entries(timelineReviewCategories).map(([category,label]) => {
+    const items = plan.findings.map((finding,index) => ({finding,index})).filter(entry => entry.finding.category === category);
+    if (!items.length) return '';
+    return '<section><h3>' + label + '</h3><ol>' + items.map(({finding,index}) =>
+      '<li><strong>' + timelineReviewSeverity[finding.severity] + ' · ' + escapeHtmlAi(finding.title) +
+      '</strong><p>' + escapeHtmlAi(finding.detail) + '</p><button class="btn btn-outline" data-review-item="' + index + '">' +
+      (finding.action === 'note' ? 'Thêm ghi chú' : 'Tạo công việc') + '</button></li>').join('') + '</ol></section>';
+  }).join('');
+  GDHomeShell.dialog(dialog,'<h2>Kết quả soát tiến độ</h2><p>' + escapeHtmlAi(plan.projectName) + ' · ' + escapeHtmlAi(plan.model) +
+    '</p>' + (groups || '<p>AI không tìm thấy mục cần lưu ý trong tiến độ này.</p>'));
+  dialog.querySelectorAll('[data-review-item]').forEach(button => button.onclick = () => {
+    const finding = plan.findings[Number(button.dataset.reviewItem)];
+    const stage = AppState.calendars.find(item => item.id === finding.calendarId && item.ownerId === plan.projectId);
+    if (!stage) return showToast('Giai đoạn đã thay đổi. Hãy soát lại tiến độ.');
+    if (finding.action === 'note') {
+      const task = AppState.tasks.find(item => item.id === finding.taskId && item.calendarId === stage.id);
+      if (!task) return showToast('Công việc đã thay đổi. Hãy soát lại tiến độ.');
+      const note = '[AI soát tiến độ] ' + finding.title + (finding.detail ? '\n' + finding.detail : '');
+      if (!(task.note || '').includes(note)) {
+        task.note = [task.note,note].filter(Boolean).join('\n\n');
+        syncAllFromMSProject('Đã thêm ghi chú vào ' + task.title + '.');
+      }
+      button.disabled = true;
+      button.textContent = 'Đã thêm ghi chú';
+      return;
+    }
+    dialog.close();
+    openTaskModal(null,finding.startDate || null,stage.id);
+    document.getElementById('task-title').value = finding.title;
+    document.getElementById('task-note').value = finding.detail;
+  });
+}
+
 function setupIntegrationsUI() {
   document.querySelectorAll('[data-close-modal]').forEach(b => b.addEventListener('click', () => {
     const m = document.getElementById(b.dataset.closeModal);
     if (m) m.classList.remove('active');
   }));
-  const openAi = () => { document.querySelectorAll('.hdr-dropdown.open').forEach(d => d.classList.remove('open')); openAiPlanner(); };
+  const aiMenu = document.getElementById('schedule-ai-menu');
+  document.getElementById('btn-ai-review-timeline')?.addEventListener('click',() => { aiMenu.open = false; openTimelineReview(); });
+  const openAi = () => { if (aiMenu) aiMenu.open = false; document.querySelectorAll('.hdr-dropdown.open').forEach(d => d.classList.remove('open')); openAiPlanner(); };
   ['btn-open-ai-planner', 'btn-open-ai-planner-menu'].forEach(id => { const b = document.getElementById(id); if (b) b.addEventListener('click', openAi); });
   const nb = document.getElementById('btn-open-notion-sync');
   if (nb) nb.addEventListener('click', () => { document.querySelectorAll('.hdr-dropdown.open').forEach(d => d.classList.remove('open')); openNotionSync(); });
