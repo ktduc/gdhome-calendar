@@ -189,7 +189,8 @@ function statistics(mode) {
     '<label><span>Phòng</span><select name="room"><option value="">Tất cả</option>' +
     rooms.map(room => option(room,room,saved.room)).join('') + '</select></label>' +
     '<label><span>Ảnh</span><select name="imageFit"><option value="fill"' + (saved.imageFit !== 'fit' ? ' selected' : '') + '>Fill đầy ô</option><option value="fit"' + (saved.imageFit === 'fit' ? ' selected' : '') + '>Vừa khung (giữ nguyên)</option></select></label>' +
-    '<label class="export-code-toggle"><span>Hiện mã trên ảnh</span><input name="showCodeOnImage" type="checkbox"' + (saved.showCodeOnImage !== false ? ' checked' : '') + '></label>' +
+    '<label class="export-code-toggle"><span>Vị trí mã</span><select name="codePosition">' +
+    [['above','Trên ảnh'],['below','Dưới ảnh'],['both','Cả hai']].map(([key,label]) => option(key,label,materialExportCodePosition(saved))).join('') + '</select></label>' +
     '<label class="export-watermark-toggle"><span>Sọc chìm</span><input name="watermark" type="checkbox"' + (saved.watermark === false ? '' : ' checked') + '></label>' +
     '<details class="export-print-columns"><summary>Cột in</summary><div class="sidebar-compact"><div class="sb-chip-grid">' +
     printColumnCheckboxes('name="printColumn"') + '</div></div></details>' +
@@ -201,7 +202,7 @@ function statistics(mode) {
     const watermark = scope.has('watermark');
     const columns = scope.getAll('printColumn');
     if (columns.length) savePrintColumns(columns);
-    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',showCodeOnImage:scope.has('showCodeOnImage')}});
+    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',codePosition:scope.get('codePosition')}});
     element.close();
     window.GDHomeShell?.toast?.('Đã lưu cài đặt xuất.');
   };
@@ -213,7 +214,7 @@ function statistics(mode) {
     const columns = scope.getAll('printColumn');
     if (!columns.length) { byId('export-scope-status').textContent = 'Bật in ít nhất một cột.'; return; }
     savePrintColumns(columns);
-    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',showCodeOnImage:scope.has('showCodeOnImage')}});
+    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',codePosition:scope.get('codePosition')}});
     const filtered = { ...sheet,groups:sheet.groups
       .filter(group => scope.get('groups') !== 'visible' || materialGroupVisible(group))
       .map(group => ({ ...group,rows:group.rows.filter(row =>

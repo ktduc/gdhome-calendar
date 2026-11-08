@@ -1379,7 +1379,7 @@ cases['16.3'] = async page => {
 
   const form = await openImageScope(page);
   await form.locator('select[name="imageFit"]').selectOption('fill');
-  assert.ok(await form.locator('input[name="showCodeOnImage"]').isChecked(), 'Mặc định hiện mã trên ảnh');
+  assert.equal(await form.locator('[name=codePosition]').inputValue(),'above');
   await form.getByRole('button', { name: 'Xem trước' }).click();
 
   await page.locator('#stats-copy').waitFor();
@@ -1410,7 +1410,7 @@ cases['16.4'] = async page => {
 
   // Đổi tuỳ chọn và bấm Lưu cài đặt
   await form.locator('select[name="imageFit"]').selectOption('fit');
-  await form.locator('input[name="showCodeOnImage"]').uncheck();
+  await form.locator('[name=codePosition]').selectOption('below');
   await page.locator('#save-export-settings-only').click();
   await page.waitForTimeout(300);
   assert.equal(await page.locator('#material-image-scope').isVisible(), false, 'Modal đóng sau khi lưu');
@@ -1420,7 +1420,7 @@ cases['16.4'] = async page => {
   await page.locator('#material-export-settings').click();
   await form.waitFor();
   assert.equal(await form.locator('select[name="imageFit"]').inputValue(), 'fit');
-  assert.equal(await form.locator('input[name="showCodeOnImage"]').isChecked(), false);
+  assert.equal(await form.locator('[name=codePosition]').inputValue(),'below');
   await page.locator('#material-dialog').press('Escape');
 };
 
@@ -1783,6 +1783,32 @@ cases['18.2'] = async page => {
   assert.equal(await panel.getAttribute('data-direction'),'above');
   assert.ok(bounds.y >= 0 && bounds.y+bounds.height <= height && bounds.height >= 400);
   assert.ok(bounds.x >= 0 && bounds.x+bounds.width <= width);
+};
+
+cases['18.5'] = async page => {
+  await openMaterials(page);
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  await cell.focus();
+  await pasteFixture(page,'items');
+  await cell.locator('.image-open img').waitFor();
+  await page.evaluate(() => modify(() => Object.assign(sheet.groups[0].rows[0].options[0],{code:'MFC 416 EV',autoName:true})));
+  const check = position => page.evaluate(position => {
+    materialView.export = {codePosition:position};
+    const cell = materialPaperForExport(sheet).querySelector('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+    return [!!cell.querySelector('.image-code-tag'),!!cell.querySelector('.pa-caption')];
+  },position);
+  assert.deepEqual(await check('above'),[true,false]);
+  assert.deepEqual(await check('below'),[false,true]);
+  assert.deepEqual(await check('both'),[true,true]);
+  await cell.locator('[data-action=cell-menu]').click();
+  await page.locator('.image-cell-dropdown-menu').getByRole('button',{name:/Xoá ảnh/}).click();
+  assert.equal(await cell.locator('input[data-field=code]').inputValue(),'');
+  await page.evaluate(() => undo(false));
+  assert.equal(await cell.locator('input[data-field=code]').inputValue(),'MFC 416 EV');
+  await cell.locator('input[data-field=code]').fill('Mã gõ tay');
+  await cell.locator('[data-action=cell-menu]').click();
+  await page.locator('.image-cell-dropdown-menu').getByRole('button',{name:/Xoá ảnh/}).click();
+  assert.equal(await cell.locator('input[data-field=code]').inputValue(),'Mã gõ tay');
 };
 
 async function main() {

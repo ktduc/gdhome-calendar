@@ -374,6 +374,9 @@ function renderMaterialPaper(current,columns,widths,groups,editing) {
     columnHeadings + '</tr></thead>' + renderMaterialGroups(columns,groups,editing) + '</table></article>';
 }
 
+function materialExportCodePosition(scope) {
+  return scope.codePosition || (scope.showCodeOnImage === false ? 'below' : 'above');
+}
 function materialPaperForExport(current) {
   const columns = printableColumns().filter(([key]) => columnPrints(key));
   if (!columns.length) {
@@ -406,7 +409,8 @@ function materialPaperForExport(current) {
   });
   paper.querySelectorAll('.image-cell').forEach(cell => cell.classList.remove('reserve'));
   const exportScope = typeof savedMaterialExportScope === 'function' ? savedMaterialExportScope() : {};
-  if (exportScope.showCodeOnImage !== false) {
+  const position = materialExportCodePosition(exportScope);
+  {
     for (const group of current.groups) {
       for (const row of group.rows) {
         const rowEl = paper.querySelector('tr[data-row="' + row.id + '"]');
@@ -416,7 +420,10 @@ function materialPaperForExport(current) {
           if (!pa?.code) continue;
           const cell = rowEl.querySelector('.image-cell[data-slot="' + i + '"]');
           const preview = cell?.querySelector('.image-preview');
-          if (preview && (preview.querySelector('img') || preview.querySelector('.paint-swatch-box')) && !preview.querySelector('.image-code-tag')) {
+          if (!preview?.querySelector('img,.paint-swatch-box')) continue;
+          if (position === 'above') cell.querySelector('.pa-caption')?.remove();
+          if (position === 'below') preview.querySelector('.image-code-tag')?.remove();
+          else if (!preview.querySelector('.image-code-tag')) {
             const tag = document.createElement('div');
             tag.className = 'image-code-tag';
             tag.title = pa.code;

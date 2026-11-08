@@ -59,7 +59,8 @@ function cleanMaterialView(patch,previous = {},sheets = [],archived = []) {
   if (patch.export && typeof patch.export === 'object') {
     result.export = {groups:patch.export.groups === 'all' ? 'all' : 'visible',rows:patch.export.rows === 'chosen' ? 'chosen' : 'all',
       room:typeof patch.export.room === 'string' ? patch.export.room.slice(0,500) : '',
-      watermark:patch.export.watermark !== false};
+      watermark:patch.export.watermark !== false,imageFit:patch.export.imageFit === 'fit' ? 'fit' : 'fill',
+      codePosition:['above','below','both'].includes(patch.export.codePosition) ? patch.export.codePosition : patch.export.showCodeOnImage === false ? 'below' : 'above'};
   }
   if (patch.suggestions && typeof patch.suggestions === 'object') {
     result.suggestions = cleanMaterialSuggestions(patch.suggestions,previous.suggestions);

@@ -329,7 +329,7 @@ function editDetail(row, slot) {
   element.addEventListener('input', event => {
     const key = event.target.dataset.field;
     if (!key || !pa || pa[key] === event.target.value) return;
-    const apply = () => { pa[key] = event.target.value; };
+    const apply = () => { pa[key] = event.target.value; if (key === 'code') pa.autoName = false; };
     if (editedField !== event.target) modify(apply,false);
     else { apply(); queueSave(); }
     editedField = event.target;
@@ -352,7 +352,7 @@ function editDetail(row, slot) {
     const i = Number(button.dataset.index);
     try {
       if (button.dataset.detail === 'pick') { element.close(); return pick(row,slot); }
-      if (button.dataset.detail === 'remove') modify(() => list.splice(i,1));
+      if (button.dataset.detail === 'remove') modify(() => removeMaterialImage(list,i,pa));
       if (button.dataset.detail === 'left' && i > 0) modify(() => { [list[i-1],list[i]] = [list[i],list[i-1]]; },false);
       if (button.dataset.detail === 'crop') {
         const view = await GDHomeAssets.editView(list[i]);
@@ -668,7 +668,7 @@ document.addEventListener('change', event => {
 let editingCode;
 function updateInlineCode(field, pa) {
   if (pa.code === field.value) return;
-  const apply = () => { pa.code = field.value; };
+  const apply = () => { pa.code = field.value; pa.autoName = false; };
   if (editingCode === field) { apply(); queueSave(); }
   else modify(apply,false);
   editingCode = field;
@@ -781,9 +781,18 @@ function pickedLibraryForSelection() {
   const target = selectedCellTarget('library');
   return target ? item => libraryPicked(target.row,target.slot,item) : null;
 }
+function removeMaterialImage(list,index,pa) {
+  const [image] = list.splice(index,1);
+  if (!image || !pa?.code || pa.autoName === false) return;
+  const full = typeof image === 'string' ? image : image.full;
+  if (pa.autoName === true || GDHomeAssets.libraryItemMatches(full,pa.code)) {
+    pa.code = '';
+    delete pa.autoName;
+  }
+}
 function libraryPicked(row,slot,item) {
   const pa = row.options[Number(slot)];
-  addPickedImage(row,slot,item,() => { if (pa && !pa.code && item.name) pa.code = item.name; });
+  addPickedImage(row,slot,item,() => { if (pa && !pa.code && (item.code || item.name)) { pa.code = item.code || item.name; pa.autoName = true; } });
 }
 let openCellMenuElement = null;
 function closeCellMenu() {
@@ -845,7 +854,7 @@ function openImageCellMenu(anchor, row, group, slot) {
       if (view) modify(() => { setImageView(list, 0, view); }, false);
     });
     addItem('🗑', 'Xoá ảnh', () => {
-      modify(() => { list.splice(0, 1); });
+      modify(() => removeMaterialImage(list,0,pa));
     }, true);
   } else if (pa?.paint) {
     addItem('🗑', 'Xoá màu sơn', () => {
