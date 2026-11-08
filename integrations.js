@@ -9,7 +9,7 @@
 //     AI_DAILY_LIMIT (mặc định 40 lượt/người/ngày, chỉ áp dụng khoá chung), AI_ALLOWED_EMAILS
 // =========================================================================
 const crypto = require('crypto');
-const { proxyDownloadImage, googleImageSearch } = require('./google-search');
+const { proxyDownloadImage, imageSearch } = require('./google-search');
 
 const ENV = {
   notionToken: (process.env.NOTION_TOKEN || '').trim(),
@@ -507,7 +507,16 @@ async function aiMaterials(ai,body,userKey) {
   return { groups,model,questions:(Array.isArray(plan.questions) ? plan.questions : []).slice(0,12).map(value => field(value,400)).filter(Boolean) };
 }
 
+const imageProviders = {serper:'Serper.dev',brave:'Brave Search',google:'Google CSE'};
+function resolveImageSearch(cfg) {
+  const provider = cfg.imageSearchProvider || (cfg.googleSearchKey && cfg.googleSearchCx ? 'google' : 'serper');
+  const key = provider === 'google' ? cfg.googleSearchKey :
+    provider === 'brave' ? cfg.braveSearchKey || process.env.BRAVE_SEARCH_KEY : cfg.serperSearchKey || process.env.SERPER_API_KEY;
+  return {provider,key,cx:cfg.googleSearchCx,configured:!!key && (provider !== 'google' || !!cfg.googleSearchCx)};
+}
+
 function settingsView(cfg) {
+  const image = resolveImageSearch(cfg);
   const nc = resolveNotion(cfg);
   const ai = resolveAi(cfg);
   return {
@@ -517,7 +526,7 @@ function settingsView(cfg) {
       dbTitle: cfg.notionDbTitle || '', dateProps: cfg.notionDateProps || [], dateProp: cfg.notionDateProp || ''
     } : { configured: false },
     ai: ai ? { configured: true, source: ai.source, provider: ai.provider, providerLabel: PROVIDER_LABEL[ai.provider], keyMasked: ai.source === 'user' ? mask(cfg.aiKey) : '', model: ai.model || '' } : { configured: false },
-    googleSearch: (cfg.googleSearchKey && cfg.googleSearchCx) ? { configured: true, keyMasked: mask(cfg.googleSearchKey), cx: cfg.googleSearchCx } : { configured: false },
+    imageSearch:{provider:image.provider,configured:image.configured,cx:cfg.googleSearchCx || '',providers:imageProviders},
     notionCustomerDb:cfg.notionCustomerDb || '', notionCustomerMap:cfg.notionCustomerMap || {},
     providers: PROVIDERS.map(id => ({ id, label: PROVIDER_LABEL[id] }))
   };
@@ -531,7 +540,12 @@ async function updateSettings(store, dataKey, body) {
     cfg.notionDateProp = body.notionDateProp;
   }
   if (body.clear === 'ai') { delete cfg.aiProvider; delete cfg.aiKey; delete cfg.aiModel; }
-  if (body.clear === 'googleSearch') { delete cfg.googleSearchKey; delete cfg.googleSearchCx; }
+  if (body.clear === 'googleSearch' || body.clear === 'imageSearch') {
+    const {provider} = resolveImageSearch(cfg);
+    if (provider === 'serper') delete cfg.serperSearchKey;
+    if (provider === 'brave') delete cfg.braveSearchKey;
+    if (provider === 'google' || body.clear === 'googleSearch') { delete cfg.googleSearchKey; delete cfg.googleSearchCx; }
+  }
   if (body.notionToken !== undefined || body.notionDb !== undefined) {
     const token = String(body.notionToken || '').trim() || cfg.notionToken;
     const dbRaw = String(body.notionDb || '').trim() || cfg.notionDb;
@@ -577,6 +591,15 @@ async function updateSettings(store, dataKey, body) {
       cfg.googleSearchKey = key;
       cfg.googleSearchCx = cx;
     }
+  }
+  if (body.imageSearchProvider !== undefined) {
+    if (!Object.hasOwn(imageProviders,body.imageSearchProvider)) throw httpError(400,'Nhà cung cấp tìm ảnh không hợp lệ.');
+    cfg.imageSearchProvider = body.imageSearchProvider;
+    const key = String(body.imageSearchKey || '').trim();
+    if (key.length > 512) throw httpError(400,'API key quá dài.');
+    const keyField = {serper:'serperSearchKey',brave:'braveSearchKey',google:'googleSearchKey'}[cfg.imageSearchProvider];
+    if (key) cfg[keyField] = key;
+    if (cfg.imageSearchProvider === 'google' && body.imageSearchCx !== undefined) cfg.googleSearchCx = String(body.imageSearchCx).trim().slice(0,200);
   }
   await saveUserCfg(store, dataKey, cfg);
   return settingsView(cfg);
@@ -634,11 +657,12 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     const params = new URL(req.url, 'http://localhost').searchParams;
     const q = String(params.get('q') || '').trim();
     const cfg = await loadUserCfg(store, dataKey);
-    if (!cfg.googleSearchKey || !cfg.googleSearchCx) {
+    const connection = resolveImageSearch(cfg);
+    if (!connection.configured) {
       sendJson(res, 200, { success: false, configured: false, items: [] });
       return true;
     }
-    const items = await googleImageSearch(cfg.googleSearchKey, cfg.googleSearchCx, q);
+    const items = await imageSearch(connection,q);
     sendJson(res, 200, { success: true, configured: true, items });
     return true;
   }

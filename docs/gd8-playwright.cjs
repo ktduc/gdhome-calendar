@@ -1615,6 +1615,25 @@ cases['17.4'] = async page => {
   assert.equal(await strip.locator('img').count(),0);
 };
 
+cases['17.5'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => GDHomeConnections.open('google'));
+  const form = page.locator('[data-connection-form=google]');
+  assert.equal(await form.locator('[name=imageSearchProvider]').inputValue(),'serper');
+  await form.locator('[name=imageSearchProvider]').selectOption('brave');
+  await form.locator('[name=imageSearchKey]').fill('test-brave-secret');
+  await form.getByRole('button',{name:'Lưu kết nối'}).click();
+  await page.getByText('Đã lưu kết nối.').waitFor();
+  const cfg = await page.request.get('/api/integrations/settings').then(response => response.json());
+  assert.equal(cfg.imageSearch.provider,'brave');
+  assert.equal(cfg.imageSearch.configured,true);
+  assert.ok(!JSON.stringify(cfg).includes('test-brave-secret'));
+  await form.getByRole('button',{name:'Gỡ kết nối'}).click();
+  await page.getByText('Đã gỡ kết nối.').waitFor();
+  const fallback = await page.request.get('/api/google/search?q=oak').then(response => response.json());
+  assert.equal(fallback.configured,false);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

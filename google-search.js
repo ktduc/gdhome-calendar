@@ -140,10 +140,9 @@ async function googleImageSearch(key, cx, query, { fetchFn = fetch } = {}) {
   const q = String(query || '').trim();
   if (!q) return [];
   const url = `https://customsearch.googleapis.com/customsearch/v1?key=${encodeURIComponent(key)}&cx=${encodeURIComponent(cx)}&q=${encodeURIComponent(q)}&searchType=image&num=10`;
-  const res = await fetchFn(url, { signal: AbortSignal.timeout(8000) });
+  const res = await fetchFn(url, { signal: AbortSignal.timeout(8000),redirect:'error' });
   if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw httpError(res.status, 'Lỗi tìm kiếm Google Custom Search (' + res.status + '): ' + errText.slice(0, 200));
+    throw httpError(res.status, 'Lỗi tìm kiếm Google Custom Search (' + res.status + ').');
   }
   const data = await res.json();
   const items = Array.isArray(data.items) ? data.items : [];
@@ -157,7 +156,30 @@ async function googleImageSearch(key, cx, query, { fetchFn = fetch } = {}) {
   }));
 }
 
+async function imageSearch({provider,key,cx},query,{fetchFn = fetch} = {}) {
+  const q = String(query || '').trim().slice(0,500);
+  if (!q || !key) return [];
+  if (provider === 'google') return googleImageSearch(key,cx,q,{fetchFn});
+  const serper = provider === 'serper';
+  if (!serper && provider !== 'brave') throw httpError(400,'Nhà cung cấp tìm ảnh không hợp lệ.');
+  const url = serper ? 'https://google.serper.dev/images' :
+    'https://api.search.brave.com/res/v1/images/search?' + new URLSearchParams({q,count:'10',safesearch:'strict'});
+  const options = serper ? {method:'POST',headers:{'X-API-KEY':key,'Content-Type':'application/json'},body:JSON.stringify({q,num:10})} :
+    {method:'GET',headers:{'X-Subscription-Token':key,Accept:'application/json'}};
+  const response = await fetchFn(url,{...options,signal:AbortSignal.timeout(8000),redirect:'error'});
+  if (!response.ok) throw httpError(response.status,'Lỗi tìm ảnh (' + response.status + ').');
+  const data = await response.json();
+  const results = serper ? data.images : data.results;
+  return (Array.isArray(results) ? results : []).filter(Boolean).slice(0,10).map(item => {
+    const link = serper ? item.imageUrl : item.properties?.url;
+    return {title:item.title || '',link,thumbnail:(serper ? item.thumbnailUrl : item.thumbnail?.src) || link,
+      width:(serper ? item.imageWidth : item.properties?.width) || 0,
+      height:(serper ? item.imageHeight : item.properties?.height) || 0,contextLink:(serper ? item.link : item.url) || ''};
+  }).filter(item => /^https?:\/\//i.test(item.link || ''));
+}
+
 module.exports = {
+  imageSearch,
   isPrivateIp,
   checkSsrfUrl,
   validateHostIp,

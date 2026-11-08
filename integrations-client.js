@@ -47,13 +47,19 @@ window.GDHomeConnections = (() => {
       '<label>Model<input name="aiModel" value="' + html(ai.source === 'user' ? ai.model : '') + '" placeholder="Để trống để tự chọn"></label>' +
       '<div class="connection-actions"><button class="btn btn-primary">Lưu &amp; kiểm tra</button>' +
       '<button type="button" class="btn btn-outline" data-clear-connection="ai">Gỡ kết nối</button></div></form></section>' +
-      '<section data-connection-section="google"><h3>Google Tìm kiếm hình ảnh</h3><p>' +
-      html(data.googleSearch?.configured ? 'Đã kết nối Google Custom Search' : 'Chưa kết nối tìm kiếm Google') + '</p>' +
-      '<form data-connection-form="google"><label>Google Search API Key<input type="password" name="googleSearchKey" autocomplete="off" placeholder="' +
-      html(data.googleSearch?.keyMasked ? 'Mã hiện tại: ' + data.googleSearch.keyMasked : 'API key') + '"></label>' +
-      '<label>Search Engine ID (cx)<input name="googleSearchCx" value="' + html(data.googleSearch?.cx || '') + '" placeholder="cx (vd: a1b2c3d4...)"></label>' +
+      '<section data-connection-section="google"><h3>Tìm ảnh trực tuyến</h3><p>' +
+      (data.imageSearch?.configured ? 'Đã kết nối' : 'Chưa kết nối') + '</p>' +
+      '<form data-connection-form="google"><label>Nhà cung cấp<select name="imageSearchProvider">' +
+      Object.entries(data.imageSearch?.providers || {serper:'Serper.dev',brave:'Brave Search',google:'Google CSE'}).map(([id,label]) =>
+        '<option value="' + html(id) + '"' + (id === data.imageSearch?.provider ? ' selected' : '') + '>' + html(label) + '</option>').join('') +
+      '</select></label><label>API key<input type="password" name="imageSearchKey" autocomplete="off" placeholder="Để trống để giữ key đã lưu"></label>' +
+      '<label data-image-search-cx>Google Search Engine ID (cx)<input name="imageSearchCx" value="' + html(data.imageSearch?.cx || '') + '"></label>' +
       '<div class="connection-actions"><button class="btn btn-primary">Lưu kết nối</button>' +
-      '<button type="button" class="btn btn-outline" data-clear-connection="googleSearch">Gỡ kết nối</button></div></form></section>';
+      '<button type="button" class="btn btn-outline" data-clear-connection="imageSearch">Gỡ kết nối</button></div></form></section>';
+    const provider = root.querySelector('[name=imageSearchProvider]');
+    const toggleCx = () => { root.querySelector('[data-image-search-cx]').hidden = provider.value !== 'google'; };
+    provider.onchange = toggleCx;
+    toggleCx();
     const status = root.querySelector('.connection-message');
     async function save(patch,section) {
       const controls = [...root.querySelectorAll('input,select,button:not(.close-dialog)')];
