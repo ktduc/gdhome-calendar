@@ -331,8 +331,7 @@ function safeEqual(a, b) {
 function resolveDataKey(req) {
   if (AUTH_MODE === 'google') {
     const auth = req.headers.authorization || '';
-    let rawToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
-    if (!rawToken && req.url && req.url.includes('token=')) { try { rawToken = new URL(req.url, 'http://localhost').searchParams.get('token') || ''; } catch (e) {} }
+    const rawToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
     const sess = verifySession(rawToken);
     return sess ? sess.email : null;
   }
@@ -375,6 +374,34 @@ function readJsonBody(req) {
       } catch (e) {
         reject(Object.assign(new Error('JSON không hợp lệ'), { status: 400 }));
       }
+    });
+    req.on('error', reject);
+  });
+}
+
+const MAX_UPLOAD_BYTES = 60 * 1024 * 1024; // 60MB cho upload tệp nhị phân HSKT
+
+function readRawBody(req, limit = MAX_UPLOAD_BYTES) {
+  return new Promise((resolve, reject) => {
+    const lenHeader = parseInt(req.headers['content-length'] || '0', 10);
+    if (lenHeader > limit) {
+      req.resume();
+      reject(Object.assign(new Error(`Tệp vượt quá giới hạn ${Math.round(limit / (1024 * 1024))}MB`), { status: 413 }));
+      return;
+    }
+    let size = 0;
+    const chunks = [];
+    req.on('data', c => {
+      size += c.length;
+      if (size > limit) {
+        req.resume();
+        reject(Object.assign(new Error(`Tệp vượt quá giới hạn ${Math.round(limit / (1024 * 1024))}MB`), { status: 413 }));
+        return;
+      }
+      chunks.push(c);
+    });
+    req.on('end', () => {
+      resolve(Buffer.concat(chunks));
     });
     req.on('error', reject);
   });
@@ -482,7 +509,7 @@ async function handleApi(req, res, urlPath) {
   }
 
   if (urlPath === '/api/project-hub' || urlPath.startsWith('/api/project-hub/')) {
-    return handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET, defaultSchedule: defaultData });
+    return handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBody, readRawBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET, defaultSchedule: defaultData });
   }
   if (urlPath === '/api/materials' || urlPath.startsWith('/api/materials/')) {
     return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET, defaultSchedule: defaultData });

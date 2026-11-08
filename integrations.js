@@ -38,9 +38,9 @@ function parseNotionId(raw) {
 }
 
 function envAiProvider() {
-  if (ENV.anthropic) return 'anthropic';
-  if (ENV.openai) return 'openai';
-  if (ENV.gemini) return 'gemini';
+  if (process.env.ANTHROPIC_API_KEY || ENV.anthropic) return 'anthropic';
+  if (process.env.OPENAI_API_KEY || ENV.openai) return 'openai';
+  if (process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY || ENV.gemini) return 'gemini';
   return '';
 }
 
@@ -92,7 +92,10 @@ function resolveNotion(cfg) {
 function resolveAi(cfg) {
   if (cfg.aiProvider && cfg.aiKey) return { provider: cfg.aiProvider, key: cfg.aiKey, model: cfg.aiModel || '', source: 'user' };
   const p = envAiProvider();
-  if (p) return { provider: p, key: ENV[p], model: ENV.aiModel, source: 'env' };
+  if (p) {
+    const key = (p === 'gemini' ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY) : p === 'openai' ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY) || ENV[p];
+    return { provider: p, key, model: process.env.AI_MODEL || ENV.aiModel, source: 'env' };
+  }
   return null;
 }
 const mask = k => (k ? '••••' + String(k).slice(-4) : '');
@@ -607,4 +610,21 @@ async function handleIntegrations(req, res, urlPath, ctx) {
   return false;
 }
 
-module.exports = { features, handleIntegrations, parseNotionId, extractJson, setSecret, encrypt, decrypt, pickModel };
+module.exports = {
+  features,
+  handleIntegrations,
+  parseNotionId,
+  extractJson,
+  setSecret,
+  encrypt,
+  decrypt,
+  pickModel,
+  resolveAi,
+  loadUserCfg,
+  callWithFallback,
+  callGemini,
+  callOpenAI,
+  callAnthropic,
+  resolveModel,
+  PROVIDER_LABEL
+};

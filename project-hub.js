@@ -3,7 +3,40 @@ const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+const fontkit = require('@pdf-lib/fontkit');
 const { projectList, writeProjectProfile } = require('./project-profiles');
+const {
+  resolveAi,
+  loadUserCfg,
+  callWithFallback,
+  callGemini,
+  callOpenAI,
+  callAnthropic,
+  resolveModel,
+  extractJson
+} = require('./integrations');
+
+const names = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'];
+const r2Configured = names.every(name => process.env[name]);
+const hash = value => crypto.createHash('sha256').update(value).digest('hex');
+const mac = (key, value) => crypto.createHmac('sha256', key).update(value).digest();
+
+function signedUrl(method, key) {
+  const [account, access, secret, bucket] = names.map(name => process.env[name]);
+  const host = account + '.r2.cloudflarestorage.com';
+  const uri = '/' + encodeURIComponent(bucket) + '/' + key;
+  const stamp = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
+  const date = stamp.slice(0, 8);
+  const scope = date + '/auto/s3/aws4_request';
+  const query = new URLSearchParams({
+    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256', 'X-Amz-Credential': access + '/' + scope,
+    'X-Amz-Date': stamp, 'X-Amz-Expires': '60', 'X-Amz-SignedHeaders': 'host'
+  }).toString();
+  const canonical = [method, uri, query, 'host:' + host + '\n', 'host', 'UNSIGNED-PAYLOAD'].join('\n');
+  const signingKey = mac(mac(mac(mac('AWS4' + secret, date), 'auto'), 's3'), 'aws4_request');
+  const signature = mac(signingKey, ['AWS4-HMAC-SHA256', stamp, scope, hash(canonical)].join('\n')).toString('hex');
+  return 'https://' + host + uri + '?' + query + '&X-Amz-Signature=' + signature;
+}
 
 const MIME_MAP = {
   '.pdf': 'application/pdf',
@@ -78,6 +111,8 @@ class ProjectAssets {
   constructor(dataDir, dataKey) {
     this.accountHash = crypto.createHash('sha256').update(dataKey).digest('hex').slice(0, 16);
     this.dir = path.join(dataDir, 'project-files', this.accountHash);
+    this.prefix = 'project-files/' + this.accountHash + '/';
+    this.r2Configured = r2Configured;
   }
 
   async ensureDir() {
@@ -85,24 +120,49 @@ class ProjectAssets {
   }
 
   async save(buf, ext, mime) {
-    await this.ensureDir();
     const cleanExt = (ext.startsWith('.') ? ext : '.' + ext).toLowerCase();
     const sha = crypto.createHash('sha256').update(buf).digest('hex');
     const assetKey = `${sha}${cleanExt}`;
-    const filePath = path.join(this.dir, assetKey);
-    await fs.writeFile(filePath, buf);
-    return { assetKey, size: buf.length, mime: mime || MIME_MAP[cleanExt] || 'application/octet-stream' };
+    const cleanMime = mime || MIME_MAP[cleanExt] || 'application/octet-stream';
+
+    if (this.r2Configured) {
+      const url = signedUrl('PUT', this.prefix + assetKey);
+      const res = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': cleanMime },
+        body: buf
+      });
+      if (!res.ok) throw Object.assign(new Error('Không ghi được tệp lên Cloudflare R2.'), { status: 502 });
+    } else {
+      await this.ensureDir();
+      const filePath = path.join(this.dir, assetKey);
+      await fs.writeFile(filePath, buf);
+    }
+
+    return { assetKey, size: buf.length, mime: cleanMime };
   }
 
   async read(assetKey) {
     if (!/^[a-f0-9]{64}\.[a-z0-9]+$/i.test(assetKey)) {
       throw Object.assign(new Error('Tên file không hợp lệ.'), { status: 400 });
     }
+    const cleanExt = path.extname(assetKey).toLowerCase();
+    const mime = MIME_MAP[cleanExt] || 'application/octet-stream';
+
+    if (this.r2Configured) {
+      const url = signedUrl('GET', this.prefix + assetKey);
+      const res = await fetch(url);
+      if (!res.ok) {
+        throw Object.assign(new Error('Không tìm thấy tài liệu trên R2.'), { status: res.status === 404 ? 404 : 502 });
+      }
+      const arrayBuf = await res.arrayBuffer();
+      return { buf: Buffer.from(arrayBuf), mime };
+    }
+
     const filePath = path.join(this.dir, assetKey);
     try {
       const buf = await fs.readFile(filePath);
-      const ext = path.extname(assetKey).toLowerCase();
-      return { buf, mime: MIME_MAP[ext] || 'application/octet-stream' };
+      return { buf, mime };
     } catch (err) {
       if (err.code === 'ENOENT') throw Object.assign(new Error('Không tìm thấy tài liệu.'), { status: 404 });
       throw err;
@@ -456,8 +516,19 @@ function toAsciiSafe(text) {
 
 async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự án') {
   const pdfDoc = await PDFDocument.load(pdfBuffer);
-  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  pdfDoc.registerFontkit(fontkit);
+
+  let regularFontBytes, boldFontBytes;
+  try {
+    const fontDir = path.join(__dirname, 'fonts');
+    regularFontBytes = await fs.readFile(path.join(fontDir, 'Roboto-Regular.ttf'));
+    boldFontBytes = await fs.readFile(path.join(fontDir, 'Roboto-Bold.ttf'));
+  } catch (err) {
+    // dự phòng nếu không đọc được font
+  }
+
+  const font = regularFontBytes ? await pdfDoc.embedFont(regularFontBytes) : await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = boldFontBytes ? await pdfDoc.embedFont(boldFontBytes) : await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   // 1. Chèn Trang 0 (Trang Tổng Hợp Đánh Giá & Phát Hiện)
   const coverPage = pdfDoc.insertPage(0, [595.28, 841.89]); // A4 chuẩn
@@ -472,20 +543,19 @@ async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự 
     color: rgb(0.8, 0.05, 0.05) // Đỏ thương hiệu GD HOME
   });
 
-  coverPage.drawText('GD HOME - BAO CAO SOAT HO SO BAN VE HSKT', {
+  coverPage.drawText('GD HOME – BÁO CÁO SOÁT HỒ SƠ BẢN VẼ HSKT', {
     x: 40,
     y: height - 45,
     size: 16,
-    font: helveticaBold,
+    font: fontBold,
     color: rgb(1, 1, 1)
   });
 
-  const safeProj = toAsciiSafe(projectName);
-  coverPage.drawText(`Du an: ${safeProj}  |  Ngay soat: ${new Date().toISOString().slice(0, 10)}`, {
+  coverPage.drawText(`Dự án: ${projectName}  |  Ngày soát: ${new Date().toISOString().slice(0, 10)}`, {
     x: 40,
     y: height - 65,
     size: 11,
-    font: helveticaFont,
+    font: font,
     color: rgb(0.95, 0.95, 0.95)
   });
 
@@ -504,19 +574,19 @@ async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự 
     borderWidth: 1
   });
 
-  coverPage.drawText(`Tong so van de: ${findings.length}     [Cao: ${highCount}]     [Trung binh: ${medCount}]     [Thap: ${lowCount}]`, {
+  coverPage.drawText(`Tổng số vấn đề: ${findings.length}     [Cao: ${highCount}]     [Trung bình: ${medCount}]     [Thấp: ${lowCount}]`, {
     x: 55,
     y: height - 125,
     size: 12,
-    font: helveticaBold,
+    font: fontBold,
     color: rgb(0.15, 0.15, 0.15)
   });
 
-  coverPage.drawText('Danh sach chi tiet cac diem can bo sung & doi chieu duoi day:', {
+  coverPage.drawText('Danh sách chi tiết các điểm cần bổ sung & đối chiếu dưới đây:', {
     x: 40,
     y: height - 170,
     size: 11,
-    font: helveticaBold,
+    font: fontBold,
     color: rgb(0.2, 0.2, 0.2)
   });
 
@@ -527,12 +597,12 @@ async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự 
     coverPage.drawCircle({ x: 50, y: currentY + 4, size: 4, color: sevColor });
 
     const targetPageText = `[Trang ${f.pageNumber}]`;
-    const cleanTitle = toAsciiSafe(f.title).slice(0, 65);
+    const cleanTitle = String(f.title || '').slice(0, 65);
     coverPage.drawText(`${idx + 1}. ${targetPageText} ${cleanTitle}`, {
       x: 65,
       y: currentY,
       size: 10,
-      font: helveticaBold,
+      font: fontBold,
       color: rgb(0.15, 0.15, 0.15)
     });
 
@@ -565,7 +635,7 @@ async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự 
       });
 
       // Nhãn ghi chú sticky note
-      const badgeW = Math.min(260, pSize.width - 40);
+      const badgeW = Math.min(320, pSize.width - 40);
       page.drawRectangle({
         x: Math.max(10, boxX),
         y: Math.min(pSize.height - 35, boxY + boxH),
@@ -574,12 +644,12 @@ async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự 
         color: rgb(0.85, 0.05, 0.05)
       });
 
-      const cleanNoteTitle = toAsciiSafe(f.title || 'GD HOME CANH BAO').slice(0, 38);
-      page.drawText(`[GD HOME] ${cleanNoteTitle}`, {
+      const noteTitle = String(f.title || 'GD HOME CẢNH BÁO').slice(0, 48);
+      page.drawText(`[GD HOME] ${noteTitle}`, {
         x: Math.max(15, boxX + 6),
         y: Math.min(pSize.height - 21, boxY + boxH + 6),
         size: 9,
-        font: helveticaBold,
+        font: fontBold,
         color: rgb(1, 1, 1)
       });
     }
@@ -728,9 +798,80 @@ function generateMaterialsProposal(quoteItems) {
 }
 
 // -----------------------------------------------------------------------------
+// AI Soát bản vẽ HSKT & Phối cảnh 3D qua integrations.js
+// -----------------------------------------------------------------------------
+const DRAWING_AI_SYSTEM = `Bạn là chuyên gia kiến trúc và nội thất GD HOME. Hãy phân tích hồ sơ bản vẽ thiết kế kỹ thuật (HSKT) đính kèm.
+Với mỗi trang bản vẽ trong tài liệu, hãy xác định:
+- pageNumber: số thứ tự trang (1, 2, 3...)
+- drawingType: loại bản vẽ ('mat_bang', 'bo_tri', 'chi_tiet', 'dien_nuoc', 'mat_dung', 'mat_cat')
+- room: tên phòng/không gian tương ứng (ví dụ: 'Phòng khách', 'Bếp & Ăn', 'Phòng ngủ master', 'Phòng ngủ con', 'WC', 'Cả nhà'...)
+- title: tiêu đề bản vẽ
+- items: mảng tên các hạng mục nội thất, cấu kiện hoặc thiết bị xuất hiện trong bản vẽ đó (ví dụ: ['Sofa', 'Bàn trà', 'Kệ tivi', 'Tủ áo', 'Tủ bếp', 'Giường', 'Vách ốp...'])
+- quantities: mảng khối lượng/số lượng nếu có ghi chú trên bản vẽ: [{"name":"Tên","qty":1,"unit":"bộ"}]
+Chỉ trả về JSON theo mẫu:
+{"pages":[{"pageNumber":1,"drawingType":"mat_bang","room":"Cả nhà","title":"Mặt bằng bố trí nội thất","items":["Sofa","Bàn trà","Kệ tivi","Tủ bếp"],"quantities":[]}]}`;
+
+const RENDER_AI_SYSTEM = `Bạn là chuyên gia thiết kế nội thất GD HOME. Hãy phân tích ảnh phối cảnh 3D đính kèm:
+- room: tên không gian/phòng tương ứng (ví dụ: 'Phòng khách', 'Bếp & Ăn', 'Phòng ngủ master', 'Phòng ngủ con', 'Phòng tắm'...)
+- detectedItems: mảng tên các món đồ nội thất, trang thiết bị chính thấy rõ trong bức ảnh (ví dụ: ['Sofa', 'Bàn trà', 'Kệ tivi', 'Đèn chùm'])
+Chỉ trả về JSON theo mẫu:
+{"room":"Phòng khách","detectedItems":["Sofa","Bàn trà","Kệ tivi"]}`;
+
+async function runAiAnalysis(ai, drawings, renders, assets) {
+  const model = await resolveModel(ai);
+  const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
+
+  // 1. Phân tích các bản vẽ HSKT
+  for (const doc of drawings) {
+    if (!doc.assetKey) continue;
+    try {
+      const { buf, mime } = await assets.read(doc.assetKey);
+      let rawJson = '';
+      if (mime === 'application/pdf' || doc.name.toLowerCase().endsWith('.pdf')) {
+        const res = await callWithFallback(ai, model, call, [], [{ data: buf.toString('base64') }], 'Phân tích bản vẽ HSKT này.', DRAWING_AI_SYSTEM);
+        rawJson = res.raw;
+      } else if (mime.startsWith('image/')) {
+        const res = await callWithFallback(ai, model, call, [{ mediaType: mime, data: buf.toString('base64') }], [], 'Phân tích bản vẽ HSKT này.', DRAWING_AI_SYSTEM);
+        rawJson = res.raw;
+      }
+      if (rawJson) {
+        const parsed = extractJson(rawJson);
+        if (Array.isArray(parsed?.pages) && parsed.pages.length > 0) {
+          doc.extractedPages = parsed.pages;
+          doc.pages = Math.max(doc.pages || 1, parsed.pages.length);
+        }
+      }
+    } catch (e) {
+      console.error(`[AI Drawing Analysis Error for ${doc.name}]:`, e.message);
+      throw e;
+    }
+  }
+
+  // 2. Phân tích các ảnh phối cảnh 3D
+  for (const doc of renders) {
+    if (!doc.assetKey) continue;
+    try {
+      const { buf, mime } = await assets.read(doc.assetKey);
+      if (mime.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(doc.name)) {
+        const cleanMime = mime.startsWith('image/') ? mime : 'image/jpeg';
+        const res = await callWithFallback(ai, model, call, [{ mediaType: cleanMime, data: buf.toString('base64') }], [], 'Phân tích phối cảnh 3D này.', RENDER_AI_SYSTEM);
+        const parsed = extractJson(res.raw);
+        if (parsed) {
+          if (parsed.room) doc.room = parsed.room;
+          if (Array.isArray(parsed.detectedItems)) doc.detectedItems = parsed.detectedItems;
+        }
+      }
+    } catch (e) {
+      console.error(`[AI Render Analysis Error for ${doc.name}]:`, e.message);
+      throw e;
+    }
+  }
+}
+
+// -----------------------------------------------------------------------------
 // Router chính: handleProjectHub
 // -----------------------------------------------------------------------------
-async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir, defaultSchedule }) {
+async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBody, readRawBody, sendJson, dataDir, defaultSchedule }) {
   const hubStore = new ProjectHubStore(store, dataKey);
   const assets = new ProjectAssets(dataDir, dataKey);
 
@@ -767,7 +908,14 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
       };
     });
 
-    return sendJson(res, 200, { success: true, projects });
+    return sendJson(res, 200, {
+      success: true,
+      projects,
+      storageInfo: {
+        r2: assets.r2Configured,
+        warning: assets.r2Configured ? null : 'Lưu tạm – sẽ mất khi server khởi động lại'
+      }
+    });
   }
 
   // 3. Chi tiết dự án: GET /api/project-hub/project?id=:id
@@ -795,6 +943,10 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
         profile: project.profile,
         stats,
         hub: hubRecord
+      },
+      storageInfo: {
+        r2: assets.r2Configured,
+        warning: assets.r2Configured ? null : 'Lưu tạm – sẽ mất khi server khởi động lại'
       }
     });
   }
@@ -818,15 +970,45 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
 
   // 5. Tải file tài liệu: POST /api/project-hub/documents/upload
   if (urlPath === '/api/project-hub/documents/upload' && req.method === 'POST') {
-    const body = await readJsonBody(req);
-    const { projectId, name, type, mime, dataBase64, room, extractedPages, detectedItems } = body;
-    if (!projectId || !name || !type || !dataBase64) {
+    const contentType = req.headers['content-type'] || '';
+    const isJson = contentType.includes('application/json');
+    let projectId, name, type, room, cleanMime, buf, extractedPages, detectedItems;
+
+    if (isJson) {
+      const body = await readJsonBody(req);
+      projectId = body.projectId;
+      name = body.name;
+      type = body.type;
+      room = body.room;
+      extractedPages = body.extractedPages;
+      detectedItems = body.detectedItems;
+      cleanMime = body.mime;
+      if (!projectId || !name || !type || !body.dataBase64) {
+        return sendJson(res, 400, { success: false, message: 'Thiếu thông tin file tải lên.' });
+      }
+      buf = Buffer.from(body.dataBase64, 'base64');
+    } else {
+      // Binary upload trực tiếp (hỗ trợ tới 60MB)
+      const urlObj = new URL(req.url, 'http://localhost');
+      projectId = urlObj.searchParams.get('projectId') || req.headers['x-project-id'];
+      const rawName = urlObj.searchParams.get('name') || req.headers['x-file-name'] || 'file';
+      name = decodeURIComponent(rawName);
+      type = urlObj.searchParams.get('type') || req.headers['x-doc-type'] || 'drawing';
+      const rawRoom = urlObj.searchParams.get('room') || req.headers['x-room'] || 'Cả nhà';
+      room = decodeURIComponent(rawRoom);
+      cleanMime = contentType || MIME_MAP[path.extname(name).toLowerCase()] || 'application/octet-stream';
+      if (!readRawBody) {
+        return sendJson(res, 500, { success: false, message: 'Server chưa hỗ trợ đọc binary stream.' });
+      }
+      buf = await readRawBody(req, 60 * 1024 * 1024);
+    }
+
+    if (!projectId || !name || !type || !buf || buf.length === 0) {
       return sendJson(res, 400, { success: false, message: 'Thiếu thông tin file tải lên.' });
     }
 
-    const buf = Buffer.from(dataBase64, 'base64');
     const ext = path.extname(name).toLowerCase() || '.bin';
-    const { assetKey, size, mime: cleanMime } = await assets.save(buf, ext, mime);
+    const { assetKey, size, mime: finalMime } = await assets.save(buf, ext, cleanMime);
 
     // Tính số trang nếu là PDF
     let pages = 1;
@@ -856,7 +1038,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
         existing.version = (existing.version || 1) + 1;
         existing.assetKey = assetKey;
         existing.size = size;
-        existing.mime = cleanMime;
+        existing.mime = finalMime;
         existing.pages = pages;
         existing.room = room || existing.room;
         if (extractedPages) existing.extractedPages = extractedPages;
@@ -869,7 +1051,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
           type,
           name,
           room: room || 'Cả nhà',
-          mime: cleanMime,
+          mime: finalMime,
           size,
           assetKey,
           pages,
@@ -934,12 +1116,25 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
 
   // 9. Soát HSKT & Phối cảnh + Ghi chú PDF: POST /api/project-hub/review/run
   if (urlPath === '/api/project-hub/review/run' && req.method === 'POST') {
-    const { projectId, drawingDocId } = await readJsonBody(req);
+    const { projectId, drawingDocId, skipAi } = await readJsonBody(req);
     if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
 
     const record = await hubStore.getProject(projectId);
     const drawings = (record.documents || []).filter(d => d.type === 'drawing');
     const renders = (record.documents || []).filter(d => d.type === 'render');
+
+    // Gọi AI thật qua integrations.js nếu không có cờ skipAi
+    if (!skipAi) {
+      const userCfg = await loadUserCfg(store, dataKey);
+      const ai = resolveAi(userCfg);
+      if (!ai) {
+        return sendJson(res, 400, {
+          success: false,
+          message: 'Chưa kết nối AI. Hãy vào ⚙ Kết nối để dán API key (Gemini / ChatGPT / Claude).'
+        });
+      }
+      await runAiAnalysis(ai, drawings, renders, assets);
+    }
 
     // Chạy ma trận phủ
     const { findings, pageTags, renderTags } = computeReviewCoverage(record.quoteItems || [], drawings, renders);
@@ -960,6 +1155,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     }
 
     const updatedRecord = await hubStore.saveProject(projectId, current => {
+      current.documents = record.documents; // lưu các extractedPages & detectedItems mà AI vừa trích xuất
       current.reviewFindings = findings;
       current.reviewSummary = {
         lastRunAt: new Date().toISOString(),
@@ -1083,5 +1279,8 @@ module.exports = {
   annotateDrawingPdf,
   generateScheduleProposal,
   generateMaterialsProposal,
-  handleProjectHub
+  handleProjectHub,
+  DRAWING_AI_SYSTEM,
+  RENDER_AI_SYSTEM,
+  runAiAnalysis
 };

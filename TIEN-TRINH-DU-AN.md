@@ -94,3 +94,56 @@
 
 ---
 **XONG GĐ11**
+
+---
+
+## Bổ sung sau Claude Review GĐ11 (Hoàn thiện 7 mục)
+
+- [x] **1. AI soát bản vẽ thật qua `integrations.js`**
+  - Tích hợp `callWithFallback`, `resolveAi`, `loadUserCfg`, `callGemini` từ `integrations.js` vào `project-hub.js`.
+  - Phân tích PDF bản vẽ HSKT qua Gemini, trích xuất danh sách `{ pageNumber, drawingType, room, title, items, quantities }` lưu vào `extractedPages`.
+  - Phân tích ảnh phối cảnh 3D bằng AI, trích xuất `{ room, detectedItems }` lưu vào tài liệu render.
+  - Khi chưa cấu hình key AI: trả mã lỗi 400 và thông báo rõ ràng "Chưa kết nối AI. Hãy vào ⚙ Kết nối để dán API key (Gemini / ChatGPT / Claude).", tuyệt đối không tạo kết quả giả.
+  - Frontend hiển thị thông báo chạy nền góc phải dưới qua `GDHomeShell.aiNotice` đồng bộ trải nghiệm Lịch.
+  - Kiểm thử tự động với mock fetch giả lập thành công 100%.
+
+- [x] **2. Lưu file Cloudflare R2 & cảnh báo lưu đĩa tạm**
+  - Cập nhật `ProjectAssets` tích hợp Cloudflare R2 ký URL AWS4 HMAC-SHA256 tương tự `material-assets.js` khi có đủ các biến môi trường `R2_*`.
+  - Khi chưa cấu hình R2: lưu đĩa cục bộ `DATA_DIR/project-files` nhưng trả `storageInfo: { r2: false, warning: 'Lưu tạm – sẽ mất khi server khởi động lại' }`.
+  - Giao diện hiển thị huy hiệu cảnh báo màu vàng trong sidebar: `⚠️ Lưu tạm – sẽ mất khi server khởi động lại (chưa cấu hình Cloudflare R2)`.
+
+- [x] **3. Upload nhị phân thô tới 60MB cho HSKT**
+  - Bổ sung hàm `readRawBody(req, limit = 60 * 1024 * 1024)` trong `server.js` và truyền vào `handleProjectHub`.
+  - Endpoint `POST /api/project-hub/documents/upload` hỗ trợ nhận body nhị phân trực tiếp (không base64), nhận metadata qua query params hoặc headers (`x-project-id`, `x-file-name`, `x-doc-type`, `x-room`).
+  - Khi tệp vượt quá 60MB: từ chối với HTTP 413 "Tệp vượt quá giới hạn 60MB".
+  - Frontend client gửi trực tiếp đối tượng `File` nhị phân qua `fetch` không làm đầy bộ nhớ trình duyệt.
+
+- [x] **4. Bảo mật: Bỏ đọc token từ query URL, tải file qua Authorization header**
+  - Loại bỏ hoàn toàn đoạn đọc `req.url.includes('token=')` trong hàm `resolveDataKey` của `server.js` (không làm lộ token phiên trong thanh địa chỉ và lịch sử trình duyệt).
+  - Client mở và tải tệp qua hàm `fetchAssetBlobUrl` có header `Authorization: Bearer <token>`, chuyển thành Object URL (Blob URL) để xem trước (iframe/img) hoặc tải xuống (`<a download>`).
+
+- [x] **5. Font Unicode tiếng Việt cho PDF ghi chú đóng dấu**
+  - Cài đặt `@pdf-lib/fontkit` vào `package.json` và `package-lock.json`.
+  - Tải lưu sẵn 2 file font TTF Unicode chuẩn: `fonts/Roboto-Regular.ttf` và `fonts/Roboto-Bold.ttf`.
+  - Cập nhật `annotateDrawingPdf`: đăng ký `pdfDoc.registerFontkit(fontkit)` và nhúng 2 font Roboto Unicode.
+  - Văn bản ghi chú, bảng tổng hợp phát hiện và các nhãn callout trên từng trang bản vẽ nay hiển thị đầy đủ dấu tiếng Việt chuẩn mực ("GD HOME – BÁO CÁO SOÁT HỒ SƠ BẢN VẼ HSKT", "Thiếu bản vẽ HSKT: Tủ áo cánh kính lùa", "Tổng số vấn đề: ...").
+
+- [x] **6. Giao diện chuẩn GĐ10 (`shell.css`/`shell.js`, `docs/HE-THONG-GIAO-DIEN.md`)**
+  - Header 56px với thanh công cụ `.shell-toolbar` chuẩn thứ tự slot GĐ10:
+    - Slot 1: `File ▾` (Tạo dự án mới, Tải tài liệu, Tải bản vẽ có dấu, Tải lại dữ liệu).
+    - Slot 2: `✨ AI ▾` (Soát bản vẽ bằng AI, ⚙ Kết nối AI).
+    - Slot 3: `Copy ảnh ▾` (Sao chép ma trận soát, Sao chép tóm tắt báo giá).
+    - Slot 4: `Undo/Redo` (`.hdr-undo-group`).
+    - Slot 5: Nút xanh chính (`.btn-primary`: 🚀 Soát bản vẽ).
+    - Theo sau bởi `.save-status` và `.shell-account`.
+  - Sidebar rộng 262px nền `#eef1f5` (`.shell-sidebar.sidebar-compact`) với 3 khối thu gọn `details.sb-collapsible`:
+    - Chọn dự án (chọn dự án, nút tạo mới, sửa hồ sơ, mở Tiến độ / Chốt mã, cảnh báo R2).
+    - Hồ sơ dự án (Khách hàng, SĐT, Địa chỉ, Số hợp đồng).
+    - Danh sách tài liệu (thống kê số lượng, danh sách tệp nhanh, nút tải tệp mới).
+  - Nút ⚙ Kết nối dùng chung dialog của `integrations-client.js`.
+
+- [x] **7. Cập nhật `Cap-Nhat-Web-Len-Mang.bat`**
+  - Bổ sung `package-lock.json` và thư mục `fonts` vào danh sách sao lưu và lệnh `git add`.
+
+---
+**XONG GĐ11 SỬA**

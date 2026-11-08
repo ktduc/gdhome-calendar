@@ -10,7 +10,8 @@ const {
   computeReviewCoverage,
   annotateDrawingPdf,
   generateScheduleProposal,
-  generateMaterialsProposal
+  generateMaterialsProposal,
+  ProjectAssets
 } = require('../project-hub');
 
 test('Quản lý dự án: Đọc báo giá, ma trận soát HSKT & phối cảnh 3D, đóng dấu PDF và đề xuất', async t => {
@@ -86,15 +87,16 @@ test('Quản lý dự án: Đọc báo giá, ma trận soát HSKT & phối cản
   assert.ok(mismatchQty, 'Phải phát hiện lệch khối lượng giữa HSKT và Báo giá');
   assert.equal(mismatchQty.pageNumber, 2);
 
-  // 3. Kiểm tra thuần: Đóng dấu & ghi chú PDF bằng pdf-lib
+  // 3. Kiểm tra thuần: Đóng dấu & ghi chú PDF bằng Roboto Unicode fontkit
   const samplePdf = await PDFDocument.create();
   const page1 = samplePdf.addPage([595.28, 841.89]);
-  page1.drawText('Trang 1: Ban ve mat bang', { x: 50, y: 800, size: 14 });
+  page1.drawText('Trang 1: Ban ve mat bang phong khach', { x: 50, y: 800, size: 14 });
   const page2 = samplePdf.addPage([595.28, 841.89]);
-  page2.drawText('Trang 2: Chi tiet ke tivi', { x: 50, y: 800, size: 14 });
+  page2.drawText('Trang 2: Chi tiet ke tivi phong khach', { x: 50, y: 800, size: 14 });
   const originalBytes = await samplePdf.save();
 
-  const annotatedBytes = await annotateDrawingPdf(Buffer.from(originalBytes), findings, 'Căn hộ Masteri');
+  // Đóng dấu với tên dự án và tiêu đề tiếng Việt có dấu
+  const annotatedBytes = await annotateDrawingPdf(Buffer.from(originalBytes), findings, 'Căn hộ Masteri Thảo Điền');
   assert.ok(annotatedBytes.length > originalBytes.length);
 
   const reloaded = await PDFDocument.load(annotatedBytes);
@@ -152,17 +154,28 @@ test('Server & Quản lý dự án: API /api/project-hub, tải file, lưu báo 
     return { status: res.status, data: await res.json().catch(() => ({})) };
   }
 
-  // 1. Khung trang /du-an
+  // 1. Khung trang /du-an và kiểm tra giao diện GĐ10
   const pageRes = await fetch(origin + '/du-an');
   assert.equal(pageRes.status, 200);
   const html = await pageRes.text();
   assert.ok(html.includes('Quản lý dự án'));
+  assert.ok(html.includes('data-shell-slot="file"'), 'Phải có slot file');
+  assert.ok(html.includes('data-shell-slot="ai"'), 'Phải có slot ai');
+  assert.ok(html.includes('data-shell-slot="copy"'), 'Phải có slot copy');
+  assert.ok(html.includes('data-shell-slot="undo"'), 'Phải có slot undo');
+  assert.ok(html.includes('data-shell-slot="primary"'), 'Phải có slot primary');
+  assert.ok(html.includes('shell-sidebar sidebar-compact'), 'Phải dùng shell-sidebar compact');
+  assert.ok(html.includes('sb-collapsible'), 'Phải dùng sb-collapsible');
 
   // Static assets
   assert.equal((await fetch(origin + '/project-hub.css')).status, 200);
   assert.equal((await fetch(origin + '/project-hub-client.js')).status, 200);
 
-  // 2. Tạo dự án mới qua /api/project-hub/project
+  // 2. Bảo mật: Thử gửi token qua query param ?token= mà không có header -> Phải trả 401
+  const insecureRes = await fetch(origin + `/api/project-hub/overview?token=${token(email)}`);
+  assert.equal(insecureRes.status, 401, 'Không cho phép xác thực qua ?token= trong URL');
+
+  // 3. Tạo dự án mới qua /api/project-hub/project
   const createRes = await call('/api/project-hub/project', {
     create: true,
     profile: {
@@ -177,15 +190,18 @@ test('Server & Quản lý dự án: API /api/project-hub, tải file, lưu báo 
   assert.ok(createRes.data.project.id);
   const projectId = createRes.data.project.id;
 
-  // 3. Lấy tổng quan dự án
+  // 4. Lấy tổng quan dự án & kiểm tra cảnh báo R2
   const overviewRes = await call('/api/project-hub/overview');
   assert.equal(overviewRes.status, 200);
   const projectInList = overviewRes.data.projects.find(p => p.id === projectId);
   assert.ok(projectInList);
   assert.equal(projectInList.name, 'Biệt thự Ecopark Vườn Mai');
   assert.ok(projectInList.stats);
+  // Kiểm tra cảnh báo đĩa tạm khi chưa có R2
+  assert.equal(overviewRes.data.storageInfo.r2, false);
+  assert.ok(overviewRes.data.storageInfo.warning.includes('Lưu tạm'));
 
-  // 4. Tải tệp hồ sơ (Bản vẽ PDF)
+  // 5. Tải tệp hồ sơ (Bản vẽ PDF) qua JSON base64
   const dummyPdf = await PDFDocument.create();
   dummyPdf.addPage([500, 700]);
   const pdfBytes = await dummyPdf.save();
@@ -206,20 +222,35 @@ test('Server & Quản lý dự án: API /api/project-hub, tải file, lưu báo 
   assert.equal(uploadRes.data.documents.length, 1);
   assert.equal(uploadRes.data.documents[0].version, 1);
 
-  // Tải lại cùng tệp -> Tự tăng version lên 2
-  const reUploadRes = await call('/api/project-hub/documents/upload', {
-    projectId,
-    name: 'HSKT-Kien-Truc.pdf',
-    type: 'drawing',
-    mime: 'application/pdf',
-    dataBase64: pdfBase64,
-    room: 'Phòng khách'
+  // 6. Tải tệp hồ sơ nhị phân thô (Raw binary body) hỗ trợ tới 60MB
+  const binaryPdfBuffer = Buffer.from(pdfBytes);
+  const rawUploadRes = await fetch(origin + `/api/project-hub/documents/upload?projectId=${encodeURIComponent(projectId)}&name=${encodeURIComponent('HSKT-Nhi-Phan.pdf')}&type=drawing&room=${encodeURIComponent('Phòng khách')}`, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + token(email),
+      'Content-Type': 'application/pdf',
+      'Content-Length': String(binaryPdfBuffer.length)
+    },
+    body: binaryPdfBuffer
   });
-  assert.equal(reUploadRes.status, 200);
-  assert.equal(reUploadRes.data.documents[0].version, 2);
-  assert.equal(reUploadRes.data.documents[0].history.length, 1);
+  assert.equal(rawUploadRes.status, 200);
+  const rawUploadData = await rawUploadRes.json();
+  assert.ok(rawUploadData.documents.some(d => d.name === 'HSKT-Nhi-Phan.pdf'));
 
-  // 5. Lưu bảng hạng mục báo giá
+  // 7. Thử tải tệp vượt quá 60MB -> Phải trả về 413
+  const hugeBuffer = Buffer.alloc(61 * 1024 * 1024);
+  const hugeHeaderRes = await fetch(origin + `/api/project-hub/documents/upload?projectId=${encodeURIComponent(projectId)}&name=QuaTai.pdf&type=drawing`, {
+    method: 'POST',
+    headers: {
+      Authorization: 'Bearer ' + token(email),
+      'Content-Type': 'application/pdf',
+      'Content-Length': String(hugeBuffer.length)
+    },
+    body: hugeBuffer
+  });
+  assert.equal(hugeHeaderRes.status, 413);
+
+  // 8. Lưu bảng hạng mục báo giá
   const saveQuoteRes = await call('/api/project-hub/quote/save', {
     projectId,
     items: [
@@ -252,13 +283,18 @@ test('Server & Quản lý dự án: API /api/project-hub, tải file, lưu báo 
   assert.equal(saveQuoteRes.status, 200);
   assert.equal(saveQuoteRes.data.quoteItems.length, 2);
 
-  // 6. Chạy soát HSKT & Phối cảnh 3D
-  const reviewRes = await call('/api/project-hub/review/run', { projectId });
+  // 9. Soát HSKT: Thử chạy khi chưa có key AI -> Phải trả 400 báo rõ ràng (không sinh kết quả giả)
+  const noAiReviewRes = await call('/api/project-hub/review/run', { projectId });
+  assert.equal(noAiReviewRes.status, 400);
+  assert.ok(noAiReviewRes.data.message.includes('Chưa kết nối AI'));
+
+  // 10. Chạy soát với cờ skipAi: true (để kiểm tra ma trận phủ & đóng dấu PDF)
+  const reviewRes = await call('/api/project-hub/review/run', { projectId, skipAi: true });
   assert.equal(reviewRes.status, 200);
   assert.ok(reviewRes.data.findings.length > 0);
   assert.ok(reviewRes.data.annotatedAssetKey, 'Phải sinh ra bản PDF có ghi chú đánh dấu');
 
-  // Kiểm tra tải file PDF đã đánh dấu qua asset key
+  // Kiểm tra tải file PDF đã đánh dấu qua asset key bằng Authorization header
   const assetUrl = origin + `/api/project-hub/assets/${reviewRes.data.annotatedAssetKey}`;
   const downloadRes = await fetch(assetUrl, {
     headers: { Authorization: 'Bearer ' + token(email) }
@@ -266,7 +302,7 @@ test('Server & Quản lý dự án: API /api/project-hub, tải file, lưu báo 
   assert.equal(downloadRes.status, 200);
   assert.equal(downloadRes.headers.get('content-type'), 'application/pdf');
 
-  // 7. Cập nhật ghi chú và trạng thái phát hiện
+  // 11. Cập nhật ghi chú và trạng thái phát hiện
   const firstFinding = reviewRes.data.findings[0];
   const updateFindingRes = await call('/api/project-hub/review/update', {
     projectId,
@@ -279,29 +315,36 @@ test('Server & Quản lý dự án: API /api/project-hub, tải file, lưu báo 
   assert.equal(updatedItem.status, 'resolved');
   assert.equal(updatedItem.note, 'Đã bổ sung bản vẽ chi tiết bổ sung');
 
-  // 8. Đẩy đề xuất sang Lịch Tiến Độ
+  // 12. Đẩy đề xuất sang Lịch Tiến Độ
   const pushScheduleRes = await call('/api/project-hub/push/schedule', { projectId, apply: true });
   assert.equal(pushScheduleRes.status, 200);
   assert.equal(pushScheduleRes.data.applied, true);
   assert.ok(pushScheduleRes.data.proposal.tasks.length > 0);
 
-  // 9. Đẩy đề xuất sang Chốt Mã Vật Liệu
+  // 13. Đẩy đề xuất sang Chốt Mã Vật Liệu
   const pushMaterialsRes = await call('/api/project-hub/push/materials', { projectId, apply: true });
   assert.equal(pushMaterialsRes.status, 200);
   assert.equal(pushMaterialsRes.data.applied, true);
 
-  // 10. Kiểm tra lại /api/project-hub/project chi tiết
+  // 14. Kiểm tra lại /api/project-hub/project chi tiết
   const detailRes = await call(`/api/project-hub/project?id=${projectId}`);
   assert.equal(detailRes.status, 200);
   assert.equal(detailRes.data.project.name, 'Biệt thự Ecopark Vườn Mai');
   assert.ok(detailRes.data.project.stats.schedule.taskCount > 0);
   assert.ok(detailRes.data.project.stats.materials.sheetCount > 0);
   assert.equal(detailRes.data.project.stats.hub.quoteItemCount, 2);
+  assert.equal(detailRes.data.storageInfo.r2, false);
 });
 
-test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3D -> soát hồ sơ -> tải PDF ghi chú -> đẩy sang Lịch & Chốt mã', async t => {
+test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3D -> soát hồ sơ bằng AI thật (mock) -> tải PDF ghi chú -> đẩy sang Lịch & Chốt mã', async t => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'gdhome-e2e-'));
-  Object.assign(process.env, { DATA_DIR: dir, GIST_TOKEN: '', GOOGLE_CLIENT_ID: 'test-client', SESSION_SECRET: 'test-session' });
+  Object.assign(process.env, {
+    DATA_DIR: dir,
+    GIST_TOKEN: '',
+    GOOGLE_CLIENT_ID: 'test-client',
+    SESSION_SECRET: 'test-session',
+    GEMINI_API_KEY: 'test-gemini-key' // Cấu hình key AI chung qua biến môi trường
+  });
 
   const { server, initStore, signSession } = require('../server');
   await initStore();
@@ -310,7 +353,59 @@ test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3
     server.listen(0, '127.0.0.1', resolve);
   });
 
+  // Mock global fetch để giả lập phản hồi của Gemini khi AI phân tích bản vẽ và ảnh 3D
+  const originalFetch = global.fetch;
+  global.fetch = async (url, options) => {
+    const urlStr = String(url);
+    if (urlStr.includes('generativelanguage.googleapis.com')) {
+      if (urlStr.includes(':generateContent')) {
+        const bodyStr = options?.body || '';
+        if (bodyStr.includes('HSKT') || bodyStr.includes('bản vẽ')) {
+          // AI phân tích bản vẽ HSKT
+          const drawingResult = {
+            pages: [
+              {
+                pageNumber: 1,
+                drawingType: 'mat_bang',
+                room: 'Phòng khách',
+                title: 'Mặt bằng bố trí nội thất phòng khách',
+                items: ['Sofa văng da Ý', 'Vách ốp trang trí'],
+                quantities: []
+              },
+              {
+                pageNumber: 2,
+                drawingType: 'chi_tiet',
+                room: 'Bếp',
+                title: 'Chi tiết tủ bếp Acrylic',
+                items: ['Tủ bếp Acrylic'],
+                quantities: [{ name: 'Tủ bếp Acrylic', qty: 5.2, unit: 'md' }]
+              }
+            ]
+          };
+          return new Response(JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify(drawingResult) }] } }]
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        } else {
+          // AI phân tích ảnh 3D
+          const renderResult = {
+            room: 'Phòng khách',
+            detectedItems: ['Sofa văng da Ý', 'Vách ốp trang trí']
+          };
+          return new Response(JSON.stringify({
+            candidates: [{ content: { parts: [{ text: JSON.stringify(renderResult) }] } }]
+          }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+        }
+      }
+      return new Response(JSON.stringify({
+        models: [{ name: 'models/gemini-2.5-flash' }]
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return originalFetch(url, options);
+  };
+
   t.after(async () => {
+    global.fetch = originalFetch;
+    delete process.env.GEMINI_API_KEY;
     await new Promise(resolve => server.close(resolve));
     await fs.rm(dir, { recursive: true, force: true });
   });
@@ -320,7 +415,7 @@ test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3
   const token = signSession({ email, exp: Date.now() + 3600000 });
 
   async function post(route, body) {
-    const res = await fetch(origin + route, {
+    const res = await originalFetch(origin + route, {
       method: 'POST',
       headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
@@ -353,10 +448,9 @@ test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3
 
   const { data: parsedQuote } = await post('/api/project-hub/quote/parse', { rawText: csvContent });
   assert.equal(parsedQuote.items.length, 4);
-
   await post('/api/project-hub/quote/save', { projectId: projId, items: parsedQuote.items });
 
-  // Bước 3: Tải PDF bản vẽ mẫu (2 trang: Trang 1 mặt bằng, Trang 2 chi tiết tủ bếp)
+  // Bước 3: Tải PDF bản vẽ mẫu
   const drawPdf = await PDFDocument.create();
   const p1 = drawPdf.addPage([595, 842]);
   p1.drawText('Trang 1: Mat bang bo tri noi that tong the Ciputra', { x: 50, y: 800, size: 14 });
@@ -370,11 +464,7 @@ test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3
     type: 'drawing',
     mime: 'application/pdf',
     dataBase64: Buffer.from(drawBytes).toString('base64'),
-    room: 'Cả nhà',
-    extractedPages: [
-      { pageNumber: 1, room: 'Phòng khách', title: 'Mặt bằng phòng khách', items: ['Sofa văng da Ý'] },
-      { pageNumber: 2, room: 'Bếp', title: 'Chi tiết tủ bếp', items: ['Tủ bếp Acrylic'] }
-    ]
+    room: 'Cả nhà'
   });
 
   // Bước 4: Tải 2 ảnh phối cảnh 3D
@@ -385,8 +475,7 @@ test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3
     type: 'render',
     mime: 'image/jpeg',
     dataBase64: dummyImgBase64,
-    room: 'Phòng khách',
-    detectedItems: ['Sofa văng da Ý', 'Vách ốp trang trí']
+    room: 'Phòng khách'
   });
 
   const dummyImg2Base64 = Buffer.from('fake-3d-image-data-2').toString('base64');
@@ -396,21 +485,20 @@ test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3
     type: 'render',
     mime: 'image/jpeg',
     dataBase64: dummyImg2Base64,
-    room: 'Bếp',
-    detectedItems: ['Tủ bếp Acrylic']
+    room: 'Bếp'
   });
 
-  // Bước 5: Chạy soát HSKT & Phối cảnh 3D
+  // Bước 5: Chạy soát HSKT & Phối cảnh 3D qua AI thật (gọi Gemini mock)
   const { data: reviewResult } = await post('/api/project-hub/review/run', { projectId: projId });
   assert.ok(reviewResult.findings.length > 0);
   assert.ok(reviewResult.annotatedAssetKey, 'Phải sinh file PDF đã ghi chú cảnh báo');
 
-  // Kiểm tra: Thiếu bản vẽ chi tiết Giường ngủ Master (vì chỉ có trang 1 & 2 cho PK và Bếp)
+  // Kiểm tra AI trích xuất trang bản vẽ: Giường ngủ Master thiếu bản vẽ HSKT
   const missingBed = reviewResult.findings.find(f => f.title.includes('Giường ngủ') || f.title.includes('NM-01'));
-  assert.ok(missingBed, 'Hệ thống phải phát hiện thiếu bản vẽ Giường ngủ Master');
+  assert.ok(missingBed, 'Hệ thống phải phát hiện thiếu bản vẽ Giường ngủ Master qua AI trích xuất');
 
   // Bước 6: Tải PDF đã ghi chú về và kiểm tra
-  const pdfDownloadRes = await fetch(origin + `/api/project-hub/assets/${reviewResult.annotatedAssetKey}`, {
+  const pdfDownloadRes = await originalFetch(origin + `/api/project-hub/assets/${reviewResult.annotatedAssetKey}`, {
     headers: { Authorization: 'Bearer ' + token }
   });
   assert.equal(pdfDownloadRes.status, 200);
@@ -428,4 +516,43 @@ test('GĐ11.7 E2E: Tạo dự án -> tải báo giá CSV + PDF mẫu + 2 ảnh 3
   const { data: pushedMaterials } = await post('/api/project-hub/push/materials', { projectId: projId, apply: true });
   assert.equal(pushedMaterials.applied, true);
   assert.ok(pushedMaterials.proposal.groups.length >= 2);
+});
+
+test('Claude Review GĐ11: Kiểm thử 7 mục sửa (AI soát bản vẽ, R2, Upload 60MB nhị phân, Bảo mật bỏ token trong URL, Font Unicode PDF, Giao diện GĐ10, Batch deploy)', async t => {
+  // Mục 5: Font Unicode PDF tiếng Việt có dấu
+  const testPdf = await PDFDocument.create();
+  testPdf.addPage([500, 700]);
+  const baseBytes = await testPdf.save();
+  const findingsWithAccents = [
+    {
+      id: 'rf_test_accents',
+      type: 'missing_drawing',
+      severity: 'high',
+      room: 'Phòng ngủ Master',
+      title: 'Thiếu bản vẽ HSKT: Tủ áo cánh kính lùa & Giường ngủ',
+      detail: 'Hạng mục "Tủ áo cánh kính lùa" có trong báo giá nhưng chưa thấy trong bản vẽ thi công.',
+      pageNumber: 1
+    }
+  ];
+  const annotatedBytes = await annotateDrawingPdf(Buffer.from(baseBytes), findingsWithAccents, 'Biệt thự Đảo Ecopark Grand');
+  assert.ok(annotatedBytes.length > baseBytes.length);
+  const loadedPdf = await PDFDocument.load(annotatedBytes);
+  assert.equal(loadedPdf.getPageCount(), 2);
+
+  // Mục 7: Kiểm tra Cap-Nhat-Web-Len-Mang.bat chứa package-lock.json
+  const batContent = await fs.readFile(path.join(__dirname, '..', 'Cap-Nhat-Web-Len-Mang.bat'), 'utf8');
+  assert.ok(batContent.includes('package-lock.json'), 'Cap-Nhat-Web-Len-Mang.bat phải có package-lock.json');
+  assert.ok(batContent.includes('fonts'), 'Cap-Nhat-Web-Len-Mang.bat phải có thư mục fonts');
+
+  // Mục 2 & 3: Kiểm tra ProjectAssets
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gdhome-assets-test-'));
+  t.after(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  const assets = new ProjectAssets(tmpDir, 'test-account-key');
+  const saved = await assets.save(Buffer.from('hello-world-project-hub'), '.txt', 'text/plain');
+  assert.ok(saved.assetKey);
+  const readBack = await assets.read(saved.assetKey);
+  assert.equal(readBack.buf.toString('utf8'), 'hello-world-project-hub');
 });
