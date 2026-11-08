@@ -57,7 +57,9 @@
   background:rgba(255,255,255,.95);font-size:11px;line-height:16px;cursor:pointer}
 .image-cell:is(:hover,:focus,:focus-within) .image-library-pick{display:block}
 .material-paper-output .image-library-pick,.material-paper-output .header-asset-upload{display:none!important}
-.header-asset-upload{margin-left:4px;padding:0 4px;border:1px solid #cbd5e1;border-radius:4px;background:#fff;font-size:11px;line-height:16px;cursor:pointer;vertical-align:middle}
+.header-asset-upload{position:absolute;right:27px;top:50%;transform:translateY(-50%);width:16px;height:17px;padding:0;border:1px solid #cbd5e1;
+  border-radius:4px;background:#fff;font-size:10px;line-height:15px;cursor:pointer}
+.header-asset-upload::before{content:'⬆'}
 .material-render-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin:6px 0}
 .material-render-strip button{padding:0;border:1px solid #d5dbe4;border-radius:4px;aspect-ratio:1;overflow:hidden;background:#f1f4f8;cursor:pointer}
 .material-render-strip img{display:block;width:100%;height:100%;object-fit:cover}

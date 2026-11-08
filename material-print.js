@@ -155,7 +155,7 @@ async function showPrint(view,base,headers,stats = false,watermark = stats) {
   overlay.className = 'shell-dialog';
   overlay.setAttribute('aria-label',stats ? 'Xem trước bảng Chốt mã' : 'Xem trước biên bản A4');
   overlay.innerHTML = '<div class="print-actions"><button id="do-print" disabled>In / Lưu PDF A4</button> <button id="close-print" autofocus>Đóng</button><span id="print-extras"></span></div>' +
-    (stats ? '' : '<article id="print-sheet" class="print-sheet" data-image-fit="' + (view.sheet.imageFit === 'fill' ? 'fill' : 'fit') + '">' + printable(view,base) + '</article>');
+    (stats ? '' : '<article id="print-sheet" class="print-sheet ' + (typeof materialFontClass === 'function' ? materialFontClass() : '') + '" data-image-fit="' + (view.sheet.imageFit === 'fill' ? 'fill' : 'fit') + '">' + printable(view,base) + '</article>');
   if (stats) {
     const paper = materialPaperForExport(view.sheet);
     paper.id = 'print-sheet';

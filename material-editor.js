@@ -39,8 +39,11 @@ async function readMaterialAsset(name) {
 }
 
 function authHeaders() {
-  return config.authMode === 'google' ? { Authorization:'Bearer ' + session().token } :
-    config.authMode === 'password' ? { 'x-app-key':localStorage.getItem(passwordKey) || '' } : {};
+  // config có thể chưa tải xong khi bảng hiện từ bản lưu trên máy (máy chủ chậm): vẫn gửi phiên đăng nhập nếu có.
+  const mode = typeof config === 'undefined' ? undefined : config?.authMode;
+  if (mode === 'password') return { 'x-app-key':localStorage.getItem(passwordKey) || '' };
+  const token = session()?.token;
+  return token && (mode === 'google' || !mode) ? { Authorization:'Bearer ' + token } : {};
 }
 
 function images(list, large = false) {

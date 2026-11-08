@@ -251,3 +251,8 @@ XONG GĐ15
 | Khác | `/favicon.ico` hết 404. |
 
 Đo: tải trang Lịch ~0,44 s (đã nén Brotli); log Render 24 giờ không có request chậm/nghẽn. Timeline 450 việc ~160–250 ms trong máy ảo chậm (khoảng 80 ms máy thật) – chấp nhận được, có thể tối ưu sau bằng gắn sự kiện chung thay vì từng dòng.
+
+### Sửa 09/11/2026
+- Dữ liệu dùng chung báo "Cannot read properties of undefined (reading 'authMode')" khi bảng hiện từ bản lưu trên máy trước lúc tải xong cấu hình: `authHeaders()` không còn phụ thuộc cấu hình đã tải.
+- Độ đậm chữ: bảng nhập, ảnh/PDF xuất, biên bản A4 và bản in dùng chung một quy tắc font-weight (Mảnh 300/600, Thường 400/700–800, Đậm 600/800, Rất đậm 800/900). Nạp thêm Roboto 600/800. Playwright 15.3.
+- Nút ⬆ tải 3D trên đầu cột không làm lệch bố cục bảng so với bản xuất (13.5).

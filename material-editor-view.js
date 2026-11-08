@@ -357,7 +357,7 @@ function materialColumnHeading(key,label,editing) {
   const subtitle = key === 'qty' ? ' ' + materialQuantityNote : '';
   if (!editing) return html(label) + subtitle;
   return '<span class="material-column-label" data-column-drag="' + key + '" draggable="true" tabindex="0" title="Kéo đổi thứ tự cột · Alt và mũi tên">' +
-    html(label) + subtitle + '</span>' + (key === 'render' ? '<button type="button" class="header-asset-upload" data-action="upload-renders" title="Tải ảnh hoặc PDF phối cảnh 3D của dự án">⬆</button>' : '');
+    html(label) + subtitle + '</span>' + (key === 'render' ? '<button type="button" class="header-asset-upload" data-action="upload-renders" title="Tải ảnh hoặc PDF phối cảnh 3D của dự án" aria-label="Tải ảnh hoặc PDF phối cảnh 3D"></button>' : '');
 }
 
 function renderMaterialPaper(current,columns,widths,groups,editing) {

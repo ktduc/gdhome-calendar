@@ -163,12 +163,16 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-header .side-field{padding:0 8px}
 .material-density,.material-font-buttons{--gd-segments:4;margin:4px 0}
 .material-image-fit{--gd-segments:2;margin:4px 0}
-.material-sheet.msp-fw-light :is(td,th,input,select),.print-sheet.msp-fw-light :is(td,th){font-weight:400}
-.material-sheet.msp-fw-bold .sheet-grid,.print-sheet.msp-fw-bold .print-table{-webkit-text-stroke:.3px currentColor}
-.material-sheet.msp-fw-heavy .sheet-grid,.print-sheet.msp-fw-heavy .print-table{-webkit-text-stroke:.65px currentColor}
-.material-sheet.msp-fw-bold input,.material-sheet.msp-fw-heavy input{-webkit-text-stroke:0}
-.material-sheet.msp-fw-bold .sheet-grid input{font-weight:800}
-.material-sheet.msp-fw-heavy .sheet-grid input{font-weight:900}
+/* Độ đậm chữ: một quy tắc chung cho bảng nhập, ảnh/PDF xuất, biên bản A4 và bản in (chỉ dùng font-weight, Roboto đủ 100–900). */
+:is(.material-paper,.print-sheet) thead th,:is(.material-paper,.print-sheet) thead th *{font-weight:800}
+:is(.material-paper,.print-sheet) :is(tr.group,tr.print-group) th,:is(.material-paper,.print-sheet) tr.group th input{font-weight:700}
+:is(.material-sheet,.material-paper,.print-sheet).msp-fw-light :is(tbody td,tbody td :is(input,textarea,select,span,small,div)){font-weight:300}
+:is(.material-sheet,.material-paper,.print-sheet).msp-fw-light :is(thead th,thead th *,tr.group th,tr.print-group th,tr.group th input){font-weight:600}
+:is(.material-sheet,.material-paper,.print-sheet).msp-fw-bold :is(tbody td,tbody td :is(input,textarea,select,span,small,div)){font-weight:600}
+:is(.material-sheet,.material-paper,.print-sheet).msp-fw-bold :is(thead th,thead th *,tr.group th,tr.print-group th,tr.group th input){font-weight:800}
+:is(.material-sheet,.material-paper,.print-sheet).msp-fw-heavy :is(tbody td,tbody td :is(input,textarea,select,span,small,div)){font-weight:800}
+:is(.material-sheet,.material-paper,.print-sheet).msp-fw-heavy :is(thead th,thead th *,tr.group th,tr.print-group th,tr.group th input){font-weight:900}
+:is(.material-sheet,.material-paper,.print-sheet) :is(button,.image-state,.paste-cell-hint){font-weight:inherit}
 .shell-copy-controls{width:100%}
 .shell-copy-controls>.hdr-split-main{justify-content:center;flex:1}
 .material-density button{padding:4px 0;font-size:11px}

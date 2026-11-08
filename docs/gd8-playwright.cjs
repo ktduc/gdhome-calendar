@@ -990,6 +990,28 @@ cases['15.2'] = async page => {
   assert.match(await pa.locator('img').first().getAttribute('style'),/--view:scale\(1\.6\)/);
 };
 
+cases['15.3'] = async page => {
+  // Độ đậm chữ giống nhau ở bảng nhập, ảnh xuất và biên bản A4 khi in.
+  await openMaterials(page);
+  const weights = selector => page.evaluate(selector => {
+    const root = document.querySelector(selector);
+    const value = query => getComputedStyle(root.querySelector(query)).fontWeight;
+    return [value('tbody tr:not(.group):not(.print-group) td:nth-child(2)'),value('tr.group th, tr.print-group th'),value('thead th')];
+  },selector);
+  for (const weight of ['light','bold','heavy']) {
+    await page.evaluate(weight => { setMaterialView({fontWeight:weight}); renderEditor(); },weight);
+    const editing = await weights('.material-paper');
+    await page.evaluate(() => showPrint({sheet},'/api/materials/assets/',authHeaders(),true,true));
+    assert.deepEqual(await weights('#print-sheet'),editing,weight + ': ảnh xuất');
+    await page.locator('#close-print').click();
+    await page.evaluate(() => showPrint({sheet},'/api/materials/assets/',authHeaders()));
+    await page.emulateMedia({media:'print'});
+    assert.deepEqual((await weights('#print-sheet')).slice(0,2),editing.slice(0,2),weight + ': biên bản A4 khi in');
+    await page.emulateMedia({media:'screen'});
+    await page.locator('#close-print').click();
+  }
+};
+
 cases['13.1'] = async page => {
   await openMaterials(page);
   await page.evaluate(() => {
