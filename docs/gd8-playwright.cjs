@@ -526,6 +526,66 @@ cases['10.3-guest'] = async page => {
   assert.equal(materialCalls,initial);
 };
 
+cases['10.4'] = async page => {
+  const config = {
+    success:true,notion:{configured:true,source:'user',db:'Bảng Lịch',dateProps:['Ngày','Hạn'],dateProp:'Ngày'},
+    notionCustomerDb:'Bảng Khách',notionCustomerMap:{},ai:{configured:true,source:'user',provider:'gemini',providerLabel:'Gemini',model:''},
+    providers:[{id:'gemini',label:'Gemini'},{id:'openai',label:'ChatGPT'},{id:'anthropic',label:'Claude'}]
+  };
+  await page.route('**/api/integrations/settings',route => {
+    if (route.request().method() === 'POST') {
+      const patch = route.request().postDataJSON();
+      if (patch.aiModel !== undefined) config.ai.model = patch.aiModel;
+      if (patch.notionDateProp) config.notion.dateProp = patch.notionDateProp;
+    }
+    return route.fulfill({json:config});
+  });
+  const openConnections = async () => {
+    await page.locator('.gd-tools-menu summary').click();
+    await page.getByRole('button',{name:'⚙ Kết nối',exact:true}).click();
+    await page.locator('.connection-dialog [name=aiModel]').waitFor();
+  };
+  await page.goto('/');
+  await openConnections();
+  await page.locator('[name=aiModel]').fill('model-thu');
+  await page.locator('[data-connection-form=ai] button[type]:not([data-clear-connection]), [data-connection-form=ai] .btn-primary').first().click();
+  await page.locator('.connection-message').getByText('Đã lưu kết nối.').waitFor();
+  await page.locator('[name=notionDateProp]').selectOption('Hạn');
+  await page.waitForFunction(() => document.querySelector('[name=notionDateProp]').value === 'Hạn' &&
+    document.querySelector('.connection-message').textContent === 'Đã lưu kết nối.');
+  await page.keyboard.press('Escape');
+  await openMaterials(page);
+  await openConnections();
+  assert.equal(await page.locator('[name=aiModel]').inputValue(),'model-thu');
+  assert.equal(await page.locator('[name=notionDateProp]').inputValue(),'Hạn');
+  assert.equal(await page.locator('[name=notionCustomerDb]').inputValue(),'Bảng Khách');
+  await page.keyboard.press('Escape');
+  await page.route('**/api/ai/materials',route => {
+    assert.equal(route.request().postDataJSON().images.length,1);
+    return route.fulfill({json:{plan:{groups:[{name:'Sơn',rows:[{name:'Sơn tường'}]}],questions:[]}}});
+  });
+  await page.locator('#material-ai').click();
+  await page.locator('.material-ai-drop').focus();
+  assert.equal(await pasteFixture(page,'items'),true);
+  await page.locator('#material-ai-file-list button[title="Xem ảnh lớn"]').click();
+  await page.locator('.shell-lightbox').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('#material-ai-form button.primary').click();
+  await page.locator('#material-ai-job').getByRole('button',{name:'Duyệt đề xuất'}).click();
+  await page.locator('#material-ai-review').waitFor();
+  await page.goto('/');
+  await page.route('**/api/ai/schedule',route => {
+    assert.equal(route.request().postDataJSON().images.length,1);
+    return route.fulfill({json:{success:true,plan:{stageName:'Sơn',tasks:[{name:'Sơn tường',workDays:2,dependsOn:[]}],questions:[]}}});
+  });
+  await page.locator('#btn-open-ai-planner').click();
+  await page.locator('#ai-drop-zone').focus();
+  assert.equal(await pasteFixture(page,'items'),true);
+  await page.locator('#btn-ai-run').click();
+  await page.locator('#ai-bg-panel').getByRole('button',{name:'Xem & thêm vào lịch'}).click();
+  await page.locator('#ai-review-body tr').first().waitFor();
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

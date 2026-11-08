@@ -43,7 +43,8 @@ window.GDHomeShell = (() => {
       if (event.key === 'Escape' && element.open) { element.open = false; element.querySelector('summary').focus(); event.stopPropagation(); }
     };
     element.innerHTML = '<summary>GD HOME Tools</summary><nav aria-label="GD HOME Tools">' +
-      links.map(([href,label]) => '<a href="' + href + '">' + label + '</a>').join('') + '</nav>';
+      links.map(([href,label]) => '<a href="' + href + '">' + label + '</a>').join('') +
+      (element.dataset.shellMenu === 'public' ? '' : '<button type="button" data-open-connections>⚙ Kết nối</button>') + '</nav>';
   }
 
   function dropdown(command,label,glyph,body,variant = 'outline') {

@@ -15,7 +15,16 @@
 .gd-tools-menu summary{cursor:pointer;padding:7px;border:1px solid #d5dce5;border-radius:6px;background:#fff}
 .gd-tools-menu nav{position:absolute;top:100%;left:0;z-index:80;width:170px;background:#fff;border:1px solid #d5dce5;border-radius:6px;box-shadow:0 6px 16px #22334422}
 .gd-tools-menu a{display:block;padding:9px;color:#263244;text-decoration:none}
-.gd-tools-menu a:hover{background:#f6e8e9}
+.gd-tools-menu a:hover,.gd-tools-menu nav button:hover{background:#f6e8e9}
+.gd-tools-menu nav button{display:block;width:100%;text-align:left;font:inherit;padding:9px;color:#263244;border:0;background:#fff;cursor:pointer}
+.connection-dialog{box-sizing:border-box;width:min(92vw,620px);padding:16px;color:var(--gd-ink)}
+.connection-dialog section{border:1px solid var(--gd-section-border);padding:12px;margin-top:10px;border-radius:var(--gd-control-radius)}
+.connection-dialog :is(h2,h3,p){margin:0 0 8px}
+.connection-dialog form[data-connection-form]{display:grid;gap:7px;justify-items:start}
+.connection-dialog label{width:100%;display:grid;gap:3px;font-size:13px;margin:6px 0}
+.connection-dialog :is(input,select){box-sizing:border-box;width:100%;font:inherit;padding:6px;border:1px solid var(--gd-section-border);border-radius:var(--gd-radius)}
+.connection-dialog .close-dialog{background:white;border:1px solid var(--gd-section-border);border-radius:var(--gd-radius);padding:4px 8px;cursor:pointer}
+.connection-actions{display:flex;flex-wrap:wrap;gap:6px}
 .msp-material-badge{flex:none;font:700 13px/1 system-ui,sans-serif;text-decoration:none;background:#fff0c4;color:#694600;padding:3px;border-radius:4px}
 .msp-material-badge.done{background:#dff2e5;color:#175938}
 .app-header {
@@ -432,6 +441,10 @@
 .ai-bg-body { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; word-break: break-word; }
 .ai-bg-close { position: absolute; top: 6px; right: 8px; border: none; background: transparent; font-size: 18px; color: #94a3b8; cursor: pointer; line-height: 1; }
 .ai-bg-close:hover { color: #334155; }
+.ai-file-chip{display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#4c1d95;border-radius:12px;padding:3px 4px 3px 10px;font-size:12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ai-file-chip button{border:none;background:transparent;color:#6d28d9;cursor:pointer;font:inherit;line-height:1;padding:2px 4px}
+.ai-file-chip button:first-child{overflow:hidden;text-overflow:ellipsis}
+.ai-file-chip+.ai-file-chip{margin-left:4px}
 
 .ai-spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ddd6fe; border-top-color: #7c3aed; border-radius: 50%; animation: ai-spin 0.8s linear infinite; }
 @keyframes ai-spin { to { transform: rotate(360deg); } }

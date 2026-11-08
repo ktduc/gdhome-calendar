@@ -12,8 +12,8 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="shell.css?v=gd103">
-  <link rel="stylesheet" href="style.css?v=gd103">
+  <link rel="stylesheet" href="shell.css?v=gd104">
+  <link rel="stylesheet" href="style.css?v=gd104">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -723,29 +723,8 @@
       </div>
       <div class="modal-body">
         <div class="ai-step" id="ai-step-input">
-          <details class="int-settings" id="ai-settings">
-            <summary>⚙ Kết nối AI: <span id="ai-conn-status">đang kiểm tra…</span></summary>
-            <div class="int-settings-body">
-              <div class="ai-grid">
-                <div class="form-group"><label for="ai-provider">Dùng AI của</label>
-                  <select id="ai-provider" class="form-select">
-                    <option value="gemini">Google Gemini (có gói miễn phí)</option>
-                    <option value="openai">ChatGPT (OpenAI)</option>
-                    <option value="anthropic">Claude (Anthropic)</option>
-                  </select>
-                </div>
-                <div class="form-group"><label for="ai-key">API key</label><input type="password" id="ai-key" autocomplete="off" placeholder="Dán API key vào đây"></div>
-                <div class="form-group"><label for="ai-model">Model (để trống = tự chọn)</label><input type="text" id="ai-model" autocomplete="off" placeholder="tự chọn bản mới nhất"></div>
-              </div>
-              <div class="int-help" id="ai-key-help"></div>
-              <div class="int-actions">
-                <button type="button" class="btn btn-primary btn-sm" id="btn-ai-save-conn">Lưu & kiểm tra</button>
-                <button type="button" class="btn btn-outline btn-sm" id="btn-ai-clear-conn">Gỡ kết nối</button>
-              </div>
-              <div class="ai-msg" id="ai-conn-msg"></div>
-            </div>
-          </details>
-          <label class="ai-drop" id="ai-drop-zone">
+          <p><button type="button" class="btn btn-outline btn-sm" data-open-connections="ai">⚙ Kết nối AI</button></p>
+          <label class="ai-drop" id="ai-drop-zone" tabindex="0">
             <input type="file" id="ai-file-input" multiple accept="image/*,.xlsx,.xls,.csv,.pdf" hidden>
             <i data-lucide="upload-cloud"></i>
             <b>Bấm hoặc kéo thả</b> ảnh báo giá / bảng khối lượng / bản vẽ, file Excel (.xlsx, .csv) hoặc PDF
@@ -807,31 +786,7 @@
       </div>
       <div class="modal-body">
         <div class="ai-msg" id="notion-status-msg"></div>
-        <details class="int-settings" id="notion-settings">
-          <summary>⚙ Kết nối Notion: <span id="notion-conn-status">đang kiểm tra…</span></summary>
-          <div class="int-settings-body">
-            <ol class="int-steps">
-              <li>Mở <a href="https://app.notion.com/developers" target="_blank" rel="noopener">Notion → Developer tools</a> → tab <b>Personal access tokens</b> → <b>New token</b> → đặt tên <i>GD HOME</i>, tick <b>Notion API</b>, hạn <b>1 year</b> → <b>Create token</b> → copy mã (chỉ hiện 1 lần).</li>
-              <li>Mở bảng lịch có sẵn trên Notion (vd <i>DEADLINE</i>) – bảng chỉ cần có 1 cột kiểu <b>Date</b>.</li>
-              <li>Ở database bấm <b>Share → Copy link</b>, dán vào ô bên dưới cùng mã ở bước 1 → <b>Lưu & kiểm tra</b>.</li>
-              <li><i>Cách khác:</i> tab <b>Connections</b> → tạo <b>Internal connection</b> → tab Configuration copy <b>API token</b>; khi đó phải vào database → <b>•••</b> → <b>Connections</b> → <b>+ Add connection</b> chọn kết nối vừa tạo.</li>
-            </ol>
-            <div class="form-group"><label for="notion-token">Mã Notion (Personal access token hoặc API token)</label><input type="password" id="notion-token" autocomplete="off" placeholder="Dán mã Notion vào đây"></div>
-            <div class="form-group"><label for="notion-db">Link database Notion</label><input type="text" id="notion-db" autocomplete="off" placeholder="https://www.notion.so/…"></div>
-            <div class="int-actions">
-              <button type="button" class="btn btn-primary btn-sm" id="btn-notion-save-conn">Lưu & kiểm tra</button>
-              <button type="button" class="btn btn-outline btn-sm" id="btn-notion-clear-conn">Gỡ kết nối</button>
-              <a class="btn btn-outline btn-sm" id="notion-open-db" target="_blank" rel="noopener" style="display:none">Mở database trên Notion ↗</a>
-            </div>
-            <div class="form-group"><label for="notion-customer-db">Link database Khách hàng / Dự án</label><input type="text" id="notion-customer-db" autocomplete="off"></div>
-            <button type="button" class="btn btn-outline btn-sm" id="btn-notion-customer-db">Lưu link khách hàng</button>
-            <div class="ai-msg" id="notion-conn-msg"></div>
-          </div>
-        </details>
-        <div class="form-group" id="notion-date-wrap" style="display:none">
-          <label for="notion-date-prop">Lấy ngày từ cột <span id="notion-db-title" class="notion-db-title"></span></label>
-          <select id="notion-date-prop" class="form-select"></select>
-        </div>
+        <p><button type="button" class="btn btn-outline btn-sm" data-open-connections="notion">⚙ Kết nối Notion</button></p>
         <div class="notion-actions">
           <button type="button" class="btn btn-primary" id="btn-notion-pull"><i data-lucide="download"></i> Lấy lịch Notion về</button>
           <button type="button" class="btn btn-outline" id="btn-notion-sync2"><i data-lucide="refresh-cw"></i> Đồng bộ 2 chiều</button>
@@ -1065,7 +1020,9 @@
   <script src="scheduler.js?v=20261108mat"></script>
   <script src="export-canvas.js?v=gd103"></script>
   <script src="material-timeline.js?v=20261108gd6"></script>
-  <script src="shell.js?v=gd103"></script>
-  <script src="app.js?v=gd103"></script>
+  <script src="shell.js?v=gd104"></script>
+  <script src="integrations-client.js?v=gd104"></script>
+  <script src="ai-client.js?v=gd104"></script>
+  <script src="app.js?v=gd104"></script>
 </body>
 </html>

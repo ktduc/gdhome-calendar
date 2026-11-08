@@ -3,8 +3,7 @@ const notionFieldLabels = { project:'Dự án',address:'Địa chỉ',customer:'
 async function openNotionCustomers() {
   const selectedProject = sheet?.projectId || byId('project-filter')?.value;
   const settings = await request('/api/integrations/settings');
-  const element = dialog('<h2>Lấy từ Notion</h2><form id="notion-customer-config" class="toolbar">' +
-    '<label>Link database Khách hàng / Dự án <input name="db" value="' + html(settings.notionCustomerDb) + '"></label><button>Lưu link</button></form>' +
+  const element = dialog('<h2>Lấy từ Notion</h2><p><button type="button" data-open-connections="notion">⚙ Kết nối Notion</button></p>' +
     '<form id="notion-customer-search" class="toolbar"><label>Tên, địa chỉ hoặc SĐT <input name="q" type="search"></label><button>Tìm</button></form>' +
     '<p id="notion-customer-message" role="status"></p><div id="notion-customer-map"></div><div id="notion-customer-results"></div>');
   const message = byId('notion-customer-message');
@@ -98,15 +97,14 @@ async function openNotionCustomers() {
       finally { button.disabled = false; }
     };
   }
-  byId('notion-customer-config').onsubmit = async event => {
-    event.preventDefault();
-    try {
-      const config = await post('/api/integrations/settings',{ notionCustomerDb:event.target.elements.db.value });
-      mapping = config.notionCustomerMap;
-      await load();
-    } catch (error) { message.textContent = error.message; }
+  const onSettings = event => {
+    if (!element.open) return;
+    mapping = event.detail.notionCustomerMap || {};
+    if (event.detail.notionCustomerDb) load();
   };
+  document.addEventListener('gdhome:connections',onSettings);
+  element.addEventListener('close',() => document.removeEventListener('gdhome:connections',onSettings),{once:true});
   search.onsubmit = event => { event.preventDefault(); load(); };
   if (settings.notionCustomerDb) await load();
-  else message.textContent = 'Lưu link database để đọc danh sách bằng kết nối Notion của tài khoản.';
+  else message.textContent = 'Mở Kết nối Notion để chọn bảng Khách hàng / Dự án.';
 }

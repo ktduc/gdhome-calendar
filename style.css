@@ -3422,9 +3422,7 @@ body {
 .ai-drop svg { width: 26px; height: 26px; color: #7c3aed; }
 .ai-drop small { color: #94a3b8; }
 .ai-file-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
-.ai-file-chip { display: inline-flex; align-items: center; gap: 4px; background: #ede9fe; color: #4c1d95; border-radius: 12px; padding: 3px 4px 3px 10px; font-size: 12px; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ai-file-chip button { border: none; background: transparent; color: #6d28d9; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
-.ai-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 0 12px; }
+
 .ai-msg { font-size: 13px; margin: 6px 0; min-height: 0; }
 .ai-msg.is-warn { color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 8px 10px; }
 .ai-msg.is-ok { color: #166534; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 8px 10px; }
@@ -3452,18 +3450,7 @@ body {
 .notion-log .is-ok { color: #166534; }
 .notion-log .is-warn { color: #b45309; }
 @media (max-width: 1280px) { .hdr-ai-btn .btn-label { display: none; } }
-.int-settings { border: 1px solid #e2e8f0; border-radius: 10px; margin-bottom: 12px; background: #f8fafc; }
-.int-settings summary { cursor: pointer; padding: 9px 12px; font-size: 13px; font-weight: 700; color: #1e293b; }
-.int-settings summary .is-ok { color: #15803d; }
-.int-settings summary .is-warn { color: #b45309; }
-.int-settings-body { padding: 0 12px 10px; }
-.int-help { font-size: 12.5px; color: #475569; line-height: 1.55; margin: -2px 0 8px; }
-.int-help a, .int-steps a { color: #2563eb; }
-.int-steps { font-size: 12.5px; color: #334155; line-height: 1.6; padding-left: 18px; margin: 0 0 10px; }
-.int-steps code { background: #e2e8f0; padding: 0 4px; border-radius: 4px; }
-.int-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.int-actions a.btn { text-decoration: none; }
-.int-settings input[type=password], .int-settings input[type=text] { width: 100%; padding: 9px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 14px; background: #fff; box-sizing: border-box; }
+
 .notion-actions button:disabled { opacity: 0.45; cursor: not-allowed; }
 .notion-db-title { font-weight: 400; color: #64748b; margin-left: 6px; }
 

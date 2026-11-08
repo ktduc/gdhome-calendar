@@ -25,52 +25,18 @@ function renderMaterialsAiNotice() {
 async function openMaterialsAi() {
   const settings = await request('/api/integrations/settings');
   const element = dialog('<h2>AI đề xuất hạng mục chốt mã</h2><p>Chọn hợp đồng, báo giá hoặc bảng khối lượng để gửi tới AI của tài khoản.</p>' +
-    '<details' + (settings.ai.configured ? '' : ' open') + '><summary>Kết nối AI · ' + html(settings.ai.providerLabel || 'Chưa cấu hình') + '</summary>' +
-    '<form id="material-ai-config" class="toolbar"><label>Nhà cung cấp <select name="provider">' +
-    settings.providers.map(p => option(p.id,p.label,settings.ai.provider)).join('') + '</select></label>' +
-    '<label>API key <input name="key" type="password" autocomplete="off"></label><label>Model <input name="model" value="' + html(settings.ai.model) +
-    '" placeholder="Tự chọn"></label><button>Lưu kết nối</button></form></details>' +
+    '<p><button type="button" class="btn btn-outline btn-sm" data-open-connections="ai">⚙ Kết nối AI</button> ' +
+    html(settings.ai.providerLabel || 'Chưa cấu hình') + '</p>' +
     '<form id="material-ai-form" class="stack"><div class="material-ai-drop" tabindex="0">Kéo PDF, Excel, CSV hoặc ảnh vào đây. Có thể dán ảnh bằng Ctrl+V.' +
     '<label>Chọn tệp <input id="material-ai-files" type="file" accept=".pdf,.xlsx,.xls,.csv,image/*" multiple></label></div>' +
     '<div id="material-ai-file-list"></div><label>Ghi chú<textarea id="material-ai-notes" maxlength="4000">' + html(aiJob.notes) + '</textarea></label>' +
     '<p id="material-ai-message" role="status"></p><button class="primary">Gửi AI đề xuất</button></form>');
   const message = byId('material-ai-message');
-  const drop = element.querySelector('.material-ai-drop');
-  const list = byId('material-ai-file-list');
-  const renderFiles = () => {
-    list.innerHTML = aiJob.files.map((file,index) => '<button type="button" data-ai-remove="' + index + '" title="Bỏ tệp">' + html(file.name) + ' ×</button>').join(' ');
-  };
-  function add(files) {
-    const valid = [...files].filter(file => file.type.startsWith('image/') || /\.(pdf|xlsx|xls|csv)$/i.test(file.name));
-    aiJob.files = [...aiJob.files,...valid].slice(0,8);
-    message.textContent = valid.length ? '' : 'Chọn PDF, Excel, CSV hoặc ảnh.';
-    renderFiles();
-  }
-  byId('material-ai-files').onchange = event => { add(event.target.files); event.target.value = ''; };
-  drop.ondragover = event => event.preventDefault();
-  drop.ondrop = event => { event.preventDefault(); add(event.dataTransfer.files); };
-  element.onpaste = event => {
-    if (!byId('material-ai-form') || !event.clipboardData.files.length) return;
-    event.preventDefault();
-    add(event.clipboardData.files);
-  };
-  list.onclick = event => {
-    if (event.target.dataset.aiRemove === undefined) return;
-    aiJob.files.splice(Number(event.target.dataset.aiRemove),1);
-    renderFiles();
-  };
-  byId('material-ai-config').onsubmit = async event => {
-    event.preventDefault();
-    const form = event.target;
-    try {
-      const config = await post('/api/integrations/settings',{
-        aiProvider:form.elements.provider.value,aiKey:form.elements.key.value,aiModel:form.elements.model.value
-      });
-      form.elements.key.value = '';
-      form.closest('details').querySelector('summary').textContent = 'Kết nối AI · ' + config.ai.providerLabel;
-      message.textContent = 'Đã lưu kết nối AI.';
-    } catch (error) { message.textContent = error.message; }
-  };
+  GDHomeAI.attachments({
+    state:aiJob,input:byId('material-ai-files'),drop:element.querySelector('.material-ai-drop'),
+    list:byId('material-ai-file-list'),root:element,
+    onChange:count => { message.textContent = count ? '' : 'Chọn PDF, Excel, CSV hoặc ảnh.'; }
+  });
   byId('material-ai-form').onsubmit = event => {
     event.preventDefault();
     aiJob.notes = byId('material-ai-notes').value.trim();
@@ -79,51 +45,18 @@ async function openMaterialsAi() {
     element.close();
     runMaterialsAi();
   };
-  renderFiles();
 }
-
-async function materialAiPayload(files,notes) {
-  const images = [],pdfs = [],sheets = [];
-  for (const file of files) {
-    if (file.size > 12*1024*1024) throw new Error(file.name + ' vượt 12 MB.');
-    if (file.type.startsWith('image/')) {
-      if (images.length >= 6) throw new Error('Mỗi lượt gửi tối đa 6 ảnh.');
-      images.push({ mediaType:'image/webp',data:await encodeImage(file,1568,220000) });
-    } else if (/\.pdf$/i.test(file.name)) {
-      if (pdfs.length >= 2) throw new Error('Mỗi lượt gửi tối đa 2 PDF.');
-      const data = await new Promise((resolve,reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result.split(',')[1]);
-        reader.onerror = () => reject(new Error('Không đọc được ' + file.name));
-        reader.readAsDataURL(file);
-      });
-      pdfs.push({ data });
-    } else if (/\.csv$/i.test(file.name)) {
-      sheets.push(file.name + '\n' + await file.text());
-    } else {
-      const XLSX = await loadXlsx();
-      const book = XLSX.read(await file.arrayBuffer());
-      for (const name of book.SheetNames) sheets.push(file.name + ' / ' + name + '\n' + XLSX.utils.sheet_to_csv(book.Sheets[name],{blankrows:false}));
-    }
-  }
-  const sheetText = sheets.join('\n\n');
-  if (sheetText.length > 60000) throw new Error('Bảng tính vượt 60.000 ký tự. Tách theo nhóm rồi gửi từng lượt.');
-  const payload = { images,pdfs,sheetText,notes };
-  if (new Blob([JSON.stringify(payload)]).size > 9*1024*1024) throw new Error('Tổng tài liệu quá lớn. Chia PDF hoặc gửi từng lượt.');
-  return payload;
-}
-
-async function runMaterialsAi() {
-  if (aiJob.running) return;
-  aiJob.running = true;
-  aiJob.error = '';
-  aiJob.plan = null;
-  renderMaterialsAiNotice();
-  try {
-    const payload = await materialAiPayload(aiJob.files,aiJob.notes);
-    aiJob.plan = (await post('/api/ai/materials',payload)).plan;
-  } catch (error) { aiJob.error = error.message; }
-  finally { aiJob.running = false; renderMaterialsAiNotice(); }
+function runMaterialsAi() {
+  return GDHomeAI.run(aiJob,{
+    onStart() { aiJob.error = ''; aiJob.plan = null; renderMaterialsAiNotice(); },
+    async request() {
+      const payload = await GDHomeAI.prepare(aiJob.files,aiJob.notes);
+      return (await post('/api/ai/materials',payload)).plan;
+    },
+    onDone(plan) { aiJob.plan = plan; },
+    onError(error) { aiJob.error = error.message; },
+    onFinish:renderMaterialsAiNotice
+  });
 }
 
 function reviewMaterialsAi() {

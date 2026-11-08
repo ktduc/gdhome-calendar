@@ -7943,165 +7943,22 @@ function integrationBlockedReason() {
 }
 
 // ----- Cài đặt kết nối (mỗi tài khoản tự dán khoá; server mã hoá & giữ, trình duyệt không đọc lại được) -----
-let _intSettings = null;
-const AI_KEY_HELP = {
-  gemini: 'Lấy key <b>miễn phí</b> bằng chính Gmail: mở <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey</a> → <b>Create API key</b> → copy (dạng AIza…). Gói miễn phí có giới hạn số lượt/phút.',
-  openai: 'Đăng nhập <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a> → <b>Create new secret key</b> → copy (sk-…). Cần nạp tiền ở mục Billing (tài khoản ChatGPT Plus KHÔNG dùng chung cho API).',
-  anthropic: 'Đăng nhập <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a> → <b>API Keys → Create Key</b> → copy (sk-ant-…). Cần nạp tiền ở mục Billing (gói Claude Pro KHÔNG dùng chung cho API).'
-};
-
-function setConnMsg(id, text, kind) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = text || '';
-  el.className = 'ai-msg' + (text && kind ? ' is-' + kind : '');
+let integrationSettings;
+function renderNotionConnection(settings) {
+  integrationSettings = settings;
+  const configured = settings.notion?.configured;
+  const status = document.getElementById('notion-status-msg');
+  status.textContent = configured ? settings.notion.dbTitle || 'Đã kết nối Notion' : 'Mở Kết nối để chọn bảng lịch và cột ngày.';
+  document.querySelectorAll('#notion-sync-modal .notion-actions button').forEach(button => { button.disabled = !configured; });
 }
-
-function renderIntegrationStatus() {
-  const st = _intSettings || {};
-  const ai = st.ai || {};
-  const nt = st.notion || {};
-  const customerDb = document.getElementById('notion-customer-db');
-  if (customerDb) customerDb.value = st.notionCustomerDb || '';
-  const aiEl = document.getElementById('ai-conn-status');
-  if (aiEl) {
-    aiEl.textContent = ai.configured
-      ? `✅ ${ai.providerLabel}${ai.source === 'user' ? ` (key ${ai.keyMasked})` : ' (khoá chung của server)'}`
-      : '❌ chưa kết nối – bấm để cài';
-    aiEl.className = ai.configured ? 'is-ok' : 'is-warn';
-  }
-  const prov = document.getElementById('ai-provider');
-  if (prov && ai.source === 'user' && ai.provider) prov.value = ai.provider;
-  const mdl = document.getElementById('ai-model');
-  if (mdl && ai.source === 'user') mdl.value = ai.model || '';
-  updateAiKeyHelp();
-  const ntEl = document.getElementById('notion-conn-status');
-  if (ntEl) {
-    ntEl.textContent = nt.configured ? `✅ đã kết nối${nt.source === 'user' ? ` (mã ${nt.tokenMasked})` : ' (dùng chung của server)'}` : '❌ chưa kết nối – bấm để cài';
-    ntEl.className = nt.configured ? 'is-ok' : 'is-warn';
-  }
-  const dpWrap = document.getElementById('notion-date-wrap');
-  const dpSel = document.getElementById('notion-date-prop');
-  if (dpWrap && dpSel) {
-    const props = nt.dateProps || [];
-    dpWrap.style.display = nt.configured && props.length ? '' : 'none';
-    dpSel.innerHTML = '';
-    props.forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; dpSel.appendChild(o); });
-    if (nt.dateProp) dpSel.value = nt.dateProp;
-    const t = document.getElementById('notion-db-title');
-    if (t) t.textContent = nt.dbTitle ? `Bảng Notion: ${nt.dbTitle}` : '';
-  }
-  const dbInp = document.getElementById('notion-db');
-  if (dbInp && nt.source === 'user' && nt.db && !dbInp.value) dbInp.value = nt.db;
-  const openDb = document.getElementById('notion-open-db');
-  if (openDb) {
-    openDb.style.display = nt.dbUrl ? '' : 'none';
-    if (nt.dbUrl) openDb.href = nt.dbUrl;
-  }
-  document.querySelectorAll('#notion-sync-modal .notion-actions button').forEach(b => { b.disabled = !nt.configured; });
-}
-
-function updateAiKeyHelp() {
-  const prov = document.getElementById('ai-provider');
-  const help = document.getElementById('ai-key-help');
-  if (prov && help) help.innerHTML = AI_KEY_HELP[prov.value] || '';
-}
-
-async function fetchIntegrationSettings() {
-  try {
-    const res = await apiFetch('/api/integrations/settings');
-    const json = await res.json().catch(() => ({}));
-    if (res.ok && json.success) _intSettings = json;
-  } catch (e) { /* bỏ qua */ }
-  renderIntegrationStatus();
-  return _intSettings;
-}
-
-async function saveIntegrationSettings(payload, msgId) {
-  setConnMsg(msgId, '⏳ Đang kiểm tra kết nối…', 'busy');
-  try {
-    const res = await apiFetch('/api/integrations/settings', { method: 'POST', body: JSON.stringify(payload) });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
-    _intSettings = json;
-    renderIntegrationStatus();
-    setConnMsg(msgId, payload.clear ? 'Đã gỡ kết nối.' : '✅ Kết nối thành công, đã lưu (khoá được mã hoá trên server).', 'ok');
-    return true;
-  } catch (err) {
-    setConnMsg(msgId, '⚠ ' + err.message, 'warn');
-    return false;
-  }
-}
-
+document.addEventListener('gdhome:connections',event => renderNotionConnection(event.detail));
 function openModalById(id) {
   const m = document.getElementById(id);
   if (m) m.classList.add('active');
   if (window.lucide) window.lucide.createIcons();
 }
 
-function loadScriptOnce(src) {
-  return new Promise((resolve, reject) => {
-    if (document.querySelector(`script[src="${src}"]`)) { resolve(); return; }
-    const s = document.createElement('script');
-    s.src = src; s.onload = resolve; s.onerror = () => reject(new Error('Không tải được thư viện ' + src));
-    document.head.appendChild(s);
-  });
-}
-
-function readFileAs(file, how) {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-    if (how === 'buffer') r.readAsArrayBuffer(file); else r.readAsDataURL(file);
-  });
-}
-
-// Thu nhỏ ảnh (cạnh dài ≤ 1568px) để gửi AI nhanh & rẻ
-async function imageFileToPayload(file) {
-  const dataUrl = await readFileAs(file, 'dataurl');
-  const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = dataUrl; });
-  const maxSide = 1568;
-  const k = Math.min(1, maxSide / Math.max(img.width, img.height));
-  const c = document.createElement('canvas');
-  c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-  ctx.drawImage(img, 0, 0, c.width, c.height);
-  return { mediaType: 'image/jpeg', data: c.toDataURL('image/jpeg', 0.85).split(',')[1] };
-}
-
-async function sheetFileToText(file) {
-  if (/\.csv$/i.test(file.name)) return await file.text();
-  await loadScriptOnce('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js');
-  const wb = window.XLSX.read(await readFileAs(file, 'buffer'), { type: 'array' });
-  return wb.SheetNames.map(n => `### Sheet: ${n}\n` + window.XLSX.utils.sheet_to_csv(wb.Sheets[n], { blankrows: false })).join('\n\n');
-}
-
-function renderAiFileList() {
-  const el = document.getElementById('ai-file-list');
-  if (!el) return;
-  el.innerHTML = '';
-  AIPlanner.files.forEach((f, i) => {
-    const chip = document.createElement('span');
-    chip.className = 'ai-file-chip';
-    chip.textContent = f.name;
-    const x = document.createElement('button');
-    x.type = 'button'; x.textContent = '×'; x.title = 'Bỏ file này';
-    x.addEventListener('click', () => { AIPlanner.files.splice(i, 1); renderAiFileList(); });
-    chip.appendChild(x);
-    el.appendChild(chip);
-  });
-}
-
-function addAiFiles(list) {
-  Array.from(list || []).forEach(f => {
-    if (/^image\//.test(f.type) || /\.(xlsx|xls|csv|pdf)$/i.test(f.name)) AIPlanner.files.push(f);
-  });
-  AIPlanner.files = AIPlanner.files.slice(0, 8);
-  renderAiFileList();
-}
-
+let renderAiFileList = () => {};
 function fillAiStageSelect() {
   const sel = document.getElementById('ai-target-stage');
   if (!sel) return;
@@ -8133,18 +7990,14 @@ function openAiPlanner() {
   const msg = document.getElementById('ai-input-msg');
   const reason = integrationBlockedReason();
   if (msg) { msg.textContent = reason; msg.className = 'ai-msg' + (reason ? ' is-warn' : ''); }
-  if (!reason) {
-    fetchIntegrationSettings().then(st => {
-      const det = document.getElementById('ai-settings');
-      if (det) det.open = !(st && st.ai && st.ai.configured);
-    });
-  }
+  if (!reason) GDHomeConnections.settings().then(settings => { integrationSettings = settings; }).catch(error => { msg.textContent = error.message; });
   const sd = document.getElementById('ai-start-date');
   if (sd && !sd.value) sd.value = formatDateStr(new Date());
   fillAiStageSelect();
   document.getElementById('ai-step-input').style.display = '';
   document.getElementById('ai-step-review').style.display = 'none';
   openModalById('ai-planner-modal');
+  document.getElementById('ai-drop-zone').focus();
 }
 
 function getAiTargetWorkDays() {
@@ -8164,9 +8017,8 @@ async function runAiPlanner() {
   const btn = document.getElementById('btn-ai-run');
   const reason = integrationBlockedReason();
   if (reason) { msg.textContent = reason; msg.className = 'ai-msg is-warn'; return; }
-  if (_intSettings && _intSettings.ai && !_intSettings.ai.configured) {
-    document.getElementById('ai-settings').open = true;
-    msg.textContent = 'Chưa kết nối AI: chọn Gemini / ChatGPT / Claude, dán API key rồi bấm "Lưu & kiểm tra".';
+  if (integrationSettings?.ai?.configured === false) {
+    msg.textContent = 'Mở Kết nối AI để chọn nhà cung cấp và nhập API key.';
     msg.className = 'ai-msg is-warn';
     return;
   }
@@ -8176,52 +8028,40 @@ async function runAiPlanner() {
     msg.textContent = 'Nhập số ngày hoặc ngày kết thúc (sau ngày bắt đầu).'; msg.className = 'ai-msg is-warn'; return;
   }
   if (AIPlanner.running) { msg.textContent = 'AI đang chạy yêu cầu trước, đợi xong đã nhé.'; msg.className = 'ai-msg is-warn'; return; }
-  AIPlanner.running = true;
-  btn.disabled = true;
-  msg.className = 'ai-msg is-busy';
-  msg.textContent = '⏳ Đang đọc file…';
-  try {
-    const payload = { images: [], pdfs: [], sheetText: '', notes };
-    for (const f of AIPlanner.files) {
-      if (/^image\//.test(f.type)) payload.images.push(await imageFileToPayload(f));
-      else if (/\.pdf$/i.test(f.name)) {
-        if (f.size > 7 * 1024 * 1024) throw new Error(`File PDF "${f.name}" quá lớn (> 7MB)`);
-        payload.pdfs.push({ data: (await readFileAs(f, 'dataurl')).split(',')[1] });
-      } else payload.sheetText += `\n\n## File: ${f.name}\n` + (await sheetFileToText(f));
-    }
-    payload.startDate = document.getElementById('ai-start-date').value || formatDateStr(new Date());
-    payload.targetWorkDays = getAiTargetWorkDays();
-    const target = document.getElementById('ai-target-stage').value;
-    const ownerId = target.startsWith('new:') ? target.slice(4) : (AppState.calendars.find(c => c.id === target) || {}).ownerId;
-    const owner = (AppState.projectOwners || []).find(o => o.id === ownerId);
-    payload.projectName = owner ? owner.name : '';
-    msg.textContent = '';
-    msg.className = 'ai-msg';
-    // Chạy nền: ẩn cửa sổ AI, hiện thông báo nhỏ góc màn hình để làm việc khác
-    document.getElementById('ai-planner-modal').classList.remove('active');
-    showAiBgPanel('running', 'AI đang đọc file và lập tiến độ… (thường 20–60 giây)<br><small>Anh cứ làm việc khác, xong sẽ báo ở đây.</small>');
-    const res = await apiFetch('/api/ai/schedule', { method: 'POST', body: JSON.stringify(payload) });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok || !json.success) throw new Error(json.message || `Lỗi ${res.status}`);
-    AIPlanner.plan = json.plan;
-    AIPlanner.startDate = payload.startDate;
-    AIPlanner.targetWorkDays = payload.targetWorkDays;
-    AIPlanner.rows = json.plan.tasks.map((t, i) => ({ ...t, include: true, idx: i }));
-    showAiReview();
-    if (!AIPlanner.rows.length) {
-      showAiBgPanel('error', 'AI không tìm thấy hạng mục công việc nào trong file.', 'Mở lại');
-    } else {
-      showAiBgPanel('done', `✨ AI đã đề xuất <b>${AIPlanner.rows.length}</b> công việc.`, 'Xem & thêm vào lịch');
-    }
-  } catch (err) {
-    const modalOpen = document.getElementById('ai-planner-modal').classList.contains('active');
-    msg.textContent = '⚠ ' + err.message;
-    msg.className = 'ai-msg is-warn';
-    if (!modalOpen) showAiBgPanel('error', escapeHtmlAi(err.message), 'Mở lại');
-  } finally {
-    btn.disabled = false;
-    AIPlanner.running = false;
-  }
+  const startDate = document.getElementById('ai-start-date').value || formatDateStr(new Date());
+  const targetWorkDays = getAiTargetWorkDays();
+  const target = document.getElementById('ai-target-stage').value;
+  const ownerId = target.startsWith('new:') ? target.slice(4) : AppState.calendars.find(c => c.id === target)?.ownerId;
+  const projectName = AppState.projectOwners.find(owner => owner.id === ownerId)?.name || '';
+  return GDHomeAI.run(AIPlanner,{
+    onStart() {
+      btn.disabled = true;
+      msg.textContent = '';
+      document.getElementById('ai-planner-modal').classList.remove('active');
+      showAiBgPanel('running','AI đang đọc tài liệu và lập tiến độ…');
+    },
+    async request() {
+      const files = await GDHomeAI.prepare(AIPlanner.files,notes);
+      const response = await apiFetch('/api/ai/schedule',{method:'POST',body:JSON.stringify({
+        ...files,startDate,targetWorkDays,projectName
+      })});
+      const json = await response.json();
+      if (!response.ok || !json.success) throw new Error(json.message || 'Không nhận được đề xuất AI.');
+      return json.plan;
+    },
+    onDone(plan) {
+      Object.assign(AIPlanner,{plan,startDate,targetWorkDays,rows:plan.tasks.map((task,idx) => ({...task,include:true,idx}))});
+      showAiReview();
+      if (AIPlanner.rows.length) showAiBgPanel('done','AI đã đề xuất <b>' + AIPlanner.rows.length + '</b> công việc.','Xem & thêm vào lịch');
+      else showAiBgPanel('error','AI không tìm thấy hạng mục trong tài liệu.','Mở lại');
+    },
+    onError(error) {
+      msg.textContent = '⚠ ' + error.message;
+      msg.className = 'ai-msg is-warn';
+      showAiBgPanel('error',escapeHtmlAi(error.message),'Mở lại');
+    },
+    onFinish() { btn.disabled = false; }
+  });
 }
 
 function escapeHtmlAi(t) {
@@ -8415,14 +8255,8 @@ function openNotionSync() {
   st.className = 'ai-msg' + (reason ? ' is-warn' : '');
   document.querySelectorAll('#notion-sync-modal .notion-actions button').forEach(b => { b.disabled = true; });
   openModalById('notion-sync-modal');
-  if (!reason) {
-    fetchIntegrationSettings().then(s2 => {
-      const det = document.getElementById('notion-settings');
-      if (det) det.open = !(s2 && s2.notion && s2.notion.configured);
-    });
-  }
+  if (!reason) GDHomeConnections.settings().then(renderNotionConnection).catch(error => { st.textContent = error.message; });
 }
-
 
 // Dự án & giai đoạn RIÊNG cho lịch Notion (không trộn vào dự án đang chọn)
 const NOTION_OWNER_ID = 'owner_notion';
@@ -8541,19 +8375,9 @@ function setupIntegrationsUI() {
   ['btn-open-ai-planner', 'btn-open-ai-planner-menu'].forEach(id => { const b = document.getElementById(id); if (b) b.addEventListener('click', openAi); });
   const nb = document.getElementById('btn-open-notion-sync');
   if (nb) nb.addEventListener('click', () => { document.querySelectorAll('.hdr-dropdown.open').forEach(d => d.classList.remove('open')); openNotionSync(); });
-  const fi = document.getElementById('ai-file-input');
-  if (fi) fi.addEventListener('change', () => { addAiFiles(fi.files); fi.value = ''; });
-  const dz = document.getElementById('ai-drop-zone');
-  if (dz) {
-    dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('is-over'); });
-    dz.addEventListener('dragleave', () => dz.classList.remove('is-over'));
-    dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('is-over'); addAiFiles(e.dataTransfer.files); });
-  }
-  document.addEventListener('paste', e => {
-    const m = document.getElementById('ai-planner-modal');
-    if (!m || !m.classList.contains('active')) return;
-    const files = Array.from(e.clipboardData ? e.clipboardData.files : []);
-    if (files.length) { e.preventDefault(); addAiFiles(files); }
+  renderAiFileList = GDHomeAI.attachments({
+    state:AIPlanner,input:document.getElementById('ai-file-input'),drop:document.getElementById('ai-drop-zone'),
+    list:document.getElementById('ai-file-list'),root:document.getElementById('ai-planner-modal')
   });
   const lm = document.getElementById('ai-limit-mode');
   if (lm) lm.addEventListener('change', () => {
@@ -8567,29 +8391,6 @@ function setupIntegrationsUI() {
   on('btn-ai-apply', applyAiPlan);
   on('btn-notion-sync2', () => runNotionAction('both'));
   on('btn-notion-pull', () => runNotionAction('pull'));
-  const prov = document.getElementById('ai-provider');
-  if (prov) prov.addEventListener('change', updateAiKeyHelp);
-  updateAiKeyHelp();
-  on('btn-ai-save-conn', async () => {
-    const ok = await saveIntegrationSettings({
-      aiProvider: document.getElementById('ai-provider').value,
-      aiKey: document.getElementById('ai-key').value.trim(),
-      aiModel: document.getElementById('ai-model').value.trim()
-    }, 'ai-conn-msg');
-    if (ok) { document.getElementById('ai-key').value = ''; setConnMsg('ai-input-msg', ''); }
-  });
-  on('btn-ai-clear-conn', () => saveIntegrationSettings({ clear: 'ai' }, 'ai-conn-msg'));
-  on('btn-notion-save-conn', async () => {
-    const ok = await saveIntegrationSettings({
-      notionToken: document.getElementById('notion-token').value.trim(),
-      notionDb: document.getElementById('notion-db').value.trim()
-    }, 'notion-conn-msg');
-    if (ok) document.getElementById('notion-token').value = '';
-  });
-  on('btn-notion-customer-db', () => saveIntegrationSettings({ notionCustomerDb: document.getElementById('notion-customer-db').value.trim() }, 'notion-conn-msg'));
-  on('btn-notion-clear-conn', () => saveIntegrationSettings({ clear: 'notion' }, 'notion-conn-msg'));
-  const dpSel = document.getElementById('notion-date-prop');
-  if (dpSel) dpSel.addEventListener('change', () => saveIntegrationSettings({ notionDateProp: dpSel.value }, 'notion-conn-msg'));
 }
 window.addEventListener('DOMContentLoaded', setupIntegrationsUI);
 

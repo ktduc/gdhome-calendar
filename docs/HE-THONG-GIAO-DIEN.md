@@ -54,3 +54,7 @@ Nạp `shell.css` trước CSS của trang và `shell.js` trước JS của tran
 | Duyệt mã, chữ ký, biên bản và Excel mua hàng | ✗ | ✓ | Nghiệp vụ Chốt mã. Lịch đọc ✓/⚠ theo việc liên quan. |
 
 Các lệnh đăng nhập của shell dùng `GDHomeShell.loginCard(title)` và `GDHomeShell.googleSignIn({clientId,container,onCredential,autoSelect})`. Tuỳ chọn xuất của Lịch và Chốt mã giữ bộ lọc tương ứng với từng loại dữ liệu.
+
+Nạp `integrations-client.js` sau `shell.js` để dùng nút **⚙ Kết nối** trong menu. Nút tắt của từng luồng dùng `data-open-connections="notion"` hoặc `data-open-connections="ai"`. Mọi trang đọc và lưu tại `/api/integrations/settings` qua `GDHomeConnections.settings([patch])`. Sau khi lưu, sự kiện `gdhome:connections` mang cấu hình đã che khoá. Biểu mẫu ghép cột của trình nhập Notion gắn với bảng kết quả nhập.
+
+Nạp `ai-client.js` để dùng `GDHomeAI.attachments({state,input,drop,list,root,onChange})`, `GDHomeAI.prepare(files,notes)` và `GDHomeAI.run(state,{request,onStart,onDone,onError,onFinish})`. Hai tool dùng chung trình chọn/dán/xem ảnh, nén tài liệu, chạy nền và thanh báo để mở duyệt. Bảng duyệt giữ các trường nghiệp vụ của mỗi tool.

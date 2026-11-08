@@ -7,18 +7,7 @@ const importColumns = {
 };
 const importLabels = { group:'Nhóm', name:'Hạng mục', room:'Vị trí',render:'Phối cảnh 3D', p1:'PA1',p2:'PA2',p3:'PA3',spec:'Chất liệu / Quy cách',qty:'Khối lượng',unit:'Đơn vị',note:'Ghi chú',supplier:'NCC / Nhà thầu' };
 const normalized = value => String(value ?? '').toLowerCase().normalize('NFD').replace(/\p{M}/gu,'').replace(/đ/g,'d').replace(/[^a-z0-9]+/g,' ').trim();
-let xlsxPromise;
-function loadXlsx() {
-  if (window.XLSX) return Promise.resolve(window.XLSX);
-  xlsxPromise ||= new Promise((resolve,reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-    script.onload = () => resolve(window.XLSX);
-    script.onerror = () => { xlsxPromise = null; reject(new Error('Không tải được bộ đọc Excel. Kiểm tra kết nối.')); };
-    document.head.append(script);
-  });
-  return xlsxPromise;
-}
+const loadXlsx = GDHomeAI.loadWorkbook;
 function parseCsv(text) {
   const first = text.split(/\r?\n/,1)[0];
   const sep = first.includes('\t') ? '\t' : first.split(';').length > first.split(',').length ? ';' : ',';
