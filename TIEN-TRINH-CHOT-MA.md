@@ -117,13 +117,15 @@ XONG GĐ9
 |---|---|---|
 | 10.1 | ✅ | tách bộ giao diện chung cho GD HOME Tools |
 | 10.2 | ✅ | lưu cài đặt Chốt mã theo tài khoản và khôi phục bảng đang mở |
-| 10.3 | ⏳ | Đối chiếu Lịch và Chốt mã |
+| 10.3 | ✅ | đồng bộ thao tác, xuất ảnh PDF và chế độ khách |
 | 10.4 | ⏳ | Kết nối và AI chung |
 | 10.5 | ⏳ | Hồ sơ dự án chung |
 | 10.6 | ⏳ | Kiểm thử và bàn giao |
 
-Bước kế tiếp GĐ10: 10.3 đồng bộ các thao tác dùng chung với Lịch.
+Bước kế tiếp GĐ10: 10.4 gom Kết nối Notion và AI về một màn.
 
 - 10.1: tài liệu tích hợp ở `docs/HE-THONG-GIAO-DIEN.md`. Ảnh header và sidebar Lịch ở 1440/1920 px trùng từng byte trước và sau khi tách. Playwright 10.1, 8.3, 9.5 đạt.
 
 - 10.2: `viewSettings` có `viewVersion` riêng trong cùng kho Chốt mã. API dùng chung hàng đợi ghi với bảng, bản tạm localStorage giữ thay đổi chưa gửi. Playwright 10.2 xác nhận khôi phục sau khi xoá localStorage, kể cả độ rộng, lọc, danh mục và chế độ xem như bản in.
+
+- 10.3: Playwright kiểm tra cụm nút thẳng hàng ở 1440/1920 px, Esc, độ đậm, ghi nhớ sọc chìm, PDF A4 và dán ảnh ở chế độ khách không gọi API Chốt mã. Bảng đối chiếu nằm trong `docs/HE-THONG-GIAO-DIEN.md`.

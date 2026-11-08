@@ -2,7 +2,7 @@ function installRelease() {
   byId('release-actions').innerHTML = [['publish','Phát hành link khách'],['history','Biên bản / Lịch sử'],
     ['settings','Điều khoản mẫu'],['buy','Excel mua hàng']].map(([key,label]) =>
       '<button class="hdr-menu-item" id="material-' + key + '">' + label + '</button>').join('');
-  byId('image-actions').innerHTML = '<div class="hdr-split-group"><button class="btn btn-success hdr-split-main" id="material-copy" data-header-command="copy" data-image-mode="copy">' +
+  byId('image-actions').innerHTML = '<div class="hdr-split-group shell-copy-controls"><button class="btn btn-success hdr-split-main" id="material-copy" data-header-command="copy" data-image-mode="copy">' +
     headerIcon('copy') + '<span class="btn-label">Copy ảnh</span></button><details class="hdr-dropdown">' +
     '<summary class="btn btn-success hdr-split-caret" aria-label="Tuỳ chọn xuất ảnh"><span class="hdr-caret">▾</span></summary>' +
     '<div class="hdr-dropdown-menu"><button class="hdr-menu-item" data-image-mode="copy">Copy ảnh bảng</button>' +
@@ -122,19 +122,21 @@ function savedMaterialExportScope() {
 function statistics(mode) {
   const rooms = [...new Set(sheet.groups.flatMap(g => g.rows.map(row => row.room)).filter(Boolean))];
   const saved = savedMaterialExportScope();
-  const element = dialog('<h2>' + exportLabels[mode] + '</h2><form id="material-image-scope">' +
+  const element = dialog('<h2>' + exportLabels[mode] + '</h2><form id="material-image-scope" class="shell-export-scope">' +
     '<label><span>Danh mục</span><select name="groups">' +
     option('visible','Chỉ nhóm đang bật',saved.groups === 'all' ? 'all' : 'visible') + option('all','Tất cả',saved.groups) + '</select></label>' +
     '<label><span>Dòng</span><select name="rows">' + option('all','Tất cả',saved.rows !== 'chosen' ? 'all' : '') +
     option('chosen','Chỉ dòng đã chốt',saved.rows) + '</select></label>' +
     '<label><span>Phòng</span><select name="room"><option value="">Tất cả</option>' +
     rooms.map(room => option(room,room,saved.room)).join('') + '</select></label>' +
+    '<label class="export-watermark-toggle"><span>Sọc chìm</span><input name="watermark" type="checkbox"' + (saved.watermark === false ? '' : ' checked') + '></label>' +
     '<p id="export-scope-status" role="status"></p><button class="primary">Xem trước</button></form>');
 
   byId('material-image-scope').onsubmit = async event => {
     event.preventDefault();
     const scope = new FormData(event.target);
-    setMaterialView({export:Object.fromEntries(scope)});
+    const watermark = scope.has('watermark');
+    setMaterialView({export:{...Object.fromEntries(scope),watermark}});
     const filtered = { ...sheet,groups:sheet.groups
       .filter(group => scope.get('groups') !== 'visible' || !hiddenGroups.has(group.id))
       .map(group => ({ ...group,rows:group.rows.filter(row =>
@@ -143,12 +145,12 @@ function statistics(mode) {
       .filter(group => group.rows.length) };
     if (!filtered.groups.length) { byId('export-scope-status').textContent = 'Phạm vi này không có dòng vật liệu.'; return; }
     element.close();
-    await showStatistics(filtered,mode);
+    await showStatistics(filtered,mode,watermark);
   };
 }
-async function showStatistics(filtered,mode) {
+async function showStatistics(filtered,mode,watermark) {
   try {
-    const overlay = await showPrint({ sheet:filtered },'/api/materials/assets/',authHeaders(),true);
+    const overlay = await showPrint({ sheet:filtered },'/api/materials/assets/',authHeaders(),true,watermark);
     if (!overlay.isConnected) return;
     byId('print-extras').innerHTML = ' <button id="stats-download">Tải PNG</button> <button id="stats-copy">Copy ảnh</button> <span id="export-image-status" role="status"></span>';
     const download = byId('stats-download');
@@ -157,8 +159,8 @@ async function showStatistics(filtered,mode) {
     const selected = { copy,png:download,pdf:print }[mode];
     selected.classList.add('primary');
     selected.focus();
-    download.onclick = () => exportStatsImage(false).catch(showExportError);
-    copy.onclick = () => exportStatsImage(true).catch(showExportError);
+    download.onclick = () => exportStatsImage(false,watermark).catch(showExportError);
+    copy.onclick = () => exportStatsImage(true,watermark).catch(showExportError);
   } catch (error) { showError(error); }
 }
 function showExportError(error) {
@@ -167,7 +169,7 @@ function showExportError(error) {
 }
 
 let canvasLoader;
-async function exportStatsImage(copy) {
+async function exportStatsImage(copy,watermark = true) {
   if (!window.html2canvas) {
     canvasLoader ||= new Promise((resolve,reject) => {
       const script = document.createElement('script');
@@ -181,8 +183,8 @@ async function exportStatsImage(copy) {
   const root = byId('print-sheet');
   if (root.scrollHeight > 12000) throw new Error('Bảng quá dài để xuất một ảnh. Lọc theo phòng hoặc dùng PDF.');
   const canvas = await html2canvas(root,{ scale:2,backgroundColor:'#fff',onclone:doc => doc.getElementById('print-sheet').classList.remove('watermark') });
-  if (copy) return copyCanvasToClipboard(canvas,{ notify:message => { const notice = byId('export-image-status'); if (notice) notice.textContent = message; },fallbackName:'GD-HOME-vat-lieu.png' });
-  downloadCanvas(canvas,'GD-HOME-vat-lieu.png');
+  if (copy) return copyCanvasToClipboard(canvas,{ watermark,notify:message => { const notice = byId('export-image-status'); if (notice) notice.textContent = message; },fallbackName:'GD-HOME-vat-lieu.png' });
+  downloadCanvas(canvas,'GD-HOME-vat-lieu.png',watermark);
 }
 async function exportPurchasing() {
   const includePrice = confirm('Thêm cột giá vào bản Excel mua hàng?');

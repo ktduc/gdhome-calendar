@@ -44,6 +44,20 @@ function applyAntiEditWatermark(canvas, enabled = true) {
   return canvas;
 }
 
+function printExportCanvas(canvas,watermark = true) {
+  applyAntiEditWatermark(canvas,watermark);
+  const preview = document.createElement('dialog');
+  preview.className = 'canvas-print';
+  preview.setAttribute('aria-label','In / Lưu PDF A4');
+  document.body.append(preview);
+  document.body.classList.add('printing-canvas');
+  GDHomeShell.dialog(preview,'<button class="btn btn-primary" data-print-canvas>In / Lưu PDF A4</button><img alt="Bảng xuất A4">');
+  const image = preview.querySelector('img');
+  image.src = canvas.toDataURL('image/png');
+  preview.querySelector('[data-print-canvas]').onclick = () => window.print();
+  preview.onclose = () => { document.body.classList.remove('printing-canvas'); preview.remove(); };
+}
+
 function downloadCanvas(canvas, filename, watermark = true) {
   applyAntiEditWatermark(canvas, watermark);
   const link = document.createElement('a');

@@ -22,6 +22,7 @@ async function encodeImage(source, maxSide, targetBytes, crop = null) {
 async function uploadImage(file, crop = null) {
   const fullData = await encodeImage(file,materials.r2 ? 1600 : 1000,materials.r2 ? 200000 : 150000,crop);
   const thumbData = await encodeImage(file,420,48000,crop);
+  if (materialGuest) return {full:await saveGuestAsset(fullData),thumb:await saveGuestAsset(thumbData)};
   const full = await post('/api/materials/assets',{ image:fullData });
   const thumb = await post('/api/materials/assets',{ image:thumbData });
   return { full:full.name, thumb:thumb.name };
@@ -67,9 +68,7 @@ async function cropImage(row, slot, i, element, onSaved) {
   const source = sheet;
   const list = slot === 'render' ? row.render : row.options[Number(slot)].images;
   const item = list[i];
-  const response = await fetch('/api/materials/assets/' + (item.full || item),{ headers:authHeaders() });
-  if (!response.ok) throw new Error('Không mở được ảnh để cắt.');
-  const file = await response.blob();
+  const file = await readMaterialAsset(item.full || item);
   if (!element.open || sheet !== source || list[i] !== item) return;
 
   const crop = document.createElement('dialog');

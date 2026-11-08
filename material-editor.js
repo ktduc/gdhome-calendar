@@ -1,5 +1,5 @@
 let sheet, before = [], after = [], saveTimer, saving = false, dirty = false, conflict = false;
-let density = 'vua';
+let density = 'm';
 const fields = ['brand','code','finish','color','size','supplier','price'];
 const labels = { brand:'Hãng', code:'Mã', finish:'Chất liệu / Quy cách', color:'Màu', size:'Kích thước', supplier:'NCC', price:'Giá', room:'Vị trí', unit:'Đơn vị' };
 const statusLabels = { draft:'Chưa chọn', sent:'Đã gửi khách', chosen:'Khách đã chốt', changed:'Đổi mã' };
@@ -23,13 +23,18 @@ function showImages(root = box()) {
   root.querySelectorAll('img[data-asset]').forEach(async img => {
     try {
       const name = img.dataset.asset;
-      if (!assetCache.has(name)) assetCache.set(name, fetch('/api/materials/assets/' + name, { headers:authHeaders() }).then(res => {
-        if (!res.ok) throw new Error('Không mở được ảnh');
-        return res.blob();
-      }).then(URL.createObjectURL).catch(error => { assetCache.delete(name); throw error; }));
+      if (!assetCache.has(name)) assetCache.set(name,readMaterialAsset(name).then(URL.createObjectURL)
+        .catch(error => { assetCache.delete(name); throw error; }));
       img.src = await assetCache.get(name);
     } catch { img.alt = 'Ảnh chưa tải được'; }
   });
+}
+
+async function readMaterialAsset(name) {
+  if (materialGuest) return guestMaterialAsset(name);
+  const response = await fetch('/api/materials/assets/' + name,{headers:authHeaders()});
+  if (!response.ok) throw new Error('Không mở được ảnh.');
+  return response.blob();
 }
 
 function authHeaders() {
@@ -47,6 +52,7 @@ function images(list, large = false) {
 function renderMaterialApp(selectedProject) {
   if (sheet) return renderEditor();
   byId('material-header-actions').replaceChildren();
+  if (byId('save-label')) byId('save-label').hidden = true;
   const query = new URLSearchParams(location.search);
   const requested = selectedProject || byId('project-filter')?.value || query.get('project') || materialView.projectId;
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
@@ -102,10 +108,20 @@ function scheduleKpiRefresh() {
   });
 }
 
+function setMaterialSaveStatus(state,detail) {
+  const label = byId('save-label');
+  if (!label) return;
+  label.hidden = !sheet;
+  const savedOnDevice = materialGuest && state !== 'error';
+  GDHomeShell.saveStatus(label,savedOnDevice ? 'guest' : state,detail,state === 'saved' && !savedOnDevice ? 'Đã lưu' : undefined);
+  const undoButton = document.querySelector('#material-header-actions [data-action="undo"]');
+  if (undoButton) undoButton.disabled = !before.length;
+}
+
 function queueSave() {
   dirty = true;
   clearTimeout(saveTimer);
-  if (byId('save-label')) byId('save-label').textContent = conflict ? 'Xung đột' : 'Chờ lưu';
+  setMaterialSaveStatus(conflict ? 'conflict' : 'pending');
   scheduleKpiRefresh();
   saveTimer = setTimeout(flushSave, 550);
 }
@@ -113,14 +129,17 @@ function queueSave() {
 async function flushSave() {
   if (saving || !dirty || conflict || !sheet) return;
   saving = true;
+  setMaterialSaveStatus('saving');
   dirty = false;
   try {
     const savedMeta = materials.sheets.find(s => s.id === sheet.id)?.meta || {};
     const baseline = { ...savedMeta,...materials.profiles?.[sheet.projectId] };
     const profilePatch = Object.fromEntries(projectFields.filter(key => sheet.meta?.[key] !== undefined && sheet.meta[key] !== baseline[key])
       .map(key => [key,sheet.meta[key]]));
-    const result = await post('/api/materials', { _version:materials._version, sheet,
-      ...(Object.keys(profilePatch).length ? {profilePatch} : {}) });
+    const changes = Object.keys(profilePatch).length ? profilePatch : undefined;
+    const result = materialGuest ? saveGuestMaterial(sheet,changes) : await post('/api/materials',{
+      _version:materials._version,sheet,...(changes ? {profilePatch:changes} : {})
+    });
     materials._version = result._version;
     materials.library = result.library || materials.library;
     materials.presets = result.presets || materials.presets;
@@ -136,12 +155,12 @@ async function flushSave() {
     const index = materials.sheets.findIndex(s => s.id === sheet.id);
     if (index < 0) materials.sheets.push(result.sheet);
     else materials.sheets[index] = result.sheet;
-    if (byId('save-label')) byId('save-label').textContent = dirty ? 'Chờ lưu' : 'Đã lưu';
+    setMaterialSaveStatus(dirty ? 'pending' : 'saved');
     say('');
   } catch (error) {
     dirty = true;
     conflict = error.status === 409;
-    if (byId('save-label')) byId('save-label').textContent = 'Chưa lưu';
+    setMaterialSaveStatus(conflict ? 'conflict' : 'error',error.message);
     say(error.message + (conflict ? ' Có thể sao lưu bản nháp bằng nút bên dưới.' : ' Bấm “Lưu lại” để thử lại.'));
     const button = document.createElement('button');
     button.textContent = conflict ? 'Tải bản nháp JSON' : 'Lưu lại';
@@ -179,7 +198,8 @@ function openSheet(value) {
 
 function createSheet(projectId, title, groups, meta = {}) {
   if (!projectId) return say('Chọn dự án Tiến độ trước.');
-  openSheet({ projectId,title,meta:{ project:materials.projects.find(p => p.id === projectId)?.name,...meta },groups });
+  const date = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Ho_Chi_Minh'}).format(new Date());
+  openSheet({ projectId,title,meta:{ project:materials.projects.find(p => p.id === projectId)?.name,date,...meta },groups });
   queueSave();
 }
 
@@ -353,6 +373,7 @@ document.addEventListener('click', async event => {
         renderEditor();
         break;
       case 'density': density = button.dataset.id; setMaterialView({density}); renderEditor(); break;
+      case 'font-weight': setMaterialView({fontWeight:button.dataset.id}); renderEditor(); break;
       case 'header-add-row': {
         const targetGroup = sheet.groups.find(entry => entry.id === byId('header-add-group').value);
         if (targetGroup) modify(() => targetGroup.rows.push(newRow()));
@@ -459,13 +480,14 @@ document.addEventListener('input', event => {
 
 document.addEventListener('keydown', event => {
   const target = event.target;
-  if (!sheet || (!target.closest('#materials,#material-header-actions') && target !== document.body) || target.closest('dialog')) return;
+  if (target.closest('dialog')) return;
   if (event.key === 'Escape') {
     const close = byId('close-print');
     if (close) { close.click(); event.preventDefault(); return; }
     if (GDHomeShell.closeMenus()) { event.preventDefault(); return; }
-    if (viewAsPrint) { byId('material-print-view').click(); event.preventDefault(); return; }
+    if (viewAsPrint && byId('material-print-view')) { byId('material-print-view').click(); event.preventDefault(); return; }
   }
+  if (!sheet || (!target.closest('#materials,#material-header-actions') && target !== document.body)) return;
   if (!viewAsPrint && handleRowSelectionKey(event)) return;
   const {group,row,slot} = context(target);
   if (event.ctrlKey && ['z','y','d'].includes(event.key.toLowerCase())) {

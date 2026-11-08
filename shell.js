@@ -1,6 +1,35 @@
 /* Shared browser UI for GD HOME Tools. Load before the page script. */
 window.GDHomeShell = (() => {
   const toastTimers = new WeakMap();
+  let googleLoader;
+
+  async function googleSignIn({clientId,container,onCredential,autoSelect = false}) {
+    if (!window.google?.accounts?.id) {
+      googleLoader ||= new Promise((resolve,reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.onload = resolve;
+        script.onerror = () => { googleLoader = null; script.remove(); reject(new Error('Không tải được đăng nhập Google.')); };
+        document.head.append(script);
+      });
+      await googleLoader;
+    }
+    if (!container.isConnected) return;
+    const google = window.google.accounts.id;
+    google.initialize({client_id:clientId,callback:onCredential,auto_select:autoSelect,cancel_on_tap_outside:false});
+    container.replaceChildren();
+    google.renderButton(container,{theme:'outline',size:'large',text:'signin_with',shape:'pill',locale:'vi',width:280});
+    if (autoSelect) google.prompt();
+  }
+
+  function loginCard(title) {
+    return '<div class="login-card"><img src="gdhome-logo.png" class="login-logo" alt="GD HOME"><h2>' + escape(title) +
+      '</h2><p>Đăng nhập bằng Gmail để xem và lưu dự án của bạn trên mọi máy.</p>' +
+      '<div class="google-signin-btn"></div><div class="login-guest-divider"><span>hoặc</span></div>' +
+      '<button type="button" class="btn btn-outline login-guest-btn">👤 Dùng thử – chế độ khách (không cần đăng nhập)</button>' +
+      '<div class="login-msg" role="status"></div></div>';
+  }
   const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
   }[c]));
@@ -151,5 +180,5 @@ window.GDHomeShell = (() => {
   }
 
   document.querySelectorAll('[data-shell-menu]').forEach(menu);
-  return { escape,icon,icons,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox };
+  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox };
 })();

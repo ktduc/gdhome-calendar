@@ -51,9 +51,16 @@ function printImages(items, base, large = false) {
 async function loadPrintImages(root, headers = {}) {
   await Promise.all([...root.querySelectorAll('[data-print-img]')].map(async img => {
     try {
-      const res = await fetch(img.dataset.printImg,{ headers,referrerPolicy:'no-referrer' });
-      if (!res.ok) throw new Error();
-      const url = URL.createObjectURL(await res.blob());
+      const source = img.dataset.printImg;
+      let blob;
+      if (typeof materialGuest !== 'undefined' && materialGuest && source.startsWith('/api/materials/assets/')) {
+        blob = guestMaterialAsset(source.split('/').at(-1));
+      } else {
+        const res = await fetch(source,{headers,referrerPolicy:'no-referrer'});
+        if (!res.ok) throw new Error();
+        blob = await res.blob();
+      }
+      const url = URL.createObjectURL(blob);
       img.src = url;
       try { await img.decode(); } catch (error) { URL.revokeObjectURL(url); throw error; }
     } catch { img.alt = 'Ảnh chưa tải được'; }
@@ -106,7 +113,7 @@ function printable(view, base, stats = false) {
   const meta = view.sheet.meta || {};
   const settings = view.settings || {};
   const date = new Intl.DateTimeFormat('vi-VN',{ timeZone:'Asia/Ho_Chi_Minh',day:'numeric',month:'numeric',year:'numeric' })
-    .formatToParts(view.customer?.at || view.publishedAt || Date.now());
+    .formatToParts((stats && /^\d{4}-\d{2}-\d{2}$/.test(meta.date) && Date.parse(meta.date + 'T12:00:00+07:00')) || view.customer?.at || view.publishedAt || Date.now());
   const parts = Object.fromEntries(date.map(p => [p.type,p.value]));
   const day = 'ngày ' + parts.day + ' tháng ' + parts.month + ' năm ' + parts.year;
   const heading = '<div class="print-heading"><img src="/gdhome-logo.png" alt="GD HOME"><i>Hà Nội, ' + day + '</i></div>';
@@ -132,12 +139,12 @@ function printable(view, base, stats = false) {
     table + '<div class="print-terms">' + formatTerms(settings.terms || '') + '</div><div class="print-signatures"><div><strong>ĐẠI DIỆN BÊN A</strong>' +
     signatureMark(view.customer) + '</div><div><strong>ĐẠI DIỆN BÊN B</strong>' + signatureMark(view.company) + '</div></div>';
 }
-async function showPrint(view,base,headers,stats = false) {
+async function showPrint(view,base,headers,stats = false,watermark = stats) {
   byId('print-preview')?.remove();
   const overlay = document.createElement('div');
   overlay.id = 'print-preview';
   overlay.innerHTML = '<div class="print-actions"><button id="do-print" disabled>In / Lưu PDF A4</button> <button id="close-print">Đóng</button><span id="print-extras"></span></div>' +
-    '<article id="print-sheet" class="print-sheet ' + (stats?'watermark':'') + '">' + printable(view,base,stats) + '</article>';
+    '<article id="print-sheet" class="print-sheet ' + (watermark ? 'watermark ' : '') + (stats ? materialFontClass() : '') + '">' + printable(view,base,stats) + '</article>';
   document.body.append(overlay);
   document.body.classList.add('printing-material');
   byId('close-print').onclick = () => {

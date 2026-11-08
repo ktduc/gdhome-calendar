@@ -35,3 +35,22 @@ Nạp `shell.css` trước CSS của trang và `shell.js` trước JS của tran
   </details>
 </aside>
 ```
+
+## Đối chiếu Lịch và Chốt mã
+
+| Tính năng | Lịch | Chốt mã | Cách áp dụng |
+|---|---|---|---|
+| Header, menu trái, modal, toast, trạng thái lưu, AI chạy nền | ✓ | ✓ | Dùng shell. Gắn `data-shell-slot` theo thứ tự `file`, `ai`, `copy`, `undo`, `primary` trong `.shell-toolbar`, rồi tới `.shell-account`. |
+| Cột/đầu bảng cố định, kéo đổi độ rộng, nháy đúp và phím mũi tên | ✓ | ✓ | Giữ cách cuộn theo bố cục từng bảng. |
+| Mật độ XS/S/M/L và độ đậm Mảnh/Thường/Đậm/Rất đậm | ✓ | ✓ | Chốt mã tính cả kích thước ảnh theo mật độ. |
+| Chọn nhiều, thanh thao tác, nhân bản và hoàn tác | ✓ | ✓ | Lịch dịch ngày theo nhóm và giữ liên kết. Chốt mã đổi trạng thái, chuyển nhóm, giữ bảo vệ dòng thuộc bản đã ký. |
+| Xem ảnh lớn, Esc và điều hướng ảnh | ✓ | ✓ | Lịch mở được logo trong bảng. Chốt mã mở ảnh trong ô, có cắt/xoá và nút chốt PA riêng. |
+| Tiêu đề theo dự án và ngày hiện tại | ✓ | ✓ | Lịch hiển thị tháng lập bảng; Chốt mã mặc định ngày theo giờ Việt Nam khi tạo bảng. |
+| Copy ảnh, PNG, PDF A4, bật/tắt sọc chìm | ✓ | ✓ | Lịch có chọn phạm vi ngày và chế độ quét vùng. Chốt mã có lọc nhóm/dòng/phòng. PNG/clipboard dùng cùng `export-canvas.js`. PDF Lịch vừa khổ A4 ngang, PDF Chốt mã in bảng nhiều trang. |
+| Màn đăng nhập, phiên theo tài khoản, chế độ khách | ✓ | ✓ | Chia sẻ thẻ đăng nhập và Google Sign-In. Khách lưu cục bộ, kể cả ảnh Chốt mã, có thể chép bảng sang tài khoản khi đăng nhập. |
+| Xung đột 409 | ✓ | ✓ | Chốt mã bảo toàn bản nháp hiện tại và cho lưu JSON để đối chiếu. |
+| Tuỳ chọn hiển thị theo tài khoản | ✓ | ✓ | Chốt mã ghi `/api/materials/preferences` với phiên bản riêng, khôi phục từ server và giữ thay đổi chưa gửi ở localStorage. |
+| Liên kết FS/SS, lịch nghỉ, âm lịch, XML MS Project | ✓ | ✗ | Nghiệp vụ Lịch. Chốt mã dùng lịch làm việc và liên kết tới việc để tính hạn vật liệu. |
+| Duyệt mã, chữ ký, biên bản và Excel mua hàng | ✗ | ✓ | Nghiệp vụ Chốt mã. Lịch đọc ✓/⚠ theo việc liên quan. |
+
+Các lệnh đăng nhập của shell dùng `GDHomeShell.loginCard(title)` và `GDHomeShell.googleSignIn({clientId,container,onCredential,autoSelect})`. Tuỳ chọn xuất của Lịch và Chốt mã giữ bộ lọc tương ứng với từng loại dữ liệu.

@@ -31,8 +31,9 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .sheet-grid tr[data-row]>td{padding:3px;vertical-align:middle;height:var(--row-height)}
 .sheet-grid td input,.sheet-grid td select{box-sizing:border-box;padding:3px;line-height:1.25}
 .sheet-scroll{--row-height:65px;--thumb-width:var(--material-square)}
-.density-gon{--row-height:37px;--thumb-width:48px}
-.density-lon{--row-height:123px;--thumb-width:140px}
+.density-xs{--row-height:24px;--thumb-width:28px}
+.density-s{--row-height:37px;--thumb-width:48px}
+.density-l{--row-height:123px;--thumb-width:140px}
 .row-actions{display:flex;align-items:center;gap:2px;white-space:nowrap}
 .row-actions button,.image-detail{padding:0;width:20px;height:22px;line-height:1;font-size:13px}
 .image-cell{position:relative;min-width:max(96px,var(--thumb-width));border:1px dashed #bdc8d5;border-radius:4px;min-height:20px}
@@ -68,7 +69,9 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .print-table{border-collapse:collapse;width:100%;font-size:13px}.print-table th,.print-table td{padding:6px;border:1px solid #a7b5c5;vertical-align:top;overflow-wrap:anywhere}
 .print-table thead th{background:var(--material-column-fill)}.print-group th{text-align:left;background:var(--material-group-fill)}
 .print-signatures{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));text-align:center;gap:10px;margin:22px 0}
-.watermark{background-image:repeating-linear-gradient(135deg,transparent 0 3px,#1a243608 3px 4px)!important}
+.watermark{position:relative}
+.watermark::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(135deg,transparent 0 1.59px,rgba(51,65,85,.035) 1.59px 2.44px);print-color-adjust:exact}
 @page{size:A4;margin:9mm}
 @media print{
   body.printing-material > :not(#print-preview),.print-actions{display:none!important}
@@ -132,7 +135,15 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-header summary.btn::-webkit-details-marker{display:none}
 .material-header #release-actions{display:contents}
 .material-header .side-field{padding:0 8px}
-.material-density{--gd-segments:3;margin:4px 0}
+.material-density,.material-font-buttons{--gd-segments:4;margin:4px 0}
+.material-sheet.msp-fw-light :is(td,th,input,select),.print-sheet.msp-fw-light :is(td,th){font-weight:400}
+.material-sheet.msp-fw-bold .sheet-grid,.print-sheet.msp-fw-bold .print-table{-webkit-text-stroke:.3px currentColor}
+.material-sheet.msp-fw-heavy .sheet-grid,.print-sheet.msp-fw-heavy .print-table{-webkit-text-stroke:.65px currentColor}
+.material-sheet.msp-fw-bold input,.material-sheet.msp-fw-heavy input{-webkit-text-stroke:0}
+.material-sheet.msp-fw-bold .sheet-grid input{font-weight:800}
+.material-sheet.msp-fw-heavy .sheet-grid input{font-weight:900}
+.shell-copy-controls{width:100%}
+.shell-copy-controls>.hdr-split-main{justify-content:center;flex:1}
 .material-density button{padding:4px 0;font-size:11px}
 .material-density button[aria-pressed=true]{background:#1a73e8;color:white;border-color:#1a73e8}
 .material-sheet .sheet-grid thead th{font-size:11px;font-weight:800;text-transform:uppercase;color:#1e293b;border-color:#cbd5e1}

@@ -11,7 +11,7 @@ function mergeMaterialView(base,patch) {
 }
 
 function materialViewKey() {
-  return 'gdhome-material-view:' + (session()?.user?.email?.toLowerCase() || 'local');
+  return 'gdhome-material-view:' + (materialGuest ? 'guest' : session()?.user?.email?.toLowerCase() || 'local');
 }
 
 function stashMaterialView() {
@@ -27,7 +27,7 @@ function initMaterialView() {
   catch { pendingMaterialView = {}; }
   materialViewVersion = materials.viewVersion || 0;
   materialView = mergeMaterialView(materials.viewSettings || {},pendingMaterialView);
-  density = materialView.density || 'vua';
+  density = {gon:'s',vua:'m',lon:'l'}[materialView.density] || materialView.density || 'm';
   for (const [set,values] of [[hiddenColumns,materialView.hiddenColumns],[forcedPA,materialView.forcedPA]]) {
     set.clear();
     for (const key of values || []) set.add(key);
@@ -54,6 +54,11 @@ function setMaterialView(patch) {
   const next = mergeMaterialView(materialView,patch);
   if (JSON.stringify(next) === JSON.stringify(materialView)) return;
   materialView = next;
+  if (materialGuest) {
+    try { saveGuestView(materialView); }
+    catch (error) { say('Không lưu được cài đặt trên máy: ' + error.message); }
+    return;
+  }
   pendingMaterialView = mergeMaterialView(pendingMaterialView,patch);
   stashMaterialView();
   scheduleMaterialViewSave();

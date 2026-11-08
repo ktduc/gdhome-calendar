@@ -11,6 +11,9 @@ function session() {
 }
 
 async function request(url, options = {}, internal = true) {
+  if (internal && typeof materialGuest !== 'undefined' && materialGuest && url !== '/api/config') {
+    throw new Error('Chế độ khách lưu trên máy. Đăng nhập Gmail để dùng kết nối và phát hành.');
+  }
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (internal && config?.authMode === 'google' && session()?.token) headers.Authorization = 'Bearer ' + session().token;
   if (internal && config?.authMode === 'password') headers['x-app-key'] = localStorage.getItem(passwordKey) || '';
@@ -36,33 +39,64 @@ async function signIn() {
     };
     return;
   }
-  if (!window.google?.accounts) await new Promise((resolve, reject) => {
-    const script = document.createElement('script');
-    script.src = 'https://accounts.google.com/gsi/client';
-    script.onload = resolve;
-    script.onerror = () => reject(new Error('Không tải được đăng nhập Google.'));
-    document.head.append(script);
-  });
-  google.accounts.id.initialize({ client_id: config.googleClientId, callback: async ({ credential }) => {
-    try {
-      const { token, user } = await request('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential }) });
-      localStorage.setItem(sessionKey, JSON.stringify({ token, user }));
-      await start();
-    } catch (error) { showError(error); }
-  } });
-  google.accounts.id.renderButton(box, { theme: 'outline', locale: 'vi', width: 270 });
+  box.className = 'login-overlay active';
+  box.innerHTML = GDHomeShell.loginCard(document.title.split(' · ')[0]);
+  box.querySelector('.login-guest-btn').onclick = () => {
+    materials = openGuestMaterials();
+    showTools();
+  };
+  const message = box.querySelector('.login-msg');
+  await GDHomeShell.googleSignIn({
+    clientId:config.googleClientId,container:box.querySelector('.google-signin-btn'),
+    onCredential:async ({credential}) => {
+      try {
+        message.textContent = 'Đang đăng nhập…';
+        const { token,user } = await request('/api/auth/google',{method:'POST',body:JSON.stringify({credential})},false);
+        localStorage.setItem(sessionKey,JSON.stringify({token,user}));
+        localStorage.removeItem(guestFlagKey);
+        materialGuest = false;
+        await start(true);
+      } catch (error) { message.textContent = error.message; }
+    }
+  }).catch(error => { message.textContent = error.message; });
 }
 
-async function start() {
+async function start(afterLogin = false) {
   config ||= await request('/api/config');
-  try { materials = await request('/api/materials'); }
-  catch (error) {
-    if (error.status !== 401) throw error;
-    return signIn();
+  if (config.authMode === 'google' && localStorage.getItem(guestFlagKey) === '1') {
+    materials = openGuestMaterials();
+  } else {
+    try { materials = await request('/api/materials'); }
+    catch (error) {
+      if (error.status !== 401) throw error;
+      return signIn();
+    }
   }
+  let copyError;
+  if (afterLogin && byId('materials')) {
+    try { await importGuestMaterials(); } catch (error) { copyError = error; }
+  }
+  showTools();
+  if (copyError) showError(copyError);
+}
+
+function showTools() {
   byId('notice').textContent = '';
   byId('login').replaceChildren();
-  byId('identity').textContent = config.authMode === 'google' ? session()?.user?.email || '' : 'GD HOME';
+  byId('login').className = '';
+  const identity = byId('identity');
+  identity.textContent = materialGuest ? '👤 Khách' : config.authMode === 'google' ? session()?.user?.email || '' : 'GD HOME';
+  if (materialGuest) {
+    const button = document.createElement('button');
+    button.className = 'btn btn-outline btn-sm';
+    button.textContent = 'Đăng nhập';
+    button.onclick = async () => {
+      if (typeof flushSave === 'function') await flushSave();
+      if (typeof dirty !== 'undefined' && (dirty || saving)) return;
+      signIn().catch(showError);
+    };
+    identity.append(' ',button);
+  }
   if (byId('projects')) {
     byId('projects').innerHTML = materials.projects.map(project => {
       const count = materials.sheets.filter(sheet => sheet.projectId === project.id).length;
@@ -70,6 +104,7 @@ async function start() {
     }).join('') || '<p>Tạo dự án trong Tiến độ trước.</p>';
   }
   if (byId('materials') && typeof renderMaterialApp === 'function') {
+    sheet = null;
     initMaterialView();
     const project = new URLSearchParams(location.search).get('project');
     const previous = materials.sheets.find(sheet => sheet.id === materialView.sheetId && (!project || sheet.projectId === project));

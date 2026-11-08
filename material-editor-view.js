@@ -55,9 +55,12 @@ function catalogSidebar() {
 function displaySidebar() {
   return sidebarSection('display','⚙ Hiển thị',
     '<div class="sb-row-label">Mật độ dòng</div><div class="sb-seg-btns material-density">' +
-    Object.entries({gon:'Gọn',vua:'Vừa',lon:'Ảnh lớn'}).map(([key,label]) =>
+    Object.entries({xs:'XS',s:'S',m:'M',l:'L'}).map(([key,label]) =>
       '<button data-action="density" data-id="' + key + '" aria-pressed="' + (key === density) + '">' + label + '</button>').join('') + '</div>' +
 
+    '<div class="sb-row-label">Độ đậm chữ</div><div class="sb-seg-btns material-font-buttons">' +
+    Object.entries({light:'Mảnh',normal:'Thường',bold:'Đậm',heavy:'Rất đậm'}).map(([key,label]) =>
+      '<button data-action="font-weight" data-id="' + key + '" aria-pressed="' + (key === (materialView.fontWeight || 'normal')) + '">' + label + '</button>').join('') + '</div>' +
     '<label class="side-field">Phòng<select id="room-filter"><option value="">Tất cả</option>' +
       [...new Set(sheet.groups.flatMap(g => g.rows.map(r => r.room)).filter(Boolean))].map(r => option(r,r,sheetRoom)).join('') + '</select></label>' +
     '<label class="side-field">Trạng thái<select id="status-filter"><option value="">Tất cả</option>' +
@@ -88,7 +91,7 @@ function columnWidth(key) {
     const longest = Math.max(0,...sheet.groups.flatMap(g => g.rows.map(row => context.measureText(row.name).width)));
     return Math.ceil(Math.min(460,Math.max(148,longest+24)));
   }
-  if (density === 'lon' && (key === 'render' || /^pa[012]$/.test(key))) return 176;
+  if (density === 'l' && (key === 'render' || /^pa[012]$/.test(key))) return 176;
   return defaultColumnWidths[key];
 }
 
@@ -220,12 +223,14 @@ function renderEditor() {
   restoreEditorView(view);
 }
 
+function materialFontClass() { return 'msp-fw-' + (materialView.fontWeight || 'normal'); }
+
 function renderMaterialPreview() {
   const groups = sheet.groups.filter(group => !hiddenGroups.has(group.id))
     .map(group => ({...group,rows:visibleGroupRows(group)})).filter(group => group.rows.length);
   const markup = printable({sheet:{...sheet,groups}},'/api/materials/assets/',true)
     .replaceAll('data-print-img="/api/materials/assets/','data-asset="');
-  return '<section class="material-sheet"><div class="sheet-scroll material-preview-scroll">' +
+  return '<section class="material-sheet ' + materialFontClass() + '"><div class="sheet-scroll material-preview-scroll">' +
     '<article class="print-sheet" id="material-table-preview">' + markup + '</article></div></section>';
 }
 
@@ -236,7 +241,7 @@ function renderMaterialTable(columns,widths) {
     label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
     label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + '</th>').join('');
   const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + widths[index] + 'px">').join('');
-  return '<section class="material-sheet"><div class="material-title"><h1>BẢNG CHỐT MÃ VẬT LIỆU – ' +
+  return '<section class="material-sheet ' + materialFontClass() + '"><div class="material-title"><h1>BẢNG CHỐT MÃ VẬT LIỆU – ' +
     html(projectName) + '</h1><div id="material-count">' + materialKpis() + '</div></div>' +
     (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm.</p>') +
     '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid" style="width:' + widths.reduce((sum,w) => sum+w,0) +
@@ -251,14 +256,20 @@ const headerMenu = GDHomeShell.dropdown;
 function renderMaterialHeader() {
   const header = byId('material-header-actions');
   header.innerHTML = headerMenu('file','File','folder','<button class="hdr-menu-item" data-action="back">Danh sách bảng</button><span id="release-actions"></span>') +
-    '<span id="ai-actions"></span><span id="image-actions"></span><div class="hdr-undo-group">' +
+    '<span id="ai-actions" data-shell-slot="ai"></span><span id="image-actions" data-shell-slot="copy"></span><div class="hdr-undo-group" data-shell-slot="undo">' +
     '<button class="btn btn-outline hdr-icon-sq" data-action="undo" data-header-command="undo" aria-label="Hoàn tác" title="Hoàn tác · Ctrl+Z">' + headerIcon('undo-2','↶') + '</button>' +
     '<button class="btn btn-outline hdr-icon-sq" data-action="redo" data-header-command="redo" aria-label="Làm lại" title="Làm lại · Ctrl+Y">' + headerIcon('redo-2','↷') + '</button></div>' +
     headerMenu('add','Thêm dòng/nhóm','plus','<label class="side-field">Danh mục<select id="header-add-group">' +
       sheet.groups.map(group => option(group.id,group.name)).join('') + '</select></label>' +
-      '<button class="hdr-menu-item" data-action="header-add-row">Thêm dòng</button><button class="hdr-menu-item" data-action="add-group">Thêm danh mục</button>','primary') +
-    '<small id="save-label" class="save-status is-inline" role="status">' + (conflict ? 'Xung đột' : dirty ? 'Chờ lưu' : saving ? 'Đang lưu' : 'Đã lưu') + '</small>';
+      '<button class="hdr-menu-item" data-action="header-add-row">Thêm dòng</button><button class="hdr-menu-item" data-action="add-group">Thêm danh mục</button>','primary');
+  for (const [command,slot] of [['file','file'],['add','primary']]) {
+    header.querySelector('[data-header-command="' + command + '"]').closest('details').dataset.shellSlot = slot;
+  }
   header.querySelector('[data-header-command="add"]').id = 'material-add';
+  header.querySelector('[data-action="undo"]').disabled = !before.length;
+  header.querySelector('[data-action="redo"]').disabled = !after.length;
+  byId('save-label').onclick = () => conflict ? saveDraft() : flushSave();
+  setMaterialSaveStatus(conflict ? 'conflict' : dirty ? 'pending' : saving ? 'saving' : 'saved');
 }
 function installEditorSidebar() {
   box().querySelectorAll('[data-sidebar]').forEach(section => {

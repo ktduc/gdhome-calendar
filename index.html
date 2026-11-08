@@ -12,8 +12,8 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="shell.css?v=gd101">
-  <link rel="stylesheet" href="style.css?v=gd101">
+  <link rel="stylesheet" href="shell.css?v=gd103">
+  <link rel="stylesheet" href="style.css?v=gd103">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -57,9 +57,10 @@
 
     <div class="header-right">
       <input type="file" id="input-import-msproject" accept=".xml,.mspdi,.csv,.json" style="display: none;">
+      <div class="shell-toolbar">
 
       <!-- 1. Nhóm Tệp: menu thả xuống "📁 File ▾" -->
-      <div class="hdr-dropdown" id="hdr-file-dropdown">
+      <div class="hdr-dropdown" id="hdr-file-dropdown" data-shell-slot="file">
         <button type="button" class="btn btn-outline hdr-dropdown-toggle" id="btn-file-menu-toggle" title="Mở hoặc xuất file dự án (.xml, .csv, .json)">
           <i data-lucide="folder"></i><span class="btn-label">File</span><span class="hdr-caret">▾</span>
         </button>
@@ -82,12 +83,12 @@
         </div>
       </div>
 
-      <button type="button" class="btn btn-outline hdr-ai-btn" id="btn-open-ai-planner" title="AI lập tiến độ từ ảnh / file Excel">
+      <button type="button" class="btn btn-outline hdr-ai-btn" id="btn-open-ai-planner" data-shell-slot="ai" title="AI lập tiến độ từ ảnh / file Excel">
         <i data-lucide="sparkles"></i><span class="btn-label">AI</span>
       </button>
 
       <!-- 2. Nhóm Ảnh: nút chính "Copy ảnh" + mũi tên "▾" -->
-      <div class="hdr-dropdown hdr-split-group" id="hdr-image-dropdown">
+      <div class="hdr-dropdown hdr-split-group" id="hdr-image-dropdown" data-shell-slot="copy">
         <button type="button" class="btn btn-success hdr-split-main" id="btn-quick-copy-clipboard" title="Copy ngay bảng tiến độ vào Clipboard để Ctrl+V dán vào Zalo / Word / Photoshop">
           <i data-lucide="copy"></i><span class="btn-label">Copy ảnh</span>
         </button>
@@ -105,20 +106,22 @@
       </div>
 
       <!-- 3. Nhóm Sửa: Undo / Redo 2 nút icon gọn cạnh nhau -->
-      <div class="hdr-undo-group">
+      <div class="hdr-undo-group" data-shell-slot="undo">
         <button type="button" class="btn btn-outline hdr-icon-sq" id="btn-undo-action" title="Hoàn tác (Undo - Ctrl+Z)">
           <i data-lucide="undo-2"></i>
         </button>
-        <button type="button" class="btn btn-outline hdr-icon-sq" id="btn-redo-action" title="Làm lại (Redo - Ctrl+Y)" style="display: none;">
+        <button type="button" class="btn btn-outline hdr-icon-sq" id="btn-redo-action" title="Làm lại (Redo - Ctrl+Y)" disabled>
           <i data-lucide="redo-2"></i>
         </button>
       </div>
 
       <!-- 4. Nút "＋ Thêm việc" nổi bật -->
-      <button type="button" title="Thêm việc" class="btn btn-primary" id="btn-add-task">
+      <button type="button" title="Thêm việc" class="btn btn-primary" id="btn-add-task" data-shell-slot="primary">
         <i data-lucide="plus"></i><span class="btn-label">Thêm việc</span>
       </button>
 
+      </div>
+      <div class="shell-account">
       <!-- Chip chế độ Khách + nút Đăng nhập hoặc Chip tài khoản Gmail -->
       <span class="user-chip guest-chip" id="guest-mode-chip" style="display:none;" title="Đang dùng chế độ khách – dữ liệu chỉ lưu trên trình duyệt này">👤 Khách</span>
       <button type="button" class="btn btn-outline btn-sm" id="btn-guest-login" style="display:none;" title="Đăng nhập bằng Gmail">Đăng nhập</button>
@@ -127,6 +130,7 @@
       <button type="button" class="btn btn-outline hdr-icon-sq icon-only-btn" id="btn-project-settings" title="Cài đặt dự án & Logo">
         <i data-lucide="settings"></i>
       </button>
+      </div>
     </div>
   </header>
 
@@ -433,6 +437,7 @@
               <div class="msp-multisel-actions">
                 <button type="button" class="msp-multisel-btn" id="btn-multisel-shift-prev" title="Lùi đồng thời các việc đang chọn 1 ngày làm việc">◀ -1 ngày</button>
                 <button type="button" class="msp-multisel-btn" id="btn-multisel-shift-next" title="Tiến đồng thời các việc đang chọn 1 ngày làm việc">+1 ngày ▶</button>
+                <button type="button" class="msp-multisel-btn" id="btn-multisel-duplicate">Nhân bản</button>
                 <button type="button" class="msp-multisel-btn clear" id="btn-multisel-clear" title="Bỏ chọn tất cả">Bỏ chọn</button>
               </div>
             </div>
@@ -879,10 +884,10 @@
   <div class="modal-overlay" id="export-modal">
     <div class="modal-card" style="max-width: 540px;">
       <div class="modal-header">
-        <h3>Tùy Chọn Vùng Nhìn, Xuất Ảnh & Copy</h3>
+        <h3>Xuất ảnh / PDF A4</h3>
         <button class="icon-btn close-modal" id="btn-close-export-modal">&times;</button>
       </div>
-      <div class="modal-body">
+      <div class="modal-body shell-export-scope">
         <div class="form-group">
           <label>Chọn phạm vi vùng nhìn:</label>
           <div style="display:flex; flex-direction:column; gap:10px; margin-top:8px;">
@@ -932,6 +937,7 @@
           <button type="button" class="btn btn-success" id="btn-copy-export-clipboard" title="Copy ảnh vào bộ nhớ tạm để dán trực tiếp (Ctrl+V) vào Zalo, Word, Messenger...">
             <i data-lucide="copy"></i> Copy vào Clipboard
           </button>
+          <button type="button" class="btn btn-outline" id="btn-print-export">In / Lưu PDF A4</button>
           <button type="button" class="btn btn-primary" id="btn-confirm-export">
             <i data-lucide="download"></i> Tải file PNG
           </button>
@@ -1057,9 +1063,9 @@
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
   <script src="holidays-data.js?v=20261107k"></script>
   <script src="scheduler.js?v=20261108mat"></script>
-  <script src="export-canvas.js?v=20261108gd6"></script>
+  <script src="export-canvas.js?v=gd103"></script>
   <script src="material-timeline.js?v=20261108gd6"></script>
-  <script src="shell.js?v=gd101"></script>
-  <script src="app.js?v=gd101"></script>
+  <script src="shell.js?v=gd103"></script>
+  <script src="app.js?v=gd103"></script>
 </body>
 </html>

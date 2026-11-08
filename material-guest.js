@@ -1,0 +1,95 @@
+const guestMaterialKey = 'gdhome_materials::guest';
+const guestFlagKey = 'gdhome_guest';
+let materialGuest = false;
+
+function guestMaterialState() {
+  try { return JSON.parse(localStorage.getItem(guestMaterialKey)) || {}; }
+  catch { return {}; }
+}
+
+function guestMaterialProjects() {
+  try {
+    const timeline = JSON.parse(localStorage.getItem('timeline_calendar_state::guest'));
+    if (timeline?.projectOwners?.length) return timeline.projectOwners;
+  } catch { /* Start with the same default project as Tiến độ. */ }
+  return [{id:'owner-1',name:'DỰ ÁN MỚI'}];
+}
+
+function openGuestMaterials() {
+  materialGuest = true;
+  localStorage.setItem(guestFlagKey,'1');
+  return { _version:0,sheets:[],presets:{},library:[],profiles:{},columnWidths:{},viewSettings:{},
+    ...guestMaterialState(),projects:guestMaterialProjects(),r2:false,schedule:{tasks:[]},signedRows:{} };
+}
+
+function saveGuestView(settings) {
+  localStorage.setItem(guestMaterialKey,JSON.stringify({...guestMaterialState(),viewSettings:settings}));
+}
+
+function saveGuestMaterial(sheet,profilePatch) {
+  const previous = guestMaterialState();
+  const saved = structuredClone(sheet);
+  saved.id ||= crypto.randomUUID();
+  const sheets = [...(previous.sheets || []).filter(entry => entry.id !== saved.id),saved];
+  const profiles = {...previous.profiles};
+  if (profilePatch) profiles[saved.projectId] = {...profiles[saved.projectId],...profilePatch};
+  const version = (previous._version || 0)+1;
+  localStorage.setItem(guestMaterialKey,JSON.stringify({...previous,_version:version,sheets,profiles}));
+  return { _version:version,sheet:saved,profiles };
+}
+
+async function saveGuestAsset(encoded) {
+  const hash = await crypto.subtle.digest('SHA-256',Uint8Array.from(atob(encoded),char => char.charCodeAt(0)));
+  const name = [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2,'0')).join('') + '.webp';
+  localStorage.setItem('gdhome-guest-material-asset:'+name,encoded);
+  return name;
+}
+
+function guestAssetData(name) {
+  const encoded = localStorage.getItem('gdhome-guest-material-asset:'+name);
+  if (!encoded) throw new Error('Không tìm thấy ảnh khách trên máy này.');
+  return encoded;
+}
+
+function guestMaterialAsset(name) {
+  return new Blob([Uint8Array.from(atob(guestAssetData(name)),char => char.charCodeAt(0))],{type:'image/webp'});
+}
+
+async function importGuestMaterials() {
+  const previous = guestMaterialState();
+  if (!previous.sheets?.length || !confirm('Chép các bảng Chốt mã đang làm ở chế độ khách vào tài khoản?')) return;
+  const assets = new Map();
+  async function upload(name) {
+    if (!assets.has(name)) assets.set(name,(await post('/api/materials/assets',{image:guestAssetData(name)})).name);
+    return assets.get(name);
+  }
+  for (const entry of [...previous.sheets]) {
+    const draft = structuredClone(entry);
+    const profile = { ...draft.meta,...previous.profiles?.[draft.projectId] };
+    const name = guestMaterialProjects().find(project => project.id === draft.projectId)?.name || profile.project || draft.title;
+    let project = materials.projects.find(item => item.name.trim().toLocaleLowerCase() === name.trim().toLocaleLowerCase());
+    if (!project) {
+      const created = await post('/api/materials/profile',{_version:materials._version,create:true,profile:{...profile,project:name}});
+      materials._version = created._version;
+      project = created.project;
+      materials.projects.push(project);
+    }
+    delete draft.id;
+    draft.projectId = project.id;
+    for (const group of draft.groups) {
+      delete group.taskId;
+      delete group.calendarId;
+      for (const row of group.rows) for (const list of [row.render,...row.options.map(option => option.images)]) {
+        for (const image of list) {
+          image.full = await upload(image.full);
+          image.thumb = await upload(image.thumb);
+        }
+      }
+    }
+    const saved = await post('/api/materials',{_version:materials._version,sheet:draft});
+    materials._version = saved._version;
+    materials.sheets.push(saved.sheet);
+    previous.sheets = previous.sheets.filter(item => item.id !== entry.id);
+    localStorage.setItem(guestMaterialKey,JSON.stringify(previous));
+  }
+}

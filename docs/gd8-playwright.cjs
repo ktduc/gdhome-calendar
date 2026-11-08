@@ -425,7 +425,7 @@ cases['10.1'] = async page => {
 
 cases['10.2'] = async page => {
   await openMaterials(page);
-  await page.locator('[data-action="density"][data-id="lon"]').click();
+  await page.locator('[data-action="density"][data-id="l"]').click();
   await page.locator('[data-column-toggle="supplier"]').uncheck();
   await page.locator('[data-column-toggle="pa1"]').check();
   await page.locator('[data-group-toggle="g2"]').uncheck();
@@ -455,7 +455,7 @@ cases['10.2'] = async page => {
   assert.equal(await page.locator('#status-filter').inputValue(),'draft');
   assert.equal(await page.locator('[data-group-toggle="g2"]').isChecked(),false);
   assert.equal(await page.locator('[data-catalog]').first().getAttribute('data-catalog'),'g4');
-  assert.equal(await page.locator('[data-action="density"][data-id="lon"]').getAttribute('aria-pressed'),'true');
+  assert.equal(await page.locator('[data-action="density"][data-id="l"]').getAttribute('aria-pressed'),'true');
   await page.locator('#material-print-view').uncheck();
   await page.locator('#room-filter').selectOption('');
   assert.equal(await page.locator('[data-group="g3"] tr[data-row]').count(),0);
@@ -464,6 +464,66 @@ cases['10.2'] = async page => {
   assert.ok(await page.locator('col[data-column="qty"]').evaluate(col => parseInt(col.style.width,10)) > 104);
   await openImageScope(page);
   assert.equal(await form.locator('[name="groups"]').inputValue(),'all');
+};
+
+cases['10.3'] = async page => {
+  for (const width of [1440,1920]) {
+    await page.setViewportSize({width,height:900});
+    const buttons = () => page.locator('.app-header [data-shell-slot]').evaluateAll(nodes =>
+      Object.fromEntries(nodes.map(node => [node.dataset.shellSlot,Math.round(node.getBoundingClientRect().x)])));
+    await page.goto('/');
+    await page.locator('.project-owner-header').first().waitFor();
+    const schedule = await buttons();
+    await openMaterials(page);
+    assert.deepEqual(await buttons(),schedule,'Các cụm lệnh cần thẳng vị trí ở ' + width + ' px');
+  }
+  await page.locator('[data-action="font-weight"][data-id="heavy"]').click();
+  await page.locator('.material-sheet.msp-fw-heavy').waitFor();
+  await page.locator('[data-header-command="file"]').click();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.hdr-dropdown[open]').count(),0);
+  const form = await openImageScope(page);
+  await form.locator('[name="watermark"]').uncheck();
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  assert.equal(await page.locator('#print-sheet.watermark').count(),0);
+  await page.keyboard.press('Escape');
+  await page.locator('#print-sheet').waitFor({state:'detached'});
+  await openImageScope(page);
+  assert.equal(await form.locator('[name="watermark"]').isChecked(),false);
+
+  await page.goto('/');
+  await page.locator('#btn-image-menu-toggle').click();
+  await page.locator('#btn-open-export-modal').click();
+  await page.locator('#btn-print-export').click();
+  await page.locator('.canvas-print img[src]').waitFor({timeout:20000});
+  assert.ok((await page.pdf({preferCSSPageSize:true})).length > 1000);
+  await page.keyboard.press('Escape');
+  await page.locator('.canvas-print').waitFor({state:'detached'});
+};
+
+cases['10.3-guest'] = async page => {
+  await page.route('**/api/config',route => route.fulfill({json:{authMode:'google',googleClientId:'test'}}));
+  await page.route('https://accounts.google.com/**',route => route.fulfill({body:
+    'window.google={accounts:{id:{initialize(){},renderButton(){},prompt(){}}}};'}));
+  let materialCalls = 0;
+  await page.route('**/api/materials**',route => {
+    materialCalls++;
+    return route.fulfill({status:401,json:{message:'Cần đăng nhập'}});
+  });
+  await page.goto('/chot-ma');
+  await page.locator('.login-guest-btn').click();
+  const initial = materialCalls;
+  await page.locator('[data-action="new"]').click();
+  await page.locator('.sheet-grid').waitFor();
+  await page.locator('.image-cell[data-slot="render"]').first().focus();
+  assert.equal(await pasteFixture(page,'items'),true);
+  await page.locator('.image-cell[data-slot="render"] img[src]').first().waitFor();
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('gdhome_materials::guest'))?.sheets[0]?.groups[0]?.rows[0]?.render.length);
+  await page.reload();
+  await page.locator('.image-cell[data-slot="render"] img[src]').first().waitFor();
+  assert.match(await page.locator('#save-label').textContent(),/Chế độ khách/);
+  assert.equal(materialCalls,initial);
 };
 
 function viewPosition(page) {

@@ -470,3 +470,49 @@
 .shell-sidebar .sb-seg-btns{grid-template-columns:repeat(var(--gd-segments,4),minmax(0,1fr))}
 .shell-sidebar .sb-seg-btns [aria-pressed=true]{background:var(--gd-primary);color:white;border-color:var(--gd-primary)}
 .save-status.is-inline{position:static;box-shadow:none}
+.shell-image-trigger{cursor:zoom-in}
+.shell-account{display:flex;align-items:center;justify-content:flex-end;gap:6px;min-width:0}
+.shell-account strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.shell-toolbar .btn:disabled{opacity:.5;cursor:default}
+.shell-export-scope .modal-actions{flex-wrap:wrap}
+@media(min-width:1280px){
+  .shell-account{width:220px}
+  .shell-toolbar [data-shell-slot=file]{width:86px}
+  .shell-toolbar [data-shell-slot=ai]{width:68px}
+  .shell-toolbar [data-shell-slot=copy]{width:128px}
+  .shell-toolbar [data-shell-slot=undo]{width:72px}
+  .shell-toolbar [data-shell-slot=primary]{width:145px}
+  .shell-toolbar [data-shell-slot]>summary,.shell-toolbar [data-shell-slot=file]>.btn,.shell-toolbar .hdr-split-main{flex:1;justify-content:center}
+  .shell-toolbar button[data-shell-slot],.shell-toolbar [data-shell-slot=ai]>.btn{justify-content:center}
+  .shell-toolbar [data-shell-slot=ai]>.btn{width:100%}
+}
+@page gd-export{size:A4 landscape;margin:9mm}
+.canvas-print{width:min(95vw,1100px);max-width:none}
+.canvas-print img{display:block;width:100%;height:auto;margin-top:12px}
+@media print{
+  body.printing-canvas>:not(.canvas-print){display:none!important}
+  body.printing-canvas{display:block;overflow:visible;height:auto;background:#fff}
+  .canvas-print{page:gd-export;position:static;display:block;width:auto;max-width:none;max-height:none;overflow:visible;margin:0;padding:0;border:0}
+  .canvas-print::backdrop{display:none}
+  .canvas-print button{display:none}
+  .canvas-print img{width:auto;max-width:100%;max-height:192mm;margin:auto;object-fit:contain}
+}
+
+.login-overlay { position: fixed; inset: 0; z-index: 20000; background: rgba(15, 23, 42, 0.55); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; padding: 16px; }
+.login-overlay.active { display: flex; }
+.login-card { background: #fff; border-radius: 16px; padding: 28px 28px 22px; width: 100%; max-width: 400px; text-align: center; box-shadow: 0 20px 60px rgba(0,0,0,0.25); display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.login-logo { height: 44px; object-fit: contain; }
+.login-card h2 { margin: 2px 0 0; font-size: 20px; color: #0f172a; }
+.login-card p { margin: 0 0 6px; font-size: 13px; color: #475569; line-height: 1.5; }
+.google-signin-btn { min-height: 44px; display: flex; justify-content: center; }
+.login-guest-divider { width: 100%; display: flex; align-items: center; gap: 10px; color: #94a3b8; font-size: 12px; margin: 2px 0; }
+.login-guest-divider::before, .login-guest-divider::after { content: ''; flex: 1; height: 1px; background: #e2e8f0; }
+.login-guest-btn { width: 100%; justify-content: center; padding: 10px 14px; border-radius: 22px; font-size: 13px; font-weight: 600; color: #334155; border-color: #cbd5e1; background: #f8fafc; }
+.login-guest-btn:hover { background: #f1f5f9; border-color: #94a3b8; color: #0f172a; }
+.login-msg { font-size: 12.5px; color: #b91c1c; min-height: 18px; }
+.user-chip { gap: 6px !important; padding: 4px 10px 4px 4px !important; border-radius: 20px !important; max-width: 240px; }
+.guest-chip { display: inline-flex; align-items: center; padding: 0 10px !important; height: 34px; background: #f1f5f9; border: 1px solid #cbd5e1; color: #334155; font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.user-chip-avatar { width: 26px; height: 26px; border-radius: 50%; background: #1e293b; color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; overflow: hidden; flex-shrink: 0; }
+.user-chip-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-chip-email { overflow: hidden; text-overflow: ellipsis; font-size: 12.5px; }
+@media (max-width: 1650px) { .user-chip .user-chip-email { display: none; } .user-chip:not(.guest-chip) { padding: 4px !important; } }

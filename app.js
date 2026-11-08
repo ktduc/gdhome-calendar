@@ -86,7 +86,7 @@ function updateUndoRedoButtonsUI() {
     btnUndo.style.opacity = _undoStack.length <= 1 ? '0.5' : '1';
   }
   if (btnRedo) {
-    btnRedo.style.display = _redoStack.length > 0 ? 'inline-flex' : 'none';
+    btnRedo.disabled = _redoStack.length === 0;
   }
 }
 
@@ -920,18 +920,6 @@ async function loadAppConfig() {
   return _appConfig;
 }
 
-function loadGoogleScript() {
-  return new Promise((resolve, reject) => {
-    if (window.google && window.google.accounts && window.google.accounts.id) return resolve();
-    const s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.async = true;
-    s.defer = true;
-    s.onload = () => resolve();
-    s.onerror = () => reject(new Error('Không tải được thư viện đăng nhập Google (kiểm tra mạng)'));
-    document.head.appendChild(s);
-  });
-}
 
 function renderUserChip() {
   const chip = document.getElementById('btn-user-account');
@@ -1033,19 +1021,10 @@ async function showLoginOverlay(message) {
   const msgEl = document.getElementById('login-overlay-msg');
   if (msgEl) msgEl.textContent = message || '';
   try {
-    await loadGoogleScript();
-    window.google.accounts.id.initialize({
-      client_id: _appConfig.googleClientId,
-      callback: handleGoogleCredential,
-      auto_select: true,
-      cancel_on_tap_outside: false
+    await GDHomeShell.googleSignIn({
+      clientId:_appConfig.googleClientId,container:document.getElementById('google-signin-btn'),
+      onCredential:handleGoogleCredential,autoSelect:true
     });
-    const btnBox = document.getElementById('google-signin-btn');
-    if (btnBox) {
-      btnBox.innerHTML = '';
-      window.google.accounts.id.renderButton(btnBox, { theme: 'outline', size: 'large', text: 'signin_with', shape: 'pill', locale: 'vi', width: 280 });
-    }
-    window.google.accounts.id.prompt();
   } catch (err) {
     if (msgEl) msgEl.textContent = '⚠ ' + err.message;
   }
@@ -3612,6 +3591,29 @@ function updateCompanyBranding() {
   }
   if (logoContainer) logoContainer.innerHTML = logoHtml;
   if (mspLogoContainer) mspLogoContainer.innerHTML = logoHtml;
+  for (const container of [logoContainer,mspLogoContainer]) {
+    const logo = container?.querySelector('img');
+    if (!logo) continue;
+    logo.tabIndex = 0;
+    logo.setAttribute('role','button');
+    logo.setAttribute('aria-label','Xem logo lớn');
+    logo.classList.add('shell-image-trigger');
+    const show = () => GDHomeShell.lightbox({
+      title:'Logo GD HOME',count:() => 1,
+      render(_index,figure) {
+        const image = document.createElement('img');
+        image.src = logo.src;
+        image.alt = logo.alt;
+        figure.append(image);
+      }
+    });
+    logo.onclick = show;
+    logo.onkeydown = event => {
+      if (!['Enter',' '].includes(event.key)) return;
+      event.preventDefault();
+      show();
+    };
+  }
 }
 
 // =========================================================================
@@ -3725,6 +3727,7 @@ function setupExportModal() {
   };
 
   btnConfirmDownload.addEventListener('click', () => handleModalExportAction('download'));
+  document.getElementById('btn-print-export').onclick = () => handleModalExportAction('print');
   if (btnCopyModal) {
     btnCopyModal.addEventListener('click', () => handleModalExportAction('clipboard'));
   }
@@ -3808,7 +3811,9 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
         activeBtn.disabled = false;
       }
 
-      if (mode === 'clipboard') {
+      if (mode === 'print') {
+        printExportCanvas(canvas,AppState.exportWatermark !== false);
+      } else if (mode === 'clipboard') {
         copyCanvasToClipboard(canvas, { watermark: AppState.exportWatermark !== false, notify: showToast });
       } else {
         downloadCanvas(canvas, `Bang_Tien_Do_${firstD}_den_${lastD}.png`, AppState.exportWatermark !== false);
@@ -4260,7 +4265,7 @@ function shiftEntireProjectToEndDate(calId, newProjectEndDateStr) {
 }
 
 // Nhân đôi nhanh 1 Công việc (chèn ngay phía dưới công việc gốc để chỉnh sửa nhanh)
-function duplicateTask(task, shiftNextDate = false) {
+function duplicateTask(task, shiftNextDate = false,commit = true) {
   if (!task) return null;
   const workDays = Math.max(1, countWorkingDays(task.startDate, task.endDate, task.skipSundays !== false));
   let newStart = task.startDate;
@@ -4281,13 +4286,14 @@ function duplicateTask(task, shiftNextDate = false) {
       ? [{ id: task.id, type: 'FS', lag: 0 }]
       : (Array.isArray(task.predecessors) ? task.predecessors.map(l => ({ ...l })) : [])
   };
+  for (const key of ['notionPageId','notionSyncedAt','notionSnap']) delete cloned[key];
   const origIdx = AppState.tasks.findIndex(t => t.id === task.id);
   if (origIdx !== -1) {
     AppState.tasks.splice(origIdx + 1, 0, cloned);
   } else {
     AppState.tasks.push(cloned);
   }
-  syncAllFromMSProject(`Đã nhân đôi công việc "${task.title}"!`);
+  if (commit) syncAllFromMSProject(`Đã nhân đôi công việc "${task.title}"!`);
   return cloned;
 }
 
@@ -5119,6 +5125,20 @@ function setupExcelColumnResizing() {
         }
       });
 
+      resizer.tabIndex = 0;
+      resizer.setAttribute('role','separator');
+      resizer.setAttribute('aria-orientation','vertical');
+      resizer.setAttribute('aria-label',resizer.title);
+      resizer.addEventListener('keydown',event => {
+        if (!['ArrowLeft','ArrowRight'].includes(event.key)) return;
+        event.preventDefault();
+        const minW = { wbs:42,name:110,dur:46,start:60,end:60,prog:44,act:40 }[colKey] || 42;
+        const delta = event.key === 'ArrowLeft' ? -8 : 8;
+        AppState.mspColWidths[colKey] = Math.max(minW,Math.min(750,(AppState.mspColWidths[colKey] || 68)+delta));
+        if (colKey === 'name') AppState.userManuallyResizedNameCol = true;
+        applyMspGridColumnWidths();
+        saveToBackend();
+      });
       resizer.addEventListener('mousedown', (e) => {
         if (e.button !== 0) return;
         e.stopPropagation();
@@ -5496,6 +5516,13 @@ function setupMSProjectEvents() {
   const btnMultiPrev = document.getElementById('btn-multisel-shift-prev');
   const btnMultiNext = document.getElementById('btn-multisel-shift-next');
   const btnMultiClear = document.getElementById('btn-multisel-clear');
+  document.getElementById('btn-multisel-duplicate').onclick = () => {
+    const selected = new Set(AppState.selectedTaskIds);
+    const tasks = AppState.tasks.filter(task => selected.has(task.id));
+    if (!tasks.length) return;
+    tasks.forEach(task => duplicateTask(task,false,false));
+    syncAllFromMSProject('Đã nhân bản ' + tasks.length + ' công việc.');
+  };
 
   if (btnMultiPrev) {
     btnMultiPrev.addEventListener('click', () => shiftMultiSelectedTasksByCalendarDays(-1));
@@ -7845,7 +7872,9 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
         activeBtn.disabled = false;
       }
 
-      if (mode === 'clipboard') {
+      if (mode === 'print') {
+        printExportCanvas(canvas,AppState.exportWatermark !== false);
+      } else if (mode === 'clipboard') {
         copyCanvasToClipboard(canvas, { watermark: AppState.exportWatermark !== false, notify: showToast });
       } else {
         const custName = getCurrentCustomerName().replace(/\s+/g, '_') || 'DuAn';
