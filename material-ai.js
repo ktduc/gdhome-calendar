@@ -3,7 +3,7 @@ const materialAiFields = { group:'Nhóm',name:'Hạng mục',room:'Vị trí',qt
 
 function installMaterialsAi() {
   const target = byId('ai-actions');
-  target.innerHTML = '<button id="material-ai">✨ AI</button>';
+  target.innerHTML = '<button id="material-ai" class="btn btn-outline" data-header-command="ai">' + headerIcon('sparkles') + '<span class="btn-label">AI</span></button>';
   byId('material-ai').onclick = () => {
     if (aiJob.plan) return reviewMaterialsAi();
     if (aiJob.running) return renderMaterialsAiNotice();

@@ -67,9 +67,9 @@ XONG GĐ7
 |---|---|---|
 | 8.1 | ✅ | giữ vị trí cuộn và focus sau thao tác |
 | 8.2 | ✅ | giữ bố cục sidebar Lịch khi hover |
-| 8.3 | ⏳ | Đồng bộ giao diện |
+| 8.3 | ✅ | dùng chung header và kiểu điều khiển với Lịch |
 | 8.4 | ⏳ | Thao tác nhiều dòng |
 | 8.5 | ⏳ | Dán ảnh |
 | 8.6 | ⏳ | Tinh chỉnh và đo hiệu năng |
 
-Bước kế tiếp GĐ8: 8.3 đồng bộ header, menu trái và bảng WBS.
+Bước kế tiếp GĐ8: 8.4 chọn và thao tác nhiều dòng.

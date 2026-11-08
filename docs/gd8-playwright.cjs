@@ -45,6 +45,30 @@ cases['8.2'] = async page => {
   }
 };
 
+cases['8.3'] = async page => {
+  await page.goto('/');
+  const metrics = await page.evaluate(() => ({
+    height:document.querySelector('.app-header').getBoundingClientRect().height,
+    sidebar:document.querySelector('.app-sidebar').getBoundingClientRect().width,
+    primary:getComputedStyle(document.querySelector('#btn-add-task')).backgroundColor,
+    copy:getComputedStyle(document.querySelector('#btn-quick-copy-clipboard')).backgroundColor
+  }));
+  await openMaterials(page);
+  const header = page.locator('header.app-header');
+  assert.equal(await header.count(),1,'Chốt mã phải dùng header chung');
+  const order = await header.locator('[data-header-command]').evaluateAll(nodes => nodes.map(node => node.dataset.headerCommand));
+  assert.deepEqual(order,['file','ai','copy','undo','redo','add']);
+  assert.deepEqual(await page.evaluate(() => ({
+    height:document.querySelector('.app-header').getBoundingClientRect().height,
+    sidebar:document.querySelector('.material-sidebar').getBoundingClientRect().width,
+    primary:getComputedStyle(document.querySelector('#material-add')).backgroundColor,
+    copy:getComputedStyle(document.querySelector('#material-copy')).backgroundColor
+  })),metrics);
+  await header.getByText('Thêm dòng/nhóm').click();
+  await header.getByRole('button',{name:'Thêm danh mục',exact:true}).click();
+  await page.locator('[data-field="groupName"][value="Nhóm mới"]').waitFor();
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

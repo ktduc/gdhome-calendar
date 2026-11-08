@@ -42,6 +42,7 @@ function images(list, large = false) {
 
 function renderMaterialApp(selectedProject) {
   if (sheet) return renderEditor();
+  byId('material-header-actions').replaceChildren();
   const query = new URLSearchParams(location.search);
   const requested = selectedProject || byId('project-filter')?.value || query.get('project');
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
@@ -87,13 +88,13 @@ function visibleColumns() {
     (!/^pa[12]$/.test(key) || forcedPA.has(key) || Number(key[2]) < count));
 }
 function sidebarSection(key,title,content) {
-  return '<details class="sb-collapsible" data-sidebar="' + key + '"' + (sidebarOpen.get(key) !== false ? ' open' : '') +
-    '><summary>' + title + '</summary><div class="material-sidebar-body">' + content + '</div></details>';
+  return '<details class="sb-collapsible sidebar-section" data-sidebar="' + key + '"' + (sidebarOpen.get(key) !== false ? ' open' : '') +
+    '><summary class="sb-head">' + title + '</summary><div class="material-sidebar-body">' + content + '</div></details>';
 }
 function projectSidebar() {
   const project = materials.projects.find(p => p.id === sheet.projectId);
   const meta = sheet.meta || {};
-  return sidebarSection('project','Dự án & khách hàng',
+  return sidebarSection('project','📁 Dự án & khách hàng',
     '<label class="side-field">Dự án Tiến độ<select id="editor-project">' + option(sheet.projectId,project?.name || meta.project || 'Dự án đã lưu',sheet.projectId) +
     materials.projects.filter(p => p.id !== sheet.projectId).map(p => option(p.id,p.name,sheet.projectId)).join('') + '</select></label>' +
     '<label class="side-field">Bảng chốt mã<select id="editor-sheet">' +
@@ -104,7 +105,7 @@ function projectSidebar() {
       .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div><button data-action="notion">Lấy từ Notion</button>');
 }
 function catalogSidebar() {
-  return sidebarSection('catalog','Danh mục',
+  return sidebarSection('catalog','📋 Danh mục',
     '<ul class="material-catalog">' + sheet.groups.map(group => '<li data-catalog="' + html(group.id) + '" draggable="true">' +
       '<input type="checkbox" data-group-toggle="' + html(group.id) + '" aria-label="Hiện ' + html(group.name) + '"' +
       (hiddenGroups.has(group.id) ? '' : ' checked') + '><button data-action="jump-group" data-id="' + html(group.id) + '">' +
@@ -112,15 +113,17 @@ function catalogSidebar() {
       '</small><span title="Kéo để đổi thứ tự">⋮⋮</span></li>').join('') + '</ul><button data-action="add-group">＋ Thêm danh mục</button>');
 }
 function displaySidebar() {
-  return sidebarSection('display','Hiển thị',
-    '<label class="side-field">Mật độ<select id="density-filter">' + Object.entries({gon:'Gọn',vua:'Vừa',lon:'Ảnh lớn'})
-      .map(([key,label]) => option(key,label,density)).join('') + '</select></label>' +
+  return sidebarSection('display','⚙ Hiển thị',
+    '<div class="sb-row-label">Mật độ dòng</div><div class="sb-seg-btns material-density">' +
+    Object.entries({gon:'Gọn',vua:'Vừa',lon:'Ảnh lớn'}).map(([key,label]) =>
+      '<button data-action="density" data-id="' + key + '" aria-pressed="' + (key === density) + '">' + label + '</button>').join('') + '</div>' +
+
     '<label class="side-field">Phòng<select id="room-filter"><option value="">Tất cả</option>' +
       [...new Set(sheet.groups.flatMap(g => g.rows.map(r => r.room)).filter(Boolean))].map(r => option(r,r,sheetRoom)).join('') + '</select></label>' +
     '<label class="side-field">Trạng thái<select id="status-filter"><option value="">Tất cả</option>' +
       Object.entries({...statusLabels,ordered:'Đã đặt hàng'}).map(([key,label]) => option(key,label,sheetStatus)).join('') + '</select></label>' +
-    '<div class="column-switches">' + materialColumns.filter(([key]) => optionalColumns.has(key) || /^pa[12]$/.test(key))
-      .map(([key,label]) => '<label><input type="checkbox" data-column-toggle="' + key + '"' +
+    '<div class="sb-chip-grid">' + materialColumns.filter(([key]) => optionalColumns.has(key) || /^pa[12]$/.test(key))
+      .map(([key,label]) => '<label class="sb-chip" title="' + label + '"><input type="checkbox" data-column-toggle="' + key + '"' +
         ((optionalColumns.has(key) ? !hiddenColumns.has(key) : forcedPA.has(key)) ? ' checked' : '') + '> ' +
         (optionalColumns.has(key) ? label : 'Luôn hiện ' + label) + '</label>').join('') + '</div>');
 }
@@ -189,7 +192,7 @@ function installColumnResize(table) {
 }
 let restoreViewFrame;
 const editorScrollAreas = ['.sheet-scroll','.material-sidebar'];
-const focusAttributes = ['id','data-field','data-action','data-group-toggle','data-column-toggle','data-resize','data-sidebar','data-select-row'];
+const focusAttributes = ['id','data-field','data-action','data-group-toggle','data-column-toggle','data-resize','data-sidebar','data-select-row','data-id','data-header-command'];
 
 function captureEditorView() {
   const root = box();
@@ -201,12 +204,14 @@ function captureEditorView() {
       return [selector,area?.scrollLeft || 0,area?.scrollTop || 0];
     })
   };
-  if (!root.contains(active) || active.closest('dialog')) return view;
+  const inHeader = byId('material-header-actions').contains(active);
+  if ((!root.contains(active) && !inHeader) || active.closest('dialog')) return view;
   const row = active.closest('[data-row]');
   const rows = row ? [...root.querySelectorAll('tr[data-row]')] : [];
   const index = rows.indexOf(row);
   const candidates = row ? [row,...rows.slice(index+1),...rows.slice(0,index).reverse()] : [];
   view.focus = {
+    inHeader,
     rowIds:candidates.map(candidate => candidate.dataset.row),
     groupId:active.closest('[data-group]')?.dataset.group,
     column:active.closest('td[data-column]')?.dataset.column,
@@ -238,7 +243,7 @@ function restoreEditorView(view) {
     const group = focus.groupId && root.querySelector('[data-group="' + CSS.escape(focus.groupId) + '"]');
     const column = row && focus.column && row.querySelector('[data-column="' + focus.column + '"]');
     const slot = column && focus.slot != null && column.querySelector('[data-slot="' + focus.slot + '"]');
-    const scope = slot || column || row || group || root;
+    const scope = slot || column || row || group || (focus.inHeader ? byId('material-header-actions') : root);
     const target = (focus.keys && scope.querySelector(focus.keys)) || slot ||
       (row && row.querySelector('td[data-column="name"] input')) ||
       (group && group.querySelector('button[data-action="fold"]'));
@@ -255,12 +260,9 @@ function renderEditor() {
   const view = captureEditorView();
   const columns = visibleColumns();
   const widths = columns.map(([key]) => columnWidth(key));
-  box().innerHTML = '<div class="material-toolbar"><details class="material-export"><summary>File ▾</summary><div>' +
-    '<button data-action="back">Danh sách bảng</button><span id="release-actions"></span></div></details>' +
-    '<span id="image-actions"></span><span id="ai-actions"></span><button data-action="undo" title="Ctrl+Z">↶ Hoàn tác</button>' +
-    '<button data-action="redo" title="Ctrl+Y">↷ Làm lại</button><span id="save-label">' +
-    (conflict?'Xung đột':dirty?'Chờ lưu':saving?'Đang lưu':'Đã lưu') + '</span></div>' +
-    '<div class="material-workspace"><aside class="material-sidebar">' + projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' +
+  renderMaterialHeader();
+  box().innerHTML = '<div class="material-workspace"><aside class="material-sidebar sidebar-compact">' + projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' +
+
     '<section class="material-sheet"><div class="material-title"><h1>BẢNG CHỐT MÃ VẬT LIỆU – ' +
     html(sheet.meta?.project || materials.projects.find(p => p.id === sheet.projectId)?.name || sheet.title) +
     '</h1><div id="material-count">' + materialKpis() + '</div></div>' +
@@ -279,16 +281,37 @@ function renderEditor() {
   installMaterialsAi();
   installColumnResize(updatedScroll.querySelector('table'));
   if (typeof installRelease === 'function') installRelease();
+  window.lucide?.createIcons({root:byId('material-header-actions')});
   restoreEditorView(view);
 }
 
+function headerIcon(name,label = '') {
+  return '<i data-lucide="' + name + '" aria-hidden="true">' + label + '</i>';
+}
+function headerMenu(key,label,icon,contents,variant = 'outline') {
+  return '<details class="hdr-dropdown"><summary class="btn btn-' + variant + '" data-header-command="' + key + '">' +
+    headerIcon(icon) + '<span class="btn-label">' + label + '</span><span class="hdr-caret">▾</span></summary>' +
+    '<div class="hdr-dropdown-menu">' + contents + '</div></details>';
+}
+function renderMaterialHeader() {
+  const header = byId('material-header-actions');
+  header.innerHTML = headerMenu('file','File','folder','<button class="hdr-menu-item" data-action="back">Danh sách bảng</button><span id="release-actions"></span>') +
+    '<span id="ai-actions"></span><span id="image-actions"></span><div class="hdr-undo-group">' +
+    '<button class="btn btn-outline hdr-icon-sq" data-action="undo" data-header-command="undo" aria-label="Hoàn tác" title="Hoàn tác · Ctrl+Z">' + headerIcon('undo-2','↶') + '</button>' +
+    '<button class="btn btn-outline hdr-icon-sq" data-action="redo" data-header-command="redo" aria-label="Làm lại" title="Làm lại · Ctrl+Y">' + headerIcon('redo-2','↷') + '</button></div>' +
+    headerMenu('add','Thêm dòng/nhóm','plus','<label class="side-field">Danh mục<select id="header-add-group">' +
+      sheet.groups.map(group => option(group.id,group.name)).join('') + '</select></label>' +
+      '<button class="hdr-menu-item" data-action="header-add-row">Thêm dòng</button><button class="hdr-menu-item" data-action="add-group">Thêm danh mục</button>','primary') +
+    '<small id="save-label">' + (conflict ? 'Xung đột' : dirty ? 'Chờ lưu' : saving ? 'Đang lưu' : 'Đã lưu') + '</small>';
+  header.querySelector('[data-header-command="add"]').id = 'material-add';
+}
 function installEditorSidebar() {
   box().querySelectorAll('[data-sidebar]').forEach(section => {
     section.ontoggle = () => sidebarOpen.set(section.dataset.sidebar,section.open);
   });
   for (const [id,setValue] of [
     ['room-filter',value => { sheetRoom = value; }],['status-filter',value => { sheetStatus = value; }],
-    ['density-filter',value => { density = value; }]
+
   ]) byId(id).onchange = event => { setValue(event.target.value); renderEditor(); };
   byId('editor-project').onchange = event => leaveSheet(event.target.value);
   byId('editor-sheet').onchange = async event => {
@@ -603,7 +626,7 @@ function suggestions(field, pa) {
 }
 
 document.addEventListener('click', async event => {
-  if (!event.target.closest('#materials')) return;
+  if (!event.target.closest('#materials,#material-header-actions')) return;
   const button = event.target.closest('[data-action]');
   const {group,row,slot} = context(event.target);
   if (!button) {
@@ -642,6 +665,12 @@ document.addEventListener('click', async event => {
       }
 
       case 'fold': if (collapsed.has(group.id)) collapsed.delete(group.id); else collapsed.add(group.id); renderEditor(); break;
+      case 'density': density = button.dataset.id; renderEditor(); break;
+      case 'header-add-row': {
+        const targetGroup = sheet.groups.find(entry => entry.id === byId('header-add-group').value);
+        if (targetGroup) modify(() => targetGroup.rows.push(newRow()));
+        break;
+      }
       case 'add-group': modify(() => sheet.groups.push(newGroup('Nhóm mới'))); break;
       case 'del-group': if (confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1)); break;
       case 'add-row': modify(() => group.rows.push(newRow())); break;
@@ -737,7 +766,7 @@ document.addEventListener('input', event => {
 
 document.addEventListener('keydown', event => {
   const target = event.target;
-  if (!sheet || !target.closest('#materials') || target.closest('dialog')) return;
+  if (!sheet || !target.closest('#materials,#material-header-actions') || target.closest('dialog')) return;
   const {group,row,slot} = context(target);
   if (event.ctrlKey && ['z','y','d'].includes(event.key.toLowerCase())) {
     event.preventDefault();

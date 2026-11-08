@@ -1,13 +1,16 @@
 function installRelease() {
-  byId('release-actions').innerHTML = '<button id="material-publish">Phát hành link khách</button><button id="material-history">Biên bản / Lịch sử</button>' +
-    '<button id="material-settings">Điều khoản mẫu</button><button id="material-buy">Excel mua hàng</button>';
-  byId('image-actions').innerHTML = '<details class="material-export"><summary>Copy ảnh ▾</summary><div>' +
-    '<button data-image-mode="copy">Copy ảnh bảng</button><button data-image-mode="png">Tải PNG</button>' +
-    '<button data-image-mode="pdf">Tải PDF A4</button></div></details>';
+  byId('release-actions').innerHTML = [['publish','Phát hành link khách'],['history','Biên bản / Lịch sử'],
+    ['settings','Điều khoản mẫu'],['buy','Excel mua hàng']].map(([key,label]) =>
+      '<button class="hdr-menu-item" id="material-' + key + '">' + label + '</button>').join('');
+  byId('image-actions').innerHTML = '<div class="hdr-split-group"><button class="btn btn-success hdr-split-main" id="material-copy" data-header-command="copy" data-image-mode="copy">' +
+    headerIcon('copy') + '<span class="btn-label">Copy ảnh</span></button><details class="hdr-dropdown">' +
+    '<summary class="btn btn-success hdr-split-caret" aria-label="Tuỳ chọn xuất ảnh"><span class="hdr-caret">▾</span></summary>' +
+    '<div class="hdr-dropdown-menu"><button class="hdr-menu-item" data-image-mode="copy">Copy ảnh bảng</button>' +
+    '<button class="hdr-menu-item" data-image-mode="png">Tải PNG</button><button class="hdr-menu-item" data-image-mode="pdf">Tải PDF A4</button></div></details></div>';
   byId('image-actions').onclick = event => {
-    const mode = event.target.dataset.imageMode;
+    const mode = event.target.closest('[data-image-mode]')?.dataset.imageMode;
     if (!mode) return;
-    event.target.closest('details').open = false;
+    byId('image-actions').querySelector('details').open = false;
     safeRelease(() => statistics(mode));
   };
 
