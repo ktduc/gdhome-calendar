@@ -7,18 +7,30 @@ function guestMaterialState() {
   catch { return {}; }
 }
 
+function readGuestSchedule() {
+  try { return JSON.parse(localStorage.getItem('timeline_calendar_state::guest')); }
+  catch { return null; }
+}
+
 function guestMaterialProjects() {
-  try {
-    const timeline = JSON.parse(localStorage.getItem('timeline_calendar_state::guest'));
-    if (timeline?.projectOwners?.length) return timeline.projectOwners;
-  } catch { /* Start with the same default project as Tiến độ. */ }
-  return [{id:'owner-1',name:'DỰ ÁN MỚI'}];
+  const projects = readGuestSchedule()?.projectOwners;
+  return projects?.length ? projects : [{id:'owner-1',name:'DỰ ÁN MỚI'}];
+}
+
+function guestMaterialSchedule() {
+  const schedule = readGuestSchedule() || {};
+  const calendars = new Map((schedule.calendars || []).map(calendar => [calendar.id,calendar]));
+  const tasks = (schedule.tasks || []).filter(task => calendars.has(task.calendarId) && task.visibleOnBoard !== false)
+    .map(task => ({id:task.id,title:task.title,start:task.startDate,calendarId:task.calendarId,
+      projectId:calendars.get(task.calendarId).ownerId,stage:calendars.get(task.calendarId).name}));
+  const date = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Ho_Chi_Minh'});
+  return {tasks,daysOffConfig:schedule.daysOffConfig,today:date.format(new Date()),soonDate:date.format(Date.now()+3*86400000)};
 }
 
 function saveGuestProjectOwners(projectOwners) {
-  let schedule;
-  try { schedule = JSON.parse(localStorage.getItem('timeline_calendar_state::guest')); } catch { /* Use defaults. */ }
-  schedule ||= {tasks:[],calendars:[{id:'cal-1',ownerId:'owner-1',name:'GIAI ĐOẠN 1',visible:true,color:'#cc0000'}],activeCalendarId:'cal-1'};
+  const schedule = readGuestSchedule() || {
+    tasks:[],calendars:[{id:'cal-1',ownerId:'owner-1',name:'GIAI ĐOẠN 1',visible:true,color:'#cc0000'}],activeCalendarId:'cal-1'
+  };
   localStorage.setItem('timeline_calendar_state::guest',JSON.stringify({...schedule,projectOwners}));
 }
 
@@ -29,7 +41,7 @@ function openGuestMaterials() {
   const state = guestMaterialState();
   const profiles = {...state.profiles,...Object.fromEntries(projects.map(project => [project.id,{...project.profile,project:project.name}]))};
   return { _version:0,sheets:[],presets:{},library:[],columnWidths:{},viewSettings:{},
-    ...state,projects,profiles,r2:false,schedule:{tasks:[]},signedRows:{} };
+    ...state,projects,profiles,r2:false,schedule:guestMaterialSchedule(),signedRows:{} };
 }
 
 function saveGuestView(settings) {
@@ -88,6 +100,8 @@ async function importGuestMaterials() {
     for (const group of draft.groups) {
       delete group.taskId;
       delete group.calendarId;
+      delete group.taskLinkMode;
+      delete group.taskLinkScore;
       for (const row of group.rows) for (const list of [row.render,...row.options.map(option => option.images)]) {
         for (const image of list) {
           image.full = await upload(image.full);

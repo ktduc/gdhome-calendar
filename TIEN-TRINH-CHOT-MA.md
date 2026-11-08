@@ -143,7 +143,7 @@ XONG GĐ10
 - Chẩn đoán Render. Đo request từ lúc nhận đến lúc hoàn tất hoặc đóng, ghi cả request còn chờ sau 3 giây. Giám sát event loop mỗi giây và ghi URL đang xử lý khi trễ quá 2 giây. Health trả uptime, bộ nhớ, độ trễ cao nhất và trạng thái sẵn sàng. Gist có timeout tối đa 15 giây mỗi lần, thử lại hai lần với lỗi tạm thời và giới hạn 60 giây cho một lượt khởi tạo. Khi Gist chưa sẵn sàng, trang tĩnh và health vẫn trả lời, thao tác dữ liệu chờ lượt kết nối tiếp theo. Test Node 25/25.
 - Phục hồi cài đặt khi API chậm hoặc lỗi. Lịch và Chốt mã dựng khung và đọc bản lưu theo tài khoản ngay, hiện trạng thái kết nối và tự thử lại sau 3 giây. Bản hiển thị tạm chỉ đọc. Các lệnh lưu dữ liệu và cài đặt chờ GET thành công. Playwright 10.6-recovery giữ cột/nhóm đã tắt qua GET bị trì hoãn, 503 và lượt thử lại. Không phát sinh POST trong ca này.
 
-Bước kế tiếp: Tiếp tục GĐ12.1 từ phần đang làm.
+Commit chẩn đoán `1f9ef08` đã lên `origin/main` để Claude đối chiếu Render. Bản giữ cài đặt nằm trong commit cục bộ `ded19f9`.
 
 XONG GĐ10
 
@@ -157,9 +157,9 @@ XONG GĐ10
 | 12.4 | ✅ | đóng xem trước bằng Esc và thu chữ ghi chú quy cách |
 | 12.5 | ✅ | thêm gợi ý Ghi chú và Quy cách cho 17 nhóm vật liệu |
 | 12.6 | ✅ | kéo đổi thứ tự cột và lưu cho bảng xuất |
-| 12.7 | ⏳ | Tự liên kết Việc Tiến độ |
+| 12.7 | ✅ | tự liên kết việc Tiến độ theo độ khớp và giữ chọn tay |
 
-Bước kế tiếp GĐ12: 12.7 tự liên kết nhóm với công việc Tiến độ.
+Bước kế tiếp GĐ12: Hoàn thành 12.1–12.7.
 
 - 12.1: dùng cùng bộ dựng đầu tờ, cột, nhóm và dòng. Thao tác được bỏ khỏi bản xuất. PDF thống kê thu đều vào A4 ngang. Ca Playwright 12.1 đối chiếu thứ tự, tỷ lệ cột trong ±5%, kích thước ô ảnh và logo; ca 9.2 xác nhận ảnh PNG thực tế.
 
@@ -172,3 +172,8 @@ Bước kế tiếp GĐ12: 12.7 tự liên kết nhóm với công việc Tiến
 - 12.5: mỗi nhóm có 15–16 Quy cách và 18 Ghi chú mặc định, cộng giá trị đã dùng. Tìm không dấu, chọn nhiều theo thứ tự chọn, xếp gợi ý theo tần suất. Playwright kiểm tra học quy cách và lưu vào PA đã chốt.
 
 - 12.6: kéo nhãn cột có vạch chỉ trước/sau, Alt+mũi tên để đổi bằng bàn phím và Về mặc định để khôi phục. Playwright kiểm tra kéo, lưu qua server và thứ tự giống nhau khi xuất.
+
+- 12.7: khớp tên không dấu, từ đồng nghĩa và giai đoạn trong cùng dự án. Ưu tiên điểm cao hơn, rồi ngày bắt đầu sớm hơn. Ghi tỷ lệ khớp và giữ lựa chọn tay, kể cả chọn không liên kết. Test kiểm tra đối chiếu, tải lại và badge Tiến độ.
+- Kiểm thử cuối đạt 27/27 Node và 27/27 Playwright trên Edge. `origin/main` dừng ở commit chẩn đoán Render `1f9ef08`. Bản giữ cài đặt và GĐ12 nằm trong các commit cục bộ.
+
+XONG GĐ12

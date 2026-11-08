@@ -893,6 +893,36 @@ cases['12.6'] = async page => {
   assert.deepEqual(await order(work),original);
 };
 
+cases['12.7'] = async page => {
+  const schedule = await page.request.get('/api/schedule').then(response => response.json());
+  const tasks = [
+    {id:'late-paint',title:'Thi công sơn bả',calendarId:'c1',startDate:'2026-11-25',endDate:'2026-11-26'},
+    {id:'early-paint',title:'Thi công sơn bả',calendarId:'c1',startDate:'2026-11-12',endDate:'2026-11-13'},
+    {id:'tile',title:'Lát gạch phòng khách',calendarId:'c1',startDate:'2026-11-10',endDate:'2026-11-11'}
+  ];
+  const saved = await page.request.post('/api/schedule',{data:{_baseVersion:schedule.version,tasks}});
+  assert.equal(saved.status(),200);
+  await openMaterials(page);
+  const group = page.locator('[data-group="g1"]');
+  const group2 = page.locator('[data-group="g2"]');
+  await group.locator('[data-field=groupName]').fill('Sơn tường');
+  await group.locator('[data-field=groupName]').blur();
+  assert.equal(await group.locator('[data-field=taskId]').inputValue(),'early-paint');
+  await group.getByText(/tự động \(độ khớp \d+%\)/).waitFor();
+  await group2.locator('[data-field=groupName]').fill('Gạch ốp lát');
+  await group2.locator('[data-field=groupName]').blur();
+  assert.equal(await group2.locator('[data-field=taskId]').inputValue(),'tile');
+  await group.locator('[data-field=taskId]').selectOption('late-paint');
+  await page.locator('[data-action=relink-tasks]').click();
+  await page.waitForFunction(() => document.querySelector('#save-label').dataset.saveState === 'saved');
+  await openMaterials(page);
+  assert.equal(await group.locator('[data-field=taskId]').inputValue(),'late-paint');
+  assert.equal(await group.locator('.material-auto-link').count(),0);
+  assert.equal(await group2.locator('[data-field=taskId]').inputValue(),'tile');
+  const timeline = await page.request.get('/api/materials/timeline').then(response => response.json());
+  assert.ok(timeline.badges.some(badge => badge.taskId === 'tile'));
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

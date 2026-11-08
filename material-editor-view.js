@@ -84,7 +84,8 @@ function catalogSidebar() {
       '<input type="checkbox" data-group-toggle="' + html(group.id) + '" aria-label="Hiện ' + html(group.name) + '"' +
       (hiddenGroups.has(group.id) ? '' : ' checked') + '><button data-action="jump-group" data-id="' + html(group.id) + '">' +
       html(group.name) + '</button><small>' + group.rows.filter(r => r.chosen != null && r.decision !== 'changed').length + '/' + group.rows.length +
-      '</small><span title="Kéo để đổi thứ tự">⋮⋮</span></li>').join('') + '</ul><button data-action="add-group">＋ Thêm danh mục</button>');
+      '</small><span title="Kéo để đổi thứ tự">⋮⋮</span></li>').join('') + '</ul><button data-action="add-group">＋ Thêm danh mục</button> ' +
+    '<button data-action="relink-tasks">Tự liên kết lại tất cả</button>');
 }
 function displaySidebar() {
   return sidebarSection('display','⚙ Hiển thị',

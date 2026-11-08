@@ -188,8 +188,9 @@ function openSheet(value) {
   if (sheet.id) setMaterialView({projectId:sheet.projectId,sheetId:sheet.id});
   before = [];
   after = [];
-
-  renderEditor();
+  const links = materialServerReady ? materialTaskUpdates(sheet) : [];
+  if (links.length) modify(() => applyMaterialTaskLinks(links));
+  else renderEditor();
 }
 
 function createSheet(projectId, title, groups, meta = {}) {
@@ -388,6 +389,7 @@ document.addEventListener('click', async event => {
         if (targetGroup) modify(() => targetGroup.rows.push(newRow()));
         break;
       }
+      case 'relink-tasks': await relinkMaterialTasks(button); break;
       case 'add-group': modify(() => sheet.groups.push(newGroup('Nhóm mới'))); break;
       case 'del-group':
         if (canRemoveRows(group.rows) && confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1));
@@ -454,10 +456,17 @@ document.addEventListener('change', event => {
 
     } else if (row && key === 'spec' && row.chosen != null) row.options[row.chosen].finish = value;
     else if (row) { row[key] = value; learnPreset(key,value); }
-    else if (group) group[key === 'groupName' ? 'name' : key] = value;
+    else if (group && key === 'taskId') {
+      group.taskId = value;
+      group.taskLinkMode = 'manual';
+      delete group.taskLinkScore;
+    } else if (group && key === 'groupName') {
+      group.name = value;
+      applyMaterialTaskLinks(materialTaskUpdates(sheet,[group],true));
+    } else if (group) group[key] = value;
     else if (key === 'title') sheet.title = value;
     else (sheet.meta ||= {})[key] = value;
-  },!!group && !row && ['taskId','leadDays','dayMode','due'].includes(key));
+  },!!group && !row && ['taskId','groupName','leadDays','dayMode','due'].includes(key));
 });
 
 let editingCode;

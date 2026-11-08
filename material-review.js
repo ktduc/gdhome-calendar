@@ -26,7 +26,11 @@ function cleanSheet(sheet) {
     groups:sheet.groups.map(group => {
       if (!group || !Array.isArray(group.rows)) error(400,'Nhóm không hợp lệ.');
       const groupId = unique(group.id);
-      return { id:groupId, ...pick(group,['name','due','taskId','calendarId','dayMode']), leadDays: Math.min(365,Math.max(0,Math.floor(Number(group.leadDays) || 0))),
+      const taskLinkMode = ['auto','manual'].includes(group.taskLinkMode) ? group.taskLinkMode : undefined;
+      const taskLinkScore = taskLinkMode === 'auto' && Number.isFinite(group.taskLinkScore) ?
+        Math.min(100,Math.max(0,Math.round(group.taskLinkScore))) : undefined;
+      return { id:groupId, ...pick(group,['name','due','taskId','calendarId','dayMode']),
+        ...(taskLinkMode ? {taskLinkMode} : {}),...(taskLinkScore !== undefined ? {taskLinkScore} : {}),leadDays: Math.min(365,Math.max(0,Math.floor(Number(group.leadDays) || 0))),
         rows:group.rows.map(row => {
           if (++count > 1000 || !row || !Array.isArray(row.options) || row.options.length !== 3) error(400,'Tối đa 1000 dòng và đúng ba ô phương án mỗi dòng.');
           const chosen = Number.isInteger(row.chosen) && row.chosen >= 0 && row.chosen < 3 ? row.chosen : null;

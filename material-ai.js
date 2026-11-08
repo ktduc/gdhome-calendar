@@ -102,7 +102,10 @@ function reviewMaterialsAi() {
       aiJob.files = [];
       byId('material-ai-job')?.remove();
       element.close();
-      if (merge) modify(() => { sheet.groups = groups; });
+      if (merge) modify(() => {
+        sheet.groups = groups;
+        applyMaterialTaskLinks(materialTaskUpdates(sheet));
+      });
       else createSheet(projectId,'Chốt mã từ khối lượng hợp đồng',groups);
       say('Đã thêm ' + added + ' hạng mục.');
     } catch (error) { message.textContent = error.message; }
