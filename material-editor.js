@@ -374,7 +374,8 @@ function imageCell(list, slot, content = '', state = '', removable = false) {
   const photo = hasImage ? images(list.slice(0,1)) : '<span class="image-plus" aria-hidden="true">＋</span>';
   const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (slot+1);
   return '<div class="image-cell ' + state + (hasImage ? ' has-image' : '') + '" tabindex="0" data-slot="' + slot +
-    '" title="Bấm ảnh để chốt phương án. Dán ảnh bằng Ctrl+V hoặc kéo thả."><div class="image-preview">' + photo +
+    '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả. Bấm ảnh PA để chốt phương án."><div class="image-preview">' + photo +
+    (!hasImage ? '<small class="paste-cell-hint">Ctrl+V để dán ảnh</small>' : '') +
     (list.length > 1 ? '<small class="image-count">+' + (list.length-1) + '</small>' : '') +
     (state ? '<span class="image-state" aria-label="' + (state === 'chosen' ? 'Đã chọn' : 'Dự phòng') + '">' + (state === 'chosen' ? '✓' : 'Dự phòng') + '</span>' : '') +
     '</div><button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' + (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
@@ -640,10 +641,11 @@ document.addEventListener('click', async event => {
   const {group,row,slot} = context(event.target);
   if (!button) {
     const cell = event.target.closest('.image-cell');
+    if (row && cell && !event.target.closest('input,select,textarea,a')) focusMaterialImageCell(cell);
     if (row && event.target.closest('.image-preview img') && cell && slot !== 'render' && row.options[Number(slot)].images.length) {
       const rowId = row.id;
       pick(row,slot);
-      box().querySelector('[data-row="' + rowId + '"] [data-slot="' + slot + '"]')?.focus({ preventScroll:true });
+      focusMaterialImageCell(box().querySelector('[data-row="' + rowId + '"] [data-slot="' + slot + '"]'));
     }
     return;
   }

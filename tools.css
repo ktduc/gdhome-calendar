@@ -150,3 +150,6 @@ body:has(.material-header){font-family:var(--gd-font)}
 #material-multiselect{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);z-index:95;
   display:flex;align-items:center;gap:7px;flex-wrap:wrap;width:max-content;max-width:94vw;
   padding:8px 12px;border:1px solid #a9c7f5;border-radius:9px;background:#fff;box-shadow:0 6px 22px #1e3a5f24}
+.image-cell:focus{outline:2px solid #1a73e8;outline-offset:1px}
+.paste-cell-hint{display:none;position:absolute;left:0;bottom:0;background:#fff;color:#1756a9;font-size:10px;white-space:nowrap;pointer-events:none}
+.image-cell:focus .paste-cell-hint,.image-cell:hover .paste-cell-hint{display:block}

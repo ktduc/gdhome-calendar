@@ -147,15 +147,96 @@ async function cropImage(row, slot, i, element) {
   paint();
 }
 
+const imageCellSelector = '.sheet-grid .image-cell[data-slot]';
+let selectedImageCell, hoveredImageCell;
+
+function focusMaterialImageCell(cell) {
+  if (!cell) return;
+  const {row,slot} = context(cell);
+  selectedImageCell = { sheetId:sheet.id, rowId:row.id, slot };
+  cell.focus({preventScroll:true});
+}
+
+document.addEventListener('focusin',event => {
+  if (sheet && event.target.matches(imageCellSelector)) focusMaterialImageCell(event.target);
+});
+document.addEventListener('pointerover',event => {
+  hoveredImageCell = event.target.closest(imageCellSelector);
+});
+document.addEventListener('pointerout',event => {
+  if (hoveredImageCell && !hoveredImageCell.contains(event.relatedTarget)) hoveredImageCell = null;
+});
+
+function clipboardImageFiles(clipboard) {
+  const isImage = file => file?.type.startsWith('image/');
+  const files = [...(clipboard?.items || [])].filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+    .map(item => item.getAsFile()).filter(isImage);
+  return files.length ? files : [...(clipboard?.files || [])].filter(isImage);
+}
+
+function clipboardImageSources(markup) {
+  if (!markup) return [];
+  const template = document.createElement('template');
+  template.innerHTML = markup;
+  return [...new Set([...template.content.querySelectorAll('img[src]')].map(img => img.getAttribute('src')))].slice(0,8);
+}
+
+async function imageFromClipboardUrl(source) {
+  const url = new URL(source,location.href);
+  if (!/^data:image\/(png|jpe?g|webp|gif|bmp|tiff);/i.test(url.href) &&
+      !['https:','http:'].includes(url.protocol) && !(url.protocol === 'blob:' && url.origin === location.origin)) {
+    throw new Error('Liên kết ảnh clipboard không mở được.');
+  }
+  const response = await fetch(url,{ credentials:'omit',referrerPolicy:'no-referrer',signal:AbortSignal.timeout(8000) });
+  if (!response.ok || Number(response.headers.get('content-length')) > 12*1024*1024) throw new Error('Không đọc được ảnh clipboard.');
+  const image = await response.blob();
+  if (!image.type.startsWith('image/') || image.size > 12*1024*1024) throw new Error('Ảnh clipboard không hợp lệ hoặc vượt 12 MB.');
+  return image;
+}
+
+async function readClipboardImages(sources) {
+  if (sources.length) {
+    const results = await Promise.allSettled(sources.map(imageFromClipboardUrl));
+    const images = results.filter(result => result.status === 'fulfilled').map(result => result.value);
+    if (images.length) return images;
+    throw new Error('Trang nguồn chặn đọc ảnh qua liên kết. Chọn Sao chép hình ảnh hoặc kéo tệp ảnh vào ô.');
+  }
+  if (!navigator.clipboard?.read) return [];
+  const images = [];
+  for (const item of await navigator.clipboard.read()) {
+    const type = item.types.find(value => value.startsWith('image/'));
+    if (type) images.push(await item.getType(type));
+  }
+  return images;
+}
+
 document.addEventListener('paste', event => {
-  const cell = event.target.closest('.sheet-grid [data-slot]');
-  if (!sheet || !cell) return;
-  const files = [...event.clipboardData.files].filter(f => f.type.startsWith('image/'));
-  if (!files.length) return;
+  if (!sheet || event.target.closest?.('dialog')) return;
+  const clipboard = event.clipboardData;
+  const files = clipboardImageFiles(clipboard);
+  const plainText = clipboard?.getData('text/plain') || '';
+  const sources = clipboardImageSources(clipboard?.getData('text/html'));
+  const textField = event.target.closest?.('input:not([type=checkbox]),textarea,[contenteditable]');
+  let cell = event.target.closest?.(imageCellSelector);
+  if (textField) {
+    const row = textField.closest('[data-row]');
+    const selected = selectedImageCell;
+    if (plainText || (!files.length && !sources.length) || !row || selected?.sheetId !== sheet.id || selected?.rowId !== row.dataset.row) return;
+    cell = row.querySelector('[data-slot="' + selected.slot + '"]');
+  } else if (!cell && hoveredImageCell?.isConnected) cell = hoveredImageCell;
+  if (!cell || (plainText && !files.length && !sources.length)) return;
   event.preventDefault();
   const {row,slot} = context(cell);
-  attachImages(row,slot,files,true).catch(showError);
+  if (files.length) attachImages(row,slot,files,true).catch(showError);
+  else {
+    const sourceSheet = sheet;
+    readClipboardImages(sources).then(images => {
+      if (sheet !== sourceSheet || !images.length) return;
+      return attachImages(row,slot,images,true);
+    }).catch(showError);
+  }
 });
+
 document.addEventListener('dragover', event => {
   if (event.target.closest('.sheet-grid [data-slot]') && event.dataTransfer.types.includes('Files')) event.preventDefault();
 });

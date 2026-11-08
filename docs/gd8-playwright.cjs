@@ -87,6 +87,56 @@ cases['8.4'] = async page => {
   await page.getByText('Đã chọn 15 dòng',{exact:true}).waitFor({state:'hidden'});
 };
 
+const imageFixture = 'iVBORw0KGgoAAAANSUhEUgAAAMAAAAB4CAIAAAArJ2pIAAABCUlEQVR42u3VQQ3AIAxA0W3hOie42w0BszA5mMAJBrCwcCEp7zko/Sln/Z4DZl2eAAEhIASEgEBACAgBISAQEAJCQAgIBISAEBACAgEhINZKUQd7273tUkvuLhC+MAQEAkJACAgBgYAQEAJCQCAgBISAEBACAgEhIASEgEBACAgBISAQEAJCQAgIBISAEBACQkAgIASEgBAQCAgBISAEBAJCQAgIAYGAEBACQkAICASEgBAQAgIBISAEhIBAQAgIASEgEBACQkAICASEgBAQAkJAICAEhIAQEPyRog5WcrddFwgBISAQEAJCQAgIBISAEBACQkAgIASEgBAQCAgBISAEBAJCQAiIiAZB4QdWS5tt1wAAAABJRU5ErkJggg==';
+cases['8.5'] = async page => {
+  await openMaterials(page);
+  const cell = page.locator('[data-row="g1-r1"] [data-slot="0"]');
+  await cell.locator('.image-plus').click();
+  assert.equal(await pasteFixture(page,'items'),true,'paste vào ô đã focus');
+  await cell.locator('img').waitFor().catch(async error => { throw new Error((await page.locator('#notice').textContent()) || error.message); });
+  await pasteFixture(page,'html');
+  await cell.locator('.image-count').getByText('+1',{exact:true}).waitFor();
+
+  const view = page.locator('[data-row="g1-r2"] [data-slot="render"]');
+  await page.locator('header.app-header .app-logo').focus();
+  await view.hover();
+  await pasteFixture(page,'items');
+  await view.locator('img').waitFor();
+
+  const fallback = page.locator('[data-row="g1-r3"] [data-slot="render"]');
+  await fallback.locator('.image-plus').click();
+  await page.evaluate(base64 => {
+    const blob = new Blob([Uint8Array.from(atob(base64),c => c.charCodeAt(0))],{type:'image/png'});
+    Object.defineProperty(navigator.clipboard,'read',{configurable:true,value:async () => [
+      {types:['image/png'],getType:async () => blob}
+    ]});
+  },imageFixture);
+  await pasteFixture(page,'fallback');
+  await fallback.locator('img').waitFor();
+  await pasteFixture(page,'url');
+  await fallback.locator('.image-count').getByText('+1',{exact:true}).waitFor();
+
+  const code = cell.locator('input[data-field="code"]');
+  await code.focus();
+  const intercepted = await pasteFixture(page,'text');
+  assert.equal(intercepted,false,'Không chiếm Ctrl+V khi nhập mã văn bản');
+};
+
+function pasteFixture(page,mode) {
+  return page.evaluate(({base64,mode}) => {
+    const event = new ClipboardEvent('paste',{bubbles:true,cancelable:true});
+    const file = new File([Uint8Array.from(atob(base64),c => c.charCodeAt(0))],'snip.png',{type:'image/png'});
+    const item = { kind:'file',type:'image/png',getAsFile:() => file };
+    Object.defineProperty(event,'clipboardData',{value:{
+      files:[],items:mode === 'items' ? [item] : [],types:mode === 'text' ? ['text/plain'] : [],
+      getData:type => mode === 'html' && type === 'text/html' ? '<img src="data:image/png;base64,'+base64+'">' :
+        mode === 'url' && type === 'text/html' ? '<img src="/gdhome-icon.png">' :
+          mode === 'text' && type === 'text/plain' ? 'Mã PA' : ''
+    }});
+    return !document.activeElement.dispatchEvent(event);
+  },{base64:imageFixture,mode});
+}
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
