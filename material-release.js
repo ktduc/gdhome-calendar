@@ -146,26 +146,36 @@ async function runDirectExport(mode) {
     else alert('Phạm vi xuất không có dòng vật liệu nào.');
     return;
   }
-  const overlay = await showPrint({ sheet:filtered },'/api/materials/assets/',authHeaders(),true,watermark);
-  if (!overlay.isConnected) return;
-  byId('print-extras').innerHTML = ' <button id="stats-download">Tải PNG</button> <button id="stats-copy">Copy ảnh</button> <span id="export-image-status" role="status"></span>';
-  byId('stats-download').onclick = () => exportStatsImage(false,watermark).catch(showExportError);
-  byId('stats-copy').onclick = () => exportStatsImage(true,watermark).catch(showExportError);
   if (mode === 'copy') {
+    const root = materialPaperForExport(filtered);
+    root.style.cssText += ';position:fixed;left:-10000px;top:0;';
+    root.setAttribute('aria-hidden','true');
+    document.body.append(root);
     try {
-      await exportStatsImage(true,watermark);
-      window.GDHomeShell?.toast?.('Đã copy ảnh bảng vào clipboard.');
-      overlay.close();
-    } catch (err) { showExportError(err); }
-  } else if (mode === 'png') {
-    try {
-      await exportStatsImage(false,watermark);
-      window.GDHomeShell?.toast?.('Đã tải ảnh PNG.');
-      overlay.close();
-    } catch (err) { showExportError(err); }
-  } else if (mode === 'pdf') {
-    byId('do-print').click();
+      await Promise.all([showImages(root),document.fonts.ready]);
+      const canvas = await captureStatsImage(root);
+      applyAntiEditWatermark(canvas,watermark);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve,'image/png'));
+      if (!blob) throw new Error('Không tạo được ảnh PNG.');
+      await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+      const count = filtered.groups.reduce((n,group) => n + group.rows.length,0);
+      window.GDHomeShell?.toast?.('Đã copy ảnh bảng (' + count + ' dòng)');
+    } catch (error) {
+      const toast = document.createElement('div');
+      window.GDHomeShell?.toast?.('Không copy được ảnh: ' + error.message + ' ',toast);
+      const preview = document.createElement('button');
+      preview.textContent = 'Xem trước';
+      preview.onclick = () => { toast.remove(); showStatistics(filtered,'copy',watermark); };
+      toast.append(preview);
+      setTimeout(() => toast.remove(),10000);
+    } finally {
+      clearPrintImages(root);
+      root.remove();
+    }
+    return;
   }
+  await showStatistics(filtered,mode,watermark);
+  if (mode === 'pdf') byId('do-print')?.click();
 }
 function statistics(mode) {
   const rooms = [...new Set(sheet.groups.flatMap(g => g.rows.map(row => row.room)).filter(Boolean))];
@@ -236,7 +246,7 @@ function showExportError(error) {
 }
 
 let canvasLoader;
-async function exportStatsImage(copy,watermark = true) {
+async function captureStatsImage(root) {
   if (!window.html2canvas) {
     canvasLoader ||= new Promise((resolve,reject) => {
       const script = document.createElement('script');
@@ -247,15 +257,18 @@ async function exportStatsImage(copy,watermark = true) {
     });
     await canvasLoader;
   }
-  const root = byId('print-sheet');
   if (root.scrollHeight > 12000) throw new Error('Bảng quá dài để xuất một ảnh. Lọc theo phòng hoặc dùng PDF.');
-  const canvas = await html2canvas(root,{
+  return html2canvas(root,{
     scale:2,backgroundColor:'#fff',windowWidth:Math.max(innerWidth,root.offsetWidth+32),
     onclone:doc => {
-      doc.getElementById('print-sheet').classList.remove('watermark');
-      doc.getElementById('print-preview').style.overflow = 'visible';
+      doc.getElementById('print-sheet')?.classList.remove('watermark');
+      const preview = doc.getElementById('print-preview');
+      if (preview) preview.style.overflow = 'visible';
     }
   });
+}
+async function exportStatsImage(copy,watermark = true) {
+  const canvas = await captureStatsImage(byId('print-sheet'));
   if (copy) return copyCanvasToClipboard(canvas,{ watermark,notify:message => { const notice = byId('export-image-status'); if (notice) notice.textContent = message; },fallbackName:'GD-HOME-vat-lieu.png' });
   downloadCanvas(canvas,'GD-HOME-vat-lieu.png',watermark);
 }

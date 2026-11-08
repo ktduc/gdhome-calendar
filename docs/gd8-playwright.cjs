@@ -1499,6 +1499,27 @@ cases['16.7'] = async page => {
   await page.keyboard.press('Escape');
 };
 
+cases['17.3'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => {
+    const showModal = HTMLDialogElement.prototype.showModal;
+    window.printPreviewOpened = false;
+    HTMLDialogElement.prototype.showModal = function () {
+      if (this.id === 'print-preview') window.printPreviewOpened = true;
+      return showModal.call(this);
+    };
+    window.html2canvas = async root => {
+      if (root.getBoundingClientRect().left >= 0) throw new Error('Bản xuất phải nằm ngoài màn hình');
+      return document.createElement('canvas');
+    };
+    Object.defineProperty(navigator,'clipboard',{value:{write:async () => {}}});
+  });
+  await page.locator('#material-copy').click();
+  await page.getByText(/Đã copy ảnh bảng \(/).waitFor();
+  assert.equal(await page.evaluate(() => window.printPreviewOpened),false);
+  assert.equal(await page.locator('#print-preview[open]').count(),0);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });
