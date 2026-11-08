@@ -1,10 +1,9 @@
 const crypto = require('node:crypto');
-const { MaterialAssets } = require('./material-assets');
+const { MaterialAssets,imageName } = require('./material-assets');
 
 const HOUR = 3600000;
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const text = (value, length = 500) => typeof value === 'string' ? value.trim().slice(0,length) : '';
-const imageName = value => typeof value === 'string' && /^[a-f0-9]{64}\.webp$/.test(value);
 const pick = (source, keys) => Object.fromEntries(keys.map(key => [key,text(source?.[key],key === 'note' ? 2000 : 500)]));
 const assetsOnly = list => (Array.isArray(list) ? list : []).slice(0,8).flatMap(image => {
   if (imageName(image)) return [{ full:image, thumb:image }];

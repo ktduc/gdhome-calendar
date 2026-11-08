@@ -58,7 +58,9 @@
       const blobUrl = await fetchAssetBlobUrl(assetKey);
       const a = document.createElement('a');
       a.href = blobUrl;
-      a.download = downloadName || assetKey;
+      const newExt = assetKey.startsWith('render-') && assetKey.split('.').at(-1);
+      const name = downloadName || assetKey;
+      a.download = newExt ? name.replace(/\.[^.]+$/,'')+'.'+newExt : name;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -213,6 +215,7 @@
     byId('view-phone').textContent = '-';
     byId('view-address').textContent = '-';
     byId('view-contract').textContent = '-';
+    clearDocumentThumbnails(byId('documents-tbody'));
     byId('documents-tbody').innerHTML = '<tr><td colspan="7" class="empty-cell">Chưa có dự án nào.</td></tr>';
     byId('quote-tbody').innerHTML = '<tr><td colspan="11" class="empty-cell">Chưa có dự án nào.</td></tr>';
     byId('findings-tbody').innerHTML = '<tr><td colspan="7" class="empty-cell">Chưa có dự án nào.</td></tr>';
@@ -281,7 +284,7 @@
     };
 
     input.onchange = () => {
-      if (input.files?.length) handleFiles(input.files);
+      if (input.files?.length) handleFiles([...input.files]);
       input.value = '';
     };
 
@@ -290,29 +293,28 @@
       if (!currentProjectId) return;
       const items = e.clipboardData?.items;
       if (!items) return;
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            toast('Đang tải ảnh dán từ Clipboard...');
-            uploadSingleFile(file, 'render');
-          }
-        }
+      const files = [...items].filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+        .map(item => item.getAsFile()).filter(Boolean);
+      if (files.length) {
+        e.preventDefault();
+        handleFiles(files,'render');
       }
     });
   }
 
-  async function handleFiles(files) {
-    if (!currentProjectId) {
+  async function handleFiles(files,forcedType) {
+    const projectId = currentProjectId;
+    if (!projectId) {
       toast('Vui lòng chọn hoặc tạo dự án trước khi tải hồ sơ.');
       return;
     }
     for (const file of files) {
-      const type = detectDocType(file.name);
-      await uploadSingleFile(file, type);
+      const type = forcedType || (file.type.startsWith('image/') ? 'render' : detectDocType(file.name));
+      await uploadSingleFile(projectId,file,type);
     }
-    await selectProject(currentProjectId);
+    if (projectId === currentProjectId) await selectProject(projectId);
   }
+
 
   function detectDocType(name) {
     const lower = name.toLowerCase();
@@ -325,21 +327,23 @@
     return 'drawing';
   }
 
-  async function uploadSingleFile(file, type) {
+  async function uploadSingleFile(projectId,file,type) {
     try {
-      const uploadUrl = `/api/project-hub/documents/upload?projectId=${encodeURIComponent(currentProjectId)}&name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(type)}&room=${encodeURIComponent('Cả nhà')}`;
+      const uploadUrl = `/api/project-hub/documents/upload?projectId=${encodeURIComponent(projectId)}&name=${encodeURIComponent(file.name)}&type=${encodeURIComponent(type)}&room=${encodeURIComponent('Cả nhà')}`;
       const headers = authHeaders(false);
-      headers['Content-Type'] = file.type || 'application/octet-stream';
+      let body = file, reduction;
+      if (type === 'render' && !/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
+        const {full,thumb} = await GDHomeImages.compress(file);
+        body = new FormData();
+        body.set('full',full);
+        if (thumb !== full) body.set('thumb',thumb);
+        reduction = GDHomeImages.reduction(file,full);
+      } else headers['Content-Type'] = file.type || 'application/octet-stream';
 
-      // Gửi body thô nhị phân trực tiếp (không base64), hỗ trợ tới 60MB
-      const res = await fetch(uploadUrl, {
-        method: 'POST',
-        headers,
-        body: file
-      });
+      const res = await fetch(uploadUrl,{method:'POST',headers,body});
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || `Lỗi tải tệp (${res.status})`);
-      toast(`Đã tải lên: ${file.name}`);
+      toast(reduction ? 'Đã tải ảnh · ' + reduction : `Đã tải lên: ${file.name}`);
     } catch (err) {
       toast(`Lỗi tải tệp ${file.name}: ${err.message}`);
     }
@@ -362,8 +366,25 @@
     `).join('');
   }
 
+  const renderThumbnails = new IntersectionObserver(entries => {
+    for (const {target,isIntersecting} of entries) {
+      if (!isIntersecting) continue;
+      renderThumbnails.unobserve(target);
+      fetchAssetBlobUrl(target.dataset.hubThumbnail).then(url => {
+        if (target.isConnected) target.src = url;
+        else URL.revokeObjectURL(url);
+      }).catch(() => { target.hidden = true; });
+    }
+  });
+  function clearDocumentThumbnails(tbody) {
+    for (const image of tbody.querySelectorAll('[data-hub-thumbnail]')) {
+      renderThumbnails.unobserve(image);
+      if (image.src.startsWith('blob:')) URL.revokeObjectURL(image.src);
+    }
+  }
   function renderDocuments(docs) {
     const tbody = byId('documents-tbody');
+    clearDocumentThumbnails(tbody);
     byId('docs-count-label').textContent = `${docs.length} tài liệu`;
     updateSidebarDocs(docs);
 
@@ -387,7 +408,7 @@
       return `
         <tr>
           <td>${typeBadges[d.type] || d.type}</td>
-          <td><strong>${escape(d.name)}</strong></td>
+          <td>${d.thumbAssetKey ? '<img class="hub-render-thumbnail" alt="" data-hub-thumbnail="' + escape(d.thumbAssetKey) + '">' : ''}<strong>${escape(d.name)}</strong></td>
           <td>${escape(d.room || 'Cả nhà')}</td>
           <td>${sizeStr}</td>
           <td>${verBadge}</td>
@@ -400,6 +421,7 @@
         </tr>
       `;
     }).join('');
+    tbody.querySelectorAll('[data-hub-thumbnail]').forEach(img => renderThumbnails.observe(img));
   }
 
   window.viewDoc = async (assetKey, name, type) => {

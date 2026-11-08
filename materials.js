@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { scheduleInfo, tasksFor } = require('./material-schedule');
-const { MaterialAssets, isConfigured } = require('./material-assets');
+const { MaterialAssets, maxImageBytes, isConfigured } = require('./material-assets');
 const { cleanSheet, handleInternalReview } = require('./material-review');
 const {projectList,profileFor,writeProjectProfile} = require('./project-profiles');
 
@@ -139,7 +139,7 @@ function signedRowsBySheet(data) {
 }
 
 
-async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJson, res, dataDir, secret, defaultSchedule }) {
+async function handleMaterials(req, url, { store, dataKey, readJsonBody, readRawBody, sendJson, res, dataDir, secret, defaultSchedule }) {
   const materials = new MaterialStore(store, dataKey);
   const assets = new MaterialAssets(dataDir, materials.key);
   const resolveProfile = async (sheet,legacy) => {
@@ -147,6 +147,10 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
     return owner ? profileFor(owner,legacy) : legacy.profiles?.[sheet.projectId];
   };
   if (url === '/api/materials/assets' && req.method === 'POST') {
+    if (/^image\/(webp|png|jpeg)$/.test(req.headers['content-type'] || '')) {
+      const {name} = await assets.saveBuffer(await readRawBody(req,maxImageBytes));
+      return sendJson(res,200,{name});
+    }
     const body = await readJsonBody(req);
     return sendJson(res, 200, { name: await assets.save(body.image) });
   }

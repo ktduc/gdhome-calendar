@@ -1068,6 +1068,90 @@ cases['13.3'] = async page => {
   assert.equal(scope,'nhom khac');
 };
 
+cases['13.4'] = async page => {
+  await openMaterials(page);
+  const original = await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:4000,height:3000});
+    const ctx = canvas.getContext('2d');
+    const pixels = ctx.createImageData(4000,3000);
+    let seed = 12345;
+    for (let y=0; y<3000; y++) for (let x=0; x<4000; x++) {
+      const i = (y*4000+x)*4;
+      for (let c=0; c<3; c++) {
+        seed = (Math.imul(seed,1664525)+1013904223)|0;
+        pixels.data[i+c] = y < 320 ? seed >>> 24 : (x/19+y/17+c*38)%255;
+      }
+      pixels.data[i+3] = 255;
+    }
+    ctx.putImageData(pixels,0,0);
+    window.gd13LargeImage = await new Promise(resolve => canvas.toBlob(resolve));
+    return window.gd13LargeImage.size;
+  });
+  assert.ok(original > 4500000 && original < 7000000,original);
+  const stored = await page.evaluate(async () => {
+    const image = await uploadImage(window.gd13LargeImage);
+    const full = await readMaterialAsset(image.full);
+    const thumb = await readMaterialAsset(image.thumb);
+    const a = await createImageBitmap(full), b = await createImageBitmap(thumb);
+    return {image,type:full.type,bytes:full.size,full:[a.width,a.height],thumb:[b.width,b.height]};
+  });
+  assert.deepEqual(stored.full,[1600,1200]);
+  assert.deepEqual(stored.thumb,[480,360]);
+  assert.equal(stored.type,'image/webp');
+  assert.ok(stored.bytes < 400000,JSON.stringify(stored));
+  console.log('Nén ảnh: '+original+' → '+stored.bytes+' byte');
+
+  const small = await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:80,height:40});
+    canvas.getContext('2d').fillRect(10,10,20,20);
+    const png = await new Promise(resolve => canvas.toBlob(resolve));
+    const image = await uploadImage(png);
+    const result = await readMaterialAsset(image.full);
+    return {equalSize:png.size === result.size,type:result.type,same:image.full === image.thumb};
+  });
+  assert.deepEqual(small,{equalSize:true,type:'image/png',same:true});
+  const jpeg = await page.evaluate(async () => {
+    const native = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function(callback,type,quality) {
+      return native.call(this,callback,type === 'image/webp' ? 'image/png' : type,quality);
+    };
+    try {
+      const image = await uploadImage(window.gd13LargeImage);
+      return (await readMaterialAsset(image.full)).type;
+    } finally { HTMLCanvasElement.prototype.toBlob = native; }
+  });
+  assert.equal(jpeg,'image/jpeg');
+
+  const largePng = await page.evaluate(async () => {
+    const reader = new FileReader();
+    return new Promise(resolve => { reader.onload = () => resolve(reader.result.split(',')[1]); reader.readAsDataURL(window.gd13LargeImage); });
+  });
+  await page.goto('/du-an?project=p1');
+  await page.getByRole('heading',{name:'Căn hộ mẫu GĐ8',exact:true}).waitFor();
+  const fileInput = page.locator('#file-input');
+  await fileInput.setInputFiles({name:'Test phối cảnh GĐ13.png',mimeType:'image/png',buffer:Buffer.from(largePng,'base64')});
+  const row = page.locator('#documents-tbody tr').filter({hasText:'Test phối cảnh GĐ13.png'});
+  await row.waitFor({timeout:15000});
+  await row.scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => document.querySelector('img[data-hub-thumbnail]')?.naturalWidth === 480);
+  assert.equal(await row.locator('img').evaluate(img => img.naturalWidth),480);
+  assert.equal(await row.locator('img').getAttribute('data-hub-thumbnail'),'render-'+stored.image.thumb);
+  await row.getByRole('button',{name:'Xem',exact:true}).click();
+  await page.locator('#preview-body img').waitFor();
+  await page.waitForFunction(() => document.querySelector('#preview-body img')?.naturalWidth === 1600);
+  await page.keyboard.press('Escape');
+  const {PDFDocument} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  pdf.addPage();
+  const pdfBytes = Buffer.from(await pdf.save());
+  const upload = page.waitForResponse(response => response.url().includes('documents/upload') && response.url().includes('draw-gd13.pdf'));
+  await fileInput.setInputFiles({name:'draw-gd13.pdf',mimeType:'application/pdf',buffer:pdfBytes});
+  const {documents} = await (await upload).json();
+  const document = documents.find(item => item.name === 'draw-gd13.pdf');
+  const response = await page.request.get('/api/project-hub/assets/'+document.assetKey);
+  assert.deepEqual(await response.body(),pdfBytes);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

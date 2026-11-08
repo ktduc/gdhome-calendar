@@ -24,6 +24,8 @@ const {
   signedUrl
 } = require('./object-storage');
 
+const { MaterialAssets,maxImageBytes } = require('./material-assets');
+
 const MIME_MAP = {
   '.pdf': 'application/pdf',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -100,6 +102,7 @@ class ProjectAssets {
     this.prefix = 'project-files/' + this.accountHash + '/';
     this.configured = isConfigured();
     this.r2Configured = this.configured;
+    this.renderAssets = new MaterialAssets(dataDir,'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex'));
   }
 
   async ensureDir() {
@@ -123,7 +126,14 @@ class ProjectAssets {
     return { assetKey, size: buf.length, mime: cleanMime };
   }
 
+  async saveRender(full,thumb) {
+    const saved = await this.renderAssets.saveBuffer(full);
+    const small = thumb ? await this.renderAssets.saveBuffer(thumb,480) : saved;
+    return {...saved,assetKey:'render-'+saved.name,thumbAssetKey:'render-'+small.name};
+  }
+
   async read(assetKey) {
+    if (typeof assetKey === 'string' && assetKey.startsWith('render-')) return this.renderAssets.read(assetKey.slice(7));
     if (!/^[a-f0-9]{64}\.[a-z0-9]+$/i.test(assetKey)) {
       throw Object.assign(new Error('Tên file không hợp lệ.'), { status: 400 });
     }
@@ -952,9 +962,25 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
   if (urlPath === '/api/project-hub/documents/upload' && req.method === 'POST') {
     const contentType = req.headers['content-type'] || '';
     const isJson = contentType.includes('application/json');
-    let projectId, name, type, room, cleanMime, buf, extractedPages, detectedItems;
+    const isRenderForm = contentType.startsWith('multipart/form-data;');
+    let projectId, name, type, room, cleanMime, buf, thumb, extractedPages, detectedItems;
 
-    if (isJson) {
+    if (isRenderForm) {
+      const url = new URL(req.url,'http://localhost');
+      projectId = url.searchParams.get('projectId');
+      name = url.searchParams.get('name');
+      type = 'render';
+      room = url.searchParams.get('room');
+      const bytes = await readRawBody(req,maxImageBytes + 1024*1024);
+      try {
+        const form = await new Response(bytes,{headers:{'Content-Type':contentType}}).formData();
+        const fullFile = form.get('full'), thumbFile = form.get('thumb');
+        if (fullFile instanceof Blob) buf = Buffer.from(await fullFile.arrayBuffer());
+        if (thumbFile instanceof Blob) thumb = Buffer.from(await thumbFile.arrayBuffer());
+      } catch {
+        return sendJson(res,400,{success:false,message:'Gói tải ảnh không hợp lệ.'});
+      }
+    } else if (isJson) {
       const body = await readJsonBody(req);
       projectId = body.projectId;
       name = body.name;
@@ -988,11 +1014,11 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     }
 
     const ext = path.extname(name).toLowerCase() || '.bin';
-    const { assetKey, size, mime: finalMime } = await assets.save(buf, ext, cleanMime);
+    const {assetKey,thumbAssetKey,size,mime:finalMime} = isRenderForm ? await assets.saveRender(buf,thumb) : await assets.save(buf,ext,cleanMime);
 
     // Tính số trang nếu là PDF
     let pages = 1;
-    if (ext === '.pdf') {
+    if (!isRenderForm && ext === '.pdf') {
       try {
         const loadedPdf = await PDFDocument.load(buf);
         pages = loadedPdf.getPageCount();
@@ -1011,12 +1037,14 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
         existing.history.push({
           version: existing.version,
           assetKey: existing.assetKey,
+          thumbAssetKey: existing.thumbAssetKey,
           size: existing.size,
           uploadedAt: existing.uploadedAt,
           note: `Thay thế bởi phiên bản ${existing.version + 1}`
         });
         existing.version = (existing.version || 1) + 1;
         existing.assetKey = assetKey;
+        existing.thumbAssetKey = thumbAssetKey;
         existing.size = size;
         existing.mime = finalMime;
         existing.pages = pages;
@@ -1034,6 +1062,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
           mime: finalMime,
           size,
           assetKey,
+          thumbAssetKey,
           pages,
           version: 1,
           history: [],

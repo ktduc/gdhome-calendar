@@ -44,7 +44,7 @@ function signatureMark(record) {
 }
 function printImages(items,base,large = false,interactive = false) {
   const asset = (image,full) => typeof image === 'string' ? image : (full ? image.full : image.thumb);
-  const list = (items || []).filter(image => [asset(image,false),asset(image,true)].every(name => /^[a-f0-9]{64}\.webp$/.test(name)));
+  const list = (items || []).filter(image => [asset(image,false),asset(image,true)].every(GDHomeImages.isAssetName));
   const slots = list.map((image,index) => {
     const cls = index ? 'material-image-thumb' : 'print-square';
     const tag = interactive ? 'button' : 'span';

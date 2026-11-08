@@ -1,32 +1,21 @@
-async function encodeImage(source, maxSide, targetBytes, crop = null) {
-  const image = await createImageBitmap(source);
-  try {
-    const [left,top,right,bottom] = crop || [0,0,1,1];
-    const x = Math.min(image.width-1,Math.floor(left*image.width));
-    const y = Math.min(image.height-1,Math.floor(top*image.height));
-    const w = Math.ceil(right*image.width)-x;
-    const h = Math.ceil(bottom*image.height)-y;
-    const canvas = document.createElement('canvas');
-    let scale = Math.min(1,maxSide/Math.max(w,h));
-    for (let attempt = 0; attempt < 10; attempt++) {
-      canvas.width = Math.max(1,Math.round(w*scale));
-      canvas.height = Math.max(1,Math.round(h*scale));
-      canvas.getContext('2d').drawImage(image,x,y,w,h,0,0,canvas.width,canvas.height);
-      const data = canvas.toDataURL('image/webp',attempt < 2 ? 0.84 : 0.72);
-      if (data.startsWith('data:image/webp;base64,') && data.length * .75 < targetBytes) return data.split(',')[1];
-      scale *= .82;
-    }
-    throw new Error('Không nén được ảnh WebP.');
-  } finally { image.close(); }
+async function storeMaterialImage(blob) {
+  if (materialGuest) return saveGuestAsset(blob);
+  const response = await fetch('/api/materials/assets',{
+    method:'POST',headers:{...authHeaders(),'Content-Type':blob.type},body:blob
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Không lưu được ảnh.');
+  return data.name;
 }
-async function uploadImage(file, crop = null) {
-  const fullData = await encodeImage(file,materials.r2 ? 1600 : 1000,materials.r2 ? 200000 : 150000,crop);
-  const thumbData = await encodeImage(file,420,48000,crop);
-  if (materialGuest) return {full:await saveGuestAsset(fullData),thumb:await saveGuestAsset(thumbData)};
-  const full = await post('/api/materials/assets',{ image:fullData });
-  const thumb = await post('/api/materials/assets',{ image:thumbData });
-  return { full:full.name, thumb:thumb.name };
+
+async function uploadImage(file,crop = null,onCompressed) {
+  const {full,thumb} = await GDHomeImages.compress(file,crop);
+  const original = await storeMaterialImage(full);
+  const small = thumb === full ? original : await storeMaterialImage(thumb);
+  onCompressed?.(GDHomeImages.reduction(file,full));
+  return {full:original,thumb:small};
 }
+
 async function attachImages(row, slot, files, render = false) {
   const source = sheet;
   const list = slot === 'render' ? row.render : row.options[Number(slot)].images;
@@ -34,10 +23,12 @@ async function attachImages(row, slot, files, render = false) {
   if (!selected.length) return;
   say('Đang nén và lưu ảnh…');
   const uploaded = [];
-  for (const file of selected) uploaded.push(await uploadImage(file));
+  let reduction;
+  for (const file of selected) uploaded.push(await uploadImage(file,null,message => { reduction = message; }));
   if (sheet !== source || !sheet.groups.some(g => g.rows.includes(row))) return;
   modify(() => list.push(...uploaded.slice(0,Math.max(0,8-list.length))),render);
-  say('');
+  byId('notice').textContent = '';
+  GDHomeShell.toast(reduction,byId('material-toast'));
 }
 
 function openMaterialLightbox(row,slot,initialIndex = 0) {

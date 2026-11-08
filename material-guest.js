@@ -60,29 +60,37 @@ function saveGuestMaterial(sheet,profilePatch) {
   return { _version:version,sheet:saved,profiles };
 }
 
-async function saveGuestAsset(encoded) {
-  const hash = await crypto.subtle.digest('SHA-256',Uint8Array.from(atob(encoded),char => char.charCodeAt(0)));
-  const name = [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2,'0')).join('') + '.webp';
-  localStorage.setItem('gdhome-guest-material-asset:'+name,encoded);
+async function saveGuestAsset(blob) {
+  const bytes = await blob.arrayBuffer();
+  const hash = await crypto.subtle.digest('SHA-256',bytes);
+  const name = [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2,'0')).join('') +
+    '.' + GDHomeImages.extension(blob.type);
+  const key = 'gdhome-guest-material-asset:'+name;
+  if (!localStorage.getItem(key)) {
+    const encoded = await new Promise((resolve,reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(blob);
+    });
+    localStorage.setItem(key,encoded);
+  }
   return name;
 }
 
-function guestAssetData(name) {
+function guestMaterialAsset(name) {
   const encoded = localStorage.getItem('gdhome-guest-material-asset:'+name);
   if (!encoded) throw new Error('Không tìm thấy ảnh khách trên máy này.');
-  return encoded;
+  return new Blob([Uint8Array.from(atob(encoded),char => char.charCodeAt(0))],{type:GDHomeImages.mimeFor(name)});
 }
 
-function guestMaterialAsset(name) {
-  return new Blob([Uint8Array.from(atob(guestAssetData(name)),char => char.charCodeAt(0))],{type:'image/webp'});
-}
 
 async function importGuestMaterials() {
   const previous = guestMaterialState();
   if (!previous.sheets?.length || !confirm('Chép các bảng Chốt mã đang làm ở chế độ khách vào tài khoản?')) return;
   const assets = new Map();
   async function upload(name) {
-    if (!assets.has(name)) assets.set(name,(await post('/api/materials/assets',{image:guestAssetData(name)})).name);
+    if (!assets.has(name)) assets.set(name,await storeMaterialImage(guestMaterialAsset(name)));
     return assets.get(name);
   }
   for (const entry of [...previous.sheets]) {

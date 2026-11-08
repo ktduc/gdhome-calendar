@@ -1,4 +1,6 @@
 /* GD HOME Quản lý dự án - Stylesheet */
+.hub-render-thumbnail{width:42px;height:42px;object-fit:cover;vertical-align:middle;margin-right:8px;border-radius:4px}
+
 :root {
   --hub-primary: #cc0000;
   --hub-primary-hover: #a80000;

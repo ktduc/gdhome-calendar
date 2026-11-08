@@ -46,7 +46,7 @@ function authHeaders() {
 function images(list, large = false) {
   return (list || []).map(image => {
     const name = typeof image === 'string' ? image : (large ? image.full : image.thumb);
-    return /^[a-f0-9]{64}\.webp$/.test(name) ? '<img data-asset="' + name + '" alt="Ảnh vật liệu">' : '';
+    return GDHomeImages.isAssetName(name) ? '<img data-asset="' + name + '" alt="Ảnh vật liệu">' : '';
   }).join('');
 }
 

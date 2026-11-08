@@ -396,12 +396,18 @@ test('Object Storage: ProjectAssets và MaterialAssets dùng module chung, tắt
     process.env.S3_BUCKET = 'gdhome-files';
 
     let uploadedKey = null;
-    let uploadedBody = null;
+    const uploadedPaths = new Set();
+    let puts = 0;
     global.fetch = async (url, opts = {}) => {
       if (opts.method === 'PUT') {
         uploadedKey = url;
-        uploadedBody = opts.body;
+        uploadedPaths.add(new URL(url).pathname);
+        puts++;
         return { ok: true, status: 200, headers: new Headers() };
+      }
+      if (opts.method === 'HEAD') {
+        const exists = uploadedPaths.has(new URL(url).pathname);
+        return {ok:exists,status:exists ? 200 : 404,headers:new Headers()};
       }
       if (opts.method === 'GET') {
         return {
@@ -438,6 +444,14 @@ test('Object Storage: ProjectAssets và MaterialAssets dùng module chung, tắt
 
     const webpName = await mAssets.save(validWebp.toString('base64'));
     assert.match(webpName, /^[a-f0-9]{64}\.webp$/);
+    const shared = pAssets.renderAssets;
+    const before = puts;
+    const [render,duplicate] = await Promise.all([pAssets.saveRender(validWebp),shared.saveBuffer(validWebp)]);
+    assert.equal(render.assetKey,'render-'+duplicate.name);
+    assert.equal(render.thumbAssetKey,render.assetKey);
+    assert.equal(puts,before+1,'Hai trang lưu cùng một ảnh chỉ tạo một đối tượng B2');
+    await pAssets.saveRender(validWebp);
+    assert.equal(puts,before+1,'Ảnh đã có trên B2 không được ghi thêm phiên bản');
   } finally {
     global.fetch = origFetch;
     process.env = origEnv;
