@@ -169,3 +169,39 @@
   - Cập nhật `HUONG-DAN-R2.md` hướng dẫn chi tiết Backblaze B2 (tạo bucket private `gdhome-files`, Application Key Read/Write, cấu hình 5 biến Render).
   - Cập nhật `Cap-Nhat-Web-Len-Mang.bat` thêm `object-storage.js` vào danh sách sao lưu và `git add`.
 
+---
+
+## GĐ14 — PHẦN B: Quản lý dự án (B1 → B3)
+
+- [x] **B1. Phối cảnh 3D dạng PDF cả nhà & gắn vào Chốt mã**
+  - Mục tải 3D nhận cả file PDF nhiều trang (1 file phối cảnh 3D tổng thể cho cả căn hộ/nhà phố).
+  - Tách từng trang tự động bằng `pdf.js` (`pdfjsLib`) ngay trên trình duyệt, render canvas và nén ảnh WebP 1600px chuẩn GĐ13 qua `window.GDHomeImages.compress`.
+  - Tải lên server kèm `pageNumber`, `sourcePdf`; AI tự động phân tích gắn không gian/phòng (`room`) và hạng mục phát hiện được (`items`/`detectedItems`).
+  - Giao diện thư viện ảnh 3D phân nhóm trực quan theo phòng (`renders-room-grid`), lazy load thumbnail, xem trước chi tiết.
+  - Tích hợp tính năng **🏷 Gắn vào Chốt mã**: mở modal chọn bảng Chốt mã, chọn gắn vào toàn bộ Nhóm (`groupName`) hoặc Hạng mục cụ thể (`rowId`) qua API `POST /api/project-hub/renders/assign-to-materials`, tự động cập nhật mảng `row.render` mà không sửa trực tiếp file `material-*.js`.
+
+- [x] **B2. Loại công trình trong ngữ cảnh AI**
+  - Thêm trường `Loại công trình` (`buildingType`): `Chung cư` / `Nhà phố` / `Văn phòng nhỏ` / `Khác` vào cấu trúc hồ sơ dự án (`project-profiles.js`, `project-hub.js`, `du-an.html`).
+  - Tự động đoán loại công trình từ tên và địa chỉ (`guessBuildingType`) trên cả server lẫn client khi người dùng nhập form, cho phép sửa thủ công.
+  - Tích hợp vào System Prompt của AI (`getBuildingContextPrompt`):
+    - **Chung cư**: không móng/mái ngoài trời, chú ý hộp kỹ thuật MEP, ban quản lý toà nhà, quy định tiếng ồn và giờ giấc, vận chuyển thang máy hàng.
+    - **Nhà phố**: nhiều tầng, kết cấu móng/cột/dầm, cầu thang bộ, chống thấm sàn mái và ban công, mặt tiền ngoài trời, an toàn nhà liền kề.
+    - **Văn phòng nhỏ**: trần thả/thạch cao khung nổi, sàn nâng kỹ thuật/thảm, vách kính/vách thạch cao ngăn phòng, mạng LAN, camera, PCCC.
+    - **Khác**: phân tích bám sát hồ sơ thực tế.
+  - Tuỳ biến trình tự đề xuất Tiến độ thi công (`generateScheduleProposal`) và Chốt mã vật tư (`generateMaterialsProposal`) theo đặc thù từng loại công trình.
+
+- [x] **B3. AI phân tích chạy nền (Background Job) phía server**
+  - Chuyển toàn bộ quá trình phân tích AI và tạo đề xuất thành background job (`HubJobManager`) với `jobId` duy nhất, lưu trạng thái chạy trong kho.
+  - Các endpoint API: `POST /api/project-hub/jobs/start`, `GET /api/project-hub/jobs/status`, `GET /api/project-hub/jobs/active`, `POST /api/project-hub/jobs/cancel`.
+  - Khi chuyển trang sang Tiến độ (`/`), Chốt mã (`/chot-ma`) hay tải lại trang, job vẫn tiếp tục chạy độc lập trên server.
+  - Tích hợp ô thông báo góc phải (`GDHomeShell.aiNotice`) dùng chung trong `shell.js` ở mọi trang:
+    - Trạng thái `running`: spinner + tên dự án + bước hiện tại kèm % tiến trình + nút "Huỷ".
+    - Trạng thái `done`: icon ✅ + tên dự án + nút "Xem kết quả" (chuyển hướng về `/du-an`).
+    - Trạng thái `error`: icon ⚠️ + lý do lỗi cụ thể.
+  - Hỗ trợ cờ `autoPush: true`: tự động đẩy đề xuất sang Lịch Tiến Độ và Bảng Chốt Mã ngay trong nền khi hoàn tất, kể cả khi người dùng đã rời trang.
+  - Bộ kiểm thử tự động `tests/project-hub-gd14.test.js` kiểm tra đầy đủ B1, B2, B3 (38/38 tests toàn bộ dự án pass 100%).
+
+---
+**XONG GĐ14B**
+
+

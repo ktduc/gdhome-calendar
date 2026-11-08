@@ -181,6 +181,112 @@ window.GDHomeShell = (() => {
     return element;
   }
 
+  // ---------------------------------------------------------------------------
+  // B3: Theo dõi Background Job AI ở mọi trang và báo tiến trình qua aiNotice
+  // ---------------------------------------------------------------------------
+  let hubJobPollTimer = null;
+  function getShellAuthHeaders() {
+    const headers = { 'Content-Type': 'application/json' };
+    try {
+      let token = localStorage.getItem('gdhome_token');
+      if (!token) {
+        const sess = JSON.parse(localStorage.getItem('gdhome_session'));
+        token = sess?.token;
+      }
+      if (token) headers['Authorization'] = 'Bearer ' + token;
+      const appKey = localStorage.getItem('gdhome_app_key');
+      if (appKey) headers['x-app-key'] = appKey;
+    } catch {}
+    return headers;
+  }
+
+  async function checkHubActiveJob() {
+    try {
+      const res = await fetch('/api/project-hub/jobs/active', {
+        headers: getShellAuthHeaders()
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const job = data.job;
+      const noticeId = 'shell-hub-active-job';
+
+      if (!job) {
+        if (hubJobPollTimer) {
+          clearInterval(hubJobPollTimer);
+          hubJobPollTimer = null;
+        }
+        return;
+      }
+
+      if (job.status === 'running') {
+        aiNotice(noticeId, {
+          state: 'running',
+          body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.step || 'Đang xử lý...')} (${job.progress || 0}%)`,
+          label: 'Huỷ',
+          onAction: async () => {
+            if (!confirm('Bạn muốn huỷ tiến trình phân tích AI đang chạy?')) return;
+            await fetch('/api/project-hub/jobs/cancel', {
+              method: 'POST',
+              headers: getShellAuthHeaders(),
+              body: JSON.stringify({ jobId: job.id })
+            });
+            const p = document.getElementById(noticeId);
+            if (p) p.style.display = 'none';
+          }
+        });
+        if (!hubJobPollTimer) {
+          hubJobPollTimer = setInterval(checkHubActiveJob, 2500);
+        }
+      } else if (job.status === 'done') {
+        if (hubJobPollTimer) {
+          clearInterval(hubJobPollTimer);
+          hubJobPollTimer = null;
+        }
+        // Chỉ hiện nếu vừa xong trong vòng 2 phút
+        const finishedMs = job.finishedAt ? Date.now() - new Date(job.finishedAt).getTime() : 0;
+        if (finishedMs < 120000) {
+          aiNotice(noticeId, {
+            state: 'done',
+            body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: AI đã hoàn thành soát bản vẽ & tự động tạo đề xuất!`,
+            label: 'Xem kết quả',
+            onAction: () => {
+              window.location.href = `/du-an?project=${encodeURIComponent(job.projectId)}`;
+            }
+          });
+        }
+      } else if (job.status === 'error') {
+        if (hubJobPollTimer) {
+          clearInterval(hubJobPollTimer);
+          hubJobPollTimer = null;
+        }
+        const finishedMs = job.finishedAt ? Date.now() - new Date(job.finishedAt).getTime() : 0;
+        if (finishedMs < 60000) {
+          aiNotice(noticeId, {
+            state: 'error',
+            body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.error || 'Lỗi khi chạy AI.')}`,
+            label: 'Đóng',
+            onAction: () => {
+              const p = document.getElementById(noticeId);
+              if (p) p.style.display = 'none';
+            }
+          });
+        }
+      }
+    } catch {}
+  }
+
+  function initHubJobTracker() {
+    setTimeout(checkHubActiveJob, 1000);
+  }
+
   document.querySelectorAll('[data-shell-menu]').forEach(menu);
-  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox };
+  if (typeof window !== 'undefined') {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initHubJobTracker);
+    } else {
+      initHubJobTracker();
+    }
+  }
+
+  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob };
 })();

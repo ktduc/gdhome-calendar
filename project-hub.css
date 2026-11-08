@@ -562,3 +562,93 @@ body.hub-body {
   border: 1px solid var(--hub-border);
   border-radius: 6px;
 }
+
+/* B1: Gallery 3D theo phòng & gắn vào chốt mã */
+.renders-gallery-section {
+  background: #ffffff;
+  border: 1px solid var(--hub-border);
+  border-radius: var(--hub-radius);
+  padding: 18px;
+}
+.renders-room-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.renders-room-group {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.renders-room-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: #1e293b;
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.renders-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+.render-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.render-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+}
+.render-card-thumb-wrap {
+  width: 100%;
+  height: 125px;
+  background: #e2e8f0;
+  cursor: pointer;
+  overflow: hidden;
+  position: relative;
+}
+.render-card-thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.render-card-info {
+  padding: 8px 10px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+.render-card-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.render-card-items {
+  font-size: 10.5px;
+  color: #64748b;
+  line-height: 1.3;
+}
+.render-card-btn {
+  width: 100%;
+  font-size: 11px;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}

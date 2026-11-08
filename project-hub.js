@@ -659,7 +659,7 @@ const WORK_SEQUENCES = [
   { name: 'Vệ sinh công nghiệp & Nghiệm thu bàn giao', category: 'Nghiệm thu', days: 2 }
 ];
 
-function generateScheduleProposal(projectId, quoteItems, existingCalendars = []) {
+function generateScheduleProposal(projectId, quoteItems, existingCalendars = [], buildingType = 'Chung cư') {
   const stageName = 'THI CÔNG TỔNG THỂ (TỪ BÁO GIÁ)';
   let targetCal = existingCalendars.find(c => c.ownerId === projectId && c.name.includes('BÁO GIÁ'));
   const calId = targetCal?.id || 'cal_' + crypto.randomUUID().slice(0, 8);
@@ -679,7 +679,15 @@ function generateScheduleProposal(projectId, quoteItems, existingCalendars = [])
 
   let previousTaskId = null;
 
-  WORK_SEQUENCES.forEach(seq => {
+  let sequences = [...WORK_SEQUENCES];
+  if (buildingType === 'Nhà phố') {
+    sequences.splice(1, 0, { name: 'Kết cấu móng/cột/dầm & Chống thấm mái/ban công', category: 'Phần thô & Xây trát', days: 8 });
+  } else if (buildingType === 'Văn phòng nhỏ') {
+    sequences = sequences.filter(s => !s.name.includes('Sofa, Bàn ăn'));
+    sequences.splice(4, 0, { name: 'Thi công sàn nâng / thảm & vách ngăn kính', category: 'Nhôm kính & Cửa', days: 5 });
+  }
+
+  sequences.forEach(seq => {
     const matchedItems = quoteItems.filter(item => item.category === seq.category);
     const hasItems = matchedItems.length > 0 || seq.category === 'Nghiệm thu';
     if (!hasItems) return;
@@ -738,7 +746,7 @@ const MATERIAL_GROUP_MAP = [
   { group: 'TAY NẮM', pattern: /tay nam|num canh/i }
 ];
 
-function generateMaterialsProposal(quoteItems) {
+function generateMaterialsProposal(quoteItems, buildingType = 'Chung cư') {
   const groupsMap = new Map();
 
   quoteItems.forEach(item => {
@@ -784,6 +792,38 @@ function generateMaterialsProposal(quoteItems) {
 }
 
 // -----------------------------------------------------------------------------
+// B2: Loại công trình trong ngữ cảnh AI
+// -----------------------------------------------------------------------------
+const BUILDING_TYPES = ['Chung cư', 'Nhà phố', 'Văn phòng nhỏ', 'Khác'];
+
+function guessBuildingType(name = '', address = '') {
+  const text = (String(name || '') + ' ' + String(address || '')).toLowerCase();
+  if (/văn\s*phòng|office|co-working|trụ\s*sở/i.test(text)) {
+    return 'Văn phòng nhỏ';
+  }
+  if (/chung\s*cư|căn\s*hộ|apartment|condo|masteri|vinhomes|smart\s*city|ocean\s*park|tòa|toà|tầng|block|tower/i.test(text)) {
+    return 'Chung cư';
+  }
+  if (/nhà\s*phố|liền\s*kề|shophouse|biệt\s*thự|villa|ngõ|ngách|hẻm|phố|số\s*nhà|thổ\s*cư/i.test(text)) {
+    return 'Nhà phố';
+  }
+  return 'Khác';
+}
+
+function getBuildingContextPrompt(buildingType = 'Chung cư') {
+  switch (buildingType) {
+    case 'Chung cư':
+      return `\n[NGỮ CẢNH CÔNG TRÌNH: CHUNG CƯ]\n- Không có phần móng, kết cấu ngầm, sàn mái ngoài trời.\n- Chú ý hộp kỹ thuật MEP toà nhà, ban quản lý toà nhà, quy định tiếng ồn và giờ giấc thi công nghiêm ngặt, vận chuyển thang máy hàng.\n- Các không gian điển hình: Phòng khách, Bếp & Ăn, Phòng ngủ master, Phòng ngủ con, Logia/Ban công, WC.`;
+    case 'Nhà phố':
+      return `\n[NGỮ CẢNH CÔNG TRÌNH: NHÀ PHỐ]\n- Công trình nhiều tầng, có kết cấu móng/cột/dầm, cầu thang bộ, chống thấm sàn mái và ban công, mặt tiền ngoài trời.\n- Lưu ý ranh giới đất, an toàn nhà liền kề, hệ thống cấp thoát nước tổng thể.\n- Các không gian điển hình: Tầng 1 (Khách/Gara/Bếp), Tầng lửng/Tầng 2-3 (Ngủ, Sinh hoạt chung), Tầng tum/Sân phơi, Phòng thờ.`;
+    case 'Văn phòng nhỏ':
+      return `\n[NGỮ CẢNH CÔNG TRÌNH: VĂN PHÒNG NHỎ]\n- Đặc thù trần thả / thạch cao khung xương nổi, sàn nâng kỹ thuật hoặc thảm trải sàn, vách kính / thạch cao ngăn phòng.\n- Hệ thống mạng LAN, điện nhẹ, camera, kiểm soát ra vào, PCCC theo tiêu chuẩn toà nhà.\n- Các không gian điển hình: Khu làm việc chung, Phòng họp, Phòng giám đốc, Khu tiếp khách/Pantry, Lễ tân.`;
+    default:
+      return `\n[NGỮ CẢNH CÔNG TRÌNH: KHÁC]\n- Phân tích bám sát thiết kế bản vẽ và bảng dự toán khối lượng thực tế.`;
+  }
+}
+
+// -----------------------------------------------------------------------------
 // AI Soát bản vẽ HSKT & Phối cảnh 3D qua integrations.js
 // -----------------------------------------------------------------------------
 const DRAWING_AI_SYSTEM = `Bạn là chuyên gia kiến trúc và nội thất GD HOME. Hãy phân tích hồ sơ bản vẽ thiết kế kỹ thuật (HSKT) đính kèm.
@@ -803,21 +843,29 @@ const RENDER_AI_SYSTEM = `Bạn là chuyên gia thiết kế nội thất GD HOM
 Chỉ trả về JSON theo mẫu:
 {"room":"Phòng khách","detectedItems":["Sofa","Bàn trà","Kệ tivi"]}`;
 
-async function runAiAnalysis(ai, drawings, renders, assets) {
+async function runAiAnalysis(ai, drawings, renders, assets, buildingType = 'Chung cư', onProgress = null) {
   const model = await resolveModel(ai);
   const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
+  const contextPrompt = getBuildingContextPrompt(buildingType);
+  const drawingSystem = DRAWING_AI_SYSTEM + contextPrompt;
+  const renderSystem = RENDER_AI_SYSTEM + contextPrompt;
+
+  const total = drawings.length + renders.length;
+  let doneCount = 0;
 
   // 1. Phân tích các bản vẽ HSKT
-  for (const doc of drawings) {
-    if (!doc.assetKey) continue;
+  for (let i = 0; i < drawings.length; i++) {
+    const doc = drawings[i];
+    if (onProgress) onProgress({ step: `AI đang đọc bản vẽ ${i + 1}/${drawings.length}: ${doc.name}`, percent: Math.round(20 + (doneCount / Math.max(1, total)) * 50) });
+    if (!doc.assetKey) { doneCount++; continue; }
     try {
       const { buf, mime } = await assets.read(doc.assetKey);
       let rawJson = '';
       if (mime === 'application/pdf' || doc.name.toLowerCase().endsWith('.pdf')) {
-        const res = await callWithFallback(ai, model, call, [], [{ data: buf.toString('base64') }], 'Phân tích bản vẽ HSKT này.', DRAWING_AI_SYSTEM);
+        const res = await callWithFallback(ai, model, call, [], [{ data: buf.toString('base64') }], 'Phân tích bản vẽ HSKT này.', drawingSystem);
         rawJson = res.raw;
       } else if (mime.startsWith('image/')) {
-        const res = await callWithFallback(ai, model, call, [{ mediaType: mime, data: buf.toString('base64') }], [], 'Phân tích bản vẽ HSKT này.', DRAWING_AI_SYSTEM);
+        const res = await callWithFallback(ai, model, call, [{ mediaType: mime, data: buf.toString('base64') }], [], 'Phân tích bản vẽ HSKT này.', drawingSystem);
         rawJson = res.raw;
       }
       if (rawJson) {
@@ -831,16 +879,19 @@ async function runAiAnalysis(ai, drawings, renders, assets) {
       console.error(`[AI Drawing Analysis Error for ${doc.name}]:`, e.message);
       throw e;
     }
+    doneCount++;
   }
 
   // 2. Phân tích các ảnh phối cảnh 3D
-  for (const doc of renders) {
-    if (!doc.assetKey) continue;
+  for (let j = 0; j < renders.length; j++) {
+    const doc = renders[j];
+    if (onProgress) onProgress({ step: `AI đang phân tích phối cảnh 3D ${j + 1}/${renders.length}: ${doc.name}`, percent: Math.round(20 + (doneCount / Math.max(1, total)) * 50) });
+    if (!doc.assetKey) { doneCount++; continue; }
     try {
       const { buf, mime } = await assets.read(doc.assetKey);
       if (mime.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(doc.name)) {
         const cleanMime = mime.startsWith('image/') ? mime : 'image/jpeg';
-        const res = await callWithFallback(ai, model, call, [{ mediaType: cleanMime, data: buf.toString('base64') }], [], 'Phân tích phối cảnh 3D này.', RENDER_AI_SYSTEM);
+        const res = await callWithFallback(ai, model, call, [{ mediaType: cleanMime, data: buf.toString('base64') }], [], 'Phân tích phối cảnh 3D này.', renderSystem);
         const parsed = extractJson(res.raw);
         if (parsed) {
           if (parsed.room) doc.room = parsed.room;
@@ -851,7 +902,233 @@ async function runAiAnalysis(ai, drawings, renders, assets) {
       console.error(`[AI Render Analysis Error for ${doc.name}]:`, e.message);
       throw e;
     }
+    doneCount++;
   }
+}
+
+// -----------------------------------------------------------------------------
+// B3: Quản lý Background Job phân tích AI
+// -----------------------------------------------------------------------------
+class HubJobManager {
+  constructor() {
+    this.jobs = new Map();
+  }
+
+  createJob({ projectId, projectName, dataKey, runFn }) {
+    const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    const controller = new AbortController();
+    const job = {
+      id: jobId,
+      projectId,
+      projectName: projectName || 'Dự án',
+      dataKey,
+      status: 'running',
+      progress: 5,
+      step: 'Khởi tạo tiến trình...',
+      startedAt: new Date().toISOString(),
+      finishedAt: null,
+      error: null,
+      result: null,
+      controller
+    };
+
+    this.jobs.set(jobId, job);
+
+    (async () => {
+      try {
+        const result = await runFn(job, controller.signal);
+        if (job.status !== 'cancelled') {
+          job.status = 'done';
+          job.progress = 100;
+          job.step = 'Hoàn tất phân tích!';
+          job.finishedAt = new Date().toISOString();
+          job.result = result;
+        }
+      } catch (err) {
+        if (job.status !== 'cancelled') {
+          job.status = 'error';
+          job.error = err.message || 'Lỗi không xác định khi chạy phân tích AI.';
+          job.step = `Lỗi: ${job.error}`;
+          job.finishedAt = new Date().toISOString();
+        }
+      }
+    })();
+
+    return job;
+  }
+
+  getJob(jobId) {
+    return this.jobs.get(jobId) || null;
+  }
+
+  getActiveJob(dataKey, projectId = null) {
+    for (const job of this.jobs.values()) {
+      if (job.dataKey === dataKey) {
+        if (!projectId || job.projectId === projectId) {
+          if (job.status === 'running') return job;
+        }
+      }
+    }
+    const userJobs = [...this.jobs.values()].filter(j => j.dataKey === dataKey && (!projectId || j.projectId === projectId));
+    return userJobs.at(-1) || null;
+  }
+
+  cancelJob(jobId) {
+    const job = this.jobs.get(jobId);
+    if (!job) return false;
+    job.status = 'cancelled';
+    job.step = 'Đã huỷ tiến trình.';
+    job.finishedAt = new Date().toISOString();
+    try { job.controller.abort(); } catch {}
+    return true;
+  }
+
+  serialize(job) {
+    if (!job) return null;
+    const { controller, ...safe } = job;
+    return safe;
+  }
+}
+
+const globalJobManager = new HubJobManager();
+
+async function executeProjectReview({
+  projectId,
+  drawingDocId,
+  skipAi,
+  autoPush,
+  hubStore,
+  assets,
+  store,
+  dataKey,
+  defaultSchedule,
+  onProgress,
+  signal
+}) {
+  if (onProgress) onProgress({ step: 'Đang tải hồ sơ dự án...', percent: 10 });
+  const record = await hubStore.getProject(projectId);
+  const buildingType = record.buildingType || record.profile?.buildingType || 'Chung cư';
+  const drawings = (record.documents || []).filter(d => d.type === 'drawing');
+  const renders = (record.documents || []).filter(d => d.type === 'render');
+
+  if (!skipAi) {
+    if (signal?.aborted) throw Object.assign(new Error('Tiến trình đã bị huỷ.'), { name: 'AbortError' });
+    if (onProgress) onProgress({ step: 'Đang kết nối AI...', percent: 15 });
+    const userCfg = await loadUserCfg(store, dataKey);
+    const ai = resolveAi(userCfg);
+    if (!ai) {
+      throw Object.assign(new Error('Chưa kết nối AI. Hãy vào ⚙ Kết nối để dán API key (Gemini / ChatGPT / Claude).'), { status: 400 });
+    }
+    await runAiAnalysis(ai, drawings, renders, assets, buildingType, onProgress);
+  }
+
+  if (signal?.aborted) throw Object.assign(new Error('Tiến trình đã bị huỷ.'), { name: 'AbortError' });
+  if (onProgress) onProgress({ step: 'Đang tính toán ma trận soát hồ sơ...', percent: 75 });
+  const { findings, pageTags, renderTags } = computeReviewCoverage(record.quoteItems || [], drawings, renders);
+
+  const targetDrawing = (drawingDocId ? drawings.find(d => d.id === drawingDocId) : null) || drawings[0];
+  let annotatedAssetKey = null;
+
+  if (targetDrawing && targetDrawing.assetKey) {
+    if (onProgress) onProgress({ step: 'Đang đóng dấu và ghi chú bản vẽ PDF...', percent: 85 });
+    try {
+      const { buf } = await assets.read(targetDrawing.assetKey);
+      const annotatedBytes = await annotateDrawingPdf(buf, findings, record.projectId);
+      const saveRes = await assets.save(Buffer.from(annotatedBytes), '.pdf', 'application/pdf');
+      annotatedAssetKey = saveRes.assetKey;
+    } catch (err) {
+      console.error('[Review PDF Annotation Error]:', err);
+    }
+  }
+
+  if (onProgress) onProgress({ step: 'Đang lưu kết quả soát hồ sơ...', percent: 90 });
+  const updatedRecord = await hubStore.saveProject(projectId, current => {
+    current.documents = record.documents;
+    current.reviewFindings = findings;
+    current.reviewSummary = {
+      lastRunAt: new Date().toISOString(),
+      annotatedAssetKey,
+      sourceDrawingDocId: targetDrawing?.id || null,
+      pageTags,
+      renderTags
+    };
+    return current;
+  });
+
+  let scheduleProposed = false;
+  let materialsProposed = false;
+
+  if (autoPush) {
+    if (onProgress) onProgress({ step: 'Đang tự động đẩy đề xuất sang Tiến độ & Chốt mã...', percent: 95 });
+    try {
+      const schedule = (await store.get(dataKey)) || (defaultSchedule ? defaultSchedule() : { calendars: [], tasks: [] });
+      const schedProposal = generateScheduleProposal(projectId, record.quoteItems || [], schedule.calendars || [], buildingType);
+      schedule.calendars ||= [];
+      if (!schedule.calendars.some(c => c.id === schedProposal.calendar.id)) {
+        schedule.calendars.push(schedProposal.calendar);
+      }
+      schedule.tasks ||= [];
+      schedule.tasks.push(...schedProposal.tasks);
+      schedule._version = (schedule._version || 0) + 1;
+      schedule._updatedAt = new Date().toISOString();
+      await store.put(dataKey, schedule);
+
+      await hubStore.saveProject(projectId, rec => {
+        rec.pushLinks ||= {};
+        rec.pushLinks.schedule = {
+          lastPushedAt: new Date().toISOString(),
+          calendarId: schedProposal.calendar.id,
+          tasksCount: schedProposal.tasks.length
+        };
+        return rec;
+      });
+      scheduleProposed = true;
+    } catch (e) {
+      console.error('[AutoPush Schedule Error]:', e.message);
+    }
+
+    try {
+      const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+      const matData = (await store.get(matKey)) || { _version: 0, sheets: [] };
+      matData.sheets ||= [];
+      const matProposal = generateMaterialsProposal(record.quoteItems || [], buildingType);
+      const newSheet = {
+        id: 'sheet_' + crypto.randomUUID().slice(0, 10),
+        title: `Chốt mã vật liệu - Tự động từ AI`,
+        projectId,
+        createdAt: new Date().toISOString(),
+        groups: matProposal.groups
+      };
+      matData.sheets.push(newSheet);
+      matData._version = (matData._version || 0) + 1;
+      matData._updatedAt = new Date().toISOString();
+      await store.put(matKey, matData);
+
+      await hubStore.saveProject(projectId, rec => {
+        rec.pushLinks ||= {};
+        rec.pushLinks.materials = {
+          lastPushedAt: new Date().toISOString(),
+          sheetId: newSheet.id,
+          itemsCount: matProposal.groups.reduce((sum, g) => sum + g.rows.length, 0)
+        };
+        return rec;
+      });
+      materialsProposed = true;
+    } catch (e) {
+      console.error('[AutoPush Materials Error]:', e.message);
+    }
+  }
+
+  if (onProgress) onProgress({ step: 'Hoàn tất phân tích!', percent: 100 });
+
+  return {
+    findings: updatedRecord.reviewFindings,
+    summary: updatedRecord.reviewSummary,
+    annotatedAssetKey,
+    findingsCount: updatedRecord.reviewFindings.length,
+    scheduleProposed,
+    materialsProposed
+  };
 }
 
 // -----------------------------------------------------------------------------
@@ -932,6 +1209,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
         stats,
         hub: hubRecord
       },
+      materialsSheets: (materials.sheets || []).filter(s => s.projectId === projectId || !s.projectId),
       storageInfo: {
         configured: assets.configured,
         r2: assets.configured,
@@ -947,12 +1225,16 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     if (!body || typeof body.profile !== 'object' || !body.profile) {
       return sendJson(res, 400, { success: false, message: 'Thiếu thông tin profile.' });
     }
+    if (!body.profile.buildingType) {
+      body.profile.buildingType = guessBuildingType(body.project || body.profile.project, body.profile.address);
+    }
     const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
     const legacy = (await store.get(matKey)) || {};
     const result = await writeProjectProfile(store, dataKey, body, defaultSchedule, legacy);
 
     // Đồng bộ vào hubRecord
     const record = await hubStore.getProject(result.project.id);
+    record.buildingType = body.profile.buildingType;
     await hubStore.saveProject(result.project.id, record);
 
     return sendJson(res, 200, { success: true, project: result.project });
@@ -963,7 +1245,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     const contentType = req.headers['content-type'] || '';
     const isJson = contentType.includes('application/json');
     const isRenderForm = contentType.startsWith('multipart/form-data;');
-    let projectId, name, type, room, cleanMime, buf, thumb, extractedPages, detectedItems;
+    let projectId, name, type, room, cleanMime, buf, thumb, extractedPages, detectedItems, pageNumber = 1, sourcePdf = null;
 
     if (isRenderForm) {
       const url = new URL(req.url,'http://localhost');
@@ -971,6 +1253,8 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
       name = url.searchParams.get('name');
       type = 'render';
       room = url.searchParams.get('room');
+      pageNumber = parseInt(url.searchParams.get('pageNumber') || '1', 10);
+      sourcePdf = url.searchParams.get('sourcePdf') ? decodeURIComponent(url.searchParams.get('sourcePdf')) : null;
       const bytes = await readRawBody(req,maxImageBytes + 1024*1024);
       try {
         const form = await new Response(bytes,{headers:{'Content-Type':contentType}}).formData();
@@ -1049,6 +1333,8 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
         existing.mime = finalMime;
         existing.pages = pages;
         existing.room = room || existing.room;
+        if (typeof pageNumber === 'number') existing.pageNumber = pageNumber;
+        if (sourcePdf) existing.sourcePdf = sourcePdf;
         if (extractedPages) existing.extractedPages = extractedPages;
         if (detectedItems) existing.detectedItems = detectedItems;
         existing.uploadedAt = new Date().toISOString();
@@ -1064,6 +1350,8 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
           assetKey,
           thumbAssetKey,
           pages,
+          pageNumber: typeof pageNumber === 'number' ? pageNumber : 1,
+          sourcePdf: sourcePdf || null,
           version: 1,
           history: [],
           extractedPages: extractedPages || [],
@@ -1123,64 +1411,198 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     return sendJson(res, 200, { success: true, quoteItems: updated.quoteItems });
   }
 
-  // 9. Soát HSKT & Phối cảnh + Ghi chú PDF: POST /api/project-hub/review/run
+  // 9. Soát HSKT & Phối cảnh + Ghi chú PDF: POST /api/project-hub/review/run (Đồng bộ)
   if (urlPath === '/api/project-hub/review/run' && req.method === 'POST') {
-    const { projectId, drawingDocId, skipAi } = await readJsonBody(req);
+    const { projectId, drawingDocId, skipAi, autoPush } = await readJsonBody(req);
     if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
 
-    const record = await hubStore.getProject(projectId);
-    const drawings = (record.documents || []).filter(d => d.type === 'drawing');
-    const renders = (record.documents || []).filter(d => d.type === 'render');
-
-    // Gọi AI thật qua integrations.js nếu không có cờ skipAi
-    if (!skipAi) {
-      const userCfg = await loadUserCfg(store, dataKey);
-      const ai = resolveAi(userCfg);
-      if (!ai) {
-        return sendJson(res, 400, {
-          success: false,
-          message: 'Chưa kết nối AI. Hãy vào ⚙ Kết nối để dán API key (Gemini / ChatGPT / Claude).'
-        });
-      }
-      await runAiAnalysis(ai, drawings, renders, assets);
-    }
-
-    // Chạy ma trận phủ
-    const { findings, pageTags, renderTags } = computeReviewCoverage(record.quoteItems || [], drawings, renders);
-
-    // Ghi chú vào bản vẽ PDF chính nếu có
-    const targetDrawing = (drawingDocId ? drawings.find(d => d.id === drawingDocId) : null) || drawings[0];
-    let annotatedAssetKey = null;
-
-    if (targetDrawing && targetDrawing.assetKey) {
-      try {
-        const { buf } = await assets.read(targetDrawing.assetKey);
-        const annotatedBytes = await annotateDrawingPdf(buf, findings, record.projectId);
-        const saveRes = await assets.save(Buffer.from(annotatedBytes), '.pdf', 'application/pdf');
-        annotatedAssetKey = saveRes.assetKey;
-      } catch (err) {
-        console.error('[Review PDF Annotation Error]:', err);
-      }
-    }
-
-    const updatedRecord = await hubStore.saveProject(projectId, current => {
-      current.documents = record.documents; // lưu các extractedPages & detectedItems mà AI vừa trích xuất
-      current.reviewFindings = findings;
-      current.reviewSummary = {
-        lastRunAt: new Date().toISOString(),
-        annotatedAssetKey,
-        sourceDrawingDocId: targetDrawing?.id || null,
-        pageTags,
-        renderTags
-      };
-      return current;
+    const result = await executeProjectReview({
+      projectId,
+      drawingDocId,
+      skipAi,
+      autoPush,
+      hubStore,
+      assets,
+      store,
+      dataKey,
+      defaultSchedule
     });
 
     return sendJson(res, 200, {
       success: true,
-      findings: updatedRecord.reviewFindings,
-      summary: updatedRecord.reviewSummary,
-      annotatedAssetKey
+      findings: result.findings,
+      summary: result.summary,
+      annotatedAssetKey: result.annotatedAssetKey
+    });
+  }
+
+  // B3.1: Khởi động Background Job: POST /api/project-hub/jobs/start
+  if (urlPath === '/api/project-hub/jobs/start' && req.method === 'POST') {
+    const { projectId, drawingDocId, skipAi, autoPush } = await readJsonBody(req);
+    if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
+
+    const rec = await hubStore.getProject(projectId);
+    const schedule = (await store.get(dataKey)) || defaultSchedule();
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const materials = (await store.get(matKey)) || { sheets: [] };
+    const p = projectList(schedule, materials).find(proj => proj.id === projectId);
+    const projectName = p?.name || rec.name || 'Dự án';
+
+    const job = globalJobManager.createJob({
+      projectId,
+      projectName,
+      dataKey,
+      runFn: async (j, signal) => {
+        return await executeProjectReview({
+          projectId,
+          drawingDocId,
+          skipAi,
+          autoPush,
+          hubStore,
+          assets,
+          store,
+          dataKey,
+          defaultSchedule,
+          onProgress: ({ step, percent }) => {
+            j.step = step;
+            if (typeof percent === 'number') j.progress = percent;
+          },
+          signal
+        });
+      }
+    });
+
+    return sendJson(res, 200, { success: true, job: globalJobManager.serialize(job) });
+  }
+
+  // B3.2: Thăm dò trạng thái Job: GET /api/project-hub/jobs/status?jobId=...
+  if (urlPath === '/api/project-hub/jobs/status' && req.method === 'GET') {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const jobId = urlObj.searchParams.get('jobId');
+    if (!jobId) return sendJson(res, 400, { success: false, message: 'Thiếu jobId.' });
+    const job = globalJobManager.getJob(jobId);
+    if (!job) return sendJson(res, 404, { success: false, message: 'Không tìm thấy job.' });
+    return sendJson(res, 200, { success: true, job: globalJobManager.serialize(job) });
+  }
+
+  // B3.3: Lấy Job đang chạy gần nhất: GET /api/project-hub/jobs/active
+  if (urlPath === '/api/project-hub/jobs/active' && req.method === 'GET') {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const projectId = urlObj.searchParams.get('projectId');
+    const job = globalJobManager.getActiveJob(dataKey, projectId);
+    return sendJson(res, 200, { success: true, job: globalJobManager.serialize(job) });
+  }
+
+  // B3.4: Huỷ Job: POST /api/project-hub/jobs/cancel
+  if (urlPath === '/api/project-hub/jobs/cancel' && req.method === 'POST') {
+    const { jobId } = await readJsonBody(req);
+    if (!jobId) return sendJson(res, 400, { success: false, message: 'Thiếu jobId.' });
+    const cancelled = globalJobManager.cancelJob(jobId);
+    return sendJson(res, 200, { success: true, cancelled });
+  }
+
+  // B1.4: Gắn ảnh phối cảnh 3D vào Chốt mã: POST /api/project-hub/renders/assign-to-materials
+  if (urlPath === '/api/project-hub/renders/assign-to-materials' && req.method === 'POST') {
+    const { projectId, assetKey, sheetId, rowId, groupName } = await readJsonBody(req);
+    if (!projectId || !assetKey) {
+      return sendJson(res, 400, { success: false, message: 'Thiếu projectId hoặc assetKey.' });
+    }
+
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const matData = (await store.get(matKey)) || { _version: 0, sheets: [] };
+    matData.sheets ||= [];
+
+    let sheet = sheetId ? matData.sheets.find(s => s.id === sheetId) : null;
+    if (!sheet) {
+      sheet = matData.sheets.find(s => s.projectId === projectId) || matData.sheets[0];
+    }
+
+    if (!sheet) {
+      sheet = {
+        id: 'sheet_' + crypto.randomUUID().slice(0, 10),
+        title: `Chốt mã vật liệu - Dự án`,
+        projectId,
+        createdAt: new Date().toISOString(),
+        groups: []
+      };
+      matData.sheets.push(sheet);
+    }
+
+    sheet.groups ||= [];
+    const cleanImgName = assetKey.replace(/^render-/, '');
+    let assignedCount = 0;
+
+    if (rowId) {
+      for (const grp of sheet.groups) {
+        const r = (grp.rows || []).find(row => row.id === rowId);
+        if (r) {
+          r.render = Array.isArray(r.render) ? r.render : (r.render ? [r.render] : []);
+          if (!r.render.includes(cleanImgName)) {
+            r.render.push(cleanImgName);
+            assignedCount++;
+          }
+          break;
+        }
+      }
+    } else if (groupName) {
+      let grp = sheet.groups.find(g => g.name === groupName);
+      if (!grp) {
+        grp = { id: 'grp_' + crypto.randomUUID().slice(0, 8), name: groupName, rows: [] };
+        sheet.groups.push(grp);
+      }
+      grp.rows ||= [];
+      if (grp.rows.length === 0) {
+        grp.rows.push({
+          id: 'row_' + crypto.randomUUID().slice(0, 8),
+          name: groupName,
+          render: [cleanImgName],
+          options: [{ images: [] }, { images: [] }, { images: [] }]
+        });
+        assignedCount++;
+      } else {
+        for (const r of grp.rows) {
+          r.render = Array.isArray(r.render) ? r.render : (r.render ? [r.render] : []);
+          if (!r.render.includes(cleanImgName)) {
+            r.render.push(cleanImgName);
+            assignedCount++;
+          }
+        }
+      }
+    } else {
+      if (sheet.groups.length === 0) {
+        sheet.groups.push({
+          id: 'grp_1',
+          name: 'Phối cảnh 3D',
+          rows: [{
+            id: 'row_1',
+            name: 'Phối cảnh 3D tổng thể',
+            render: [cleanImgName],
+            options: [{ images: [] }]
+          }]
+        });
+        assignedCount++;
+      } else {
+        const firstRow = sheet.groups[0].rows?.[0];
+        if (firstRow) {
+          firstRow.render = Array.isArray(firstRow.render) ? firstRow.render : [];
+          if (!firstRow.render.includes(cleanImgName)) {
+            firstRow.render.push(cleanImgName);
+            assignedCount++;
+          }
+        }
+      }
+    }
+
+    matData._version = (matData._version || 0) + 1;
+    matData._updatedAt = new Date().toISOString();
+    await store.put(matKey, matData);
+
+    return sendJson(res, 200, {
+      success: true,
+      message: 'Đã gắn ảnh 3D vào Chốt mã.',
+      sheetId: sheet.id,
+      assignedImage: cleanImgName,
+      assignedCount
     });
   }
 
@@ -1291,5 +1713,10 @@ module.exports = {
   handleProjectHub,
   DRAWING_AI_SYSTEM,
   RENDER_AI_SYSTEM,
+  BUILDING_TYPES,
+  guessBuildingType,
+  getBuildingContextPrompt,
+  executeProjectReview,
+  globalJobManager,
   runAiAnalysis
 };

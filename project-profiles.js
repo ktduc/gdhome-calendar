@@ -1,6 +1,6 @@
 const {randomUUID} = require('node:crypto');
 
-const projectFields = ['project','address','customer','phone','email','contract'];
+const projectFields = ['project','address','customer','phone','email','contract','buildingType'];
 const scheduleQueues = new Map();
 
 function withScheduleWrite(key,write) {

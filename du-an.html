@@ -106,6 +106,10 @@
         <summary class="sb-head">Hồ sơ dự án</summary>
         <div class="sb-body">
           <div class="sidebar-meta-item">
+            <span class="sb-row-label">Loại công trình</span>
+            <span id="view-building-type" class="badge badge-outline">-</span>
+          </div>
+          <div class="sidebar-meta-item">
             <span class="sb-row-label">Khách hàng</span>
             <strong id="view-customer">-</strong>
           </div>
@@ -141,8 +145,9 @@
     <main class="hub-main-area">
       <!-- Thống kê liên kết 3 trụ cột -->
       <section id="project-overview-card" class="hub-overview-card">
-        <div class="overview-info">
-          <h2 id="view-project-name">Chưa chọn dự án</h2>
+        <div class="overview-info" style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+          <h2 id="view-project-name" style="margin: 0;">Chưa chọn dự án</h2>
+          <span id="overview-building-type" class="badge badge-outline">-</span>
         </div>
 
         <div class="linked-stats-grid">
@@ -230,6 +235,20 @@
                 <tr><td colspan="7" class="empty-cell">Chưa có tài liệu nào được tải lên.</td></tr>
               </tbody>
             </table>
+          </div>
+
+          <!-- B1: Thư viện ảnh phối cảnh 3D theo phòng & gắn vào Chốt mã -->
+          <div class="renders-gallery-section" id="renders-gallery-section" style="margin-top: 28px;">
+            <div class="documents-header">
+              <h3>🎨 Thư viện Phối cảnh 3D theo phòng</h3>
+              <span id="renders-count-label" class="badge badge-render">0 ảnh 3D</span>
+            </div>
+            <p style="font-size: 12.5px; color: #64748b; margin-top: -6px; margin-bottom: 12px;">
+              Ảnh phối cảnh 3D được AI nhận diện phòng và hạng mục. Bấm <strong>🏷 Gắn vào Chốt mã</strong> để liên kết ảnh trực tiếp sang bảng vật liệu.
+            </p>
+            <div id="renders-gallery-container" class="renders-room-grid">
+              <p class="empty-cell">Chưa có ảnh phối cảnh 3D nào. Kéo thả file ảnh (.jpg, .png, .webp) hoặc file PDF 3D cả căn vào khung phía trên.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -378,6 +397,14 @@
       <h3 id="profile-dialog-title">Hồ sơ dự án</h3>
       <form id="profile-form">
         <label>Tên dự án: <input type="text" name="project" required maxlength="200" placeholder="VD: Chung cư Masteri - Căn 1205"></label>
+        <label>Loại công trình:
+          <select name="buildingType" id="profile-building-type">
+            <option value="Chung cư">Chung cư</option>
+            <option value="Nhà phố">Nhà phố</option>
+            <option value="Văn phòng nhỏ">Văn phòng nhỏ</option>
+            <option value="Khác">Khác</option>
+          </select>
+        </label>
         <label>Tên khách hàng: <input type="text" name="customer" placeholder="VD: Anh Đức"></label>
         <label>Số điện thoại: <input type="tel" name="phone" placeholder="VD: 0912345678"></label>
         <label>Địa chỉ: <input type="text" name="address" placeholder="VD: Masteri Waterfront, Gia Lâm, Hà Nội"></label>
@@ -385,6 +412,42 @@
         <div class="dialog-actions">
           <button type="button" class="btn btn-outline" onclick="document.getElementById('profile-dialog').close()">Huỷ</button>
           <button type="submit" class="btn btn-primary">Lưu dự án</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- B1: Modal Gắn ảnh 3D vào Chốt mã -->
+  <dialog id="assign-render-dialog" class="hub-dialog">
+    <div class="dialog-content">
+      <h3>🏷 Gắn ảnh 3D vào Chốt mã vật liệu</h3>
+      <form id="assign-render-form">
+        <input type="hidden" name="assetKey" id="assign-render-asset-key">
+        <div style="text-align: center; margin-bottom: 12px;">
+          <img id="assign-render-preview" style="max-height: 140px; border-radius: 6px; border: 1px solid #cbd5e1; object-fit: contain;">
+        </div>
+        <label>Bảng Chốt mã:
+          <select name="sheetId" id="assign-render-sheet-select" required></select>
+        </label>
+        <label>Cách gắn:
+          <select name="assignMode" id="assign-render-mode">
+            <option value="row">Gắn vào Hạng mục cụ thể</option>
+            <option value="group">Gắn vào toàn bộ Nhóm</option>
+          </select>
+        </label>
+        <div id="assign-row-field">
+          <label>Hạng mục:
+            <select name="rowId" id="assign-render-row-select"></select>
+          </label>
+        </div>
+        <div id="assign-group-field" style="display: none;">
+          <label>Nhóm:
+            <select name="groupName" id="assign-render-group-select"></select>
+          </label>
+        </div>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('assign-render-dialog').close()">Huỷ</button>
+          <button type="submit" class="btn btn-primary">Xác nhận gắn ảnh</button>
         </div>
       </form>
     </div>

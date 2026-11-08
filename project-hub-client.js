@@ -94,6 +94,7 @@
     initTabs();
     initDropzone();
     initProfileModal();
+    initAssignRenderForm();
     initReviewActions();
     initPushActions();
     initQuoteActions();
@@ -201,6 +202,7 @@
 
       renderOverview(currentProject);
       renderDocuments(currentProject.hub?.documents || []);
+      render3DGallery(currentProject.hub?.documents || []);
       renderQuoteItems(currentProject.hub?.quoteItems || []);
       renderFindings(currentProject.hub?.reviewFindings || [], currentProject.hub?.reviewSummary);
       resetProposals();
@@ -211,12 +213,16 @@
 
   function renderEmptyState() {
     byId('view-project-name').textContent = 'Chưa chọn dự án';
+    byId('overview-building-type').textContent = '-';
+    byId('view-building-type').textContent = '-';
     byId('view-customer').textContent = '-';
     byId('view-phone').textContent = '-';
     byId('view-address').textContent = '-';
     byId('view-contract').textContent = '-';
     clearDocumentThumbnails(byId('documents-tbody'));
     byId('documents-tbody').innerHTML = '<tr><td colspan="7" class="empty-cell">Chưa có dự án nào.</td></tr>';
+    const gal = byId('renders-gallery-container');
+    if (gal) gal.innerHTML = '<p class="empty-cell">Chưa có dự án nào.</p>';
     byId('quote-tbody').innerHTML = '<tr><td colspan="11" class="empty-cell">Chưa có dự án nào.</td></tr>';
     byId('findings-tbody').innerHTML = '<tr><td colspan="7" class="empty-cell">Chưa có dự án nào.</td></tr>';
     updateSidebarDocs([]);
@@ -225,6 +231,12 @@
   function renderOverview(proj) {
     byId('view-project-name').textContent = proj.name || 'Dự án không tên';
     const prof = proj.profile || {};
+    const bType = proj.buildingType || prof.buildingType || 'Chung cư';
+    const viewBType = byId('view-building-type');
+    if (viewBType) viewBType.textContent = bType;
+    const overBType = byId('overview-building-type');
+    if (overBType) overBType.textContent = 'Loại: ' + bType;
+
     byId('view-customer').textContent = prof.customer || '-';
     byId('view-phone').textContent = prof.phone || '-';
     byId('view-address').textContent = prof.address || '-';
@@ -302,15 +314,77 @@
     });
   }
 
-  async function handleFiles(files,forcedType) {
+  // ---------------------------------------------------------------------------
+  // B1: Tách trang PDF 3D bằng pdf.js trên trình duyệt & nén WebP 1600px
+  // ---------------------------------------------------------------------------
+  async function splitAndUploadPdfRenders(projectId, file) {
+    if (!window.pdfjsLib) {
+      toast('Đang chuẩn bị thư viện đọc PDF...');
+      await new Promise(r => setTimeout(r, 600));
+    }
+    if (!window.pdfjsLib) {
+      throw new Error('Thư viện pdf.js chưa sẵn sàng.');
+    }
+    toast(`Đang mở file PDF 3D: ${file.name}...`);
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const numPages = pdf.numPages;
+    toast(`Tìm thấy ${numPages} trang 3D. Bắt đầu tách và nén WebP 1600px...`);
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      toast(`Đang xử lý trang 3D ${pageNum}/${numPages}...`);
+      const page = await pdf.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 2.0 });
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      const ctx = canvas.getContext('2d');
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+      let full = blob, thumb = blob;
+      if (window.GDHomeImages?.compress) {
+        const compressed = await GDHomeImages.compress(blob);
+        full = compressed.full;
+        thumb = compressed.thumb;
+      }
+
+      const body = new FormData();
+      body.set('full', full);
+      if (thumb !== full) body.set('thumb', thumb);
+
+      const baseName = file.name.replace(/\.pdf$/i, '');
+      const pageName = `${baseName}_trang_${pageNum}.webp`;
+      const uploadUrl = `/api/project-hub/documents/upload?projectId=${encodeURIComponent(projectId)}&name=${encodeURIComponent(pageName)}&type=render&room=${encodeURIComponent('Cả nhà')}&pageNumber=${pageNum}&sourcePdf=${encodeURIComponent(file.name)}`;
+      const headers = authHeaders(false);
+      const res = await fetch(uploadUrl, { method: 'POST', headers, body });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || `Lỗi tải trang ${pageNum}`);
+      }
+    }
+    toast(`Đã tách và tải lên thành công ${numPages} trang phối cảnh 3D!`);
+  }
+
+  async function handleFiles(files, forcedType) {
     const projectId = currentProjectId;
     if (!projectId) {
       toast('Vui lòng chọn hoặc tạo dự án trước khi tải hồ sơ.');
       return;
     }
     for (const file of files) {
-      const type = forcedType || (file.type.startsWith('image/') ? 'render' : detectDocType(file.name));
-      await uploadSingleFile(projectId,file,type);
+      const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+      const is3D = forcedType === 'render' || /3d|phoi[-_ ]?canh|render/i.test(file.name);
+      if (isPdf && is3D) {
+        try {
+          await splitAndUploadPdfRenders(projectId, file);
+        } catch (err) {
+          toast(`Lỗi tách file PDF 3D: ${err.message}`);
+        }
+      } else {
+        const type = forcedType || (file.type.startsWith('image/') ? 'render' : detectDocType(file.name));
+        await uploadSingleFile(projectId, file, type);
+      }
     }
     if (projectId === currentProjectId) await selectProject(projectId);
   }
@@ -457,6 +531,179 @@
   };
 
   // ---------------------------------------------------------------------------
+  // B1: Lưới Thumbnail phối cảnh 3D theo phòng & gắn vào Chốt mã
+  // ---------------------------------------------------------------------------
+  function render3DGallery(docs) {
+    const container = byId('renders-gallery-container');
+    const countLabel = byId('renders-count-label');
+    if (!container) return;
+
+    const renderDocs = docs.filter(d => d.type === 'render');
+    if (countLabel) countLabel.textContent = `${renderDocs.length} ảnh 3D`;
+
+    if (!renderDocs.length) {
+      container.innerHTML = '<p class="empty-cell">Chưa có ảnh phối cảnh 3D nào. Kéo thả file ảnh (.jpg, .png, .webp) hoặc file PDF 3D cả căn vào khung phía trên.</p>';
+      return;
+    }
+
+    // Gom ảnh theo phòng
+    const roomMap = new Map();
+    renderDocs.forEach(d => {
+      const room = d.room || 'Phòng khách';
+      if (!roomMap.has(room)) roomMap.set(room, []);
+      roomMap.get(room).push(d);
+    });
+
+    let html = '';
+    for (const [room, items] of roomMap.entries()) {
+      html += `
+        <div class="renders-room-group">
+          <div class="renders-room-title">
+            <span>🏠 ${escape(room)} (${items.length} góc nhìn)</span>
+          </div>
+          <div class="renders-card-grid">
+            ${items.map(d => {
+              const detected = d.extractedPages?.[0]?.items || d.detectedItems || [];
+              const detectedStr = detected.length > 0
+                ? `AI: ${detected.join(', ')}`
+                : (d.sourcePdf ? `${d.sourcePdf} (Trang ${d.pageNumber || 1})` : 'Ảnh phối cảnh 3D');
+              const thumbKey = d.thumbAssetKey || d.assetKey;
+              return `
+                <div class="render-card">
+                  <div class="render-card-thumb-wrap" onclick="window.viewDoc('${d.assetKey}', '${escape(d.name)}', 'render')">
+                    <img class="render-card-thumb" alt="${escape(d.name)}" data-hub-thumbnail="${escape(thumbKey)}">
+                  </div>
+                  <div class="render-card-info">
+                    <div class="render-card-name" title="${escape(d.name)}">${escape(d.name)}</div>
+                    <div class="render-card-items" title="${escape(detectedStr)}">${escape(detectedStr)}</div>
+                    <button type="button" class="btn btn-outline btn-sm render-card-btn" onclick="window.openAssignRenderModal('${escape(d.assetKey)}', '${escape(thumbKey)}')">
+                      🏷 Gắn vào Chốt mã
+                    </button>
+                  </div>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    }
+
+    container.innerHTML = html;
+    container.querySelectorAll('[data-hub-thumbnail]').forEach(img => renderThumbnails.observe(img));
+  }
+
+  let activeAssignAssetKey = null;
+  window.openAssignRenderModal = async (assetKey, thumbKey) => {
+    activeAssignAssetKey = assetKey;
+    const dialog = byId('assign-render-dialog');
+    if (!dialog) return;
+
+    byId('assign-render-asset-key').value = assetKey;
+    const previewImg = byId('assign-render-preview');
+    try {
+      const url = await fetchAssetBlobUrl(thumbKey || assetKey);
+      previewImg.src = url;
+    } catch {}
+
+    const sheets = currentProject?.materialsSheets || [];
+    const sheetSel = byId('assign-render-sheet-select');
+    sheetSel.innerHTML = '';
+
+    if (!sheets.length) {
+      sheetSel.innerHTML = '<option value="">-- Dự án chưa có bảng Chốt mã --</option>';
+      toast('Dự án chưa có bảng Chốt mã nào. Hãy tạo bảng chốt mã ở bước 4 trước.');
+      dialog.showModal();
+      return;
+    }
+
+    sheets.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.title || 'Bảng chốt mã';
+      sheetSel.appendChild(opt);
+    });
+
+    const updateTargetOptions = () => {
+      const selSheetId = sheetSel.value;
+      const targetSheet = sheets.find(s => s.id === selSheetId);
+      const rowSel = byId('assign-render-row-select');
+      const grpSel = byId('assign-render-group-select');
+      rowSel.innerHTML = '';
+      grpSel.innerHTML = '';
+
+      if (!targetSheet) return;
+
+      const groups = targetSheet.groups || [];
+      groups.forEach(g => {
+        const gOpt = document.createElement('option');
+        gOpt.value = g.name;
+        gOpt.textContent = `Nhóm: ${g.name} (${g.rows?.length || 0} mục)`;
+        grpSel.appendChild(gOpt);
+
+        (g.rows || []).forEach(r => {
+          const rOpt = document.createElement('option');
+          rOpt.value = r.id;
+          rOpt.textContent = `[${g.name}] ${r.name}`;
+          rowSel.appendChild(rOpt);
+        });
+      });
+    };
+
+    sheetSel.onchange = updateTargetOptions;
+    updateTargetOptions();
+
+    const modeSel = byId('assign-render-mode');
+    const rowField = byId('assign-row-field');
+    const grpField = byId('assign-group-field');
+
+    modeSel.onchange = () => {
+      if (modeSel.value === 'group') {
+        rowField.style.display = 'none';
+        grpField.style.display = 'block';
+      } else {
+        rowField.style.display = 'block';
+        grpField.style.display = 'none';
+      }
+    };
+    modeSel.value = 'row';
+    rowField.style.display = 'block';
+    grpField.style.display = 'none';
+
+    dialog.showModal();
+  };
+
+  function initAssignRenderForm() {
+    const form = byId('assign-render-form');
+    if (!form) return;
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const sheetId = byId('assign-render-sheet-select').value;
+      if (!sheetId) return toast('Vui lòng chọn bảng Chốt mã.');
+
+      const mode = byId('assign-render-mode').value;
+      const payload = {
+        projectId: currentProjectId,
+        assetKey: activeAssignAssetKey,
+        sheetId
+      };
+      if (mode === 'group') {
+        payload.groupName = byId('assign-render-group-select').value;
+      } else {
+        payload.rowId = byId('assign-render-row-select').value;
+      }
+
+      try {
+        const res = await api('/api/project-hub/renders/assign-to-materials', payload);
+        byId('assign-render-dialog').close();
+        toast(`Đã gắn ảnh vào ${res.assignedCount || 1} hạng mục Chốt mã thành công!`);
+        await selectProject(currentProjectId);
+      } catch (err) {
+        toast('Lỗi gắn ảnh: ' + err.message);
+      }
+    };
+  }
+
+  // ---------------------------------------------------------------------------
   // Báo giá: Danh sách hạng mục chuẩn hoá (11.3)
   // ---------------------------------------------------------------------------
   function initQuoteActions() {
@@ -598,50 +845,102 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Soát HSKT & Phối cảnh 3D qua AI thật (11.4 & Claude Review 1)
+  // B3: AI phân tích chạy nền (background job) phía server, không ngắt khi chuyển trang
   // ---------------------------------------------------------------------------
+  let activeReviewPollTimer = null;
+
+  async function pollReviewJob(jobId, projectId) {
+    if (activeReviewPollTimer) clearInterval(activeReviewPollTimer);
+
+    const btnAi = byId('btn-ai-review');
+    const btnMain = byId('btn-main-review');
+    const updateBtnText = (text, disabled) => {
+      if (btnAi) { btnAi.textContent = text; btnAi.disabled = disabled; }
+      if (btnMain) { btnMain.textContent = text; btnMain.disabled = disabled; }
+    };
+
+    activeReviewPollTimer = setInterval(async () => {
+      try {
+        const res = await api(`/api/project-hub/jobs/status?jobId=${encodeURIComponent(jobId)}`, null, 'GET');
+        const job = res.job;
+        if (!job) return;
+
+        if (job.status === 'running') {
+          updateBtnText(`⏳ Đang soát (${job.progress}%)...`, true);
+          if (window.GDHomeShell?.aiNotice) {
+            GDHomeShell.aiNotice('shell-hub-active-job', {
+              state: 'running',
+              body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.step)} (${job.progress}%)`,
+              label: 'Huỷ',
+              onAction: async () => {
+                if (!confirm('Huỷ phân tích AI?')) return;
+                await api('/api/project-hub/jobs/cancel', { jobId });
+              }
+            });
+          }
+        } else if (job.status === 'done') {
+          clearInterval(activeReviewPollTimer);
+          activeReviewPollTimer = null;
+          updateBtnText('🚀 Soát bản vẽ', false);
+          toast('AI đã hoàn tất soát hồ sơ và tự động tạo đề xuất Tiến độ & Chốt mã!');
+          if (window.GDHomeShell?.aiNotice) {
+            GDHomeShell.aiNotice('shell-hub-active-job', {
+              state: 'done',
+              body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: AI đã hoàn tất soát bản vẽ & tự động tạo đề xuất!`,
+              label: 'Xem kết quả',
+              onAction: () => {
+                const tab = document.querySelector('[data-tab="tab-review"]');
+                if (tab) tab.click();
+              }
+            });
+          }
+          if (projectId === currentProjectId) {
+            await selectProject(projectId);
+            const tabBtn = document.querySelector('[data-tab="tab-review"]');
+            if (tabBtn) tabBtn.click();
+          }
+        } else if (job.status === 'error') {
+          clearInterval(activeReviewPollTimer);
+          activeReviewPollTimer = null;
+          updateBtnText('🚀 Soát bản vẽ', false);
+          toast('Lỗi khi soát bản vẽ: ' + (job.error || ''));
+          if (window.GDHomeShell?.aiNotice) {
+            GDHomeShell.aiNotice('shell-hub-active-job', {
+              state: 'error',
+              body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.error || 'Lỗi phân tích')}`,
+              label: 'Thử lại',
+              onAction: () => runReview()
+            });
+          }
+        } else if (job.status === 'cancelled') {
+          clearInterval(activeReviewPollTimer);
+          activeReviewPollTimer = null;
+          updateBtnText('🚀 Soát bản vẽ', false);
+          toast('Đã huỷ tiến trình phân tích AI.');
+        }
+      } catch (err) {}
+    }, 2000);
+  }
+
   async function runReview() {
     if (!currentProjectId) {
       toast('Vui lòng chọn hoặc tạo dự án trước.');
       return;
     }
-    const noticeId = 'ai-review-notice';
-    if (window.GDHomeShell?.aiNotice) {
-      GDHomeShell.aiNotice(noticeId, {
-        state: 'running',
-        body: 'Đang gửi hồ sơ bản vẽ HSKT & phối cảnh 3D cho AI phân tích...',
-        label: 'Soát bản vẽ'
-      });
-    }
-    toast('Đang gửi hồ sơ cho AI phân tích...');
+    toast('Đang khởi động tiến trình AI phân tích chạy nền...');
 
     try {
-      const res = await api('/api/project-hub/review/run', { projectId: currentProjectId });
-      renderFindings(res.findings || [], res.summary);
-      if (res.summary?.annotatedAssetKey) {
-        annotatedAssetKey = res.summary.annotatedAssetKey;
-        const btnFile = byId('btn-file-export-pdf');
-        if (btnFile) btnFile.disabled = false;
-        const btnTab = byId('btn-download-annotated-pdf');
-        if (btnTab) btnTab.disabled = false;
-      }
-      toast(`Đã soát xong! Phát hiện ${res.findings?.length || 0} điểm lưu ý.`);
-      if (window.GDHomeShell?.aiNotice) {
-        GDHomeShell.aiNotice(noticeId, {
-          state: 'done',
-          body: `Đã hoàn tất soát bản vẽ: ${res.findings?.length || 0} điểm lưu ý.`,
-          label: 'Xem kết quả',
-          onAction: () => {
-            const tabBtn = document.querySelector('[data-tab="tab-review"]');
-            if (tabBtn) tabBtn.click();
-          }
-        });
-      }
-      await selectProject(currentProjectId);
+      const res = await api('/api/project-hub/jobs/start', {
+        projectId: currentProjectId,
+        autoPush: true
+      });
+      const job = res.job;
+      toast('AI đang bắt đầu phân tích trong nền. Bạn có thể chuyển trang thoải mái.');
+      pollReviewJob(job.id, currentProjectId);
     } catch (err) {
-      toast('Lỗi khi soát bản vẽ: ' + err.message);
+      toast('Lỗi khởi động AI: ' + err.message);
       if (window.GDHomeShell?.aiNotice) {
-        GDHomeShell.aiNotice(noticeId, {
+        GDHomeShell.aiNotice('shell-hub-active-job', {
           state: 'error',
           body: err.message,
           label: 'Thử lại',
@@ -841,15 +1140,41 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Profile modal: Tạo & Sửa dự án
+  // Profile modal: Tạo & Sửa dự án (B2: Loại công trình)
   // ---------------------------------------------------------------------------
+  function guessBuildingType(name = '', address = '') {
+    const text = (String(name || '') + ' ' + String(address || '')).toLowerCase();
+    if (/văn\s*phòng|office|co-working|trụ\s*sở/i.test(text)) return 'Văn phòng nhỏ';
+    if (/chung\s*cư|căn\s*hộ|apartment|condo|masteri|vinhomes|smart\s*city|ocean\s*park|tòa|toà|tầng|block|tower/i.test(text)) return 'Chung cư';
+    if (/nhà\s*phố|liền\s*kề|shophouse|biệt\s*thự|villa|ngõ|ngách|hẻm|phố|số\s*nhà|thổ\s*cư/i.test(text)) return 'Nhà phố';
+    return 'Khác';
+  }
+
   function initProfileModal() {
     const dialog = byId('profile-dialog');
     const form = byId('profile-form');
 
+    const autoGuess = () => {
+      if (form.dataset.mode === 'create' || !form.elements.buildingType?.dataset.manual) {
+        const guessed = guessBuildingType(form.elements.project.value, form.elements.address.value);
+        if (guessed && form.elements.buildingType) form.elements.buildingType.value = guessed;
+      }
+    };
+    form.elements.project.addEventListener('input', autoGuess);
+    form.elements.address.addEventListener('input', autoGuess);
+    if (form.elements.buildingType) {
+      form.elements.buildingType.addEventListener('change', () => {
+        form.elements.buildingType.dataset.manual = '1';
+      });
+    }
+
     byId('btn-create-project').onclick = () => {
       byId('profile-dialog-title').textContent = 'Tạo dự án mới';
       form.reset();
+      if (form.elements.buildingType) {
+        form.elements.buildingType.value = 'Chung cư';
+        delete form.elements.buildingType.dataset.manual;
+      }
       form.dataset.mode = 'create';
       dialog.showModal();
     };
@@ -859,6 +1184,10 @@
       byId('profile-dialog-title').textContent = 'Sửa hồ sơ dự án';
       const prof = currentProject.profile || {};
       form.elements.project.value = currentProject.name || prof.project || '';
+      if (form.elements.buildingType) {
+        form.elements.buildingType.value = currentProject.buildingType || prof.buildingType || 'Chung cư';
+        form.elements.buildingType.dataset.manual = '1';
+      }
       form.elements.customer.value = prof.customer || '';
       form.elements.phone.value = prof.phone || '';
       form.elements.address.value = prof.address || '';
@@ -870,8 +1199,10 @@
     form.onsubmit = async e => {
       e.preventDefault();
       const isCreate = form.dataset.mode === 'create';
+      const buildingType = form.elements.buildingType?.value || 'Chung cư';
       const values = {
         project: form.elements.project.value.trim(),
+        buildingType,
         customer: form.elements.customer.value.trim(),
         phone: form.elements.phone.value.trim(),
         address: form.elements.address.value.trim(),
@@ -882,6 +1213,7 @@
         const payload = {
           create: isCreate,
           projectId: isCreate ? undefined : currentProjectId,
+          buildingType,
           profile: values
         };
         const res = await api('/api/project-hub/project', payload);
