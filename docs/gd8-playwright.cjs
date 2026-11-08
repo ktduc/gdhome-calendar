@@ -586,6 +586,7 @@ cases['10.4'] = async page => {
     assert.equal(route.request().postDataJSON().images.length,1);
     return route.fulfill({json:{success:true,plan:{stageName:'Sơn',tasks:[{name:'Sơn tường',workDays:2,dependsOn:[]}],questions:[]}}});
   });
+  await page.locator('#schedule-ai-menu summary').click();
   await page.locator('#btn-open-ai-planner').click();
   await page.locator('#ai-drop-zone').focus();
   assert.equal(await pasteFixture(page,'items'),true);
@@ -1501,6 +1502,12 @@ cases['16.7'] = async page => {
 
 cases['18.6'] = async page => {
   await openMaterials(page);
+  await addFixtureImage(page,'0');
+  await page.evaluate(() => modify(() => {
+    sheet.groups = [{...sheet.groups[0],rows:sheet.groups[0].rows.slice(0,2)}];
+    materialView.export = {watermark:false};
+  }));
+  await page.locator('.image-open img[data-image-axis]').first().waitFor();
   await page.evaluate(() => {
     const showModal = HTMLDialogElement.prototype.showModal;
     window.printPreviewOpened = false;
@@ -1508,15 +1515,28 @@ cases['18.6'] = async page => {
       if (this.id === 'print-preview') window.printPreviewOpened = true;
       return showModal.call(this);
     };
-    window.html2canvas = async root => {
-      if (root.getBoundingClientRect().left >= 0) throw new Error('Bản xuất phải nằm ngoài màn hình');
-      return document.createElement('canvas');
-    };
-    Object.defineProperty(navigator,'clipboard',{value:{write:async () => {}}});
+    Object.defineProperty(navigator,'clipboard',{value:{write:async items => {
+      const root = document.querySelector('.material-paper-output[aria-hidden=true]');
+      if (!root || root.getBoundingClientRect().left >= 0) throw new Error('Bản xuất phải nằm ngoài màn hình');
+      window.gd18CopyBlob = await items[0].getType('image/png');
+    }}});
   });
   await page.locator('#material-copy').click();
   const result = page.locator('#material-copy-result');
-  await result.getByText(/Đã copy vào bộ nhớ/).waitFor();
+  const status = result.getByRole('status');
+  await status.waitFor({timeout:20000});
+  assert.match(await status.textContent(),/Đã copy vào bộ nhớ/);
+  const png = await page.evaluate(async () => {
+    const image = await createImageBitmap(window.gd18CopyBlob);
+    const canvas = Object.assign(document.createElement('canvas'),{width:80,height:80});
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(image,0,0,80,80);
+    const pixels = ctx.getImageData(0,0,80,80).data;
+    let nonwhite = 0;
+    for (let i=0; i<pixels.length; i+=4) if (Math.min(pixels[i],pixels[i+1],pixels[i+2]) < 200) nonwhite++;
+    return {width:image.width,height:image.height,nonwhite};
+  });
+  assert.ok(png.width > 200 && png.height > 100 && png.nonwhite > 30,JSON.stringify(png));
   assert.equal(await page.evaluate(() => window.printPreviewOpened),false);
   await result.locator('img').waitFor();
   assert.match(await result.getByRole('link',{name:'Tải PNG'}).getAttribute('href'),/^blob:/);
@@ -1687,9 +1707,10 @@ cases['18.7'] = async page => {
   const boxes = await strip.locator('button').evaluateAll(items => items.map(item => item.getBoundingClientRect().toJSON()));
   assert.ok(boxes.every(box => box.width <= 40 && box.height <= 40));
   assert.equal(new Set(boxes.map(box => box.y)).size,2);
-  await page.waitForFunction(async () => (await fetch('/api/materials/preferences').then(r => r.json())).viewSettings.hideAssetPreviews === false);
+  await page.waitForFunction(() => materials.viewSettings?.hideAssetPreviews === false && !Object.keys(sentMaterialView).length);
   await page.reload();
   await strip.getByText('+4',{exact:true}).waitFor();
+  await page.waitForFunction(() => !Object.keys(pendingMaterialView).length && !Object.keys(sentMaterialView).length);
 };
 cases['17.4'] = cases['18.7'];
 
@@ -2029,7 +2050,10 @@ async function main() {
         assert.deepEqual(pageErrors,[],'Lỗi JavaScript trên trang');
         console.log(key+' đạt');
       }
-      finally { await page.close(); }
+      catch (error) {
+        console.error(key+' lỗi',error);
+        process.exitCode = 1;
+      } finally { await page.close(); }
     }
   } finally {
     if (browser) await browser.close();

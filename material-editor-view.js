@@ -559,12 +559,12 @@ function renderMaterialGroups(columns,groups,editing) {
 }
 function renderGroup(group,columns,nextNumber,editing) {
   const span = columns.length;
-  const unlinked = editing && !linkedMaterialTask(group);
+  const unlinked = !linkedMaterialTask(group);
   const heading = '<tr class="group print-group' + (unlinked ? ' material-unlinked-group' : '') + '"><th colspan="' + span + '">' +
     '<input type="checkbox" data-select-group="' + html(group.id) + '" aria-label="Chọn cả nhóm ' + html(group.name) + '"> ' +
     '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
     input('groupName',group.name,'Nhóm') + ' <span class="material-group-controls"><label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
-    (unlinked ? '<button type="button" class="material-unlinked-chip" data-action="choose-group-task">Chưa liên kết Tiến độ</button> ' : '') +
+    (editing && unlinked ? '<button type="button" class="material-unlinked-chip" data-action="choose-group-task">Chưa liên kết Tiến độ</button> ' : '') +
     scheduleControls(group) + ' <button data-action="del-group">Bỏ nhóm</button></span></th></tr>';
   const rows = (editing ? visibleGroupRows(group) : group.rows).map(row => renderRow(row,columns,nextNumber(),editing)).join('');
   const add = !editing || collapsed.has(group.id) ? '' : '<tr><td colspan="' + span + '"><button data-action="add-row">＋ Dòng</button></td></tr>';
