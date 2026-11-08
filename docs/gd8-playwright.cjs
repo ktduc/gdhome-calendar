@@ -630,6 +630,75 @@ cases['10.6'] = async page => {
   }
 };
 
+cases['10.6-recovery'] = async page => {
+  async function slowReload(routeName,assertLocal,assertRestored) {
+    let releaseFirstRead;
+    const firstRead = new Promise(resolve => { releaseFirstRead = resolve; });
+    let reads = 0;
+    const writes = [];
+    const requests = request => {
+      if (request.method() === 'POST' && /\/api\/(schedule|materials)(?:\/preferences)?$/.test(request.url())) writes.push(request.url());
+    };
+    page.on('request',requests);
+    const pattern = '**' + routeName;
+    await page.route(pattern,async route => {
+      if (route.request().method() !== 'GET') return route.continue();
+      reads++;
+      if (reads === 1) {
+        await firstRead;
+        return route.fulfill({status:503,json:{message:'Đang kết nối máy chủ…'}});
+      }
+      return route.continue();
+    });
+    await page.reload({waitUntil:'domcontentloaded'});
+    try { await assertLocal(); }
+    finally { releaseFirstRead(); }
+    await assertRestored();
+    assert.ok(reads >= 2,'Tự thử lại sau 503');
+    assert.deepEqual(writes,[],'Không ghi dữ liệu hoặc mặc định khi tải chậm/lỗi');
+    await page.unroute(pattern);
+    page.off('request',requests);
+  }
+
+  await page.goto('/');
+  await page.waitForFunction(() => document.querySelector('#save-status-indicator').dataset.saveState === 'saved');
+  await page.evaluate(async () => {
+    AppState.mspVisibility.colProg = false;
+    AppState.mspRowHeight = 'tall';
+    updateUIElements();
+    await saveToBackend();
+  });
+  await slowReload('/api/schedule',async () => {
+    await page.locator('#save-status-indicator').getByText('Đang kết nối máy chủ…').waitFor();
+    assert.equal(await page.evaluate(() => AppState.mspVisibility.colProg),false);
+    assert.equal(await page.evaluate(() => AppState.mspRowHeight),'tall');
+    assert.equal(await page.locator('.app-body-layout').evaluate(node => node.inert),true);
+    await page.evaluate(() => Promise.all([saveToBackend(),flushSaveToBackend({force:true})]));
+  },async () => {
+    await page.locator('#save-status-indicator[data-save-state=saved]').waitFor({timeout:12000});
+    assert.equal(await page.evaluate(() => AppState.mspVisibility.colProg),false);
+  });
+
+  await openMaterials(page);
+  await page.locator('[data-column-toggle=supplier]').uncheck();
+  await page.locator('[data-group-toggle=g2]').uncheck();
+  await page.waitForFunction(() => {
+    const view = JSON.parse(localStorage.getItem('gdhome-tools-snapshot:local'))?.viewSettings;
+    return view?.hiddenColumns?.includes('supplier') && view?.sheets?.['gd8-sheet']?.hiddenGroups?.includes('g2');
+  });
+  await slowReload('/api/materials',async () => {
+    await page.locator('#tools-connection').waitFor();
+    assert.equal(await page.locator('[data-column-toggle=supplier]').isChecked(),false);
+    assert.equal(await page.locator('[data-group-toggle=g2]').isChecked(),false);
+    assert.equal(await page.locator('#materials').evaluate(node => node.inert),true);
+    await page.evaluate(async () => { setMaterialView({hiddenColumns:[]}); queueSave(); await Promise.all([flushSave(),flushMaterialView()]); });
+  },async () => {
+    await page.locator('#tools-connection').waitFor({state:'hidden',timeout:12000});
+    assert.equal(await page.locator('[data-column-toggle=supplier]').isChecked(),false);
+    assert.equal(await page.locator('[data-group-toggle=g2]').isChecked(),false);
+  });
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

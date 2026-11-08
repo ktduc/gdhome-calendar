@@ -81,6 +81,7 @@ window.GDHomeShell = (() => {
 
   const statuses = {
     saved:['✓ Đã lưu','saved','Dữ liệu đã được lưu lên server'],
+    connecting:['Đang kết nối máy chủ…','offline','Hiển thị bản lưu gần nhất trên máy. Bấm để thử kết nối lại.'],
     pending:['● Chưa lưu…','pending','Đang chờ gửi thay đổi lên server'],
     saving:['⟳ Đang lưu…','saving','Đang gửi thay đổi lên server'],
     error:['⚠ Lỗi lưu server','error','Không gửi được lên server. Bấm để thử lại ngay.'],

@@ -800,6 +800,10 @@ let _appConfig = { authMode: 'none', googleClientId: null, storage: 'file' };
 let _currentUser = null;
 let _guestMode = false;
 let _loginOverlayShown = false;
+let _scheduleReady = false;
+let _scheduleBooting = false;
+let _scheduleLocalPainted = false;
+let _scheduleRetry;
 
 function getSession() {
   try {
@@ -889,15 +893,19 @@ function enterGuestMode(opts = {}) {
   updateUIElements();
   snapshotState();
   renderUserChip();
+  setScheduleReady(true);
   setSaveStatus('guest');
   if (!opts.silent) {
     showToast('👤 Đang dùng Chế độ khách – dữ liệu chỉ lưu trên trình duyệt này');
   }
 }
 
-function promptLoginFromGuest() {
-  try { localStorage.removeItem(GUEST_FLAG_KEY); } catch (e) { /* bỏ qua */ }
-  showLoginOverlay();
+async function promptLoginFromGuest() {
+  try {
+    await loadAppConfig();
+    localStorage.removeItem(GUEST_FLAG_KEY);
+    await showLoginOverlay();
+  } catch { showToast('Đang kết nối máy chủ…'); }
 }
 
 function getGuestSavedData() {
@@ -913,13 +921,11 @@ function getGuestSavedData() {
 
 async function loadAppConfig() {
   if (isOfflineFileMode()) return _appConfig;
-  try {
-    const res = await fetch('/api/config', { cache: 'no-store' });
-    if (res.ok) _appConfig = Object.assign(_appConfig, await res.json());
-  } catch (e) { /* mất mạng: dùng mặc định */ }
+  const response = await fetch('/api/config',{cache:'no-store',signal:AbortSignal.timeout(12000)});
+  if (!response.ok) throw new Error('Không tải được cấu hình server.');
+  _appConfig = {..._appConfig,...await response.json()};
   return _appConfig;
 }
-
 
 function renderUserChip() {
   const chip = document.getElementById('btn-user-account');
@@ -974,6 +980,7 @@ async function handleGoogleCredential(response) {
       : false;
 
     _guestMode = false;
+    _scheduleReady = false;
     try { localStorage.removeItem(GUEST_FLAG_KEY); } catch (e) { /* bỏ qua */ }
     setSession({ token: result.token, user: result.user });
     _currentUser = result.user;
@@ -996,6 +1003,12 @@ async function handleGoogleCredential(response) {
     renderUserChip();
 
     if (copyGuestToAccount && guestData) {
+      const latest = await apiFetch('/api/schedule',{signal:AbortSignal.timeout(12000)});
+      if (!latest.ok) { retryScheduleConnection(); return; }
+      const {version} = await latest.json();
+      if (!Number.isSafeInteger(version)) { retryScheduleConnection(); return; }
+      _serverVersion = version;
+      setScheduleReady(true);
       applyServerData(guestData);
       normalizeAppState();
       updateUIElements();
@@ -1010,6 +1023,7 @@ async function handleGoogleCredential(response) {
     showToast(`Đã đăng nhập: ${result.user.email}`);
   } catch (err) {
     if (msgEl) msgEl.textContent = '⚠ ' + err.message;
+    if (!_loginOverlayShown) retryScheduleConnection();
   }
 }
 
@@ -1046,8 +1060,32 @@ function signOut() {
 }
 
 // Khởi động: đọc cấu hình -> nếu đang ở chế độ khách hoặc cần đăng nhập mà chưa có phiên -> xử lý tương ứng
+function setScheduleReady(ready) {
+  _scheduleReady = ready;
+  document.querySelectorAll('.app-body-layout,.shell-toolbar,#hdr-range-dropdown').forEach(node => {
+    node.inert = !ready;
+  });
+  if (!ready) setSaveStatus('connecting');
+}
+
+function retryScheduleConnection() {
+  setScheduleReady(false);
+  clearTimeout(_scheduleRetry);
+  _scheduleRetry = setTimeout(bootstrapAuthAndData,3000);
+}
+
 async function bootstrapAuthAndData() {
-  await loadAppConfig();
+  if (_scheduleBooting) return;
+  _scheduleBooting = true;
+  clearTimeout(_scheduleRetry);
+  try {
+    await startScheduleConnection();
+  } catch {
+    retryScheduleConnection();
+  } finally { _scheduleBooting = false; }
+}
+
+async function startScheduleConnection() {
   const chip = document.getElementById('btn-user-account');
   if (chip && !chip.dataset.bound) {
     chip.dataset.bound = '1';
@@ -1064,23 +1102,26 @@ async function bootstrapAuthAndData() {
     btnGuestLogin.addEventListener('click', () => promptLoginFromGuest());
   }
 
-  let isGuestSaved = false;
-  try { isGuestSaved = localStorage.getItem(GUEST_FLAG_KEY) === '1'; } catch (e) { /* bỏ qua */ }
-  if (isGuestSaved) {
-    enterGuestMode({ silent: true });
+  if (localStorage.getItem(GUEST_FLAG_KEY) === '1') {
+    enterGuestMode({silent:true});
     return;
   }
-
-  if (_appConfig.authMode === 'google') {
-    const sess = getSession();
-    if (!sess) {
-      showLoginOverlay();
-      return;
-    }
-    _currentUser = sess.user;
-    renderUserChip();
+  _currentUser = getSession()?.user || null;
+  if (!_scheduleLocalPainted) {
+    loadFromStorage();
+    normalizeAppState();
+    updateUIElements();
+    snapshotState();
+    _scheduleLocalPainted = true;
   }
-  syncWithBackend();
+  if (!isOfflineFileMode()) setScheduleReady(false);
+  await loadAppConfig();
+  if (_appConfig.authMode === 'google' && !getSession()) {
+    showLoginOverlay();
+    return;
+  }
+  renderUserChip();
+  await syncWithBackend();
 }
 
 function getAppKey() {
@@ -1232,15 +1273,19 @@ async function syncWithBackend() {
     normalizeAppState();
     updateUIElements();
     snapshotState();
+    setScheduleReady(true);
     setSaveStatus('offline');
     return;
   }
 
+  setScheduleReady(false);
   try {
-    const res = await apiFetch('/api/schedule');
+    const res = await apiFetch('/api/schedule',{signal:AbortSignal.timeout(12000)});
     if (res.ok) {
       const result = await res.json();
-      const serverVersion = typeof result.version === 'number' ? result.version : 0;
+      if (!Number.isSafeInteger(result.version) || !Array.isArray(result.data?.tasks)) throw new Error('Dữ liệu Tiến độ chưa sẵn sàng.');
+      const serverVersion = result.version;
+      setScheduleReady(true);
 
       // Phát hiện server bị "reset" (VD: Render cập nhật code làm mất dữ liệu, server trả về bản cũ hơn
       // bản trình duyệt này đã từng lưu) -> hỏi trước, KHÔNG để bản cũ ghi đè lên dữ liệu trên máy
@@ -1312,16 +1357,11 @@ async function syncWithBackend() {
       setSaveStatus('saved');
       return;
     }
-    if (res.status === 401) {
-      showToast('⚠ Sai mật khẩu - đang hiển thị dữ liệu lưu trên trình duyệt này');
-    }
-  } catch (err) {
-    // Mất mạng -> dùng dữ liệu trên trình duyệt
+    if (res.status === 401 && _appConfig.authMode === 'google') return;
+  } catch (error) {
+    console.warn('Chưa tải được Tiến độ:',error.message);
   }
-  normalizeAppState();
-  updateUIElements();
-  snapshotState();
-  setSaveStatus(_pendingSync ? 'error' : 'offline', 'Không kết nối được server - đang dùng dữ liệu lưu trên trình duyệt này');
+  retryScheduleConnection();
 }
 
 // Gọi sau MỖI thay đổi dữ liệu: chuẩn hoá + chụp Undo + lưu trình duyệt + hẹn gửi server
@@ -1343,6 +1383,7 @@ function autoLinkFreshTasks() {
 }
 
 function saveToBackend() {
+  if (!_scheduleReady && !_guestMode && !isOfflineFileMode()) return Promise.resolve();
   normalizeAppState();
   autoLinkFreshTasks();
   if (typeof refreshAllLinkLags === 'function') refreshAllLinkLags(AppState.tasks);
@@ -1370,7 +1411,7 @@ function saveToBackend() {
 }
 
 async function flushSaveToBackend(opts = {}) {
-  if (isOfflineFileMode() || _guestMode) return;
+  if (isOfflineFileMode() || _guestMode || !_scheduleReady) return;
   if (_saveInFlight) {
     _saveAgainAfterFlight = true;
     return;
@@ -1385,7 +1426,7 @@ async function flushSaveToBackend(opts = {}) {
     const res = await apiFetch('/api/schedule', {
       method: 'POST',
       body: JSON.stringify(body),
-      keepalive: !!opts.keepalive
+      keepalive: !!opts.keepalive,signal:AbortSignal.timeout(15000)
     });
 
     if (res.status === 409) {
@@ -7955,7 +7996,8 @@ window.addEventListener('DOMContentLoaded', () => {
   const saveStatusEl = document.getElementById('save-status-indicator');
   if (saveStatusEl) {
     saveStatusEl.addEventListener('click', () => {
-      if (!isOfflineFileMode()) flushSaveToBackend();
+      if (!_scheduleReady) bootstrapAuthAndData();
+      else if (!isOfflineFileMode()) flushSaveToBackend();
     });
   }
   bootstrapAuthAndData().finally(() => { if (typeof refreshMaterialBadges === 'function') refreshMaterialBadges(); });
@@ -8447,7 +8489,7 @@ document.getElementById('btn-project-profile').onclick = () => {
   });
 };
 function refreshSharedProjectProfiles() {
-  if (_guestMode || _loginOverlayShown || _pendingSync || isOfflineFileMode()) return;
+  if (_guestMode || _loginOverlayShown || _pendingSync || isOfflineFileMode() || !_scheduleReady) return;
   GDHomeProjects.list().then(({projects}) => {
     let changed = false;
     for (const project of projects) {

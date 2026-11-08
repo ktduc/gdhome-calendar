@@ -36,7 +36,7 @@ function initMaterialView() {
   for (const [key,open] of Object.entries(materialView.sidebarOpen || {})) sidebarOpen.set(key,open);
   materials.columnWidths = { ...(materialView.columnWidths || materials.columnWidths) };
 
-  if (Object.keys(pendingMaterialView).length) scheduleMaterialViewSave();
+  if (materialServerReady && Object.keys(pendingMaterialView).length) scheduleMaterialViewSave();
 }
 
 function restoreMaterialSheetView(current) {
@@ -51,6 +51,7 @@ function restoreMaterialSheetView(current) {
 }
 
 function setMaterialView(patch) {
+  if (!materialGuest && !materialServerReady) return;
   const next = mergeMaterialView(materialView,patch);
   if (JSON.stringify(next) === JSON.stringify(materialView)) return;
   materialView = next;
@@ -78,12 +79,12 @@ function scheduleMaterialViewSave() {
 }
 
 async function flushMaterialView() {
-  if (Object.keys(sentMaterialView).length || !Object.keys(pendingMaterialView).length) return;
+  if (!materialServerReady || materialGuest || Object.keys(sentMaterialView).length || !Object.keys(pendingMaterialView).length) return;
   sentMaterialView = pendingMaterialView;
   pendingMaterialView = {};
   let saved = false;
   const send = () => request('/api/materials/preferences',{
-    method:'POST',body:JSON.stringify({_version:materialViewVersion,patch:sentMaterialView}),keepalive:true
+    method:'POST',body:JSON.stringify({_version:materialViewVersion,patch:sentMaterialView}),keepalive:true,signal:AbortSignal.timeout(15000)
   });
   try {
     let result;
@@ -94,6 +95,9 @@ async function flushMaterialView() {
       result = await send();
     }
     materialViewVersion = result._version;
+    materials.viewVersion = result._version;
+    materials.viewSettings = result.viewSettings;
+    saveToolsSnapshot();
     saved = true;
   } catch (error) {
     pendingMaterialView = mergeMaterialView(sentMaterialView,pendingMaterialView);

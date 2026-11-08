@@ -141,4 +141,8 @@ XONG GĐ10
 ### Bổ sung GĐ10.6 theo báo lỗi Render
 
 - Chẩn đoán Render. Đo request từ lúc nhận đến lúc hoàn tất hoặc đóng, ghi cả request còn chờ sau 3 giây. Giám sát event loop mỗi giây và ghi URL đang xử lý khi trễ quá 2 giây. Health trả uptime, bộ nhớ, độ trễ cao nhất và trạng thái sẵn sàng. Gist có timeout tối đa 15 giây mỗi lần, thử lại hai lần với lỗi tạm thời và giới hạn 60 giây cho một lượt khởi tạo. Khi Gist chưa sẵn sàng, trang tĩnh và health vẫn trả lời, thao tác dữ liệu chờ lượt kết nối tiếp theo. Test Node 25/25.
-- Bước kế tiếp. Dùng bản cài đặt gần nhất trên máy khi API chậm hoặc lỗi, khóa ghi đến khi tải thành công, rồi tiếp tục GĐ12.
+- Phục hồi cài đặt khi API chậm hoặc lỗi. Lịch và Chốt mã dựng khung và đọc bản lưu theo tài khoản ngay, hiện trạng thái kết nối và tự thử lại sau 3 giây. Bản hiển thị tạm chỉ đọc. Các lệnh lưu dữ liệu và cài đặt chờ GET thành công. Playwright 10.6-recovery giữ cột/nhóm đã tắt qua GET bị trì hoãn, 503 và lượt thử lại. Không phát sinh POST trong ca này.
+
+Bước kế tiếp: Tiếp tục GĐ12.1 từ phần đang làm.
+
+XONG GĐ10

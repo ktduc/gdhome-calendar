@@ -111,7 +111,7 @@ function scheduleKpiRefresh() {
 function setMaterialSaveStatus(state,detail) {
   const label = byId('save-label');
   if (!label) return;
-  label.hidden = !sheet;
+  label.hidden = !sheet || (!materialServerReady && !materialGuest);
   const savedOnDevice = materialGuest && state !== 'error';
   GDHomeShell.saveStatus(label,savedOnDevice ? 'guest' : state,detail,state === 'saved' && !savedOnDevice ? 'Đã lưu' : undefined);
   const undoButton = document.querySelector('#material-header-actions [data-action="undo"]');
@@ -119,6 +119,7 @@ function setMaterialSaveStatus(state,detail) {
 }
 
 function queueSave() {
+  if (!materialServerReady && !materialGuest) return;
   dirty = true;
   clearTimeout(saveTimer);
   setMaterialSaveStatus(conflict ? 'conflict' : 'pending');
@@ -127,7 +128,7 @@ function queueSave() {
 }
 
 async function flushSave() {
-  if (saving || !dirty || conflict || !sheet) return;
+  if ((!materialServerReady && !materialGuest) || saving || !dirty || conflict || !sheet) return;
   saving = true;
   setMaterialSaveStatus('saving');
   dirty = false;
@@ -148,6 +149,7 @@ async function flushSave() {
     const index = materials.sheets.findIndex(s => s.id === sheet.id);
     if (index < 0) materials.sheets.push(result.sheet);
     else materials.sheets[index] = result.sheet;
+    saveToolsSnapshot();
     setMaterialSaveStatus(dirty ? 'pending' : 'saved');
     say('');
   } catch (error) {
