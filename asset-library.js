@@ -422,13 +422,16 @@ window.GDHomeAssets = (() => {
     return openPopover;
   }
 
-  function pickRender(anchor,{projectId,onPick,title = 'Phối cảnh 3D của dự án'}) {
+  function pickRender(anchor,{projectId,groupName,onPick,title = 'Phối cảnh 3D của dự án'}) {
     return popover(anchor,async (panel,close,place) => {
+      let query = '';
       async function paint(force = false) {
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
+          '<div class="asset-filters"><input type="search" aria-label="Tìm ảnh 3D" value="' + esc(query) + '"></div>' +
           '<div class="asset-body"><p class="asset-empty">Đang tải…</p></div><footer><button type="button" data-upload>⬆ Tải ảnh / PDF 3D</button>' +
           '<button type="button" data-full>Mở danh sách</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
+        wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelector('[data-full]').onclick = () => { close(); openRenders({projectId,onPick}); };
         panel.querySelector('[data-upload]').onclick = async () => {
           const files = await filePicker('image/*,application/pdf');
@@ -439,9 +442,13 @@ window.GDHomeAssets = (() => {
         };
         enableDrop(panel,async files => { try { await uploadRenders(projectId,files); } catch (error) { toast(error.message); } paint(true); });
         try {
-          const items = await loadRenders(projectId,force);
+          const available = await loadRenders(projectId,force);
+          const items = available.filter(item => !query || fold([item.name,item.room,item.source].join(' ')).includes(fold(query)));
           if (!panel.isConnected) return;
-          panel.querySelector('.asset-body').innerHTML = grid(items,{empty:'Dự án chưa có phối cảnh 3D. Tải ảnh hoặc file PDF cả nhà lên để chọn nhanh.'});
+          panel.querySelector('.asset-body').innerHTML = grid(items,{empty:query ? 'Không có ảnh 3D phù hợp.' : 'Dự án chưa có phối cảnh 3D.'}) + onlineSlot;
+          if (items.length < 4) renderGoogleFallback(panel.querySelector('.asset-google-fallback-slot'),query,{
+            groupName,onPickImage:entry => { close(); onPick?.(entry); }
+          });
           panel.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
             const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
             close();
@@ -464,14 +471,14 @@ window.GDHomeAssets = (() => {
       async function paint() {
         try { data = await loadLibrary(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
         categoryId ||= categoryFor(data,groupName)?.id || 'all';
-        const items = data.items.filter(item => (categoryId === 'all' || item.categoryId === categoryId) &&
+        const items = data.items.filter(item => item.full && (categoryId === 'all' || item.categoryId === categoryId) &&
           (!query || fold(item.name).includes(fold(query)))).sort((a,b) => (b.used || 0)-(a.used || 0));
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters"><select aria-label="Hạng mục"><option value="all">Tất cả hạng mục</option>' +
           data.categories.map(c => '<option value="' + esc(c.id) + '"' + (c.id === categoryId ? ' selected' : '') + '>' + esc(c.name) +
             ' (' + data.items.filter(item => item.categoryId === c.id).length + ')</option>').join('') + '</select>' +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
-          '<div class="asset-body">' + (items.length ? grid(items,{empty:'Hạng mục này chưa có ảnh. Bấm "Tải lên" để thêm ảnh mẫu dùng chung.'}) : '<p class="asset-empty">Không tìm thấy ảnh' + (query ? ' cho "' + esc(query) + '"' : '') + '. Bấm "Tải lên" để thêm ảnh mẫu dùng chung.</p><div class="asset-google-fallback-slot"></div>') + '</div>' +
+          '<div class="asset-body">' + (items.length ? grid(items,{empty:'Hạng mục này chưa có ảnh. Bấm "Tải lên" để thêm ảnh mẫu dùng chung.'}) : '<p class="asset-empty">Không tìm thấy ảnh' + (query ? ' cho "' + esc(query) + '"' : '') + '. Bấm "Tải lên" để thêm ảnh mẫu dùng chung.</p>') + onlineSlot + '</div>' +
           '<footer><button type="button" data-upload>⬆ Tải lên hạng mục này</button><button type="button" data-full>Quản lý dữ liệu</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         panel.querySelector('select').onchange = event => { categoryId = event.target.value; paint(); };
@@ -493,10 +500,10 @@ window.GDHomeAssets = (() => {
           onPick?.(item);
         });
         await hydrate(panel);
-        if (!items.length && query.trim()) {
+        if (items.length < 4 && query.trim()) {
           renderGoogleFallback(panel.querySelector('.asset-google-fallback-slot'), query, {
             onPickImage: entry => { close(); onPick?.(entry); },
-            categoryId: categoryId === 'all' ? null : categoryId
+            categoryId: categoryId === 'all' ? null : categoryId,groupName
           });
         }
 
@@ -507,61 +514,94 @@ window.GDHomeAssets = (() => {
     });
   }
 
-  async function renderGoogleFallback(container, query, { onPickImage, categoryId }) {
-    if (!container || !query?.trim()) return;
-    container.innerHTML = '<div class="asset-google-fallback"><p class="asset-hint">Đang tìm kiếm ảnh trên Google…</p></div>';
-    try {
-      const res = await fetch('/api/google/search?q=' + encodeURIComponent(query.trim()), { headers: hooks.headers() });
-      const data = await res.json().catch(() => ({}));
-      if (data.configured && data.items && data.items.length) {
-        container.innerHTML = '<div class="asset-google-fallback"><p><strong>Tìm thấy ' + data.items.length + ' ảnh trực tuyến cho "' + esc(query) + '":</strong></p>' +
-          '<div class="asset-google-grid">' +
-          data.items.slice(0, 12).map((item, idx) => '<button type="button" class="asset-google-item" data-google-idx="' + idx + '" title="' + esc(item.title) + '"><img src="' + esc(item.thumbnail || item.link) + '" alt="' + esc(item.title) + '"></button>').join('') +
-          '</div><p class="asset-hint">Bấm vào ảnh để tải về và lưu vào ô</p></div>';
-        container.querySelectorAll('[data-google-idx]').forEach(btn => {
-          btn.onclick = async () => {
-            const item = data.items[Number(btn.dataset.googleIdx)];
-            btn.style.opacity = '0.5';
-            toast('Đang tải ảnh từ Google và nén WebP…');
-            try {
-              const proxyRes = await fetch('/api/google/proxy-image', {
-                method: 'POST',
-                headers: { ...hooks.headers(), 'Content-Type': 'application/json' },
-                body: JSON.stringify({ url: item.link })
-              });
-              if (!proxyRes.ok) {
-                const err = await proxyRes.json().catch(() => ({}));
-                throw new Error(err.message || 'Lỗi tải ảnh proxy (' + proxyRes.status + ')');
-              }
-              const blob = await proxyRes.blob();
-              const { full, thumb } = await GDHomeImages.compress(blob);
-              const fullName = await storeAsset(full);
-              const thumbName = thumb === full ? fullName : await storeAsset(thumb);
-              const entry = { full: fullName, thumb: thumbName, name: item.title?.slice(0, 160) || query };
-              if (categoryId && categoryId !== 'all') {
-                await addItems(categoryId, [entry]).catch(() => {});
-              }
-              toast('Đã tải ảnh thành công!');
-              onPickImage?.(entry);
-            } catch (e) {
-              toast('Không tải được ảnh: ' + e.message);
-            }
-          };
-        });
-      } else {
-        const notConfiguredMsg = !data.configured ? 'Chưa cấu hình Google Search trong ⚙ Kết nối.' : 'Không tìm thấy ảnh trên Google.';
-        container.innerHTML = '<div class="asset-google-fallback">' +
-          '<p class="asset-hint">' + notConfiguredMsg + '</p>' +
-          '<a class="btn btn-primary" href="https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(query.trim()) + '" target="_blank" rel="noopener">🔍 Mở Google Ảnh "' + esc(query.trim()) + '" ↗</a>' +
-          '<p class="asset-hint">Mở Google Ảnh: nhấp chuột phải vào ảnh → <strong>Sao chép hình ảnh</strong> (Copy image) → quay lại bảng bấm <strong>Ctrl+V</strong> để dán.</p>' +
-          '</div>';
-      }
-    } catch (err) {
-      container.innerHTML = '<div class="asset-google-fallback">' +
-        '<a class="btn btn-primary" href="https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(query.trim()) + '" target="_blank" rel="noopener">🔍 Mở Google Ảnh "' + esc(query.trim()) + '" ↗</a>' +
-        '<p class="asset-hint">Nhấp chuột phải vào ảnh → Sao chép hình ảnh → quay lại bảng bấm Ctrl+V để dán.</p></div>';
-    }
+  const onlineSlot = '<div class="asset-google-fallback-slot"></div>';
+  function wireAssetSearch(root,getQuery,setQuery,paint) {
+    const field = root.querySelector('input[type=search]');
+    field.oninput = () => {
+      setQuery(field.value);
+      clearTimeout(field.timer);
+      field.timer = setTimeout(async () => {
+        await paint();
+        const replacement = root.querySelector('input[type=search]');
+        replacement?.focus();
+        replacement?.setSelectionRange(getQuery().length,getQuery().length);
+      },250);
+    };
   }
+  async function renderGoogleFallback(container,query,{onPickImage,categoryId,groupName} = {}) {
+    query = query.trim();
+    if (!container || !query) return;
+    const heading = '<h4>Tìm trên mạng</h4>';
+    const fallback = message => {
+      container.innerHTML = '<section class="asset-google-fallback">' + heading +
+        (message ? '<p class="asset-hint">' + esc(message) + '</p>' : '') +
+        '<a class="btn btn-primary" href="https://www.google.com/search?tbm=isch&q=' + encodeURIComponent(query) + '" target="_blank" rel="noopener">🔍 Mở Google Ảnh "' + esc(query) + '" ↗</a>' +
+        '<p class="asset-hint">Nhấp chuột phải vào ảnh → Sao chép hình ảnh → quay lại bảng bấm <strong>Ctrl+V</strong> để dán.</p></section>';
+    };
+    container.innerHTML = '<section class="asset-google-fallback">' + heading + '<p class="asset-hint">Đang tìm ảnh…</p></section>';
+    try {
+      const data = await api('/api/google/search?q=' + encodeURIComponent(query));
+      if (!container.isConnected) return;
+      if (!data.configured || !data.items?.length) {
+        fallback(data.configured ? 'Không tìm thấy ảnh trực tuyến.' : 'Chưa cấu hình nhà cung cấp tìm ảnh trong ⚙ Kết nối.');
+        return;
+      }
+      const library = await loadLibrary().catch(() => null);
+      if (!container.isConnected) return;
+      const target = library?.categories.find(category => category.id === categoryId) ||
+        (library && (categoryFor(library,groupName) || library.categories[0]));
+      container.innerHTML = '<section class="asset-google-fallback">' + heading +
+        (target ? '<label><input type="checkbox" data-save-online-image checked> Lưu vào Dữ liệu dùng chung · ' + esc(target.name) + '</label>' : '') +
+        '<div class="asset-google-grid">' + data.items.slice(0,12).map((item,index) =>
+          '<button type="button" class="asset-google-item" data-google-idx="' + index + '" title="' + esc(item.title) + '"><img src="' +
+          esc(item.thumbnail || item.link) + '" alt="' + esc(item.title) + '"></button>').join('') + '</div></section>';
+      const save = container.querySelector('[data-save-online-image]');
+      let picking = false;
+      container.querySelectorAll('[data-google-idx]').forEach(button => {
+        button.onclick = async () => {
+          if (picking) return;
+          picking = button.disabled = true;
+          const item = data.items[Number(button.dataset.googleIdx)];
+          const saveToLibrary = save?.checked;
+          try {
+            const response = await fetch('/api/google/proxy-image',{
+              method:'POST',headers:{...hooks.headers(),'Content-Type':'application/json'},body:JSON.stringify({url:item.link})
+            });
+            if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || 'Không tải được ảnh.');
+            const {full,thumb} = await uploadImage(await response.blob());
+            const entry = {full,thumb,name:item.title?.slice(0,160) || query};
+            if (onPickImage) onPickImage(entry);
+            if (target && saveToLibrary) {
+              await addItems(target.id,[entry]);
+            } else if (!onPickImage) {
+              const image = document.createElement('img');
+              image.src = await assetUrl(entry.full);
+              image.alt = entry.name;
+              image.className = 'asset-online-preview';
+              container.append(image);
+            }
+            toast('Đã tải ảnh thành công.');
+          } catch (error) { toast(error.message); }
+          finally { picking = button.disabled = false; }
+        };
+      });
+    } catch { if (container.isConnected) fallback('Không kết nối được dịch vụ tìm ảnh.'); }
+  }
+
+  async function findLocalAssetPhotos(query,categoryId,groupName) {
+    if (!query.trim()) return [];
+    const data = await loadLibrary().catch(() => null);
+    if (!data) return [];
+    const category = categoryId || categoryFor(data,groupName)?.id;
+    return data.items.filter(item => item.full && !item.code && item.categoryId === category && fold(item.name).includes(fold(query)));
+  }
+  function wireLocalAssetPhotos(panel,items,onPick) {
+    panel.querySelectorAll('.asset-specialized-photos [data-asset-pick]').forEach(button => {
+      button.onclick = () => onPick(items.find(item => item.id === button.closest('[data-asset-id]').dataset.assetId));
+    });
+    hydrate(panel);
+  }
+  const localAssetPhotos = items => items.length ? '<div class="asset-specialized-photos">' + grid(items) + '</div>' : '';
 
   const paintCache = {};
   async function loadPaintData(brand = 'Dulux') {
@@ -580,6 +620,8 @@ window.GDHomeAssets = (() => {
       let brand = 'Dulux', query = '', paintData = null;
       async function paint() {
         try { paintData = await loadPaintData(brand); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
+        const photos = await findLocalAssetPhotos(query,null,groupName);
+        if (!panel.isConnected) return;
         const colors = (paintData.colors || []).filter(c => !query || fold(c.code).includes(fold(query)) || fold(c.name).includes(fold(query)));
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
@@ -593,25 +635,13 @@ window.GDHomeAssets = (() => {
             '<p class="asset-empty">Chưa có "' + esc(query) + '" trong bảng màu mẫu.</p>' +
             '<form class="asset-paint-custom"><strong>Dùng mã này</strong><label>Mã <input name="code" required value="' + esc(query) + '"></label>' +
             '<label>Tên màu <input name="name" placeholder="vd Ivory Lace"></label><label>Màu <input name="hex" type="color" value="#f2eee6"></label>' +
-            '<button class="primary">Dùng màu ' + esc(brand) + ' này</button><small class="asset-hint">Xem mã trên quạt màu hoặc web hãng rồi chọn màu gần đúng. Lần sau sẽ có sẵn trong Dữ liệu dùng chung.</small></form>' +
-            '<div class="asset-google-fallback-slot"></div>') +
+            '<button class="primary">Dùng màu ' + esc(brand) + ' này</button><small class="asset-hint">Xem mã trên quạt màu hoặc web hãng rồi chọn màu gần đúng. Lần sau sẽ có sẵn trong Dữ liệu dùng chung.</small></form>') + localAssetPhotos(photos) + onlineSlot +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(paintData.source || '') + ' (' + colors.length + ' màu)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('select').onchange = event => { brand = event.target.value; paint(); };
-        const search = panel.querySelector('input[type=search]');
-        search.oninput = () => {
-          query = search.value;
-          clearTimeout(search.timer);
-          search.timer = setTimeout(() => {
-            paint().then(() => {
-              const s = panel.querySelector('input[type=search]');
-              s?.focus();
-              s?.setSelectionRange(query.length, query.length);
-            });
-          }, 200);
-        };
+        wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelectorAll('[data-paint-code]').forEach(button => {
           button.onclick = () => {
             const c = colors.find(entry => entry.code === button.dataset.paintCode);
@@ -628,12 +658,13 @@ window.GDHomeAssets = (() => {
           close();
           onPick?.({ kind: 'paint', brand, code, name: String(form.get('name') || '').trim(), hex: String(form.get('hex') || '#f2eee6') });
         };
-        if (!colors.length && query.trim()) {
+        wireLocalAssetPhotos(panel,photos,entry => { close(); onPick?.(entry); });
+        if (colors.length + photos.length < 4 && query.trim()) {
           renderGoogleFallback(panel.querySelector('.asset-google-fallback-slot'), query, {
             onPickImage: entry => {
               close();
               onPick?.(entry);
-            }
+            },groupName
           });
         }
         place();
@@ -655,11 +686,13 @@ window.GDHomeAssets = (() => {
   }
 
   const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường'});
-  function pickWood(anchor, { onPick, title = 'Mã gỗ' } = {}) {
+  function pickWood(anchor, { groupName, onPick, title = 'Mã gỗ' } = {}) {
     return popover(anchor, async (panel, close, place) => {
       let brand = '', collection = 'all', query = '', woodData = null;
       async function paint() {
         try { woodData = await loadWoodData(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
+        const photos = await findLocalAssetPhotos(query,'ancuong-wood',groupName);
+        if (!panel.isConnected) return;
         const brands = [...new Set(woodData.woods.map(wood => wood.brand))];
         const byBrand = woodData.woods.filter(wood => !brand || brand === wood.brand);
         const collections = [...new Set(byBrand.map(wood => wood.collection).filter(Boolean))];
@@ -676,25 +709,14 @@ window.GDHomeAssets = (() => {
           (woods.length ? '<div class="asset-wood-grid">' + woods.map((w,index) => '<button type="button" data-wood-index="' + index + '" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
             (w.thumb ? '<img data-lib-asset="' + esc(w.thumb) + '" alt="">' : '') + '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span>' +
             '<span class="wood-badge">' + esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>').join('') + '</div>' :
-            '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p><div class="asset-google-fallback-slot"></div>') +
+            '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>') + localAssetPhotos(photos) + onlineSlot +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(woodData.source || '') + ' (' + woods.length + ' mã)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('[aria-label=Hãng]').onchange = event => { brand = event.target.value; collection = 'all'; paint(); };
         panel.querySelector('[aria-label="Dòng sản phẩm"]').onchange = event => { collection = event.target.value; paint(); };
-        const search = panel.querySelector('input[type=search]');
-        search.oninput = () => {
-          query = search.value;
-          clearTimeout(search.timer);
-          search.timer = setTimeout(() => {
-            paint().then(() => {
-              const s = panel.querySelector('input[type=search]');
-              s?.focus();
-              s?.setSelectionRange(query.length, query.length);
-            });
-          }, 200);
-        };
+        wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelectorAll('[data-wood-code]').forEach(button => {
           button.onclick = () => {
             const w = woods[Number(button.dataset.woodIndex)];
@@ -702,13 +724,13 @@ window.GDHomeAssets = (() => {
             if (w) onPick?.({...w,kind:'wood'});
           };
         });
-        hydrate(panel);
-        if (!woods.length && query.trim()) {
+        wireLocalAssetPhotos(panel,photos,entry => { close(); onPick?.(entry); });
+        if (woods.length + photos.length < 4 && query.trim()) {
           renderGoogleFallback(panel.querySelector('.asset-google-fallback-slot'), query, {
             onPickImage: entry => {
               close();
               onPick?.(entry);
-            }
+            },categoryId:'ancuong-wood',groupName
           });
         }
         place();
@@ -979,7 +1001,7 @@ window.GDHomeAssets = (() => {
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' +
-          grid(items,{selectable:!!onPick,removable:true,empty:'Chưa có ảnh trong hạng mục này.'}) : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
+          grid(items,{selectable:!!onPick,removable:true,empty:'Chưa có ảnh trong hạng mục này.'}) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       body.querySelectorAll('[data-cat]').forEach(button => button.onclick = () => { current = button.dataset.cat; status = ''; paint(); });
       body.querySelector('[data-cat-add]').onclick = async () => {
@@ -1035,6 +1057,10 @@ window.GDHomeAssets = (() => {
           if (name === null) return;
           try { await updateItem({id,name:name.trim()}); paint(); } catch (error) { toast(error.message); }
         };
+      });
+      if (items.length < 4 && query.trim()) renderGoogleFallback(body.querySelector('.asset-google-fallback-slot'),query,{
+        categoryId:current,groupName,
+        onPickImage:onPick ? entry => { dialog.close(); onPick(entry); } : undefined
       });
       await hydrate(body);
     }

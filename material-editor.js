@@ -769,7 +769,7 @@ function materialProjectName() {
   return materials.projects.find(project => project.id === sheet?.projectId)?.name || sheet?.meta?.project || '';
 }
 function addPickedImage(row,slot,item,extra) {
-  if (!item || !sheet) return;
+  if (!item || !sheet?.groups.some(group => group.rows.includes(row))) return;
   const list = slot === 'render' ? row.render : row.options[Number(slot)]?.images;
   if (!list) return;
   if (list.some(image => (typeof image === 'string' ? image : image.full) === item.full)) return say('Ảnh đã có trong ô.');
@@ -928,16 +928,16 @@ function isWoodGroup(name) {
 function openAssetPicker(cell,row,group,slot) {
   if (!window.GDHomeAssets || !row) return;
   if (slot === 'render') {
-    GDHomeAssets.pickRender(cell,{projectId:sheet.projectId,onPick:item => addPickedImage(row,'render',item)});
+    GDHomeAssets.pickRender(cell,{projectId:sheet.projectId,groupName:group?.name,onPick:item => addPickedImage(row,'render',item)});
   } else if (isPaintGroup(group?.name)) {
     GDHomeAssets.pickPaint(cell,{groupName:group?.name,onPick:paint => {
       if (paint.kind === 'paint') paintPicked(row,slot,paint);
-      else addPickedImage(row,slot,paint);
+      else libraryPicked(row,slot,paint);
     }});
   } else if (isWoodGroup(group?.name)) {
     GDHomeAssets.pickWood(cell,{groupName:group?.name,onPick:wood => {
       if (wood.kind === 'wood') woodPicked(row,slot,wood);
-      else addPickedImage(row,slot,wood);
+      else libraryPicked(row,slot,wood);
     }});
   } else {
     GDHomeAssets.pickLibrary(cell,{groupName:group?.name,onPick:item => libraryPicked(row,slot,item)});

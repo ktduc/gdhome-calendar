@@ -128,3 +128,6 @@
 .material-paper .image-cell .pa-caption .sheet-value{display:block;white-space:pre-wrap;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 
 .sheet-grid .material-image-drop-target{outline:2px solid #2563eb;outline-offset:-2px}
+
+.asset-google-fallback h4{margin:0 0 6px}
+.asset-online-preview{display:block;max-width:100%;max-height:240px;object-fit:contain}

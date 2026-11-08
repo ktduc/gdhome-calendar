@@ -1920,6 +1920,61 @@ cases['18.9'] = async page => {
     ['Bảng chốt mã mới - V1','Bảng chốt mã mới - V2']);
 };
 
+cases['18.8'] = async page => {
+  const asset = 'a'.repeat(64) + '.webp';
+  await page.route('**/api/materials/assets/' + asset,route => route.fulfill({status:404}));
+  await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents:[]}}}}));
+  await page.route('**/api/google/search?*',route => route.fulfill({json:{configured:true,items:[
+    {title:'Mẫu trực tuyến',link:'https://example.com/oak.png',thumbnail:'data:image/png;base64,' + imageFixture}
+  ]}}));
+  await page.route('**/api/google/proxy-image',route => {
+    assert.equal(route.request().postDataJSON().url,'https://example.com/oak.png');
+    return route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')});
+  });
+  await openMaterials(page);
+  const category = await page.evaluate(async asset => {
+    const data = await GDHomeAssets.loadLibrary();
+    const category = data.categories[0].id;
+    await GDHomeAssets.addItems(category,[{name:'Oak mẫu trong kho',full:asset,thumb:asset}]);
+    return category;
+  },asset);
+  const cell = id => page.locator('[data-row="g1-r' + id + '"] .image-cell[data-slot="0"]');
+  const panel = page.locator('.asset-popover');
+  await cell(1).click();
+  await panel.getByLabel('Hạng mục').selectOption(category);
+  await panel.locator('input[type=search]').fill('Oak');
+  await panel.getByRole('heading',{name:'Tìm trên mạng'}).waitFor();
+  assert.equal(await panel.locator('.asset-card').count(),1);
+  assert.ok(await panel.locator('[data-save-online-image]').isChecked());
+  const saved = page.waitForResponse(response => response.url().endsWith('/api/library/items') && response.request().method() === 'POST');
+  await panel.locator('[data-google-idx="0"]').click();
+  await saved;
+  await cell(1).locator('.image-open img').waitFor();
+  assert.ok((await page.request.get('/api/library').then(r => r.json())).items.some(item => item.name === 'Mẫu trực tuyến' && item.categoryId === category));
+  await cell(2).click();
+  await panel.locator('input[type=search]').fill('Riêng');
+  await panel.locator('[data-save-online-image]').uncheck();
+  let saves = 0;
+  page.on('request',request => { if (request.url().endsWith('/api/library/items') && request.method() === 'POST') saves++; });
+  await panel.locator('[data-google-idx="0"]').click();
+  await cell(2).locator('.image-open img').waitFor();
+  assert.equal(saves,0);
+  await page.locator('[data-sidebar=library] .material-sidebar-actions [data-action=open-library]').click();
+  const library = page.locator('.asset-library-dialog');
+  await library.locator('input[type=search]').fill('Oak');
+  await library.getByRole('heading',{name:'Tìm trên mạng'}).waitFor();
+  await library.locator('.close-dialog').click();
+  await library.waitFor({state:'detached'});
+  for (const picker of ['pickPaint','pickWood','pickRender']) {
+    await page.evaluate(picker => GDHomeAssets[picker](document.querySelector('.image-cell'),{projectId:'p1'}),picker);
+    const search = panel.locator('input[type=search]');
+    await search.fill('Catalogue999');
+    assert.equal(await search.inputValue(),'Catalogue999',picker);
+    await panel.getByRole('heading',{name:'Tìm trên mạng'}).waitFor().catch(async error => { throw new Error(picker + ': ' + await panel.textContent(),{cause:error}); });
+    await page.keyboard.press('Escape');
+  }
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });
