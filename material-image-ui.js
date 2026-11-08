@@ -50,7 +50,7 @@ function openMaterialLightbox(row,slot,initialIndex = 0) {
     },
     remove(index) {
       if (!confirm('Xoá ảnh này khỏi ô?')) return false;
-      modify(() => list.splice(index,1));
+      modify(() => removeMaterialImage(list,index,slot === 'render' ? null : row.options[Number(slot)]));
       return true;
     },
     onClose() {
@@ -262,12 +262,73 @@ document.addEventListener('paste', event => {
   }
 });
 
-document.addEventListener('dragover', event => {
-  if (event.target.closest('.sheet-grid [data-slot]') && event.dataTransfer.types.includes('Files')) event.preventDefault();
+let draggedMaterialImage, markedImageCell;
+const materialImageDragType = 'application/x-gdhome-image';
+const materialImageList = (row,slot) => slot === 'render' ? row?.render : row?.options[Number(slot)]?.images;
+function markImageDrop(cell) {
+  markedImageCell?.classList.remove('material-image-drop-target');
+  markedImageCell = cell;
+  cell?.classList.add('material-image-drop-target');
+}
+function imageDropTarget(cell) {
+  if (!cell || !draggedMaterialImage || draggedMaterialImage.sheet !== sheet) return null;
+  const target = context(cell);
+  const source = draggedMaterialImage;
+  if ((target.slot === 'render') !== (source.slot === 'render')) return null;
+  const list = materialImageList(target.row,target.slot);
+  return list && list !== source.list ? {...target,list} : null;
+}
+document.addEventListener('dragstart',event => {
+  const button = event.target.closest('.sheet-grid [draggable=true][data-action=view-image]');
+  if (!button || !sheet) return;
+  const {row,slot} = context(button);
+  const list = materialImageList(row,slot);
+  const image = list?.[Number(button.dataset.index || 0)];
+  if (!image) return;
+  draggedMaterialImage = {sheet,row,slot,list,image};
+  event.dataTransfer.setData(materialImageDragType,'1');
+  event.dataTransfer.effectAllowed = 'copyMove';
 });
-document.addEventListener('drop', event => {
+document.addEventListener('dragend',() => {
+  draggedMaterialImage = null;
+  markImageDrop(null);
+});
+document.addEventListener('dragover',event => {
   const cell = event.target.closest('.sheet-grid [data-slot]');
-  if (!cell || !event.dataTransfer.files.length) return;
+  if (imageDropTarget(cell)) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = event.shiftKey ? 'move' : 'copy';
+    markImageDrop(cell);
+  } else {
+    markImageDrop(null);
+    if (cell && event.dataTransfer.types.includes('Files')) event.preventDefault();
+  }
+});
+document.addEventListener('dragleave',event => {
+  if (markedImageCell && !markedImageCell.contains(event.relatedTarget)) markImageDrop(null);
+});
+document.addEventListener('drop',event => {
+  const cell = event.target.closest('.sheet-grid [data-slot]');
+  markImageDrop(null);
+  if (!cell) return;
+  if (event.dataTransfer.types.includes(materialImageDragType)) {
+    event.preventDefault();
+    const target = imageDropTarget(cell);
+    const source = draggedMaterialImage;
+    draggedMaterialImage = null;
+    const index = source?.list.indexOf(source.image) ?? -1;
+    if (!target || index < 0) return;
+    const full = image => typeof image === 'string' ? image : image.full;
+    const exists = target.list.some(image => full(image) === full(source.image));
+    if (exists && !event.shiftKey) return say('Ảnh đã có trong ô.');
+    if (!exists && target.list.length >= 8) return say('Mỗi ô tối đa 8 ảnh.');
+    modify(() => {
+      if (!exists) target.list.push(structuredClone(source.image));
+      if (event.shiftKey) removeMaterialImage(source.list,index,source.slot === 'render' ? null : source.row.options[Number(source.slot)]);
+    });
+    return;
+  }
+  if (!event.dataTransfer.files.length) return;
   event.preventDefault();
   window.GDHomeAssets?.closePicker?.();
   const {row,slot} = context(cell);

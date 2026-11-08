@@ -126,3 +126,5 @@
 .sheet-grid .image-cell .pa-caption textarea{display:block;box-sizing:border-box;width:100%;min-height:1.25em;field-sizing:content;resize:none;overflow:hidden;border:0;padding:1px 2px;text-align:center;font-size:11px;line-height:1.25}
 .sheet-grid .image-cell .pa-caption small,.material-paper .image-cell .pa-caption small{display:block;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
 .material-paper .image-cell .pa-caption .sheet-value{display:block;white-space:pre-wrap;overflow:visible;text-overflow:clip;overflow-wrap:anywhere}
+
+.sheet-grid .material-image-drop-target{outline:2px solid #2563eb;outline-offset:-2px}

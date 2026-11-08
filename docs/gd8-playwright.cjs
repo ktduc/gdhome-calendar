@@ -1858,6 +1858,40 @@ cases['18.3'] = async page => {
   assert.equal(await page.locator('.wood-catalogue-dialog [name=brand]').inputValue(),'Hãng tự nhập');
 };
 
+cases['18.10'] = async page => {
+  const asset = 'a'.repeat(64) + '.webp';
+  let uploads = 0;
+  await page.route('**/api/materials/assets**',route => {
+    if (route.request().method() === 'POST') uploads++;
+    return route.fulfill({status:404});
+  });
+  await openMaterials(page);
+  await page.evaluate(asset => modify(() => {
+    const row = sheet.groups[0].rows[0];
+    row.render = [{full:asset,thumb:asset}];
+    row.options[0].images = [{full:asset,thumb:asset}];
+  }),asset);
+  const from = slot => page.locator('[data-row=g1-r1] [data-slot="' + slot + '"] .image-open');
+  const to = slot => page.locator('[data-row=g1-r2] [data-slot="' + slot + '"]');
+  await from('render').dragTo(to('render'));
+  await to('render').locator('.image-open').waitFor();
+  await from('render').waitFor();
+  const dataTransfer = await page.evaluateHandle(() => new DataTransfer());
+  await from('0').dispatchEvent('dragstart',{dataTransfer});
+  await to('0').dispatchEvent('dragover',{dataTransfer,shiftKey:true});
+  assert.ok((await to('0').getAttribute('class')).includes('material-image-drop-target'));
+  await to('0').dispatchEvent('drop',{dataTransfer,shiftKey:true});
+  await to('0').locator('.image-open').waitFor();
+  assert.equal(await from('0').count(),0);
+  const target = await page.evaluate(() => sheet.groups[0].rows[1]);
+  assert.equal(target.render[0].full,asset);
+  assert.equal(target.options[0].images[0].thumb,asset);
+  assert.equal(uploads,0);
+  await page.evaluate(() => undo(false));
+  await from('0').waitFor();
+  assert.equal(await to('0').locator('.image-open').count(),0);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

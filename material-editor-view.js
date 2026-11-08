@@ -576,7 +576,7 @@ function imageCell(list, slot, content = '', state = '', removable = false, edit
   const isPaint = !hasImage && !!pa?.paint;
   let photo = '';
   if (hasImage) {
-    photo = '<button class="image-open" data-action="view-image" aria-label="Xem ảnh lớn">' +
+    photo = '<button class="image-open"' + (editing ? ' draggable="true"' : '') + ' data-action="view-image" aria-label="Xem ảnh lớn">' +
       images(list.slice(0,1),!editing) + '</button>';
   } else if (isPaint) {
     photo = '<div class="image-open paint-swatch-box" data-action="open-paint" title="Màu sơn: ' + html(pa.paint.brand + ' ' + pa.paint.code + ' – ' + pa.paint.name) + '" style="background-color:' + html(pa.paint.hex) + ';width:100%;height:100%;border-radius:4px;display:flex;align-items:flex-end;justify-content:center;padding:2px;box-sizing:border-box;cursor:pointer;"><span class="image-code-tag">' + html(pa.paint.code || pa.paint.hex) + '</span></div>';
@@ -590,7 +590,7 @@ function imageCell(list, slot, content = '', state = '', removable = false, edit
     (!hasImage && !isPaint ? '<div class="image-empty-hint">Bấm để chọn<br>·<br>Ctrl+V để dán</div>' : '') +
     (state === 'reserve' ? '<span class="image-state">Dự phòng</span>' : '') +
     '</div>' + (list && list.length > 1 ? '<div class="material-image-thumbs">' +
-      list.slice(1).map((image,i) => '<button class="material-image-thumb" data-action="view-image" data-index="' + (i+1) +
+      list.slice(1).map((image,i) => '<button class="material-image-thumb"' + (editing ? ' draggable="true"' : '') + ' data-action="view-image" data-index="' + (i+1) +
         '" aria-label="Xem ảnh ' + (i+2) + '">' + images([image],!editing) + '</button>').join('') + '</div>' : '') + choose + '<button type="button" class="image-detail" data-action="cell-menu" aria-label="' + label + '" title="Tuỳ chọn ô ảnh">⋯</button>' +
     (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
 }
@@ -609,7 +609,7 @@ function _oldImageCell_disabled() {
 
 
     '</div>' + (list.length > 1 ? '<div class="material-image-thumbs">' +
-      list.slice(1).map((image,i) => '<button class="material-image-thumb" data-action="view-image" data-index="' + (i+1) +
+      list.slice(1).map((image,i) => '<button class="material-image-thumb"' + (editing ? ' draggable="true"' : '') + ' data-action="view-image" data-index="' + (i+1) +
         '" aria-label="Xem ảnh ' + (i+2) + '">' + images([image],!editing) + '</button>').join('') + '</div>' : '') + choose + '<button type="button" class="image-detail" data-action="cell-menu" aria-label="' + label + '" title="Tuỳ chọn ô ảnh">⋯</button>' +
     (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
 }
