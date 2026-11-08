@@ -449,6 +449,17 @@
 .ai-test-result { margin: 6px 0 0; font-size: 13px; }
 .ai-test-result.is-ok { color: #15803d; }
 .ai-test-result.is-error { color: #b45309; }
+
+/* GĐ18B.2: Lưới thumbnail 120px cho ảnh 3D & trang tách từ PDF trong Quản lý dự án */
+.renders-card-grid.hub-thumb-grid-120 { grid-template-columns: repeat(auto-fill, minmax(120px, 120px)); gap: 10px; }
+.render-card.hub-thumb-card { width: 120px; cursor: grab; user-select: none; }
+.render-card.hub-thumb-card.is-dragging { opacity: 0.45; }
+.render-card.hub-thumb-card.is-drop-target { outline: 2px dashed #cc0000; outline-offset: 2px; }
+.render-card-thumb-wrap.hub-thumb-120 { width: 120px; height: 120px; position: relative; }
+.hub-thumb-del { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; border: none; background: rgba(15, 23, 42, 0.72); color: #fff; font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; opacity: 0; transition: opacity 0.15s, background 0.15s; }
+.render-card-thumb-wrap.hub-thumb-120:hover .hub-thumb-del, .hub-thumb-del:focus-visible { opacity: 1; }
+.hub-thumb-del:hover { background: #dc2626; }
+.renders-drag-hint { font-size: 11.5px; font-weight: 400; color: #64748b; }
 .ai-bg-icon { font-size: 18px; line-height: 1; padding-top: 1px; }
 .ai-bg-body { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; word-break: break-word; }
 .ai-bg-close { position: absolute; top: 6px; right: 8px; border: none; background: transparent; font-size: 18px; color: #94a3b8; cursor: pointer; line-height: 1; }

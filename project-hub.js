@@ -1460,6 +1460,32 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     return sendJson(res, 200, { success: true, documents: updated.documents });
   }
 
+  // 6b. Sắp xếp lại thứ tự tài liệu / ảnh: POST /api/project-hub/documents/reorder
+  if (urlPath === '/api/project-hub/documents/reorder' && req.method === 'POST') {
+    const { projectId, documentIds } = await readJsonBody(req);
+    if (!projectId || !Array.isArray(documentIds)) {
+      return sendJson(res, 400, { success: false, message: 'Thiếu projectId hoặc documentIds.' });
+    }
+    const updated = await hubStore.saveProject(projectId, record => {
+      const docs = record.documents || [];
+      const byIdMap = new Map(docs.map(d => [d.id, d]));
+      const ordered = [];
+      const seen = new Set();
+      for (const id of documentIds) {
+        if (byIdMap.has(id) && !seen.has(id)) {
+          ordered.push(byIdMap.get(id));
+          seen.add(id);
+        }
+      }
+      for (const d of docs) {
+        if (!seen.has(d.id)) ordered.push(d);
+      }
+      record.documents = ordered;
+      return record;
+    });
+    return sendJson(res, 200, { success: true, documents: updated.documents });
+  }
+
   // 7. Parse Báo giá: POST /api/project-hub/quote/parse
   if (urlPath === '/api/project-hub/quote/parse' && req.method === 'POST') {
     const body = await readJsonBody(req);

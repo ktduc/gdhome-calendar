@@ -213,3 +213,9 @@
   - Chuẩn hoá thông báo lỗi tiếng Việt (`AI_ERROR_TEXT`) nêu rõ nguyên nhân (chưa có key, key sai, hết hạn mức, tệp quá lớn, hết thời gian) kèm nút **Thử lại** / **⚙ Mở Kết nối AI** trong `shell.js` và `project-hub-client.js`.
   - Thêm nút **Kiểm tra kết nối AI** trong `⚙ Kết nối` (`integrations-client.js` → `POST /api/ai/test`) báo rõ hãng AI, model và thời gian phản hồi.
   - Thêm bộ kiểm thử `tests/gd18b-ai.test.js` (giả lập chậm 90s, lỗi 429, lỗi 400, chia PDF 15 trang, kiểm tra kết nối).
+- [x] **18B.2. Quản lý dự án: ảnh tách từ PDF & phối cảnh 3D hiện dạng lưới 120px**
+  - Tài liệu hợp đồng, báo giá, bản vẽ HSKT giữ nguyên dạng bảng danh sách; nhóm ảnh 3D và các trang tách từ PDF hiển thị dạng lưới thumbnail `120px` (`.hub-thumb-grid-120`, `.hub-thumb-120`).
+  - Bấm vào ảnh mở `GDHomeShell.lightbox` chung để xem lớn, chuyển ảnh trước/sau hoặc xoá trực tiếp trong lightbox.
+  - Hỗ trợ kéo thả (`draggable="true"` + API `POST /api/project-hub/documents/reorder`) để đổi thứ tự ảnh.
+  - Xoá tài liệu cập nhật giao diện tức thì (`applyLocalDocumentsUpdate`) không chờ F5, đồng thời phát `BroadcastChannel('gdhome-assets')` để tab Chốt mã tự làm mới.
+  - Thêm bộ kiểm thử `tests/gd18b-documents.test.js`.

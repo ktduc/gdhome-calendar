@@ -357,6 +357,17 @@ window.GDHomeShell = (() => {
     if (window.GDHomeAssets) window.GDHomeAssets.openLibrary();
     else location.href = '/tools#library';
   });
+  // GĐ18B.2: Đồng bộ kênh BroadcastChannel('gdhome-assets') sang GDHomeAssets (để tab Chốt mã tự cập nhật khi Quản lý dự án thêm/xoá/đổi thứ tự ảnh)
+  try {
+    if (typeof BroadcastChannel === 'function') {
+      const assetsBc = new BroadcastChannel('gdhome-assets');
+      assetsBc.onmessage = event => {
+        const pid = event?.data?.projectId || (typeof event?.data === 'string' ? event.data : null);
+        if (pid && window.GDHomeAssets?.invalidateRenders) window.GDHomeAssets.invalidateRenders(pid, false);
+      };
+    }
+  } catch {}
+
   if (typeof window !== 'undefined') {
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', initHubJobTracker);

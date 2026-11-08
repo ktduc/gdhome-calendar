@@ -363,6 +363,7 @@
         throw new Error(err.message || `Lỗi tải trang ${pageNum}`);
       }
     }
+    broadcastAssetsChange('upload', { count: numPages, sourcePdf: file.name });
     toast(`Đã tách và tải lên thành công ${numPages} trang phối cảnh 3D!`);
   }
 
@@ -417,10 +418,33 @@
       const res = await fetch(uploadUrl,{method:'POST',headers,body});
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || `Lỗi tải tệp (${res.status})`);
+      if (type === 'render') broadcastAssetsChange('upload', { name: file.name });
       toast(reduction ? 'Đã tải ảnh · ' + reduction : `Đã tải lên: ${file.name}`);
     } catch (err) {
       toast(`Lỗi tải tệp ${file.name}: ${err.message}`);
     }
+  }
+
+  // GĐ18B.2: Kênh đồng bộ tức thì sang tab Chốt mã và các tab khác khi thêm/xoá/đổi thứ tự ảnh 3D
+  const assetsChannel = typeof BroadcastChannel === 'function' ? new BroadcastChannel('gdhome-assets') : null;
+  function broadcastAssetsChange(action, detail = {}) {
+    window.GDHomeAssets?.invalidateRenders?.(currentProjectId);
+    try {
+      assetsChannel?.postMessage({ type: action, projectId: currentProjectId, ...detail, at: Date.now() });
+    } catch {}
+  }
+  if (assetsChannel) {
+    assetsChannel.onmessage = event => {
+      const msg = event?.data;
+      if (msg && msg.projectId === currentProjectId && currentProjectId) {
+        selectProject(currentProjectId);
+      }
+    };
+  }
+
+  function isImageOrRenderDoc(d) {
+    if (!d) return false;
+    return d.type === 'render' || !!d.sourcePdf || /^image\//i.test(d.mime || '') || /\.(jpg|jpeg|png|webp|gif)$/i.test(d.name || '');
   }
 
   function updateSidebarDocs(docs) {
@@ -432,12 +456,18 @@
       listEl.innerHTML = '<div style="font-size: 11px; color: #94a3b8;">Chưa có tài liệu</div>';
       return;
     }
-    listEl.innerHTML = docs.map(d => `
+    const listDocs = docs.filter(d => !isImageOrRenderDoc(d));
+    const renderDocs = docs.filter(d => isImageOrRenderDoc(d));
+    let html = listDocs.map(d => `
       <div class="sidebar-doc-pill" title="${escape(d.name)}">
-        <span>${d.type === 'quote' ? '📋' : d.type === 'render' ? '🎨' : '📐'}</span>
+        <span>${d.type === 'quote' ? '📋' : '📐'}</span>
         <span style="overflow: hidden; text-overflow: ellipsis;">${escape(d.name)}</span>
       </div>
     `).join('');
+    if (renderDocs.length) {
+      html += `<div class="sidebar-doc-pill" title="Nhóm ảnh 3D & trang tách từ PDF"><span>🎨</span><span>${renderDocs.length} ảnh 3D / trang tách PDF</span></div>`;
+    }
+    listEl.innerHTML = html;
   }
 
   const renderThumbnails = new IntersectionObserver(entries => {
@@ -450,37 +480,59 @@
       }).catch(() => { target.hidden = true; });
     }
   });
-  function clearDocumentThumbnails(tbody) {
-    for (const image of tbody.querySelectorAll('[data-hub-thumbnail]')) {
+  function clearDocumentThumbnails(root) {
+    if (!root) return;
+    for (const image of root.querySelectorAll('[data-hub-thumbnail]')) {
       renderThumbnails.unobserve(image);
       if (image.src.startsWith('blob:')) URL.revokeObjectURL(image.src);
     }
   }
+
+  function applyLocalDocumentsUpdate(nextDocs) {
+    if (!currentProject) return;
+    currentProject.hub ||= {};
+    currentProject.hub.documents = nextDocs;
+    if (currentProject.stats?.hub) {
+      currentProject.stats.hub.totalDocuments = nextDocs.length;
+      currentProject.stats.hub.quoteDocuments = nextDocs.filter(d => d.type === 'quote').length;
+      currentProject.stats.hub.drawingDocuments = nextDocs.filter(d => d.type === 'drawing').length;
+      currentProject.stats.hub.renderDocuments = nextDocs.filter(d => d.type === 'render').length;
+      renderOverview(currentProject);
+    }
+    renderDocuments(nextDocs);
+    render3DGallery(nextDocs);
+  }
+
   function renderDocuments(docs) {
     const tbody = byId('documents-tbody');
     clearDocumentThumbnails(tbody);
     byId('docs-count-label').textContent = `${docs.length} tài liệu`;
     updateSidebarDocs(docs);
 
-    if (!docs.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="empty-cell">Chưa có tài liệu nào được tải lên.</td></tr>';
+    const listDocs = docs.filter(d => !isImageOrRenderDoc(d));
+    const renderDocs = docs.filter(d => isImageOrRenderDoc(d));
+
+    if (!listDocs.length) {
+      tbody.innerHTML = renderDocs.length
+        ? '<tr><td colspan="7" class="empty-cell">Chưa có tệp hợp đồng, báo giá hoặc bản vẽ HSKT (các ảnh 3D / trang tách từ PDF hiển thị ở lưới bên dưới).</td></tr>'
+        : '<tr><td colspan="7" class="empty-cell">Chưa có tài liệu nào được tải lên.</td></tr>';
       return;
     }
 
     const typeBadges = {
-      quote: '<span class="badge badge-quote">📋 Báo giá</span>',
+      quote: '<span class="badge badge-quote">📋 Báo giá / HĐ</span>',
       drawing: '<span class="badge badge-drawing">📐 Bản vẽ HSKT</span>',
       render: '<span class="badge badge-render">🎨 Phối cảnh 3D</span>'
     };
 
-    tbody.innerHTML = docs.map(d => {
+    tbody.innerHTML = listDocs.map(d => {
       const sizeStr = (d.size / (1024 * 1024) >= 1)
         ? (d.size / (1024 * 1024)).toFixed(2) + ' MB'
         : (d.size / 1024).toFixed(1) + ' KB';
       const timeStr = new Date(d.uploadedAt).toLocaleString('vi-VN');
       const verBadge = `<span class="badge badge-version" title="Xem lịch sử phiên bản">v${d.version || 1}</span>`;
       return `
-        <tr>
+        <tr data-doc-id="${escape(d.id)}">
           <td>${typeBadges[d.type] || d.type}</td>
           <td>${d.thumbAssetKey ? '<img class="hub-render-thumbnail" alt="" data-hub-thumbnail="' + escape(d.thumbAssetKey) + '">' : ''}<strong>${escape(d.name)}</strong>${d.aiSkipped ? '<br><small style="color:#b45309">⚠ ' + escape(d.aiSkipped) + '</small>' : ''}</td>
           <td>${escape(d.room || 'Cả nhà')}</td>
@@ -498,7 +550,54 @@
     tbody.querySelectorAll('[data-hub-thumbnail]').forEach(img => renderThumbnails.observe(img));
   }
 
+  window.openRenderLightbox = docId => {
+    const docs = (currentProject?.hub?.documents || []).filter(isImageOrRenderDoc);
+    if (!docs.length) return;
+    const initialIndex = Math.max(0, docs.findIndex(d => d.id === docId));
+    const blobUrls = new Set();
+    if (window.GDHomeShell?.lightbox) {
+      let currentTitleEl = null;
+      const dlg = GDHomeShell.lightbox({
+        title: docs[initialIndex]?.name || 'Ảnh phối cảnh 3D',
+        count: () => docs.length,
+        initialIndex,
+        render(idx, figure) {
+          const item = docs[idx];
+          if (!item) return;
+          if (currentTitleEl) currentTitleEl.textContent = item.name;
+          figure.innerHTML = '<p style="color:#cbd5e1;padding:20px">Đang tải ảnh...</p>';
+          fetchAssetBlobUrl(item.assetKey).then(url => {
+            blobUrls.add(url);
+            figure.innerHTML = `<img src="${url}" alt="${escape(item.name)}">`;
+          }).catch(err => {
+            figure.innerHTML = `<p style="color:#fca5a5;padding:20px">Lỗi tải ảnh: ${escape(err.message)}</p>`;
+          });
+        },
+        remove(idx) {
+          const item = docs[idx];
+          if (!item) return false;
+          if (!confirm(`Xoá ảnh "${item.name}"?`)) return false;
+          docs.splice(idx, 1);
+          window.deleteDoc(item.id, true);
+          return true;
+        },
+        onClose() {
+          blobUrls.forEach(u => URL.revokeObjectURL(u));
+          blobUrls.clear();
+        }
+      });
+      currentTitleEl = dlg?.querySelector('h2') || null;
+      return;
+    }
+    const target = docs[initialIndex];
+    if (target) window.viewDoc(target.assetKey, target.name, 'render');
+  };
+
   window.viewDoc = async (assetKey, name, type) => {
+    if (type === 'render') {
+      const match = (currentProject?.hub?.documents || []).find(d => d.assetKey === assetKey);
+      if (match && window.GDHomeShell?.lightbox) return window.openRenderLightbox(match.id);
+    }
     const dialog = byId('preview-dialog');
     byId('preview-title').textContent = name;
     const body = byId('preview-body');
@@ -519,66 +618,95 @@
     }
   };
 
-  window.deleteDoc = async docId => {
-    if (!confirm('Bạn chắc chắn muốn xoá tài liệu này?')) return;
+  window.deleteDoc = async (docId, skipConfirm = false) => {
+    if (!skipConfirm && !confirm('Bạn chắc chắn muốn xoá tài liệu này?')) return;
+    const prevDocs = [...(currentProject?.hub?.documents || [])];
+    const removed = prevDocs.find(d => d.id === docId);
+    const nextDocs = prevDocs.filter(d => d.id !== docId);
+    // Cập nhật giao diện NGAY lập tức, không chờ F5
+    applyLocalDocumentsUpdate(nextDocs);
+    broadcastAssetsChange('delete', { documentId: docId, assetKey: removed?.assetKey });
     try {
-      await api('/api/project-hub/documents/delete', { projectId: currentProjectId, documentId: docId });
-      window.GDHomeAssets?.invalidateRenders(currentProjectId);
+      const res = await api('/api/project-hub/documents/delete', { projectId: currentProjectId, documentId: docId });
+      if (Array.isArray(res?.documents)) applyLocalDocumentsUpdate(res.documents);
       toast('Đã xoá tài liệu.');
-      await selectProject(currentProjectId);
     } catch (err) {
+      applyLocalDocumentsUpdate(prevDocs);
       toast('Lỗi xoá tài liệu: ' + err.message);
     }
   };
 
+  async function reorderRenderDocs(draggedId, targetId) {
+    if (!draggedId || !targetId || draggedId === targetId) return;
+    const allDocs = [...(currentProject?.hub?.documents || [])];
+    const fromIdx = allDocs.findIndex(d => d.id === draggedId);
+    const toIdx = allDocs.findIndex(d => d.id === targetId);
+    if (fromIdx < 0 || toIdx < 0) return;
+    const [moved] = allDocs.splice(fromIdx, 1);
+    allDocs.splice(toIdx, 0, moved);
+    applyLocalDocumentsUpdate(allDocs);
+    broadcastAssetsChange('reorder', { documentIds: allDocs.map(d => d.id) });
+    try {
+      await api('/api/project-hub/documents/reorder', {
+        projectId: currentProjectId,
+        documentIds: allDocs.map(d => d.id)
+      });
+    } catch (err) {
+      toast('Lỗi lưu thứ tự ảnh: ' + err.message);
+    }
+  }
+
   // ---------------------------------------------------------------------------
-  // B1: Lưới Thumbnail phối cảnh 3D theo phòng & gắn vào Chốt mã
+  // GĐ18B.2: Lưới Thumbnail 120px cho ảnh 3D & trang tách từ PDF (lightbox, xoá ngay, kéo đổi thứ tự)
   // ---------------------------------------------------------------------------
   function render3DGallery(docs) {
     const container = byId('renders-gallery-container');
     const countLabel = byId('renders-count-label');
     if (!container) return;
+    clearDocumentThumbnails(container);
 
-    const renderDocs = docs.filter(d => d.type === 'render');
+    const renderDocs = docs.filter(isImageOrRenderDoc);
     if (countLabel) countLabel.textContent = `${renderDocs.length} ảnh 3D`;
 
     if (!renderDocs.length) {
-      container.innerHTML = '<p class="empty-cell">Chưa có ảnh phối cảnh 3D nào. Kéo thả file ảnh (.jpg, .png, .webp) hoặc file PDF 3D cả căn vào khung phía trên.</p>';
+      container.innerHTML = '<p class="empty-cell">Chưa có ảnh phối cảnh 3D hoặc trang tách từ PDF nào. Kéo thả file ảnh (.jpg, .png, .webp) hoặc file PDF 3D cả căn vào khung phía trên.</p>';
       return;
     }
 
-    // Gom ảnh theo phòng
-    const roomMap = new Map();
+    // Gom theo nguồn PDF hoặc theo phòng
+    const groupMap = new Map();
     renderDocs.forEach(d => {
-      const room = d.room || 'Phòng khách';
-      if (!roomMap.has(room)) roomMap.set(room, []);
-      roomMap.get(room).push(d);
+      const key = d.sourcePdf ? `📄 Tách từ PDF: ${d.sourcePdf}` : `🏠 ${d.room || 'Phối cảnh 3D'}`;
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key).push(d);
     });
 
     let html = '';
-    for (const [room, items] of roomMap.entries()) {
+    for (const [groupTitle, items] of groupMap.entries()) {
       html += `
         <div class="renders-room-group">
           <div class="renders-room-title">
-            <span>🏠 ${escape(room)} (${items.length} góc nhìn)</span>
+            <span>${escape(groupTitle)} (${items.length} ảnh)</span>
+            <small class="renders-drag-hint">Kéo thả để đổi thứ tự · Bấm ảnh để xem lớn</small>
           </div>
-          <div class="renders-card-grid">
+          <div class="renders-card-grid hub-thumb-grid-120">
             ${items.map(d => {
               const detected = d.extractedPages?.[0]?.items || d.detectedItems || [];
-              const detectedStr = detected.length > 0
+              const subStr = detected.length > 0
                 ? `AI: ${detected.join(', ')}`
-                : (d.sourcePdf ? `${d.sourcePdf} (Trang ${d.pageNumber || 1})` : 'Ảnh phối cảnh 3D');
+                : (d.sourcePdf ? `Trang ${d.pageNumber || 1}` : (d.room || '3D'));
               const thumbKey = d.thumbAssetKey || d.assetKey;
               return `
-                <div class="render-card">
-                  <div class="render-card-thumb-wrap" onclick="window.viewDoc('${d.assetKey}', '${escape(d.name)}', 'render')">
+                <div class="render-card hub-thumb-card" draggable="true" data-render-doc-id="${escape(d.id)}">
+                  <div class="render-card-thumb-wrap hub-thumb-120" onclick="window.openRenderLightbox('${escape(d.id)}')">
                     <img class="render-card-thumb" alt="${escape(d.name)}" data-hub-thumbnail="${escape(thumbKey)}">
+                    <button type="button" class="hub-thumb-del" title="Xoá ảnh này" aria-label="Xoá ${escape(d.name)}" onclick="event.stopPropagation(); window.deleteDoc('${escape(d.id)}')">×</button>
                   </div>
                   <div class="render-card-info">
                     <div class="render-card-name" title="${escape(d.name)}">${escape(d.name)}</div>
-                    <div class="render-card-items" title="${escape(detectedStr)}">${escape(detectedStr)}</div>
+                    <div class="render-card-items" title="${escape(subStr)}">${escape(subStr)}</div>
                     <button type="button" class="btn btn-outline btn-sm render-card-btn" onclick="window.openAssignRenderModal('${escape(d.assetKey)}', '${escape(thumbKey)}')">
-                      🏷 Gắn vào Chốt mã
+                      🏷 Gắn Chốt mã
                     </button>
                   </div>
                 </div>
@@ -591,6 +719,35 @@
 
     container.innerHTML = html;
     container.querySelectorAll('[data-hub-thumbnail]').forEach(img => renderThumbnails.observe(img));
+
+    // Gắn sự kiện kéo đổi thứ tự (drag & drop)
+    let draggedId = null;
+    container.querySelectorAll('[data-render-doc-id]').forEach(card => {
+      card.ondragstart = e => {
+        draggedId = card.dataset.renderDocId;
+        card.classList.add('is-dragging');
+        if (e.dataTransfer) {
+          e.dataTransfer.effectAllowed = 'move';
+          try { e.dataTransfer.setData('text/plain', draggedId); } catch {}
+        }
+      };
+      card.ondragend = () => {
+        draggedId = null;
+        container.querySelectorAll('.is-dragging,.is-drop-target').forEach(el => el.classList.remove('is-dragging', 'is-drop-target'));
+      };
+      card.ondragover = e => {
+        e.preventDefault();
+        if (draggedId && draggedId !== card.dataset.renderDocId) card.classList.add('is-drop-target');
+      };
+      card.ondragleave = () => card.classList.remove('is-drop-target');
+      card.ondrop = e => {
+        e.preventDefault();
+        card.classList.remove('is-drop-target');
+        const fromId = draggedId || e.dataTransfer?.getData('text/plain');
+        const toId = card.dataset.renderDocId;
+        if (fromId && toId && fromId !== toId) reorderRenderDocs(fromId, toId);
+      };
+    });
   }
 
   let activeAssignAssetKey = null;
