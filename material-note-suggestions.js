@@ -432,7 +432,8 @@ function materialSuggestionCategory(group,row) {
 }
 
 function materialSuggestionChoices(group,row,field) {
-  const category = materialSuggestionCategory(group,row);
+  const multi = field === 'note' || field === 'spec';
+  const category = multi ? materialSuggestionCategory(group,row) : null;
   const groupKey = normalized(group.name.split('(')[0]);
   const choices = new Map();
   function add(value,count = 0) {
@@ -444,8 +445,10 @@ function materialSuggestionChoices(group,row,field) {
   if (field === 'note') {
     for (const suggestion of (row.noteSuggestions || []).flatMap(splitMaterialSuggestions)) add(suggestion);
     for (const suggestion of [...(category?.note || []),...materialNoteCommon]) add(suggestion);
-  } else {
+  } else if (field === 'spec') {
     for (const suggestion of category?.spec || materialSpecCommon) add(suggestion);
+  } else {
+    for (const suggestion of [...(initialPresets[field] || []),...(materials.presets[field] || []),...(sheet.presets?.[field] || [])]) add(suggestion);
   }
 
   const candidates = [sheet,...materials.sheets.filter(saved => saved.id !== sheet.id)];
@@ -453,53 +456,104 @@ function materialSuggestionChoices(group,row,field) {
     const sameGroup = normalized(other.name.split('(')[0]) === groupKey;
     for (const source of other.rows) {
       if (source.id === row.id) continue;
-      const value = field === 'note' ? source.note : source.options?.[source.chosen]?.finish || source.spec;
-      if (!value || (category ? materialSuggestionCategory(other,source) !== category : !sameGroup)) continue;
-      const distinct = new Map(splitMaterialSuggestions(value).map(text => [normalized(text),text]));
+      const value = field === 'spec' ? source.options?.[source.chosen]?.finish || source.spec : source[field];
+      if (!value || (multi && (category ? materialSuggestionCategory(other,source) !== category : !sameGroup))) continue;
+      const distinct = new Map((multi ? splitMaterialSuggestions(value) : [value]).map(text => [normalized(text),text]));
       for (const suggestion of distinct.values()) add(suggestion,1);
     }
   }
   return {category:category?.name || group.name,choices:[...choices.values()].sort((a,b) => b.count-a.count).slice(0,120)};
 }
 
+function saveMaterialSuggestionValue(field,value) {
+  if (!field.isConnected || field.value === value) return;
+  field.value = value;
+  field.dispatchEvent(new Event('change',{bubbles:true}));
+  field.defaultValue = value;
+}
+
 function openMaterialSuggestions(field,group,row) {
   const key = field.dataset.field;
-  const label = key === 'note' ? 'Ghi chú' : 'Chất liệu / Quy cách';
+  const label = materialDialogFields[key];
+  const multi = key === 'note' || key === 'spec';
   const maxLength = key === 'note' ? 2000 : 500;
+  const textInput = multi ? '<textarea name="text" autofocus maxlength="' + maxLength + '">' + html(field.value) + '</textarea>' :
+    '<input name="text" autofocus maxlength="' + maxLength + '" value="' + html(field.value) + '">';
   const {category,choices} = materialSuggestionChoices(group,row,key);
   const element = dialog('<h2>' + label + ' · ' + html(row.name || group.name) + '</h2>' +
-    '<form class="material-notes-form"><label>' + label + ' hiện tại<textarea name="text" maxlength="' + maxLength + '">' +
-    html(field.value) + '</textarea></label><label>Tìm gợi ý<input type="search" name="query" autofocus></label>' +
+    '<form class="material-notes-form"><div class="material-suggestion-edit"><label>' + label + ' hiện tại' + textInput +
+    '</label><button type="button" data-note-clear aria-label="Xóa trắng ' + label + '" title="Xóa trắng ' + label +
+    '">✕</button></div><label>Tìm gợi ý<input type="search" name="query"></label>' +
     '<strong>' + html(category || 'Gợi ý chung') + '</strong><div class="material-note-choices"></div>' +
     '<div class="material-note-actions"></div><p class="material-notes-message" role="status"></p><div class="toolbar">' +
     '<button type="button" data-note-cancel>Huỷ</button><button class="primary">' +
-    (key === 'note' ? 'Lưu ghi chú' : 'Lưu quy cách') + '</button></div></form>');
+    ({note:'Lưu ghi chú',spec:'Lưu quy cách',room:'Lưu vị trí',supplier:'Lưu NCC'}[key]) + '</button></div></form>');
   const form = element.querySelector('.material-notes-form');
   const query = form.elements.query;
   const chosen = new Map();
   const list = form.querySelector('.material-note-choices');
   const actions = materialSuggestionActions(key,group,() => query.value.trim() || form.elements.text.value,refresh);
   form.querySelector('.material-note-actions').append(actions);
-  query.focus();
+  form.elements.text.focus();
   function refresh() {
     const custom = materialCustomChoices(key,group);
     const builtIn = choices.filter(item => !custom.keys.has(normalized(item.value)));
     const matches = [...custom.items.map(item => ({...item,custom:item})),...builtIn]
       .filter(item => normalized(item.value).includes(normalized(query.value)));
-    list.innerHTML = matches.map(({value,count,custom}) =>
-      '<label><input type="checkbox" name="suggestion" value="' + html(value) + '"' + (chosen.has(value) ? ' checked' : '') +
-      '> <span>' + (custom ? '★ ' : '') + html(value) + '</span>' +
-      (count ? '<small class="material-suggestion-frequency" aria-hidden="true">' + count + ' lượt</small>' : '') + '</label>').join('') ||
-      '<p>Không có gợi ý phù hợp.</p>';
-    for (const [i,entry] of [...list.querySelectorAll('input')].entries()) entry.onchange = () => {
-      if (entry.checked) chosen.set(entry.value,matches[i].custom);
-      else chosen.delete(entry.value);
-    };
+    list.innerHTML = matches.map(({value,count,custom}) => {
+      const title = '<span>' + (custom ? '★ ' : '') + html(value) + '</span>' +
+        (count ? '<small class="material-suggestion-frequency" aria-hidden="true">' + count + ' lượt</small>' : '');
+      return multi ? '<label><input type="checkbox" name="suggestion" value="' + html(value) + '"' +
+        (chosen.has(value) ? ' checked' : '') + '> ' + title + '</label>' :
+        '<button type="button" data-single-suggestion>' + title + '</button>';
+    }).join('') || '<p>Không có gợi ý phù hợp.</p>';
+    for (const [i,entry] of [...list.querySelectorAll('input,[data-single-suggestion]')].entries()) {
+      const {value,custom} = matches[i];
+      if (multi) entry.onchange = () => {
+        if (entry.checked) chosen.set(value,custom);
+        else chosen.delete(value);
+      };
+      else entry.onclick = () => {
+        chosen.clear();
+        chosen.set(value,custom);
+        form.elements.text.value = value;
+        form.elements.text.focus();
+        actions.update();
+      };
+    }
     actions.update();
   }
   refresh();
   query.oninput = refresh;
-  form.elements.text.oninput = actions.update;
+  form.elements.text.oninput = () => { if (!multi) chosen.clear(); actions.update(); };
+  form.querySelector('[data-note-clear]').onclick = () => {
+    form.elements.text.value = '';
+    query.value = '';
+    chosen.clear();
+    refresh();
+    form.elements.text.focus();
+  };
+  form.onkeydown = event => {
+    if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229 || !event.target.matches('input,textarea')) return;
+    if (event.shiftKey && event.target.matches('textarea')) return;
+    event.preventDefault();
+    if (!event.shiftKey) form.requestSubmit();
+  };
+  const controller = new AbortController();
+  const opts = {signal:controller.signal};
+  const outside = event => {
+    if (event.target !== element) return false;
+    const bounds = element.getBoundingClientRect();
+    return event.clientX < bounds.left || event.clientX > bounds.right ||
+      event.clientY < bounds.top || event.clientY > bounds.bottom;
+  };
+  let downOutside;
+  element.addEventListener('pointerdown',event => { downOutside = outside(event); },opts);
+  element.addEventListener('click',event => {
+    if (downOutside && outside(event)) form.requestSubmit();
+    downOutside = false;
+  },opts);
+  element.addEventListener('close',() => controller.abort(),{once:true});
 
   form.querySelector('[data-note-cancel]').onclick = () => element.close();
   form.onsubmit = event => {
@@ -511,17 +565,13 @@ function openMaterialSuggestions(field,group,row) {
       const normalizedValue = normalized(value);
       if (!unique.has(normalizedValue)) unique.set(normalizedValue,value);
     }
-    const value = chosen.size ? [...unique.values()].join('; ') : manual;
+    const value = multi && chosen.size ? [...unique.values()].join('; ') : manual;
     if (value.length > maxLength) {
       form.querySelector('.material-notes-message').textContent = label + ' tối đa ' + maxLength.toLocaleString('vi-VN') + ' ký tự.';
       return;
     }
-    if (value !== field.value) {
-      field.value = value;
-      field.dispatchEvent(new Event('change',{bubbles:true}));
-    }
+    saveMaterialSuggestionValue(field,value);
     for (const item of chosen.values()) if (item) useMaterialSuggestion(key,item);
-    field.defaultValue = value;
     element.close();
   };
 }

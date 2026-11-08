@@ -31,8 +31,13 @@ async function relinkMaterialTasks(button) {
   } finally { button.disabled = false; }
 }
 
+function linkedMaterialTask(group) {
+  if (!group.taskId || (group.taskLinkMode === 'auto' && !(group.taskLinkScore >= MaterialTaskMatcher.minScore))) return null;
+  return materials.schedule.tasks.find(task => task.id === group.taskId && task.projectId === sheet.projectId);
+}
+
 function deadlineFor(group) {
-  const task = materials.schedule.tasks.find(task => task.id === group.taskId && task.projectId === sheet.projectId);
+  const task = linkedMaterialTask(group);
   if (group.taskId && !task) return { due:group.due, status:'missing' };
   const due = task ? materialDueDate(task.start,group.leadDays,group.dayMode,materials.schedule.daysOffConfig) || group.due : group.due;
   const pending = group.rows.some(row => row.chosen == null || row.decision !== 'chosen');

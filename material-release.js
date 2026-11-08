@@ -26,7 +26,7 @@ async function safeRelease(task) {
     await task();
   } catch (error) { showError(error); }
 }
-const releasePath = () => '/api/materials/sheets/' + sheet.id + '/review';
+const releasePath = (id = sheet.id) => '/api/materials/sheets/' + encodeURIComponent(id) + '/review';
 function replaceSaved(result) {
   materials._version = result._version;
   if (!result.sheet) return;
@@ -37,6 +37,8 @@ function replaceSaved(result) {
 async function publish() {
   const result = await post(releasePath(),{ _version:materials._version,action:'publish',imageFit:materialImageFit() });
   replaceSaved(result);
+  materials.publishedSheetIds = [...new Set([...(materials.publishedSheetIds || []),sheet.id])];
+  saveToolsSnapshot();
   renderEditor();
   const url = location.origin + result.path;
   dialog('<h2>Đã phát hành</h2><p>Link chưa ký có hiệu lực 14 ngày. Mỗi lần phát hành lại sẽ thu hồi link chưa ký cũ.</p><input id="issued-link" readonly value="' +
@@ -62,18 +64,19 @@ async function settingsDialog() {
     } catch (error) { showError(error); }
   };
 }
-async function historyDialog() {
-  const result = await request(releasePath());
-  const element = dialog('<h2>Biên bản và lịch sử</h2><button id="refresh-material">Tải lại bảng từ máy chủ</button>' +
+async function historyDialog(archived) {
+  const result = await request(releasePath(archived?.id));
+  const element = dialog('<h2>Biên bản và lịch sử</h2>' + (archived ? '<p>Đã lưu trữ · ' + html(archived.title) + '</p>' :
+    '<button id="refresh-material">Tải lại bảng từ máy chủ</button>') +
     [...result.revisions].reverse().map((view,i) => '<article><strong>Bản ' + (result.revisions.length-i) + ' · ' + html(vnDate(view.publishedAt)) +
       '</strong><p>' + (view.revoked?'Đã thu hồi · ':'') + (view.customer?'A đã ký':'Chờ A ký') + ' · ' + (view.company?'B đã ký':'Chờ B ký') +
       '</p>' + (view.customer || view.company ? '<div class="print-signatures history-signatures"><div><strong>Bên A</strong>' + signatureMark(view.customer) +
         '</div><div><strong>Bên B</strong>' + signatureMark(view.company) + '</div></div>' : '') +
       '<button data-print-revision="' + view.id + '">Biên bản A4</button> ' +
-      (view.customer && !view.company ? '<button data-company="' + view.id + '">Bên B xác nhận</button> ' : '') +
-      (view.revoked ? '' : '<button data-revoke="' + view.id + '">Thu hồi link</button>') + '</article>').join('') +
+      (!archived && view.customer && !view.company ? '<button data-company="' + view.id + '">Bên B xác nhận</button> ' : '') +
+      (archived || view.revoked ? '' : '<button data-revoke="' + view.id + '">Thu hồi link</button>') + '</article>').join('') +
     '<ol>' + [...result.audit].reverse().map(entry => '<li>' + html(vnDate(entry.at) + ' · ' + entry.actor + ' · ' +
-      ({ published:'Phát hành',revoked:'Thu hồi', 'customer-signed':'Bên A ký','company-signed':'Bên B ký','change-requested':'Yêu cầu đổi','draft-choice':'Sửa phương án bản nháp' })[entry.event] +
+      ({ published:'Phát hành',revoked:'Thu hồi', 'customer-signed':'Bên A ký','company-signed':'Bên B ký','change-requested':'Yêu cầu đổi','draft-choice':'Sửa phương án bản nháp', 'sheet-archived':'Lưu trữ bảng','sheet-restored':'Khôi phục bảng' })[entry.event] +
       (entry.reason ? ' · '+entry.reason : entry.row ? ' · '+entry.row+' · '+(entry.previous.code || '—')+' → '+(entry.next.code || '—') : '')) + '</li>').join('') + '</ol>');
   element.onclick = event => {
     const { printRevision,company,revoke } = event.target.dataset;
@@ -87,7 +90,8 @@ async function historyDialog() {
       element.close(); await historyDialog();
     });
   };
-  byId('refresh-material').onclick = async () => {
+  const refresh = byId('refresh-material');
+  if (refresh) refresh.onclick = async () => {
     try {
       const data = await request('/api/materials');
       const fresh = data.sheets.find(s => s.id === sheet.id);
@@ -144,7 +148,7 @@ function statistics(mode) {
     savePrintColumns(columns);
     setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark}});
     const filtered = { ...sheet,groups:sheet.groups
-      .filter(group => scope.get('groups') !== 'visible' || !hiddenGroups.has(group.id))
+      .filter(group => scope.get('groups') !== 'visible' || materialGroupVisible(group))
       .map(group => ({ ...group,rows:group.rows.filter(row =>
         (scope.get('rows') !== 'chosen' || (row.chosen != null && row.decision === 'chosen')) &&
         (!scope.get('room') || row.room === scope.get('room'))) }))

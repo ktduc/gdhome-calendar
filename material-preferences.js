@@ -49,6 +49,7 @@ function restoreMaterialSheetView(current) {
   sheetRoom = settings.room || '';
   sheetStatus = settings.status || '';
   viewAsPrint = settings.viewAsPrint === true;
+  onlyUnlinkedGroups = settings.onlyUnlinked === true;
 }
 
 function setMaterialView(patch) {

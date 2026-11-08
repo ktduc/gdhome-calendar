@@ -118,9 +118,21 @@ function signature(body) {
   return { name, strokes:points };
 }
 function assetNames(sheet) {
-  return new Set(sheet.groups.flatMap(g => g.rows.flatMap(row => [...row.render,...row.options.flatMap(pa => pa.images)]))
-    .flatMap(image => [image.full,image.thumb]));
+  const names = new Set();
+  for (const group of sheet.groups || []) for (const row of group.rows) {
+    const images = [...(row.render || []),...row.options.flatMap(pa => pa.images || [])];
+    for (const image of images) {
+      for (const name of typeof image === 'string' ? [image] : [image?.full,image?.thumb]) {
+        if (imageName(name)) names.add(name);
+      }
+    }
+  }
+  return names;
 }
+function findStoredSheet(data,id) {
+  return data.sheets.find(sheet => sheet.id === id) || data.archivedSheets?.find(sheet => sheet.id === id);
+}
+
 
 async function handlePublicReview(req,url,{ res, store, MaterialStore, dataDir, readJsonBody, sendJson, secret }) {
   const match = /^\/api\/review\/([^/]+)(?:\/(sign|change|assets)(?:\/([^/]+))?)?$/.exec(url);
@@ -150,7 +162,7 @@ async function handlePublicReview(req,url,{ res, store, MaterialStore, dataDir, 
         const at = Date.now();
         const customer = { kind:'customer', revisionId:revision.id,...signed,at,expiresAt:at+48*HOUR, choices };
         data.approvals.push(customer);
-        const draft = data.sheets.find(sheet => sheet.id === revision.sheet.id);
+        const draft = findStoredSheet(data,revision.sheet.id);
         if (draft) {
           const savedRows = new Map(revision.sheet.groups.flatMap(g => g.rows).map(row => [row.id,row]));
           for (const row of draft.groups.flatMap(g => g.rows)) {
@@ -172,7 +184,7 @@ async function handlePublicReview(req,url,{ res, store, MaterialStore, dataDir, 
         if (!reason) error(400,'Nhập lý do yêu cầu đổi.');
         if (state.changes.length >= 20) error(429,'Đã đạt giới hạn yêu cầu đổi cho bản này.');
         data.approvals.push({ kind:'change', revisionId:revision.id,reason,at:Date.now() });
-        const draft = data.sheets.find(sheet => sheet.id === revision.sheet.id);
+        const draft = findStoredSheet(data,revision.sheet.id);
         const latest = data.revisions.filter(entry => entry.sheet.id === revision.sheet.id).at(-1);
         if (draft && latest?.id === revision.id) for (const row of draft.groups.flatMap(g => g.rows)) {
           if (Object.hasOwn(state.customer.choices,row.id) && row.decision === 'chosen') row.decision = 'changed';
@@ -205,7 +217,7 @@ async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, 
   const sheetId = match[1];
   if (req.method === 'GET') {
     const data = await repo.get();
-    if (!data.sheets.some(sheet => sheet.id === sheetId)) error(404,'Không tìm thấy bảng.');
+    if (!findStoredSheet(data,sheetId)) error(404,'Không tìm thấy bảng.');
     return sendJson(res,200,{
       _version:data._version,
       revisions:data.revisions.filter(r => r.sheet.id === sheetId).map(r => ({
@@ -218,9 +230,10 @@ async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, 
   const body = await readJsonBody(req);
   requireVersion(body);
   const saved = await repo.update(body._version,async data => {
-    const sheet = data.sheets.find(entry => entry.id === sheetId);
+    const sheet = findStoredSheet(data,sheetId);
     if (!sheet) error(404,'Không tìm thấy bảng.');
     if (body.action === 'publish') {
+      if (sheet.archivedAt) error(409,'Khôi phục bảng trước khi phát hành.');
       const snapshot = publicSheet({ ...sheet,meta:{ ...sheet.meta,...await resolveProfile(sheet,data) } });
       snapshot.imageFit = (['fill','fit'].includes(body.imageFit) ? body.imageFit : data.viewSettings?.imageFit) === 'fit' ? 'fit' : 'fill';
       if (!snapshot.groups.length) error(400,'Điền ít nhất một phương án trước khi phát hành.');
@@ -260,4 +273,4 @@ async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, 
 function requireVersion(body) {
   if (!Number.isSafeInteger(body?._version)) error(400,'Thiếu phiên bản dữ liệu.');
 }
-module.exports = { cleanSheet, handlePublicReview, handleInternalReview, publicSheet, hasOption };
+module.exports = { cleanSheet, handlePublicReview, handleInternalReview, publicSheet, hasOption, assetNames };

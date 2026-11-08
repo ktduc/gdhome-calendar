@@ -50,6 +50,10 @@ function images(list, large = false) {
   }).join('');
 }
 
+function materialSheetRemoveLabel(current) {
+  return materials.publishedSheetIds?.includes(current.id) ? 'Lưu trữ bảng' : 'Xoá bảng';
+}
+
 function renderMaterialApp(selectedProject) {
   if (sheet) return renderEditor();
   byId('material-header-actions').replaceChildren();
@@ -57,9 +61,19 @@ function renderMaterialApp(selectedProject) {
   const query = new URLSearchParams(location.search);
   const requested = selectedProject || byId('project-filter')?.value || query.get('project') || materialView.projectId;
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
+  const inProject = item => item.projectId === projectId || !materials.projects.some(p => p.id === item.projectId);
+  const archived = (materials.archivedSheets || []).filter(inProject).sort((a,b) => b.archivedAt-a.archivedAt);
   box().innerHTML = '<div class="panel"><label>Dự án <select id="project-filter">' + materials.projects.map(p => option(p.id,p.name,projectId)).join('') +
     '</select></label> <a class="button" href="/du-an?project=' + encodeURIComponent(projectId || '') + '" title="Mở Hồ sơ dự án & Soát bản vẽ">📁 Hồ sơ dự án</a> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span> <button data-action="notion">Lấy từ Notion</button> <span id="ai-actions"></span></div>' +
-    materials.sheets.filter(s => s.projectId === projectId || !materials.projects.some(p => p.id === s.projectId)).map(s => '<article><button data-action="open" data-id="' + html(s.id) + '">' + html(s.title) + '</button> · ' + counts(s) + '</article>').join('') +
+    materials.sheets.filter(inProject).map(item => '<article class="material-sheet-list-item"><button data-action="open" data-id="' +
+      html(item.id) + '">' + html(item.title) + '</button> <span>' + counts(item) + '</span><button data-action="remove-sheet" data-id="' +
+      html(item.id) + '">' + materialSheetRemoveLabel(item) + '</button></article>').join('') +
+    (archived.length ? '<details class="panel" id="material-archive"><summary>Đã lưu trữ (' + archived.length + ')</summary>' +
+      archived.map(item => '<article class="material-sheet-list-item"><strong>' + html(item.title) + '</strong><small>' +
+        html(vnDate(item.archivedAt)) + '</small><button data-action="archived-history" data-id="' + html(item.id) +
+        '">Biên bản / Lịch sử</button><button data-action="restore-sheet" data-id="' + html(item.id) +
+        '">Khôi phục</button></article>').join('') + '</details>' : '') +
+
     (!materials.projects.length ? '<p>Tạo và lưu dự án trong Tiến độ trước.</p>' : '');
   box().insertAdjacentHTML('beforeend','<dialog id="material-dialog"></dialog>');
   byId('project-filter').onchange = event => {
@@ -68,6 +82,77 @@ function renderMaterialApp(selectedProject) {
   };
   if (typeof installImport === 'function') installImport();
   installMaterialsAi();
+}
+
+const materialLifecyclePath = id => '/api/materials/sheets/' + encodeURIComponent(id) + '/lifecycle';
+function finishMaterialLifecycle(target,result) {
+  materials._version = result._version;
+  if (result.archivedSheets) materials.archivedSheets = result.archivedSheets;
+  if (result.publishedSheetIds) materials.publishedSheetIds = result.publishedSheetIds;
+  materials.sheets = materials.sheets.filter(item => item.id !== target.id);
+  if (result.sheet) materials.sheets.push(result.sheet);
+  if (sheet?.id === target.id) sheet = null;
+  setMaterialView({projectId:target.projectId,sheetId:null});
+  saveToolsSnapshot();
+  renderMaterialApp(target.projectId);
+  say({deleted:'Đã xoá bản nháp.',archived:'Đã lưu trữ bảng. Có thể xem biên bản hoặc khôi phục trong mục Đã lưu trữ.',
+    restored:'Đã khôi phục bảng.'}[result.outcome]);
+}
+
+async function confirmMaterialSheetRemoval(id) {
+  if (sheet) {
+    await flushSave();
+    if (dirty || saving || conflict) throw new Error('Cần lưu bảng trước khi xoá hoặc lưu trữ.');
+    id = sheet.id;
+  }
+  const target = materials.sheets.find(item => item.id === id);
+  if (!target) return;
+  const version = materials._version;
+  const label = materialSheetRemoveLabel(target);
+  const archived = label === 'Lưu trữ bảng';
+  const element = dialog('<h2>' + label + '</h2><p>' + (archived ?
+    'Bảng đã phát hành sẽ chuyển vào mục Đã lưu trữ. Biên bản và link khách được giữ lại.' :
+    'Bản nháp sẽ bị xoá vĩnh viễn.') + '</p><form id="material-lifecycle-form" class="stack">' +
+    '<p><strong>' + html(target.title) + '</strong></p><label>Gõ đúng tên bảng <input name="confirmation" autocomplete="off" autofocus required></label>' +
+    '<p role="status"></p><button class="primary" disabled>' + label + '</button></form>');
+  const form = byId('material-lifecycle-form');
+  const confirmation = form.elements.confirmation;
+  const submit = form.querySelector('button');
+  const close = element.querySelector('.close-dialog');
+  const status = form.querySelector('[role=status]');
+  let busy = false;
+  const matches = () => confirmation.value.trim() === target.title.trim();
+  form.oninput = () => { submit.disabled = !matches() || busy; };
+  const blockCancel = event => { if (busy) event.preventDefault(); };
+  element.addEventListener('cancel',blockCancel);
+  element.addEventListener('close',() => element.removeEventListener('cancel',blockCancel),{once:true});
+  form.onsubmit = async event => {
+    event.preventDefault();
+    if (!matches() || busy) return;
+    busy = submit.disabled = close.disabled = confirmation.disabled = true;
+    status.textContent = 'Đang xử lý…';
+    try {
+      const result = materialGuest ? deleteGuestMaterial(id) :
+        await post(materialLifecyclePath(id),{action:'remove',title:confirmation.value,_version:version});
+      element.close();
+      finishMaterialLifecycle(target,result);
+    } catch (error) {
+      status.textContent = error.message + (error.status === 409 ? ' Tải lại trang trước khi thử lại.' : '');
+    } finally {
+      busy = close.disabled = confirmation.disabled = false;
+      submit.disabled = !matches();
+    }
+  };
+}
+
+async function restoreMaterialSheet(button) {
+  const target = materials.archivedSheets?.find(item => item.id === button.dataset.id);
+  if (!target) return;
+  button.disabled = true;
+  try {
+    const result = await post(materialLifecyclePath(target.id),{action:'restore',_version:materials._version});
+    finishMaterialLifecycle(target,result);
+  } finally { button.disabled = false; }
 }
 
 function counts(current) {
@@ -143,7 +228,7 @@ async function flushSave() {
       sheet.id = result.sheet.id;
       setMaterialView({projectId:sheet.projectId,sheetId:sheet.id});
       saveMaterialGroupsView();
-      setMaterialSheetView({room:sheetRoom,status:sheetStatus,viewAsPrint});
+      setMaterialSheetView({room:sheetRoom,status:sheetStatus,viewAsPrint,onlyUnlinked:onlyUnlinkedGroups});
       const selector = byId('editor-sheet');
       if (selector?.options[0]) { selector.options[0].value = sheet.id; selector.options[0].textContent = sheet.title; }
     }
@@ -373,7 +458,7 @@ document.addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
   const {group,row,slot} = context(event.target);
   if (!button) {
-    if (row && event.target.matches('textarea[data-field="note"],textarea[data-field="spec"]')) {
+    if (row && event.target.matches('.material-suggestion-cell [data-field]')) {
       return openMaterialSuggestions(event.target,group,row);
     }
     const cell = event.target.closest('.image-cell');
@@ -384,6 +469,16 @@ document.addEventListener('click', async event => {
 
     switch (button.dataset.action) {
       case 'open': openSheet(materials.sheets.find(s => s.id === button.dataset.id)); break;
+      case 'remove-sheet':
+        if (button.closest('.hdr-dropdown')) button.closest('.hdr-dropdown').open = false;
+        await confirmMaterialSheetRemoval(button.dataset.id);
+        break;
+      case 'archived-history': {
+        const current = materials.archivedSheets?.find(item => item.id === button.dataset.id);
+        if (current) await historyDialog(current);
+        break;
+      }
+      case 'restore-sheet': await restoreMaterialSheet(button); break;
       case 'new': createSheet(byId('project-filter').value,'Bảng chốt mã mới',makeTemplate()); break;
       case 'copy': {
         const options = materials.sheets.map((s,i) => (i+1) + '. ' + s.title).join('\n');
@@ -402,6 +497,11 @@ document.addEventListener('click', async event => {
       case 'add-pa': modify(() => { row.paCount = Math.min(3,rowPaCount(row)+1); }); break;
       case 'remove-pa': modify(() => { row.paCount = Number(slot); }); break;
       case 'jump-group': {
+        const destination = sheet.groups.find(group => group.id === button.dataset.id);
+        if (onlyUnlinkedGroups && destination && linkedMaterialTask(destination)) {
+          onlyUnlinkedGroups = false;
+          setMaterialSheetView({onlyUnlinked:false});
+        }
         hiddenGroups.delete(button.dataset.id);
         collapsed.delete(button.dataset.id);
         saveMaterialGroupsView();
@@ -411,6 +511,12 @@ document.addEventListener('click', async event => {
         break;
       }
 
+      case 'choose-group-task': {
+        const picker = button.closest('tbody').querySelector('select[data-field="taskId"]');
+        picker.focus({preventScroll:true});
+        try { picker.showPicker?.(); } catch { /* Focus leaves the native dropdown ready for keyboard selection. */ }
+        break;
+      }
       case 'fold':
         setMembership(collapsed,group.id,!collapsed.has(group.id));
         saveMaterialGroupsView();
@@ -451,6 +557,11 @@ document.addEventListener('click', async event => {
         break;
       }
       case 'duplicate': modify(() => group.rows.splice(group.rows.indexOf(row)+1,0,duplicate(row))); break;
+      case 'clear-suggestion': {
+        const field = button.closest('.material-suggestion-cell').querySelector('[data-field]');
+        saveMaterialSuggestionValue(field,'');
+        break;
+      }
       case 'detail': editDetail(row,slot); break;
       case 'view-image': openMaterialLightbox(row,slot,Number(button.dataset.index || 0)); break;
       case 'pick-pa': pick(row,slot); break;
@@ -496,8 +607,10 @@ document.addEventListener('change', event => {
         say('Chọn PA trước khi chốt hoặc đặt hàng.');
       }
 
-    } else if (row && key === 'spec' && row.chosen != null) row.options[row.chosen].finish = value;
-    else if (row) { row[key] = value; learnPreset(key,value); }
+    } else if (row && key === 'spec' && row.chosen != null) {
+      row.options[row.chosen].finish = value;
+      if (!value) row.spec = '';
+    } else if (row) { row[key] = value; learnPreset(key,value); }
     else if (group && key === 'taskId') {
       group.taskId = value;
       group.taskLinkMode = 'manual';
@@ -555,7 +668,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!row) return;
-  if (event.altKey && event.key === 'ArrowDown' && target.matches('textarea[data-field="note"],textarea[data-field="spec"]')) {
+  if (event.altKey && event.key === 'ArrowDown' && target.matches('.material-suggestion-cell [data-field]')) {
     event.preventDefault();
     return openMaterialSuggestions(target,group,row);
   }
