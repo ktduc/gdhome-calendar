@@ -25,6 +25,7 @@ const { handleMaterials, MaterialStore } = require('./materials');
 const {projectList,writeProjectProfile,withScheduleWrite} = require('./project-profiles');
 const { handlePublicReview } = require('./material-review');
 const { handleProjectHub } = require('./project-hub');
+const { getStorageKind } = require('./object-storage');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -482,7 +483,7 @@ function serveStatic(req, res, urlPath) {
 async function handleApi(req, res, urlPath) {
   if (urlPath === '/api/health') {
     sendJson(res,200,{
-      ok:!!store,ready:!!store,auth:AUTH_MODE,...(store ? store.info() : {}),
+      ok:!!store,ready:!!store,auth:AUTH_MODE,objectStorage:getStorageKind(),...(store ? store.info() : {}),
       features:integrations.features(),uptime:process.uptime(),memoryUsage:process.memoryUsage(),eventLoopLagMax
     });
     return;
@@ -494,6 +495,7 @@ async function handleApi(req, res, urlPath) {
       authMode: AUTH_MODE,
       googleClientId: GOOGLE_CLIENT_ID || null,
       storage: store ? store.kind : 'file',
+      objectStorage: getStorageKind(),
       features: integrations.features()
     });
     return;

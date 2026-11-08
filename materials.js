@@ -1,6 +1,6 @@
 const crypto = require('node:crypto');
 const { scheduleInfo, tasksFor } = require('./material-schedule');
-const { MaterialAssets, r2 } = require('./material-assets');
+const { MaterialAssets, isConfigured } = require('./material-assets');
 const { cleanSheet, handleInternalReview } = require('./material-review');
 const {projectList,profileFor,writeProjectProfile} = require('./project-profiles');
 
@@ -165,7 +165,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
     const data = await materials.get();
     const { _version, sheets, presets, library, settings } = data;
     const sharedProjects = projectList(schedule,data);
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, viewVersion:data.viewVersion || 0, viewSettings:data.viewSettings || {}, columnWidths:data.columnWidths || {}, profiles:Object.fromEntries(sharedProjects.map(project => [project.id,project.profile])), signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2: isConfigured(), viewVersion:data.viewVersion || 0, viewSettings:data.viewSettings || {}, columnWidths:data.columnWidths || {}, profiles:Object.fromEntries(sharedProjects.map(project => [project.id,project.profile])), signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);

@@ -147,3 +147,25 @@
 
 ---
 **XONG GĐ11 SỬA**
+
+---
+
+## GĐ11.8: Nâng cấp kho lưu trữ sang Backblaze B2 (Chuẩn S3 AWS SigV4)
+
+- [x] **1. Module dùng chung `object-storage.js`**
+  - Hỗ trợ chuẩn AWS Signature Version 4 (Query string auth) cho mọi dịch vụ S3-compatible.
+  - Đọc cấu hình `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, `S3_BUCKET` (chuẩn Backblaze B2).
+  - Tự động nhận diện region từ endpoint URL (vd `s3.us-west-004.backblazeb2.com` -> `us-west-004`).
+  - Duy trì hỗ trợ tương thích ngược cho Cloudflare R2 (`R2_*`).
+  - Cung cấp path-style URL, các hàm `putObject`, `getObject`, `headObject`, `deleteObject` với `AbortSignal.timeout`.
+- [x] **2. Tích hợp `material-assets.js` và `project-hub.js` dùng chung module**
+  - Khóa theo tài khoản người dùng (`assets/<accountHash>/...` và `project-files/<accountHash>/...`).
+  - Khi có B2/R2, `storageInfo.configured === true` và `storageInfo.warning === null` (hết cảnh báo lưu tạm).
+- [x] **3. `/api/health` và `/api/config`**
+  - Trả về `objectStorage: 'b2' | 'r2' | 'temp'` (bảo mật tuyệt đối, không lộ khoá bí mật).
+- [x] **4. Bộ Unit Test `tests/object-storage.test.js`**
+  - Kiểm thử định tuyến cấu hình, tính toán chữ ký AWS SigV4 theo chuẩn xác định, mock fetch PUT/GET/HEAD/DELETE, `/api/health`, và tích hợp tài sản dự án (34/34 tests pass 100%).
+- [x] **5. Hướng dẫn & Tự động hoá triển khai**
+  - Cập nhật `HUONG-DAN-R2.md` hướng dẫn chi tiết Backblaze B2 (tạo bucket private `gdhome-files`, Application Key Read/Write, cấu hình 5 biến Render).
+  - Cập nhật `Cap-Nhat-Web-Len-Mang.bat` thêm `object-storage.js` vào danh sách sao lưu và `git add`.
+

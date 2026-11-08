@@ -16,27 +16,13 @@ const {
   extractJson
 } = require('./integrations');
 
-const names = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'];
-const r2Configured = names.every(name => process.env[name]);
-const hash = value => crypto.createHash('sha256').update(value).digest('hex');
-const mac = (key, value) => crypto.createHmac('sha256', key).update(value).digest();
-
-function signedUrl(method, key) {
-  const [account, access, secret, bucket] = names.map(name => process.env[name]);
-  const host = account + '.r2.cloudflarestorage.com';
-  const uri = '/' + encodeURIComponent(bucket) + '/' + key;
-  const stamp = new Date().toISOString().replace(/[-:]|\.\d{3}/g, '');
-  const date = stamp.slice(0, 8);
-  const scope = date + '/auto/s3/aws4_request';
-  const query = new URLSearchParams({
-    'X-Amz-Algorithm': 'AWS4-HMAC-SHA256', 'X-Amz-Credential': access + '/' + scope,
-    'X-Amz-Date': stamp, 'X-Amz-Expires': '60', 'X-Amz-SignedHeaders': 'host'
-  }).toString();
-  const canonical = [method, uri, query, 'host:' + host + '\n', 'host', 'UNSIGNED-PAYLOAD'].join('\n');
-  const signingKey = mac(mac(mac(mac('AWS4' + secret, date), 'auto'), 's3'), 'aws4_request');
-  const signature = mac(signingKey, ['AWS4-HMAC-SHA256', stamp, scope, hash(canonical)].join('\n')).toString('hex');
-  return 'https://' + host + uri + '?' + query + '&X-Amz-Signature=' + signature;
-}
+const {
+  isConfigured,
+  putObject,
+  getObject,
+  getStorageKind,
+  signedUrl
+} = require('./object-storage');
 
 const MIME_MAP = {
   '.pdf': 'application/pdf',
@@ -112,7 +98,8 @@ class ProjectAssets {
     this.accountHash = crypto.createHash('sha256').update(dataKey).digest('hex').slice(0, 16);
     this.dir = path.join(dataDir, 'project-files', this.accountHash);
     this.prefix = 'project-files/' + this.accountHash + '/';
-    this.r2Configured = r2Configured;
+    this.configured = isConfigured();
+    this.r2Configured = this.configured;
   }
 
   async ensureDir() {
@@ -125,14 +112,8 @@ class ProjectAssets {
     const assetKey = `${sha}${cleanExt}`;
     const cleanMime = mime || MIME_MAP[cleanExt] || 'application/octet-stream';
 
-    if (this.r2Configured) {
-      const url = signedUrl('PUT', this.prefix + assetKey);
-      const res = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Content-Type': cleanMime },
-        body: buf
-      });
-      if (!res.ok) throw Object.assign(new Error('Không ghi được tệp lên Cloudflare R2.'), { status: 502 });
+    if (this.configured) {
+      await putObject(this.prefix + assetKey, buf, cleanMime, { timeout: 30000 });
     } else {
       await this.ensureDir();
       const filePath = path.join(this.dir, assetKey);
@@ -149,14 +130,9 @@ class ProjectAssets {
     const cleanExt = path.extname(assetKey).toLowerCase();
     const mime = MIME_MAP[cleanExt] || 'application/octet-stream';
 
-    if (this.r2Configured) {
-      const url = signedUrl('GET', this.prefix + assetKey);
-      const res = await fetch(url);
-      if (!res.ok) {
-        throw Object.assign(new Error('Không tìm thấy tài liệu trên R2.'), { status: res.status === 404 ? 404 : 502 });
-      }
-      const arrayBuf = await res.arrayBuffer();
-      return { buf: Buffer.from(arrayBuf), mime };
+    if (this.configured) {
+      const res = await getObject(this.prefix + assetKey, { timeout: 30000 });
+      return { buf: res.buffer, mime: res.mime || mime };
     }
 
     const filePath = path.join(this.dir, assetKey);
@@ -912,8 +888,10 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
       success: true,
       projects,
       storageInfo: {
-        r2: assets.r2Configured,
-        warning: assets.r2Configured ? null : 'Lưu tạm – sẽ mất khi server khởi động lại'
+        configured: assets.configured,
+        r2: assets.configured,
+        kind: getStorageKind(),
+        warning: assets.configured ? null : 'Lưu tạm – sẽ mất khi server khởi động lại (chưa cấu hình kho lưu trữ B2 / R2)'
       }
     });
   }
@@ -945,8 +923,10 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
         hub: hubRecord
       },
       storageInfo: {
-        r2: assets.r2Configured,
-        warning: assets.r2Configured ? null : 'Lưu tạm – sẽ mất khi server khởi động lại'
+        configured: assets.configured,
+        r2: assets.configured,
+        kind: getStorageKind(),
+        warning: assets.configured ? null : 'Lưu tạm – sẽ mất khi server khởi động lại (chưa cấu hình kho lưu trữ B2 / R2)'
       }
     });
   }

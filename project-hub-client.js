@@ -76,9 +76,10 @@
   function updateStorageWarning(storageInfo) {
     const warnEl = byId('storage-warning');
     if (!warnEl) return;
-    if (storageInfo && !storageInfo.r2) {
+    const isConfigured = storageInfo && (storageInfo.configured || storageInfo.r2);
+    if (!isConfigured) {
       warnEl.style.display = 'block';
-      warnEl.textContent = '⚠️ ' + (storageInfo.warning || 'Lưu tạm – sẽ mất khi server khởi động lại (chưa cấu hình Cloudflare R2)');
+      warnEl.textContent = '⚠️ ' + (storageInfo?.warning || 'Lưu tạm – sẽ mất khi server khởi động lại (chưa cấu hình Backblaze B2 / Cloudflare R2)');
     } else {
       warnEl.style.display = 'none';
     }
