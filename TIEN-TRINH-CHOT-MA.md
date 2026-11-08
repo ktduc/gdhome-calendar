@@ -110,3 +110,18 @@ Bước kế tiếp GĐ9: Hoàn thành 9.1–9.7. Chờ review trước khi tri�
 - Hướng dẫn và phạm vi thay đổi đã cập nhật ở mục 3o của `CLAUDE_HANDOVER.md`.
 
 XONG GĐ9
+
+## Giai đoạn 10
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| 10.1 | ✅ | tách bộ giao diện chung cho GD HOME Tools |
+| 10.2 | ⏳ | Lưu cài đặt Chốt mã |
+| 10.3 | ⏳ | Đối chiếu Lịch và Chốt mã |
+| 10.4 | ⏳ | Kết nối và AI chung |
+| 10.5 | ⏳ | Hồ sơ dự án chung |
+| 10.6 | ⏳ | Kiểm thử và bàn giao |
+
+Bước kế tiếp GĐ10: 10.2 lưu tuỳ chọn Chốt mã theo tài khoản.
+
+- 10.1: tài liệu tích hợp ở `docs/HE-THONG-GIAO-DIEN.md`. Ảnh header và sidebar Lịch ở 1440/1920 px trùng từng byte trước và sau khi tách. Playwright 10.1, 8.3, 9.5 đạt.

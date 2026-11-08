@@ -408,6 +408,21 @@ async function addFixtureImage(page,slot) {
   else await cell.locator('img[src]').waitFor();
 }
 
+cases['10.1'] = async page => {
+  const destination = process.env.GD_SHELL_SCREENSHOTS;
+  for (const width of [1440,1920]) {
+    await page.setViewportSize({width,height:900});
+    await page.goto('/');
+    await page.locator('.project-owner-header').first().waitFor();
+    await page.evaluate(() => document.fonts.ready);
+    for (const [name,selector] of [['header','.app-header'],['sidebar','.app-sidebar']]) {
+      const target = page.locator(selector);
+      assert.equal(Math.round((await target.boundingBox())[name === 'header' ? 'height' : 'width']),name === 'header' ? 56 : 262);
+      if (destination) await target.screenshot({path:path.join(destination,'lich-'+width+'-'+name+'.png'),animations:'disabled'});
+    }
+  }
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

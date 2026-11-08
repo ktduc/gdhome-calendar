@@ -12,22 +12,14 @@ function installMaterialsAi() {
 }
 
 function renderMaterialsAiNotice() {
-  let panel = byId('material-ai-job');
-  if (!panel) {
-    panel = document.createElement('aside');
-    panel.id = 'material-ai-job';
-    panel.className = 'material-ai-job';
-    panel.setAttribute('aria-live','polite');
-    document.body.append(panel);
-  }
-  panel.innerHTML = '<strong>AI chốt mã</strong><div>' +
-    html(aiJob.running ? 'Đang đọc tài liệu và đề xuất hạng mục…' : aiJob.error || 'Đã có đề xuất để duyệt.') + '</div>' +
-    (aiJob.running ? '' : '<button id="material-ai-job-open">' + (aiJob.plan ? 'Duyệt đề xuất' : 'Thử lại') +
-      '</button> <button id="material-ai-job-hide">Ẩn</button>');
-  if (!aiJob.running) {
-    byId('material-ai-job-open').onclick = () => aiJob.plan ? reviewMaterialsAi() : openMaterialsAi().catch(showError);
-    byId('material-ai-job-hide').onclick = () => panel.remove();
-  }
+  const state = aiJob.running ? 'running' : aiJob.error ? 'error' : 'done';
+  GDHomeShell.aiNotice('material-ai-job',{
+    state,
+    body:'<strong>AI chốt mã</strong><div>' + html(aiJob.running ? 'Đang đọc tài liệu và đề xuất hạng mục…' :
+      aiJob.error || 'Đã có đề xuất để duyệt.') + '</div>',
+    label:aiJob.running ? '' : aiJob.plan ? 'Duyệt đề xuất' : 'Thử lại',
+    onAction:() => aiJob.plan ? reviewMaterialsAi() : openMaterialsAi().catch(showError)
+  });
 }
 
 async function openMaterialsAi() {

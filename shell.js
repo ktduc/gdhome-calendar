@@ -1,0 +1,155 @@
+/* Shared browser UI for GD HOME Tools. Load before the page script. */
+window.GDHomeShell = (() => {
+  const toastTimers = new WeakMap();
+  const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+  const icon = (name,fallback = '') => '<i data-lucide="' + escape(name) + '" aria-hidden="true">' + escape(fallback) + '</i>';
+  const icons = () => window.lucide?.createIcons();
+
+  function menu(element) {
+    if (!element) return;
+    const links = [['/','Lập tiến độ'],['/chot-ma','Chốt mã vật liệu'],['/tools','Trang chủ']];
+    element.onkeydown = event => {
+      if (event.key === 'Escape' && element.open) { element.open = false; element.querySelector('summary').focus(); event.stopPropagation(); }
+    };
+    element.innerHTML = '<summary>GD HOME Tools</summary><nav aria-label="GD HOME Tools">' +
+      links.map(([href,label]) => '<a href="' + href + '">' + label + '</a>').join('') + '</nav>';
+  }
+
+  function dropdown(command,label,glyph,body,variant = 'outline') {
+    return '<details class="hdr-dropdown"><summary class="btn btn-' + escape(variant) + '" data-header-command="' +
+      escape(command) + '">' + icon(glyph) + '<span class="btn-label">' + escape(label) +
+      '</span><span class="hdr-caret">▾</span></summary><div class="hdr-dropdown-menu">' + body + '</div></details>';
+  }
+
+  function closeMenus() {
+    const open = [...document.querySelectorAll('.hdr-dropdown.open, .hdr-dropdown[open], .gd-tools-menu[open]')]
+      .filter(element => element.getClientRects().length);
+    const top = open.findLast(element => element.contains(document.activeElement)) || open.at(-1);
+    if (!top) return false;
+    top.classList.remove('open');
+    top.removeAttribute('open');
+    top.querySelector('summary, .hdr-dropdown-toggle')?.focus({preventScroll:true});
+    return true;
+  }
+
+  function toast(message,element) {
+    if (!element) {
+      element = document.querySelector('[data-shell-toast]') || document.createElement('div');
+      element.dataset.shellToast = '';
+    }
+    element.classList.add('toast-notification');
+    element.setAttribute('role','status');
+    const layer = [...document.querySelectorAll('dialog[open]')].at(-1) || document.body;
+    layer.append(element);
+    element.textContent = message;
+    element.classList.add('show');
+    clearTimeout(toastTimers.get(element));
+    toastTimers.set(element,setTimeout(() => element.classList.remove('show'),3200));
+  }
+
+  const statuses = {
+    saved:['✓ Đã lưu','saved','Dữ liệu đã được lưu lên server'],
+    pending:['● Chưa lưu…','pending','Đang chờ gửi thay đổi lên server'],
+    saving:['⟳ Đang lưu…','saving','Đang gửi thay đổi lên server'],
+    error:['⚠ Lỗi lưu server','error','Không gửi được lên server. Bấm để thử lại ngay.'],
+    offline:['💾 Chỉ lưu trên máy này','offline','Dữ liệu chỉ lưu trong trình duyệt này'],
+    guest:['💾 Chế độ khách – chỉ lưu trên máy này','offline','Dữ liệu khách chỉ lưu trong trình duyệt này'],
+    conflict:['⚠ Xung đột dữ liệu','error','Dữ liệu trên server đã bị sửa từ máy khác']
+  };
+
+  function saveStatus(element,state,detail,shortLabel) {
+    if (!element) return;
+    const [label,style,title] = statuses[state] || statuses.saved;
+    element.textContent = shortLabel || label;
+    element.classList.add('save-status');
+    for (const name of ['saved','pending','saving','error','offline']) element.classList.toggle('is-' + name,name === style);
+    element.title = detail || title;
+    element.dataset.saveState = state;
+  }
+
+  function dialog(element,markup) {
+    element.classList.add('shell-dialog');
+    element.innerHTML = '<form method="dialog"><button class="close-dialog" aria-label="Đóng">×</button></form>' + markup;
+    element.showModal();
+    return element;
+  }
+
+  function aiNotice(id,{state,body,label,onAction,onClose}) {
+    let panel = document.getElementById(id);
+    if (!panel) {
+      panel = document.createElement('aside');
+      panel.id = id;
+      panel.setAttribute('aria-live','polite');
+      document.body.append(panel);
+    }
+    panel.className = 'ai-bg-panel is-' + state;
+    panel.innerHTML = '<div class="ai-bg-icon" aria-hidden="true">' +
+      (state === 'running' ? '<span class="ai-spinner"></span>' : state === 'done' ? '✅' : '⚠') +
+      '</div><div class="ai-bg-body"><div>' + body + '</div></div><button type="button" class="ai-bg-close" aria-label="Ẩn">×</button>';
+    panel.querySelector('.ai-bg-close').onclick = () => { panel.style.display = 'none'; onClose?.(); };
+    if (label) {
+      const button = document.createElement('button');
+      button.className = 'btn btn-primary btn-sm';
+      button.textContent = label;
+      button.onclick = onAction;
+      panel.querySelector('.ai-bg-body').append(button);
+    }
+    panel.style.display = 'flex';
+    return panel;
+  }
+
+  function lightbox({title,count,render,crop,remove,onClose,onError,extraClass = ''}) {
+    if (!count()) return;
+    const element = document.createElement('dialog');
+    element.className = 'shell-dialog shell-lightbox ' + extraClass;
+    element.setAttribute('aria-label',title);
+    element.innerHTML = '<h2>' + escape(title) + '</h2><button class="lightbox-close" aria-label="Đóng" autofocus>×</button>' +
+      '<div class="lightbox-stage"><button data-lightbox="prev" aria-label="Ảnh trước">←</button>' +
+      '<figure></figure><button data-lightbox="next" aria-label="Ảnh tiếp theo">→</button></div>' +
+      '<div class="lightbox-actions"><output aria-live="polite"></output>' +
+      (crop ? '<button data-lightbox="crop">Cắt ảnh</button>' : '') +
+      (remove ? '<button data-lightbox="remove">Xoá ảnh</button>' : '') + '</div>';
+    const figure = element.querySelector('figure');
+    let index = 0;
+    function show() {
+      render(index,figure);
+      element.querySelector('output').value = (index+1) + ' / ' + count();
+      element.querySelectorAll('[data-lightbox="prev"],[data-lightbox="next"]').forEach(button => {
+        button.disabled = count() < 2;
+      });
+    }
+    function move(step) {
+      if (count() < 2) return;
+      index = (index+step+count()) % count();
+      show();
+    }
+    element.onkeydown = event => {
+      if (!['ArrowLeft','ArrowRight'].includes(event.key)) return;
+      event.preventDefault();
+      move(event.key === 'ArrowLeft' ? -1 : 1);
+    };
+    element.onclick = async event => {
+      if (event.target === element || event.target.closest('.lightbox-close')) return element.close();
+      const command = event.target.closest('[data-lightbox]')?.dataset.lightbox;
+      if (command === 'prev' || command === 'next') move(command === 'prev' ? -1 : 1);
+      if (command === 'crop') {
+        try { await crop(index,element,show); } catch (error) { onError?.(error); }
+      }
+      if (command === 'remove' && remove(index)) {
+        if (!count()) return element.close();
+        index = Math.min(index,count()-1);
+        show();
+      }
+    };
+    element.onclose = () => { element.remove(); onClose?.(); };
+    show();
+    document.body.append(element);
+    element.showModal();
+    return element;
+  }
+
+  document.querySelectorAll('[data-shell-menu]').forEach(menu);
+  return { escape,icon,icons,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox };
+})();

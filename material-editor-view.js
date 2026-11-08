@@ -202,9 +202,9 @@ function renderEditor() {
   const columns = visibleColumns();
   const widths = columns.map(([key]) => columnWidth(key));
   renderMaterialHeader();
-  box().innerHTML = '<div class="material-workspace"><aside class="material-sidebar sidebar-compact">' +
+  box().innerHTML = '<div class="material-workspace"><aside class="material-sidebar shell-sidebar sidebar-compact">' +
     projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' + renderMaterialTable(columns,widths) +
-    '</div><div id="material-multiselect" hidden></div><dialog id="material-dialog"></dialog>';
+    '</div><div id="material-multiselect" class="msp-multisel-bar" hidden></div><dialog id="material-dialog"></dialog>';
 
   const updatedScroll = box().querySelector('.sheet-scroll');
 
@@ -234,14 +234,9 @@ function renderMaterialTable(columns,widths) {
     '</table></div></section>';
 }
 
-function headerIcon(name,label = '') {
-  return '<i data-lucide="' + name + '" aria-hidden="true">' + label + '</i>';
-}
-function headerMenu(key,label,icon,contents,variant = 'outline') {
-  return '<details class="hdr-dropdown"><summary class="btn btn-' + variant + '" data-header-command="' + key + '">' +
-    headerIcon(icon) + '<span class="btn-label">' + label + '</span><span class="hdr-caret">▾</span></summary>' +
-    '<div class="hdr-dropdown-menu">' + contents + '</div></details>';
-}
+const headerIcon = GDHomeShell.icon;
+const headerMenu = GDHomeShell.dropdown;
+
 function renderMaterialHeader() {
   const header = byId('material-header-actions');
   header.innerHTML = headerMenu('file','File','folder','<button class="hdr-menu-item" data-action="back">Danh sách bảng</button><span id="release-actions"></span>') +
@@ -251,7 +246,7 @@ function renderMaterialHeader() {
     headerMenu('add','Thêm dòng/nhóm','plus','<label class="side-field">Danh mục<select id="header-add-group">' +
       sheet.groups.map(group => option(group.id,group.name)).join('') + '</select></label>' +
       '<button class="hdr-menu-item" data-action="header-add-row">Thêm dòng</button><button class="hdr-menu-item" data-action="add-group">Thêm danh mục</button>','primary') +
-    '<small id="save-label">' + (conflict ? 'Xung đột' : dirty ? 'Chờ lưu' : saving ? 'Đang lưu' : 'Đã lưu') + '</small>';
+    '<small id="save-label" class="save-status is-inline" role="status">' + (conflict ? 'Xung đột' : dirty ? 'Chờ lưu' : saving ? 'Đang lưu' : 'Đã lưu') + '</small>';
   header.querySelector('[data-header-command="add"]').id = 'material-add';
 }
 function installEditorSidebar() {

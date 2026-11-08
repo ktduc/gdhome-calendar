@@ -12,8 +12,8 @@
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <link rel="stylesheet" href="tools-menu.css?v=gd86">
-  <link rel="stylesheet" href="style.css?v=gd86">
+  <link rel="stylesheet" href="shell.css?v=gd101">
+  <link rel="stylesheet" href="style.css?v=gd101">
 </head>
 <body>
   <!-- Header Bar tương tự Google Calendar -->
@@ -22,7 +22,7 @@
       <button class="icon-btn" id="btn-toggle-sidebar" title="Ẩn/Hiện danh sách lịch bên trái">
         <i data-lucide="menu"></i>
       </button>
-      <details class="gd-tools-menu"><summary>GD HOME Tools</summary><nav><a href="/">Lập tiến độ</a><a href="/chot-ma">Chốt mã vật liệu</a><a href="/tools">Trang chủ</a></nav></details>
+      <details class="gd-tools-menu" data-shell-menu></details>
       <div class="app-logo">
         <img src="gdhome-icon.png" alt="GD HOME" class="header-logo-img">
         <span>Lịch Tiến Độ</span>
@@ -1059,6 +1059,7 @@
   <script src="scheduler.js?v=20261108mat"></script>
   <script src="export-canvas.js?v=20261108gd6"></script>
   <script src="material-timeline.js?v=20261108gd6"></script>
-  <script src="app.js?v=20261108gd73"></script>
+  <script src="shell.js?v=gd101"></script>
+  <script src="app.js?v=gd101"></script>
 </body>
 </html>

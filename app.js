@@ -504,17 +504,8 @@ function getLunarDateDisplay(date) {
   }
 }
 
-// Toast Notification
-let toastTimeout = null;
 function showToast(message) {
-  const toast = document.getElementById('toast-notification');
-  if (!toast) return;
-  toast.textContent = message;
-  toast.classList.add('show');
-  if (toastTimeout) clearTimeout(toastTimeout);
-  toastTimeout = setTimeout(() => {
-    toast.classList.remove('show');
-  }, 3200);
+  GDHomeShell.toast(message,document.getElementById('toast-notification'));
 }
 
 // Sắp xếp các công việc trong từng dự án theo đúng thứ tự Ngày bắt đầu -> Ngày kết thúc (Tránh bị lộn xộn)
@@ -1142,29 +1133,7 @@ async function apiFetch(url, options = {}, allowPrompt = true) {
 }
 
 function setSaveStatus(state, detail) {
-  const el = document.getElementById('save-status-indicator');
-  if (!el) return;
-  const map = {
-    saved: { text: '✓ Đã lưu', cls: 'is-saved' },
-    pending: { text: '● Chưa lưu…', cls: 'is-pending' },
-    saving: { text: '⟳ Đang lưu…', cls: 'is-saving' },
-    error: { text: '⚠ Lỗi lưu server', cls: 'is-error' },
-    offline: { text: '💾 Chỉ lưu trên máy này', cls: 'is-offline' },
-    guest: { text: '💾 Chế độ khách – chỉ lưu trên máy này', cls: 'is-offline' },
-    conflict: { text: '⚠ Xung đột dữ liệu', cls: 'is-error' }
-  };
-  const m = map[state] || map.saved;
-  el.textContent = m.text;
-  el.className = `save-status ${m.cls}`;
-  el.title = detail || ({
-    saved: 'Dữ liệu đã được lưu lên server',
-    pending: 'Đang chờ gửi thay đổi lên server',
-    saving: 'Đang gửi thay đổi lên server',
-    error: 'Không gửi được lên server. Dữ liệu vẫn được giữ trên trình duyệt này và sẽ tự gửi lại ở lần lưu sau. Bấm để thử lại ngay.',
-    offline: 'Đang mở file trực tiếp (không có server) - dữ liệu chỉ lưu trong trình duyệt này',
-    guest: 'Đang ở chế độ khách – mọi thay đổi chỉ lưu trên trình duyệt của máy này (không gửi lên server)',
-    conflict: 'Dữ liệu trên server đã bị sửa từ máy khác'
-  }[state] || '');
+  GDHomeShell.saveStatus(document.getElementById('save-status-indicator'),state,detail);
 }
 
 function buildServerPayload() {
@@ -4452,10 +4421,10 @@ function openDayOverrideContextMenu(e, dateStr) {
 }
 
 function handleEscapeKey() {
+  if (document.querySelector('dialog[open]')) return false;
   const menu = document.getElementById('custom-context-menu');
   if (menu && menu.style.display !== 'none' && menu.offsetParent !== null) { hideCustomContextMenu(); return true; }
-  const openDd = document.querySelectorAll('.hdr-dropdown.open');
-  if (openDd.length) { openDd.forEach(d => d.classList.remove('open')); return true; }
+  if (GDHomeShell.closeMenus()) return true;
   const pop = document.getElementById('quick-create-popover');
   if (pop && pop.classList.contains('active')) { closeQuickPopover(); return true; }
   // Hộp thoại (bỏ qua màn hình đăng nhập)
@@ -8232,48 +8201,13 @@ function escapeHtmlAi(t) {
 
 // Ô thông báo nhỏ góc phải dưới khi AI chạy nền
 function showAiBgPanel(state, html, actionLabel) {
-  let el = document.getElementById('ai-bg-panel');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'ai-bg-panel';
-    el.className = 'ai-bg-panel';
-    document.body.appendChild(el);
-  }
-  el.className = 'ai-bg-panel is-' + state;
-  el.innerHTML = '';
-  const icon = document.createElement('div');
-  icon.className = 'ai-bg-icon';
-  icon.textContent = state === 'running' ? '' : state === 'done' ? '✅' : '⚠';
-  if (state === 'running') icon.innerHTML = '<span class="ai-spinner"></span>';
-  const body = document.createElement('div');
-  body.className = 'ai-bg-body';
-  const text = document.createElement('div');
-  text.innerHTML = html;
-  body.appendChild(text);
-  if (actionLabel) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'btn btn-primary btn-sm';
-    btn.textContent = actionLabel;
-    btn.addEventListener('click', () => {
-      hideAiBgPanel();
-      openModalById('ai-planner-modal');
-      const review = state === 'done';
-      document.getElementById('ai-step-input').style.display = review ? 'none' : '';
-      document.getElementById('ai-step-review').style.display = review ? '' : 'none';
-    });
-    body.appendChild(btn);
-  }
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.className = 'ai-bg-close';
-  close.title = state === 'running' ? 'Ẩn (AI vẫn chạy tiếp)' : 'Đóng';
-  close.textContent = '×';
-  close.addEventListener('click', hideAiBgPanel);
-  el.appendChild(icon);
-  el.appendChild(body);
-  el.appendChild(close);
-  el.style.display = 'flex';
+  GDHomeShell.aiNotice('ai-bg-panel',{state,body:html,label:actionLabel,onAction() {
+    hideAiBgPanel();
+    openModalById('ai-planner-modal');
+    const review = state === 'done';
+    document.getElementById('ai-step-input').style.display = review ? 'none' : '';
+    document.getElementById('ai-step-review').style.display = review ? '' : 'none';
+  }});
 }
 
 function hideAiBgPanel() {

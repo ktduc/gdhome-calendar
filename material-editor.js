@@ -13,17 +13,10 @@ const option = (value, label, selected) => '<option value="' + html(value) + '"'
 const assetCache = new Map();
 
 function post(url, body) { return request(url, { method:'POST', body:JSON.stringify(body) }); }
-let materialToastTimer, materialToast;
+let materialToast;
 function say(message) {
   byId('notice').textContent = message;
-  if (!message || !sheet) return;
-  const toast = materialToast ||= byId('material-toast');
-  const layer = [...document.querySelectorAll('dialog[open]')].at(-1) || document.body;
-  layer.append(toast);
-  toast.textContent = message;
-  toast.classList.add('show');
-  clearTimeout(materialToastTimer);
-  materialToastTimer = setTimeout(() => { toast.classList.remove('show'); },3200);
+  if (message && sheet) GDHomeShell.toast(message,materialToast ||= byId('material-toast'));
 }
 
 function showImages(root = box()) {
@@ -198,10 +191,7 @@ function pick(row, slot) {
 }
 
 function dialog(markup) {
-  const element = byId('material-dialog');
-  element.innerHTML = '<form method="dialog"><button class="close-dialog" aria-label="Đóng">×</button></form>' + markup;
-  element.showModal();
-  return element;
+  return GDHomeShell.dialog(byId('material-dialog'),markup);
 }
 
 let activeDetail;
@@ -457,6 +447,11 @@ document.addEventListener('input', event => {
 document.addEventListener('keydown', event => {
   const target = event.target;
   if (!sheet || (!target.closest('#materials,#material-header-actions') && target !== document.body) || target.closest('dialog')) return;
+  if (event.key === 'Escape') {
+    const close = byId('close-print');
+    if (close) { close.click(); event.preventDefault(); return; }
+    if (GDHomeShell.closeMenus()) { event.preventDefault(); return; }
+  }
   if (handleRowSelectionKey(event)) return;
   const {group,row,slot} = context(target);
   if (event.ctrlKey && ['z','y','d'].includes(event.key.toLowerCase())) {

@@ -39,62 +39,28 @@ async function attachImages(row, slot, files, render = false) {
   say('');
 }
 
-function openMaterialLightbox(row, slot) {
+function openMaterialLightbox(row,slot) {
   const list = slot === 'render' ? row.render : row.options[Number(slot)].images;
-  if (!list.length) return;
-  const lightbox = document.createElement('dialog');
-  lightbox.className = 'material-lightbox';
-  lightbox.setAttribute('aria-labelledby','lightbox-title');
-  lightbox.innerHTML = '<h2 id="lightbox-title">' + html(row.name || 'Ảnh vật liệu') + ' · ' +
-    (slot === 'render' ? 'Phối cảnh 3D' : 'PA' + (Number(slot)+1)) + '</h2>' +
-    '<button class="lightbox-close" aria-label="Đóng" autofocus>×</button>' +
-    '<div class="lightbox-stage"><button data-lightbox="prev" aria-label="Ảnh trước">←</button>' +
-    '<figure></figure><button data-lightbox="next" aria-label="Ảnh tiếp theo">→</button></div>' +
-    '<div class="lightbox-actions"><output aria-live="polite"></output>' +
-    '<button data-lightbox="crop">Cắt ảnh</button><button data-lightbox="remove">Xoá ảnh</button></div>';
-  const figure = lightbox.querySelector('figure');
-  let index = 0;
-  function show() {
-    figure.innerHTML = images([list[index]],true);
-    showImages(figure);
-    lightbox.querySelector('output').value = (index+1) + ' / ' + list.length;
-    lightbox.querySelectorAll('[data-lightbox="prev"],[data-lightbox="next"]').forEach(button => {
-      button.disabled = list.length < 2;
-    });
-  }
-  function move(step) {
-    if (list.length < 2) return;
-    index = (index+step+list.length) % list.length;
-    show();
-  }
-  lightbox.onkeydown = event => {
-    if (!['ArrowLeft','ArrowRight'].includes(event.key)) return;
-    event.preventDefault();
-    move(event.key === 'ArrowLeft' ? -1 : 1);
-  };
-  lightbox.onclick = async event => {
-    if (event.target === lightbox || event.target.closest('.lightbox-close')) return lightbox.close();
-    const command = event.target.closest('[data-lightbox]')?.dataset.lightbox;
-    if (command === 'prev' || command === 'next') move(command === 'prev' ? -1 : 1);
-    if (command === 'crop') {
-      try { await cropImage(row,slot,index,lightbox,() => { renderEditor(); show(); }); }
-      catch (error) { showError(error); }
-    }
-    if (command === 'remove' && confirm('Xoá ảnh này khỏi ô?')) {
+  GDHomeShell.lightbox({
+    title:(row.name || 'Ảnh vật liệu') + ' · ' + (slot === 'render' ? 'Phối cảnh 3D' : 'PA' + (Number(slot)+1)),
+    count:() => list.length,
+    render(index,figure) {
+      figure.innerHTML = images([list[index]],true);
+      showImages(figure);
+    },
+    crop:(index,element,refresh) => cropImage(row,slot,index,element,() => { renderEditor(); refresh(); }),
+    remove(index) {
+      if (!confirm('Xoá ảnh này khỏi ô?')) return false;
       modify(() => list.splice(index,1));
-      if (!list.length) return lightbox.close();
-      index = Math.min(index,list.length-1);
-      show();
-    }
-  };
-  lightbox.onclose = () => {
-    lightbox.remove();
-    const cell = box().querySelector('[data-row="' + CSS.escape(row.id) + '"] [data-slot="' + slot + '"]');
-    (cell?.querySelector('.image-open') || cell)?.focus({preventScroll:true});
-  };
-  show();
-  document.body.append(lightbox);
-  lightbox.showModal();
+      return true;
+    },
+    onClose() {
+      const cell = box().querySelector('[data-row="' + CSS.escape(row.id) + '"] [data-slot="' + slot + '"]');
+      (cell?.querySelector('.image-open') || cell)?.focus({preventScroll:true});
+    },
+    onError:showError,
+    extraClass:'material-lightbox'
+  });
 }
 
 async function cropImage(row, slot, i, element, onSaved) {
@@ -107,7 +73,7 @@ async function cropImage(row, slot, i, element, onSaved) {
   if (!element.open || sheet !== source || list[i] !== item) return;
 
   const crop = document.createElement('dialog');
-  crop.className = 'crop-dialog';
+  crop.className = 'shell-dialog crop-dialog';
   crop.setAttribute('aria-labelledby','crop-title');
   crop.innerHTML = '<h2 id="crop-title">Cắt ảnh</h2><p>Kéo bốn góc để chọn vùng giữ lại. Kéo trong vùng sáng để di chuyển.</p>' +
     '<div class="crop-stage"><img alt="Ảnh gốc" draggable="false"><div class="crop-selection">' +
