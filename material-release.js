@@ -1,12 +1,19 @@
 function installRelease() {
   byId('release-actions').innerHTML = '<button id="material-publish">Phát hành link khách</button><button id="material-history">Biên bản / Lịch sử</button>' +
     '<button id="material-settings">Điều khoản mẫu</button><button id="material-buy">Excel mua hàng</button>';
-  byId('image-actions').innerHTML = '<button id="material-stats">Copy ảnh ▾</button>';
+  byId('image-actions').innerHTML = '<details class="material-export"><summary>Copy ảnh ▾</summary><div>' +
+    '<button data-image-mode="copy">Copy ảnh bảng</button><button data-image-mode="png">Tải PNG</button>' +
+    '<button data-image-mode="pdf">Tải PDF A4</button></div></details>';
+  byId('image-actions').onclick = event => {
+    const mode = event.target.dataset.imageMode;
+    if (!mode) return;
+    event.target.closest('details').open = false;
+    safeRelease(() => statistics(mode));
+  };
 
   byId('material-publish').onclick = () => safeRelease(publish);
   byId('material-history').onclick = () => safeRelease(historyDialog);
   byId('material-settings').onclick = () => safeRelease(settingsDialog);
-  byId('material-stats').onclick = () => safeRelease(statistics);
   byId('material-buy').onclick = event => { event.target.closest('details').open = false; safeRelease(exportPurchasing); };
 }
 async function safeRelease(task) {
@@ -100,14 +107,48 @@ function companyDialog(view,version) {
     });
   };
 }
-async function statistics() {
-  const filtered = { ...sheet,groups:sheet.groups.map(g => ({ ...g,rows:g.rows.filter(r => !sheetRoom || r.room === sheetRoom) })).filter(g => g.rows.length) };
-  const overlay = await showPrint({ sheet:filtered },'/api/materials/assets/',authHeaders(),true);
-  if (!overlay.isConnected) return;
-  byId('print-extras').innerHTML = ' <button id="stats-download">Tải PNG</button> <button id="stats-copy">Copy ảnh</button>';
-  byId('stats-download').onclick = () => safeRelease(() => exportStatsImage(false));
-  byId('stats-copy').onclick = () => safeRelease(() => exportStatsImage(true));
+const exportLabels = {copy:'Copy ảnh bảng',png:'Tải PNG',pdf:'Tải PDF A4'};
+function statistics(mode) {
+  const rooms = [...new Set(sheet.groups.flatMap(g => g.rows.map(row => row.room)).filter(Boolean))];
+  const element = dialog('<h2>' + exportLabels[mode] + '</h2><form id="material-image-scope" class="stack">' +
+    '<label>Danh mục<select name="groups"><option value="all">Tất cả</option><option value="visible">Chỉ nhóm đang bật</option></select></label>' +
+    '<label>Dòng<select name="rows"><option value="all">Tất cả</option><option value="chosen">Chỉ dòng đã chốt</option></select></label>' +
+    '<label>Phòng<select name="room"><option value="">Tất cả</option>' + rooms.map(room => option(room,room,sheetRoom)).join('') +
+    '</select></label><p id="export-scope-status" role="status"></p><button class="primary">Xem trước</button></form>');
+  byId('material-image-scope').onsubmit = async event => {
+    event.preventDefault();
+    const scope = new FormData(event.target);
+    const filtered = { ...sheet,groups:sheet.groups
+      .filter(group => scope.get('groups') !== 'visible' || !hiddenGroups.has(group.id))
+      .map(group => ({ ...group,rows:group.rows.filter(row =>
+        (scope.get('rows') !== 'chosen' || (row.chosen != null && row.decision === 'chosen')) &&
+        (!scope.get('room') || row.room === scope.get('room'))) }))
+      .filter(group => group.rows.length) };
+    if (!filtered.groups.length) { byId('export-scope-status').textContent = 'Phạm vi này không có dòng vật liệu.'; return; }
+    element.close();
+    await showStatistics(filtered,mode);
+  };
 }
+async function showStatistics(filtered,mode) {
+  try {
+    const overlay = await showPrint({ sheet:filtered },'/api/materials/assets/',authHeaders(),true);
+    if (!overlay.isConnected) return;
+    byId('print-extras').innerHTML = ' <button id="stats-download">Tải PNG</button> <button id="stats-copy">Copy ảnh</button> <span id="export-image-status" role="status"></span>';
+    const download = byId('stats-download');
+    const copy = byId('stats-copy');
+    const print = byId('do-print');
+    const selected = { copy,png:download,pdf:print }[mode];
+    selected.classList.add('primary');
+    selected.focus();
+    download.onclick = () => exportStatsImage(false).catch(showExportError);
+    copy.onclick = () => exportStatsImage(true).catch(showExportError);
+  } catch (error) { showError(error); }
+}
+function showExportError(error) {
+  const notice = byId('export-image-status');
+  if (notice) notice.textContent = error.message;
+}
+
 let canvasLoader;
 async function exportStatsImage(copy) {
   if (!window.html2canvas) {
@@ -122,8 +163,8 @@ async function exportStatsImage(copy) {
   }
   const root = byId('print-sheet');
   if (root.scrollHeight > 12000) throw new Error('Bảng quá dài để xuất một ảnh. Lọc theo phòng hoặc dùng PDF.');
-  const canvas = await html2canvas(root,{ scale:2,backgroundColor:'#fff' });
-  if (copy) return copyCanvasToClipboard(canvas,{ notify:say,fallbackName:'GD-HOME-vat-lieu.png' });
+  const canvas = await html2canvas(root,{ scale:2,backgroundColor:'#fff',onclone:doc => doc.getElementById('print-sheet').classList.remove('watermark') });
+  if (copy) return copyCanvasToClipboard(canvas,{ notify:message => { const notice = byId('export-image-status'); if (notice) notice.textContent = message; },fallbackName:'GD-HOME-vat-lieu.png' });
   downloadCanvas(canvas,'GD-HOME-vat-lieu.png');
 }
 async function exportPurchasing() {

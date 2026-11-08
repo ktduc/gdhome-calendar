@@ -46,7 +46,7 @@ XONG GĐ6
 | 7.1 | ✅ | bố cục, danh mục và phương án theo dòng |
 | 7.2 | ✅ | kéo và lưu độ rộng cột |
 | 7.3 | ✅ | hồ sơ dự án và lọc khách từ Notion |
-| 7.4 | ⏳ | Xuất ảnh |
+| 7.4 | ✅ | xuất ảnh và A4 theo phạm vi |
 | 7.5 | ⏳ | AI và duyệt |
 
-Bước kế tiếp GĐ7: 7.4 xuất ảnh, PNG và PDF theo phạm vi.
+Bước kế tiếp GĐ7: 7.5 AI đọc khối lượng, chạy nền và duyệt dòng.

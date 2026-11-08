@@ -72,7 +72,7 @@ function rowsForPrint(view, base, stats) {
       const options = row.options.filter(o => o.code || o.brand || o.finish || o.color || o.size || o.images?.length);
       const name = html(row.name) + (row.room ? '<br><small>' + html(row.room) + '</small>' : '');
       if (stats) return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td>' + printImages(row.render,base) + '</td><td>' +
-        options.map(o => '<div>' + (o === pa ? '✓ ' : '') + html([o.brand,o.code,o.color,o.size,o.finish].filter(Boolean).join(' · ')) +
+        options.map(o => '<div><strong>PA' + (row.options.indexOf(o)+1) + (o === pa ? ' ✓' : '') + '</strong> ' + html([o.brand,o.code,o.color,o.size,o.finish].filter(Boolean).join(' · ')) +
           '<br>' + printImages(o.images,base) + '</div>').join('') + '</td><td>' + html([row.qty,row.unit].filter(Boolean).join(' ')) + '</td><td>' + html(row.note) + '</td></tr>';
       return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td>' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
@@ -81,7 +81,7 @@ function rowsForPrint(view, base, stats) {
     }).join('')).join('');
 }
 function printable(view, base, stats = false) {
-  const { meta } = view.sheet;
+  const meta = view.sheet.meta || {};
   const settings = view.settings || {};
   const date = new Intl.DateTimeFormat('vi-VN',{ timeZone:'Asia/Ho_Chi_Minh',day:'numeric',month:'numeric',year:'numeric' })
     .formatToParts(view.customer?.at || view.publishedAt || Date.now());
@@ -92,8 +92,11 @@ function printable(view, base, stats = false) {
     ['STT','Danh mục','Phối cảnh 3D','Mẫu vật liệu','Khối lượng','Ghi chú'] :
     ['STT','Hạng mục','Chất liệu / Quy cách','Màu / Mã / Kích thước','Ghi chú / Hình ảnh minh hoạ']).map(t => '<th>' + t + '</th>').join('') +
     '</tr></thead><tbody>' + rowsForPrint(view,base,stats) + '</tbody></table>';
-  if (stats) return heading + '<h1>BẢNG THỐNG KÊ VẬT LIỆU</h1><p>Kính gửi ' + html(meta.customer) + ' · Dự án ' + html(meta.project) +
-    ' · Số ' + html(meta.number) + '</p>' + table;
+  if (stats) {
+    const details = [['Khách hàng',meta.customer],['Địa chỉ',meta.address],['SĐT',meta.phone],['Email',meta.email],['Hợp đồng',meta.contract],['Số bảng',meta.number]];
+    return heading + '<h1>BẢNG CHỐT MÃ VẬT LIỆU – ' + html(meta.project || view.sheet.title) +
+      '</h1><p>' + details.filter(([,value]) => value).map(([label,value]) => '<strong>' + label + '</strong> ' + html(value)).join(' · ') + '</p>' + table;
+  }
   return heading + '<h1>BIÊN BẢN XÁC NHẬN</h1><div class="print-center">* * *<br><strong><i>(V/v: Thống nhất quy cách vật liệu, kích thước thiết bị nội thất)</i></strong></div>' +
     '<p><strong>BÊN A: CHỦ ĐẦU TƯ - KHÁCH HÀNG</strong><br>Họ và tên khách hàng - Ông/Bà: ' + html(meta.customer) +
     '<br>Địa chỉ lắp đặt: ' + html(meta.address) + '<br>Số điện thoại liên hệ: ' + html(meta.phone) + '</p>' +
