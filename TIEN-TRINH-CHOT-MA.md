@@ -137,3 +137,8 @@ Bước kế tiếp GĐ10: Hoàn thành 10.1–10.6. Tiếp tục GĐ12 theo yê
 - 10.6: Node 23/23 và Playwright 19/19 trên Edge. Chụp header và sidebar Lịch/Chốt mã ở 1440 và 1920 px; các cụm lệnh cùng toạ độ ngang. Kiểm tra lưu trên server, hồ sơ hai chiều, khách, Esc, PDF và cấu hình AI/Notion giả lập. Tài liệu tích hợp ghi tại mục 3p trong `CLAUDE_HANDOVER.md`.
 
 XONG GĐ10
+
+### Bổ sung GĐ10.6 theo báo lỗi Render
+
+- Chẩn đoán Render. Đo request từ lúc nhận đến lúc hoàn tất hoặc đóng, ghi cả request còn chờ sau 3 giây. Giám sát event loop mỗi giây và ghi URL đang xử lý khi trễ quá 2 giây. Health trả uptime, bộ nhớ, độ trễ cao nhất và trạng thái sẵn sàng. Gist có timeout tối đa 15 giây mỗi lần, thử lại hai lần với lỗi tạm thời và giới hạn 60 giây cho một lượt khởi tạo. Khi Gist chưa sẵn sàng, trang tĩnh và health vẫn trả lời, thao tác dữ liệu chờ lượt kết nối tiếp theo. Test Node 25/25.
+- Bước kế tiếp. Dùng bản cài đặt gần nhất trên máy khi API chậm hoặc lỗi, khóa ghi đến khi tải thành công, rồi tiếp tục GĐ12.

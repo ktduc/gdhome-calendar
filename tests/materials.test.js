@@ -13,6 +13,10 @@ test('Chốt mã: phiên bản, quyền Gmail, ảnh riêng và hồ sơ ký b�
   await new Promise((resolve,reject) => { server.once('error',reject); server.listen(0,'127.0.0.1',resolve); });
   t.after(async () => { await new Promise(resolve => server.close(resolve)); await fs.rm(dir,{ recursive:true,force:true }); });
   const origin = 'http://127.0.0.1:' + server.address().port;
+  const health = await fetch(origin+'/api/health').then(response => response.json());
+  assert.equal(health.ready,true);
+  assert.ok(health.uptime >= 0 && health.eventLoopLagMax >= 0);
+  assert.ok(health.memoryUsage.rss > 0 && health.memoryUsage.heapUsed > 0);
   const email = 'a@example.com';
   const other = 'b@example.com';
   const signature = { name:'Nguyễn Văn A',strokes:[[[1,2],[30,40],[120,150]]] };
@@ -88,4 +92,42 @@ test('Chốt mã: phiên bản, quyền Gmail, ảnh riêng và hồ sơ ký b�
   assert.equal((await call(publicApi,null,null)).data.sheet.meta.customer,'Khách A');
   assert.equal((await call(endpoint,{ _version:change.data._version,revisionId:view.data.id,action:'revoke' })).status,200);
   assert.equal((await call(publicApi,null,null)).status,410);
+});
+
+test('Gist giới hạn mỗi lần gọi 15 giây và thử lại tối đa hai lần',async t => {
+  const {GistStore} = require('../server');
+  const delays = [];
+  const controllers = [];
+  t.mock.method(AbortSignal,'timeout',ms => {
+    delays.push(ms);
+    const controller = new AbortController();
+    controllers.push(controller);
+    return controller.signal;
+  });
+  let attempts = 0;
+  t.mock.method(globalThis,'fetch',async (_url,options) => {
+    assert.equal(options.signal,controllers.at(-1).signal);
+    attempts++;
+    if (attempts === 1) {
+      controllers.at(-1).abort(new DOMException('Hết hạn','TimeoutError'));
+      throw options.signal.reason;
+    }
+    if (attempts === 2) return new Response('Tạm lỗi',{status:503});
+    return new Response(JSON.stringify({files:{}}));
+  });
+  const store = new GistStore('test','example',{});
+  assert.deepEqual(await store.api('GET','/gists/example'),{files:{}});
+  assert.deepEqual(delays,[15000,15000,15000]);
+});
+
+test('Gist dừng sau ba lần lỗi và không lặp tạo Gist khi không chắc kết quả',async t => {
+  const {GistStore} = require('../server');
+  const store = new GistStore('test','example',{});
+  const fetch = t.mock.method(globalThis,'fetch',async () => { throw new TypeError('Kết nối đứt'); });
+  await assert.rejects(store.api('PATCH','/gists/example',{files:{}}),/Kết nối đứt/);
+  assert.equal(fetch.mock.callCount(),3);
+  await assert.rejects(store.api('POST','/gists',{files:{}}),/Kết nối đứt/);
+  assert.equal(fetch.mock.callCount(),4);
+  await assert.rejects(store.api('GET','/gists/example',undefined,performance.now()-1),/Hết thời gian/);
+  assert.equal(fetch.mock.callCount(),4);
 });

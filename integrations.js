@@ -107,6 +107,7 @@ async function notionApi(nc, method, apiPath, body) {
   for (let attempt = 0; attempt < 4; attempt++) {
     const res = await fetch('https://api.notion.com/v1' + apiPath, {
       method,
+      signal:AbortSignal.timeout(20000),
       headers: { Authorization: `Bearer ${nc.token}`, 'Notion-Version': NOTION_VERSION, 'Content-Type': 'application/json' },
       body: body ? JSON.stringify(body) : undefined
     });
@@ -268,18 +269,18 @@ const verNum = v => v.split('.').map(Number).reduce((a, x, i) => a + x / Math.po
 
 async function listModels(ai) {
   if (ai.provider === 'anthropic') {
-    const res = await fetch('https://api.anthropic.com/v1/models?limit=100', { headers: { 'x-api-key': ai.key, 'anthropic-version': '2023-06-01' } });
+    const res = await fetch('https://api.anthropic.com/v1/models?limit=100', {signal:AbortSignal.timeout(15000),headers:{'x-api-key':ai.key,'anthropic-version':'2023-06-01'}});
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw httpError(400, res.status === 401 ? 'API key Claude không đúng' : ((json.error && json.error.message) || `Claude lỗi ${res.status}`));
     return (json.data || []).map(m => m.id);
   }
   if (ai.provider === 'openai') {
-    const res = await fetch('https://api.openai.com/v1/models', { headers: { Authorization: `Bearer ${ai.key}` } });
+    const res = await fetch('https://api.openai.com/v1/models', {signal:AbortSignal.timeout(15000),headers:{Authorization:`Bearer ${ai.key}`}});
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw httpError(400, res.status === 401 ? 'API key OpenAI (ChatGPT) không đúng' : ((json.error && json.error.message) || `OpenAI lỗi ${res.status}`));
     return (json.data || []).map(m => m.id);
   }
-  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', { headers: { 'x-goog-api-key': ai.key } });
+  const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=200', {signal:AbortSignal.timeout(15000),headers:{'x-goog-api-key':ai.key}});
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw httpError(400, res.status === 400 || res.status === 403 ? 'API key Gemini không đúng' : ((json.error && json.error.message) || `Gemini lỗi ${res.status}`));
   return (json.models || []).filter(m => (m.supportedGenerationMethods || []).includes('generateContent')).map(m => String(m.name).replace(/^models\//, ''));
@@ -355,6 +356,7 @@ async function callAnthropic(ai, model, images, pdfs, text, system = AI_SYSTEM) 
   pdfs.forEach(p => content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.data } }));
   content.push({ type: 'text', text });
   const res = await fetch('https://api.anthropic.com/v1/messages', {
+    signal:AbortSignal.timeout(60000),
     method: 'POST',
     headers: { 'x-api-key': ai.key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
     body: JSON.stringify({ model, max_tokens: 8000, system, messages: [{ role: 'user', content }] })
@@ -369,6 +371,7 @@ async function callOpenAI(ai, model, images, pdfs, text, system = AI_SYSTEM) {
   images.forEach(img => content.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${img.data}` } }));
   pdfs.forEach((p, i) => content.push({ type: 'file', file: { filename: `tai-lieu-${i + 1}.pdf`, file_data: `data:application/pdf;base64,${p.data}` } }));
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    signal:AbortSignal.timeout(60000),
     method: 'POST',
     headers: { Authorization: `Bearer ${ai.key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content }] })
@@ -384,6 +387,7 @@ async function callGemini(ai, model, images, pdfs, text, system = AI_SYSTEM) {
   pdfs.forEach(p => parts.push({ inline_data: { mime_type: 'application/pdf', data: p.data } }));
   parts.push({ text });
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+    signal:AbortSignal.timeout(60000),
     method: 'POST',
     headers: { 'x-goog-api-key': ai.key, 'Content-Type': 'application/json' },
     body: JSON.stringify({
