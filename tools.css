@@ -284,8 +284,9 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
   #print-sheet.material-paper{margin:0 auto;print-color-adjust:exact}
   #print-sheet.material-paper .sheet-grid{table-layout:fixed}
 }
+.image-code-tag{position:absolute;left:0;right:0;bottom:0;padding:2px 4px;background:rgba(15,23,42,.75);color:#fff;font-family:var(--gd-font,sans-serif);font-size:10.5px;font-weight:600;line-height:1.25;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;pointer-events:none;z-index:5;text-shadow:0 1px 2px rgba(0,0,0,.8),-1px -1px 0 #000,1px -1px 0 #000,-1px 1px 0 #000,1px 1px 0 #000;letter-spacing:.2px}
 .print-squares:empty,.material-image-thumbs:empty{display:none}
-.print-square{display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;padding:0;border:0;border-radius:0;
+.image-open,.print-square{position:relative;display:flex;align-items:center;justify-content:center;width:100%;max-width:100%;padding:0;border:0;border-radius:0;
   aspect-ratio:1;background:#fff;overflow:hidden}
 .print-square img{display:block;max-width:100%;max-height:100%;width:auto;height:auto}
 .material-image-thumbs{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
@@ -296,9 +297,11 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .print-sheet .print-table{table-layout:fixed}
 .print-sheet .print-table th:first-child{width:7%}
 .print-sheet .print-table th:last-child{width:27%}
-[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis]{flex:none;max-width:none;max-height:none;object-fit:cover}
-[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis=wide]{width:auto;height:100%}
-[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis=tall]{width:100%;height:auto}
+[data-image-fit=fill] :is(.image-open,.print-square) img{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);object-fit:cover;flex:none;max-width:none;max-height:none}
+[data-image-fit=fill] :is(.image-open,.print-square) img:not([data-image-axis]){width:100%;height:100%;object-fit:cover}
+[data-image-fit=fill] :is(.image-open,.print-square) img[style*="--view"]{transform:translate(-50%,-50%) var(--view)}
+[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis=wide]{width:auto;height:100%;min-width:100%}
+[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis=tall]{width:100%;height:auto;min-height:100%}
 
 .material-row-number{display:flex;align-items:center;justify-content:center;gap:3px;font-size:10px;font-variant-numeric:tabular-nums}
 .material-row-number input{flex:none;margin:0}

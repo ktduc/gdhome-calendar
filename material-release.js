@@ -6,12 +6,20 @@ function installRelease() {
     headerIcon('copy') + '<span class="btn-label">Copy ảnh</span></button><details class="hdr-dropdown">' +
     '<summary class="btn btn-success hdr-split-caret" aria-label="Tuỳ chọn xuất ảnh"><span class="hdr-caret">▾</span></summary>' +
     '<div class="hdr-dropdown-menu"><button class="hdr-menu-item" data-image-mode="copy">Copy ảnh bảng</button>' +
-    '<button class="hdr-menu-item" data-image-mode="png">Tải PNG</button><button class="hdr-menu-item" data-image-mode="pdf">Tải PDF A4</button></div></details></div>';
+    '<button class="hdr-menu-item" data-image-mode="png">Tải PNG</button><button class="hdr-menu-item" data-image-mode="pdf">Tải PDF A4</button>' +
+    '<hr style="margin:4px 0;border:0;border-top:1px solid #cbd5e1">' +
+    '<button class="hdr-menu-item" id="material-export-settings" data-action="export-settings">⚙ Cài đặt xuất…</button></div></details></div>';
   byId('image-actions').onclick = event => {
+    const settingsBtn = event.target.closest('#material-export-settings,[data-action="export-settings"]');
+    if (settingsBtn) {
+      byId('image-actions').querySelector('details').open = false;
+      safeRelease(() => statistics('settings'));
+      return;
+    }
     const mode = event.target.closest('[data-image-mode]')?.dataset.imageMode;
     if (!mode) return;
     byId('image-actions').querySelector('details').open = false;
-    safeRelease(() => statistics(mode));
+    safeRelease(() => runDirectExport(mode));
   };
 
   byId('material-publish').onclick = () => safeRelease(publish);
@@ -115,7 +123,7 @@ function companyDialog(view,version) {
     });
   };
 }
-const exportLabels = {copy:'Copy ảnh bảng',png:'Tải PNG',pdf:'Tải PDF A4'};
+const exportLabels = {copy:'Copy ảnh bảng',png:'Tải PNG',pdf:'Tải PDF A4',settings:'⚙ Cài đặt xuất'};
 function materialExportKey() {
   return 'gdhome-material-export:' + (session()?.user?.email?.toLowerCase() || 'local');
 }
@@ -123,6 +131,41 @@ function savedMaterialExportScope() {
   if (materialView.export) return materialView.export;
   try { return JSON.parse(localStorage.getItem(materialExportKey())) || {}; }
   catch { return {}; }
+}
+async function runDirectExport(mode) {
+  const saved = savedMaterialExportScope();
+  const watermark = saved.watermark !== false;
+  const filtered = { ...sheet,groups:sheet.groups
+    .filter(group => saved.groups !== 'visible' || materialGroupVisible(group))
+    .map(group => ({ ...group,rows:group.rows.filter(row =>
+      (saved.rows !== 'chosen' || (row.chosen != null && row.decision === 'chosen')) &&
+      (!saved.room || row.room === saved.room)) }))
+    .filter(group => group.rows.length) };
+  if (!filtered.groups.length) {
+    if (window.GDHomeShell?.toast) GDHomeShell.toast('Phạm vi xuất không có dòng vật liệu nào. Hãy kiểm tra Cài đặt xuất.');
+    else alert('Phạm vi xuất không có dòng vật liệu nào.');
+    return;
+  }
+  const overlay = await showPrint({ sheet:filtered },'/api/materials/assets/',authHeaders(),true,watermark);
+  if (!overlay.isConnected) return;
+  byId('print-extras').innerHTML = ' <button id="stats-download">Tải PNG</button> <button id="stats-copy">Copy ảnh</button> <span id="export-image-status" role="status"></span>';
+  byId('stats-download').onclick = () => exportStatsImage(false,watermark).catch(showExportError);
+  byId('stats-copy').onclick = () => exportStatsImage(true,watermark).catch(showExportError);
+  if (mode === 'copy') {
+    try {
+      await exportStatsImage(true,watermark);
+      window.GDHomeShell?.toast?.('Đã copy ảnh bảng vào clipboard.');
+      overlay.close();
+    } catch (err) { showExportError(err); }
+  } else if (mode === 'png') {
+    try {
+      await exportStatsImage(false,watermark);
+      window.GDHomeShell?.toast?.('Đã tải ảnh PNG.');
+      overlay.close();
+    } catch (err) { showExportError(err); }
+  } else if (mode === 'pdf') {
+    byId('do-print').click();
+  }
 }
 function statistics(mode) {
   const rooms = [...new Set(sheet.groups.flatMap(g => g.rows.map(row => row.room)).filter(Boolean))];
@@ -134,19 +177,32 @@ function statistics(mode) {
     option('chosen','Chỉ dòng đã chốt',saved.rows) + '</select></label>' +
     '<label><span>Phòng</span><select name="room"><option value="">Tất cả</option>' +
     rooms.map(room => option(room,room,saved.room)).join('') + '</select></label>' +
+    '<label><span>Ảnh</span><select name="imageFit"><option value="fill"' + (saved.imageFit !== 'fit' ? ' selected' : '') + '>Fill đầy ô</option><option value="fit"' + (saved.imageFit === 'fit' ? ' selected' : '') + '>Vừa khung (giữ nguyên)</option></select></label>' +
+    '<label class="export-code-toggle"><span>Hiện mã trên ảnh</span><input name="showCodeOnImage" type="checkbox"' + (saved.showCodeOnImage !== false ? ' checked' : '') + '></label>' +
     '<label class="export-watermark-toggle"><span>Sọc chìm</span><input name="watermark" type="checkbox"' + (saved.watermark === false ? '' : ' checked') + '></label>' +
     '<details class="export-print-columns"><summary>Cột in</summary><div class="sidebar-compact"><div class="sb-chip-grid">' +
     printColumnCheckboxes('name="printColumn"') + '</div></div></details>' +
-    '<p id="export-scope-status" role="status"></p><button class="primary">Xem trước</button></form>');
+    '<p id="export-scope-status" role="status"></p><div style="display:flex;gap:6px;justify-content:flex-end"><button type="button" id="save-export-settings-only" class="btn">Lưu cài đặt</button><button class="primary">Xem trước</button></div></form>');
 
-  byId('material-image-scope').onsubmit = async event => {
+  const form = byId('material-image-scope');
+  byId('save-export-settings-only').onclick = () => {
+    const scope = new FormData(form);
+    const watermark = scope.has('watermark');
+    const columns = scope.getAll('printColumn');
+    if (columns.length) savePrintColumns(columns);
+    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',showCodeOnImage:scope.has('showCodeOnImage')}});
+    element.close();
+    window.GDHomeShell?.toast?.('Đã lưu cài đặt xuất.');
+  };
+
+  form.onsubmit = async event => {
     event.preventDefault();
     const scope = new FormData(event.target);
     const watermark = scope.has('watermark');
     const columns = scope.getAll('printColumn');
     if (!columns.length) { byId('export-scope-status').textContent = 'Bật in ít nhất một cột.'; return; }
     savePrintColumns(columns);
-    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark}});
+    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',showCodeOnImage:scope.has('showCodeOnImage')}});
     const filtered = { ...sheet,groups:sheet.groups
       .filter(group => scope.get('groups') !== 'visible' || materialGroupVisible(group))
       .map(group => ({ ...group,rows:group.rows.filter(row =>
@@ -156,7 +212,7 @@ function statistics(mode) {
     if (!filtered.groups.length) { byId('export-scope-status').textContent = 'Phạm vi này không có dòng vật liệu.'; return; }
     element.close();
     renderEditor();
-    await showStatistics(filtered,mode,watermark);
+    await showStatistics(filtered,mode === 'settings' ? 'copy' : mode,watermark);
   };
 }
 async function showStatistics(filtered,mode,watermark) {

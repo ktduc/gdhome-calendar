@@ -395,7 +395,13 @@ cases['9.6'] = async page => {
 };
 
 async function openImageScope(page) {
-  await page.locator('#material-copy').click();
+  const settingsBtn = page.locator('#material-export-settings');
+  if (await settingsBtn.count() > 0) {
+    await page.locator('.hdr-split-caret').click();
+    await settingsBtn.click();
+  } else {
+    await page.locator('#material-copy').click();
+  }
   const form = page.locator('#material-image-scope');
   await form.waitFor();
   return form;
@@ -1355,6 +1361,64 @@ cases['16.2'] = async page => {
   await page.locator('.image-cell-dropdown-menu').getByText('Bỏ chốt phương án').click();
   await page.waitForTimeout(200);
   assert.equal(await cell.locator('.image-pick.chosen').count(), 0, 'Bỏ chốt qua menu ⋯');
+};
+
+cases['16.3'] = async page => {
+  await openMaterials(page);
+  const row = page.locator('[data-row="g1-r1"]');
+  const codeInput = row.locator('input[data-field="code"]').first();
+  await codeInput.fill('MFC 7241 T');
+  await codeInput.dispatchEvent('change');
+  const cell = row.locator('.image-cell[data-slot="0"]');
+  await cell.focus();
+  await pasteFixture(page, 'items');
+  await cell.locator('.image-open img').waitFor();
+  await cell.locator('[data-action="pick-pa"]').click();
+  await cell.locator('.image-pick.chosen').waitFor();
+
+  const form = await openImageScope(page);
+  await form.locator('select[name="imageFit"]').selectOption('fill');
+  assert.ok(await form.locator('input[name="showCodeOnImage"]').isChecked(), 'Mặc định hiện mã trên ảnh');
+  await form.getByRole('button', { name: 'Xem trước' }).click();
+
+  await page.locator('#stats-copy').waitFor();
+  const printSheet = page.locator('#print-sheet');
+  assert.equal(await printSheet.getAttribute('data-image-fit'), 'fill', 'Bản xuất phải có data-image-fit=fill');
+  const tag = printSheet.locator('.image-code-tag').first();
+  await tag.waitFor();
+  assert.equal(await tag.textContent(), 'MFC 7241 T', 'Tag mã đè lên ảnh cạnh dưới');
+  assert.ok(await printSheet.locator('.image-cell.chosen').count() > 0, 'Bản xuất vẫn giữ viền đỏ PA đã chốt');
+  await page.locator('#close-print').click();
+};
+
+cases['16.4'] = async page => {
+  await openMaterials(page);
+  // Bấm nút Copy ảnh chính -> chạy trực tiếp, KHÔNG mở modal #material-image-scope
+  await page.locator('#material-copy').click();
+  await page.waitForTimeout(400);
+  assert.equal(await page.locator('#material-image-scope').count(), 0, 'Copy ảnh không hiện modal mỗi lần');
+
+  // Mở menu ▾ -> bấm ⚙ Cài đặt xuất…
+  await page.locator('.hdr-split-caret').click();
+  await page.locator('#material-export-settings').click();
+  const form = page.locator('#material-image-scope');
+  await form.waitFor();
+  assert.ok(await form.isVisible(), 'Modal cài đặt xuất hiển thị');
+
+  // Đổi tuỳ chọn và bấm Lưu cài đặt
+  await form.locator('select[name="imageFit"]').selectOption('fit');
+  await form.locator('input[name="showCodeOnImage"]').uncheck();
+  await page.locator('#save-export-settings-only').click();
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('#material-image-scope').isVisible(), false, 'Modal đóng sau khi lưu');
+
+  // Mở lại kiểm tra tuỳ chọn đã lưu
+  await page.locator('.hdr-split-caret').click();
+  await page.locator('#material-export-settings').click();
+  await form.waitFor();
+  assert.equal(await form.locator('select[name="imageFit"]').inputValue(), 'fit');
+  assert.equal(await form.locator('input[name="showCodeOnImage"]').isChecked(), false);
+  await page.locator('#material-dialog').press('Escape');
 };
 
 async function main() {

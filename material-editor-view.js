@@ -385,6 +385,7 @@ function materialPaperForExport(current) {
   template.innerHTML = renderMaterialPaper(current,columns,columns.map(([key]) => columnWidth(key)),current.groups,false);
   const paper = template.content.firstElementChild;
   paper.classList.add('material-paper-output');
+  paper.dataset.imageFit = (typeof savedMaterialExportScope === 'function' ? savedMaterialExportScope().imageFit : null) === 'fit' ? 'fit' : 'fill';
   for (const imageButton of paper.querySelectorAll('.image-open,.material-image-thumb')) {
     const slot = document.createElement('span');
     slot.className = imageButton.className;
@@ -400,7 +401,29 @@ function materialPaperForExport(current) {
     value.textContent = field.tagName === 'SELECT' ? field.selectedOptions[0]?.textContent || '' : field.value;
     field.replaceWith(value);
   });
-  paper.querySelectorAll('.image-cell').forEach(cell => cell.classList.remove('chosen','reserve'));
+  paper.querySelectorAll('.image-cell').forEach(cell => cell.classList.remove('reserve'));
+  const exportScope = typeof savedMaterialExportScope === 'function' ? savedMaterialExportScope() : {};
+  if (exportScope.showCodeOnImage !== false) {
+    for (const group of current.groups) {
+      for (const row of group.rows) {
+        const rowEl = paper.querySelector('tr[data-row="' + row.id + '"]');
+        if (!rowEl) continue;
+        for (let i = 0; i < row.options.length; i++) {
+          const pa = row.options[i];
+          if (!pa?.code) continue;
+          const cell = rowEl.querySelector('.image-cell[data-slot="' + i + '"]');
+          const preview = cell?.querySelector('.image-preview');
+          if (preview && preview.querySelector('img') && !preview.querySelector('.image-code-tag')) {
+            const tag = document.createElement('div');
+            tag.className = 'image-code-tag';
+            tag.title = pa.code;
+            tag.textContent = pa.code;
+            preview.append(tag);
+          }
+        }
+      }
+    }
+  }
   paper.querySelectorAll('[tabindex]').forEach(element => element.removeAttribute('tabindex'));
   return paper;
 }

@@ -42,7 +42,7 @@ function signatureMark(record) {
     (record.strokes || []).map(stroke => '<polyline fill="none" stroke="#222" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="' +
       stroke.map(point => (Number(point[0])*0.6) + ',' + (Number(point[1])*0.19)).join(' ') + '"/>').join('') + '</svg><strong>' + html(record.name) + '</strong><br><small>' + html(vnDate(record.at)) + '</small>';
 }
-function printImages(items,base,large = false,interactive = false) {
+function printImages(items,base,large = false,interactive = false,codeTag = '') {
   const asset = (image,full) => typeof image === 'string' ? image : (full ? image.full : image.thumb);
   const list = (items || []).filter(image => [asset(image,false),asset(image,true)].every(GDHomeImages.isAssetName));
   const slots = list.map((image,index) => {
@@ -51,8 +51,9 @@ function printImages(items,base,large = false,interactive = false) {
     const extra = interactive ? ' type="button" aria-label="Xem ảnh ' + (index+1) + '" data-review-image="' +
       html(base+asset(image,true)) + '"' : '';
     const view = typeof image === 'object' && window.GDHomeAssets ? GDHomeAssets.viewStyle(image.view) : '';
+    const codeHtml = !index && codeTag ? '<span class="image-code-tag">' + html(codeTag) + '</span>' : '';
     return '<' + tag + ' class="' + cls + '"' + extra + '><img class="print-material" data-print-img="' +
-      html(base+asset(image,large)) + '" alt="Ảnh vật liệu"' + view + '></' + tag + '>';
+      html(base+asset(image,large)) + '" alt="Ảnh vật liệu"' + view + '>' + codeHtml + '</' + tag + '>';
   });
   return slots.length ? slots[0] + (slots.length > 1 ? '<div class="material-image-thumbs">' + slots.slice(1).join('') + '</div>' : '') : '';
 }
@@ -122,7 +123,7 @@ function rowsForPrint(view, base) {
       return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td class="material-copy-secondary">' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
         (pa ? '<br><small>' + html(options.filter(o => o !== pa && o.code).map(o => 'Dự phòng: '+o.code).join(' · ')) + '</small>' : '') +
-        '</td><td data-column="qty">' + html(displayMaterialQuantity(row)) + '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base,true) + '</div></td></tr>';
+        '</td><td data-column="qty">' + html(displayMaterialQuantity(row)) + '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base,true,false,pa?.code) + '</div></td></tr>';
     }).join('')).join('');
 }
 function printable(view,base) {

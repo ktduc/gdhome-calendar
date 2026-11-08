@@ -50,7 +50,7 @@
 .asset-view-dialog .toolbar{display:flex;gap:8px;align-items:center}.asset-view-dialog .toolbar span{flex:1}
 
 /* Vùng nhìn trong ô ảnh vuông (chỉ khi khung ảnh = Fill) */
-[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis][style*="--view"]{transform:var(--view)}
+[data-image-fit=fill] :is(.image-open,.print-square) img[style*="--view"]{transform:translate(-50%,-50%) var(--view)}
 
 /* Chốt mã: nút chọn ảnh và mục thư viện ở menu trái */
 .image-library-pick{display:none!important} /*
