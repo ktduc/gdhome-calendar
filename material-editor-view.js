@@ -350,10 +350,10 @@ function renderMaterialPaper(current,columns,widths,groups,editing) {
     '<label class="material-row-number"><input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện">' + materialColumnHeading(key,label,editing) + '</label>' :
     materialColumnHeading(key,label,editing) + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
     label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + (editing ? printColumnButton(key,label) : '') + '</th>').join('');
-  const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + widths[index] + 'px">').join('');
+  const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + (editing ? widths[index] + 'px' : (widths[index]/width*100) + '%') + '">').join('');
   return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" data-image-fit="' + materialImageFit() + '" style="width:' + width +
-    'px;--material-page-scale:' + Math.min(1,1050/width) + '">' + materialPaperHeading(current) +
-    '<table class="sheet-grid print-table" style="width:' + width + 'px"><colgroup>' + columnSizes + '</colgroup><thead><tr>' +
+    'px">' + materialPaperHeading(current) +
+    '<table class="sheet-grid print-table" style="width:' + (editing ? width + 'px' : '100%') + '"><colgroup>' + columnSizes + '</colgroup><thead><tr>' +
     columnHeadings + '</tr></thead>' + renderMaterialGroups(columns,groups,editing) + '</table></article>';
 }
 
@@ -384,6 +384,7 @@ function materialPaperForExport(current) {
     value.textContent = field.tagName === 'SELECT' ? field.selectedOptions[0]?.textContent || '' : field.value;
     field.replaceWith(value);
   });
+  paper.querySelectorAll('.image-cell').forEach(cell => cell.classList.remove('chosen','reserve'));
   paper.querySelectorAll('[tabindex]').forEach(element => element.removeAttribute('tabindex'));
   return paper;
 }

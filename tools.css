@@ -233,9 +233,14 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-paper .pa-caption .sheet-value{width:auto;padding:2px;font-size:11px;text-align:center}
 .material-paper [data-column=qty] .sheet-value{text-align:right;font-variant-numeric:tabular-nums}
 .material-paper-output .sheet-grid :is(th,td){position:static}
-#print-sheet.material-paper{margin:14px auto}
+.material-paper-output{max-width:min(1050px,100%)}
+.material-paper-output .image-cell{border:1px solid transparent;background:none;border-radius:0}
+#print-preview:has(.material-paper-output){padding:0 16px}
+#print-sheet.material-paper{margin:14px auto;padding:0}
+
 @media print{
-  #print-sheet.material-paper{page:material-board;zoom:var(--material-page-scale);margin:0;print-color-adjust:exact}
+  #print-preview:has(.material-paper-output){padding:0}
+  #print-sheet.material-paper{page:material-board;margin:0 auto;print-color-adjust:exact}
   #print-sheet.material-paper .sheet-grid{table-layout:fixed}
 }
 .print-squares{display:flex;flex-wrap:wrap;align-items:flex-start;gap:4px}

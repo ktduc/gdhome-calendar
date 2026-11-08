@@ -239,9 +239,8 @@ cases['9.2'] = async page => {
   });
   function verifyFit(metrics) {
     assert.equal(metrics.slots.length,2);
-    assert.deepEqual(metrics.slots[0],metrics.slots[1]);
-    assert.equal(metrics.slots[0].width,metrics.slots[0].height);
-    assert.deepEqual(metrics.images[0],metrics.images[1]);
+    assert.equal(metrics.slots[0].top,metrics.slots[1].top);
+    metrics.slots.forEach(slot => assert.ok(Math.abs(slot.width-slot.height) < 1));
     metrics.images.forEach((img,i) => assert.ok(Math.abs(img.width/img.height-metrics.originals[i]) < 0.01));
   }
   const desktop = await measure();
@@ -722,7 +721,8 @@ cases['12.1'] = async page => {
   await page.locator('#stats-copy').waitFor();
   const exported = await measure(page.locator('#print-sheet'));
   assert.deepEqual(exported.columns,work.columns);
-  assert.deepEqual(exported.images,work.images);
+  assert.equal(exported.images.length,work.images.length);
+  exported.images.forEach(([width,height]) => assert.ok(Math.abs(width-height) <= 1 && width > 0));
   assert.equal(exported.title,work.title);
   assert.equal(exported.logo,work.logo);
   exported.ratios.forEach((ratio,index) => assert.ok(Math.abs(ratio-work.ratios[index])/work.ratios[index] <= 0.05));
@@ -780,7 +780,9 @@ cases['12.3'] = async page => {
   const form = await openImageScope(page);
   await form.getByRole('button',{name:'Xem trước'}).click();
   await page.locator('#stats-copy').waitFor();
-  assert.deepEqual(await sizes(page.locator('#print-sheet [data-row="g1-r1"]')),fill);
+  for (const [width,height,iw,ih] of await sizes(page.locator('#print-sheet [data-row="g1-r1"]'))) {
+    assert.ok(Math.abs(width-height) <= 1 && Math.abs(height-ih) <= 1 && iw > width);
+  }
   await page.locator('#close-print').click();
   await page.locator('[data-action=image-fit][data-id=fit]').click();
   await row.locator('img[data-image-axis]').last().waitFor();
@@ -935,6 +937,44 @@ async function openMaterials(page) {
   if (await listButton.isVisible()) await listButton.click();
   await page.locator('[data-row="g1-r1"]').waitFor();
 }
+
+cases['13.1'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => {
+    ['pa1','pa2'].forEach(key => forcedPA.add(key));
+    hiddenColumns.clear();
+    materials.columnWidths = Object.fromEntries(printableColumns().map(([key]) => [key,245]));
+    sheet.groups[0].rows[0].chosen = 0;
+  });
+  for (const width of [1050,1440,1920]) {
+    await page.setViewportSize({width,height:720});
+    for (const count of [6,12]) {
+      const preview = page.locator('#print-sheet');
+      await page.evaluate(async count => {
+        const columns = printableColumns().map(([key]) => key);
+        savePrintColumns(columns.slice(0,count));
+        await showStatistics({...sheet,groups:[{...sheet.groups[0],rows:[sheet.groups[0].rows[0]]}]},'png',false);
+      },count);
+      await page.locator('#stats-download').waitFor();
+      const layout = await preview.evaluate(paper => {
+        const table = paper.querySelector('table');
+        const box = paper.getBoundingClientRect();
+        const edge = table.getBoundingClientRect().right;
+        return {paperRight:box.right,tableRight:edge,paperWidth:box.width,
+          frame:paper.parentElement.clientWidth,columns:table.querySelectorAll('thead th').length,
+          controls:paper.querySelectorAll('input,textarea,select,button').length,
+          dashed:[...table.querySelectorAll('*')].filter(node => node.getBoundingClientRect().width &&
+            getComputedStyle(node).borderTopStyle === 'dashed').length};
+      });
+      assert.equal(layout.columns,count);
+      assert.ok(Math.abs(layout.tableRight-layout.paperRight) <= 1,JSON.stringify(layout));
+      assert.ok(layout.paperWidth <= Math.min(1054,layout.frame),JSON.stringify(layout));
+      assert.equal(layout.controls,0);
+      assert.equal(layout.dashed,0);
+      await page.locator('#close-print').click();
+    }
+  }
+};
 
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));

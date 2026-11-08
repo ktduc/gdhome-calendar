@@ -177,3 +177,17 @@ Bước kế tiếp GĐ12: Hoàn thành 12.1–12.7.
 - Kiểm thử cuối đạt 27/27 Node và 27/27 Playwright trên Edge. `origin/main` dừng ở commit chẩn đoán Render `1f9ef08`. Bản giữ cài đặt và GĐ12 nằm trong các commit cục bộ.
 
 XONG GĐ12
+
+## Giai đoạn 13
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| 13.1 | ✅ | giữ bảng xuất trong khổ giấy và bỏ viền nhập liệu |
+| 13.2 | ⏳ | Ảnh vuông lấp cột |
+| 13.3 | ⏳ | Gợi ý theo tài khoản |
+| 13.4 | ⏳ | Nén ảnh |
+| 13.5 | ⏳ | Kiểm tra và bàn giao |
+
+Bước kế tiếp GĐ13: 13.2
+
+- 13.1: test tái hiện tràn 16 px và viền dashed; bản sửa qua 6 cấu hình khổ/cột, Node 36/36 và Playwright 28/28.
