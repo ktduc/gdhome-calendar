@@ -1576,7 +1576,7 @@ cases['17.0'] = async page => {
   await page.locator('.asset-library-dialog').getByText('Chưa có ảnh trong hạng mục này.').waitFor();
   await page.keyboard.press('Escape');
   await page.locator('[data-library-summary]').filter({hasText:'0 ảnh mẫu'}).waitFor();
-  await page.locator('[data-render-strip] [data-id=render-test]').waitFor();
+  await page.locator('[data-render-summary]').filter({hasText:'1 ảnh 3D'}).waitFor();
   await page.locator('[data-sidebar=renders] [data-action=open-renders]').click();
   await page.locator('.asset-render-dialog [data-asset-remove]').click();
   await page.locator('.asset-render-dialog').getByText('Dự án chưa có phối cảnh 3D.').waitFor();
@@ -1609,7 +1609,7 @@ cases['18.1'] = async page => {
   await page.locator('.asset-library-dialog [data-asset-remove]').waitFor({state:'detached',timeout:100});
   await page.keyboard.press('Escape');
   await page.locator('[data-library-summary]').filter({hasText:'0 ảnh mẫu'}).waitFor();
-  await page.locator('[data-render-strip] [data-id=render-test]').waitFor();
+  await page.locator('[data-render-summary]').filter({hasText:'1 ảnh 3D'}).waitFor();
   await page.locator('[data-sidebar=renders] [data-action=open-renders]').click();
   await page.locator('.asset-render-dialog [data-asset-remove]').click();
   await page.locator('.asset-render-dialog [data-asset-remove]').waitFor({state:'detached',timeout:100});
@@ -1659,26 +1659,29 @@ cases['17.1'] = async page => {
   await page.getByRole('button',{name:'Duyệt đề xuất'}).waitFor();
 };
 
-cases['17.4'] = async page => {
+cases['18.7'] = async page => {
   const asset = 'a'.repeat(64) + '.webp';
-  const documents = Array.from({length:7},(_,i) => ({id:'render-' + i,name:'Mẫu ' + i,type:'render',assetKey:'render-' + asset}));
+  const documents = Array.from({length:13},(_,i) => ({id:'render-' + i,name:'Mẫu ' + i,type:'render',assetKey:'render-' + asset}));
   await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents}}}}));
   await page.route('**/api/materials/assets/' + asset,route => route.fulfill({status:404}));
   await openMaterials(page);
   const strip = page.locator('[data-render-strip]');
-  await strip.getByText('+2',{exact:true}).waitFor();
-  assert.equal(await strip.locator('img').count(),5);
-  const boxes = await strip.locator('button').evaluateAll(items => items.map(item => item.getBoundingClientRect().toJSON()));
-  assert.ok(boxes.every(box => box.width <= 44 && box.height <= 44 && box.y === boxes[0].y));
+  await page.locator('[data-render-summary]').filter({hasText:'13 ảnh 3D'}).waitFor();
+  assert.equal(await strip.locator('img').count(),0);
   const display = page.locator('[data-sidebar=display]');
   if (await display.getAttribute('open') === null) await display.locator('summary').click();
-  await display.locator('[data-action=toggle-asset-previews]').click();
-  await strip.locator('img').first().waitFor({state:'detached'});
-  await page.waitForFunction(async () => (await fetch('/api/materials/preferences').then(r => r.json())).viewSettings.hideAssetPreviews === true);
+  const toggle = display.locator('[data-action=toggle-asset-previews]');
+  await toggle.click();
+  await strip.getByText('+4',{exact:true}).waitFor();
+  assert.equal(await strip.locator('img').count(),9);
+  const boxes = await strip.locator('button').evaluateAll(items => items.map(item => item.getBoundingClientRect().toJSON()));
+  assert.ok(boxes.every(box => box.width <= 40 && box.height <= 40));
+  assert.equal(new Set(boxes.map(box => box.y)).size,2);
+  await page.waitForFunction(async () => (await fetch('/api/materials/preferences').then(r => r.json())).viewSettings.hideAssetPreviews === false);
   await page.reload();
-  await page.locator('[data-render-summary]').filter({hasText:'7 ảnh 3D'}).waitFor();
-  assert.equal(await strip.locator('img').count(),0);
+  await strip.getByText('+4',{exact:true}).waitFor();
 };
+cases['17.4'] = cases['18.7'];
 
 cases['17.5'] = async page => {
   await openMaterials(page);

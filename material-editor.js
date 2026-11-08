@@ -589,7 +589,7 @@ document.addEventListener('click', async event => {
         break;
       }
       case 'toggle-asset-previews':
-        setMaterialView({hideAssetPreviews:!materialView.hideAssetPreviews});
+        setMaterialView({hideAssetPreviews:materialView.hideAssetPreviews === false});
         renderEditor();
         break;
       case 'upload-renders': await uploadProjectRenders(); break;
@@ -1000,9 +1000,9 @@ async function fillMaterialAssetSidebar(force = false) {
       const items = await GDHomeAssets.loadRenders(sheet.projectId,force);
       if (!strip.isConnected || revision !== assetSidebarRevision) return;
       if (renderSummary) renderSummary.textContent = items.length + ' ảnh 3D';
-      strip.innerHTML = materialView.hideAssetPreviews ? '' : items.slice(0,5).map(item => '<button type="button" data-action="render-strip" data-id="' + html(item.id) +
+      strip.innerHTML = materialView.hideAssetPreviews !== false ? '' : items.slice(0,items.length > 10 ? 9 : 10).map(item => '<button type="button" data-action="render-strip" data-id="' + html(item.id) +
         '" title="' + html((item.page ? 'Trang ' + item.page + ' · ' : '') + (item.room || item.name)) + ' — bấm để gắn vào ô 3D đang chọn"><img data-lib-asset="' + html(item.thumb) + '" alt=""></button>').join('') +
-        (items.length > 5 ? '<button type="button" class="more" data-action="open-renders">+' + (items.length-5) + '</button>' : '') +
+        (items.length > 10 ? '<button type="button" class="more" data-action="open-renders">+' + (items.length-9) + '</button>' : '') +
         '';
       GDHomeAssets.hydrate(strip);
     } catch (error) {
@@ -1018,10 +1018,10 @@ async function fillMaterialAssetSidebar(force = false) {
       summary.textContent = images.length + ' ảnh mẫu · ' + data.categories.length + ' hạng mục';
       const preview = box().querySelector('[data-library-strip]');
       if (!preview) return;
-      preview.innerHTML = materialView.hideAssetPreviews ? '' : images.slice(0,5).map(item =>
+      preview.innerHTML = materialView.hideAssetPreviews !== false ? '' : images.slice(0,images.length > 10 ? 9 : 10).map(item =>
         '<button type="button" data-action="open-library" data-category="' + html(item.categoryId) + '" title="' + html(item.name) +
         '"><img data-lib-asset="' + html(item.thumb) + '" alt="' + html(item.name || 'Ảnh mẫu') + '"></button>').join('') +
-        (images.length > 5 ? '<button type="button" class="more" data-action="open-library">+' + (images.length-5) + '</button>' : '');
+        (images.length > 10 ? '<button type="button" class="more" data-action="open-library">+' + (images.length-9) + '</button>' : '');
       GDHomeAssets.hydrate(preview);
     } catch (error) { summary.textContent = error.message; }
   }
