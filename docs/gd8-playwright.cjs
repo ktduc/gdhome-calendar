@@ -1768,6 +1768,23 @@ cases['17.6'] = async page => {
   await cell.locator('.image-open img').waitFor();
 };
 
+cases['18.2'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => {
+    const anchor = document.createElement('button');
+    anchor.style.cssText = 'position:fixed;top:90vh;left:50vw';
+    document.body.append(anchor);
+    GDHomeAssets.pickLibrary(anchor,{});
+  });
+  const panel = page.locator('.asset-popover');
+  await panel.waitFor();
+  const bounds = await panel.boundingBox();
+  const {height,width} = page.viewportSize();
+  assert.equal(await panel.getAttribute('data-direction'),'above');
+  assert.ok(bounds.y >= 0 && bounds.y+bounds.height <= height && bounds.height >= 400);
+  assert.ok(bounds.x >= 0 && bounds.x+bounds.width <= width);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

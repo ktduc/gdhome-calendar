@@ -1,10 +1,10 @@
 /* Thư viện ảnh dùng chung · GD HOME Tools */
-.asset-popover{position:fixed;z-index:1200;display:flex;flex-direction:column;min-height:160px;background:#f4f1ec;border:1px solid #d8d2c8;
+.asset-popover{position:fixed;z-index:1200;display:flex;flex-direction:column;box-sizing:border-box;background:#f4f1ec;border:1px solid #d8d2c8;
   border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.18);overflow:hidden;font-size:13px}
 .asset-popover>header,.asset-popover>footer{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f6f8fb}
 .asset-popover>header{justify-content:space-between;border-bottom:1px solid #e5e9f0}
 .asset-popover>footer{border-top:1px solid #e5e9f0;justify-content:space-between}
-.asset-popover .asset-body{flex:1;overflow:auto;padding:8px 10px;min-height:80px}
+.asset-popover .asset-body{flex:1;overflow:auto;padding:8px 10px;min-height:0}
 .asset-popover.is-drop,.asset-drop.is-drop{outline:2px dashed #1a73e8;outline-offset:-4px;background:#eef5ff}
 .asset-x{border:0;background:none;font-size:20px;line-height:1;cursor:pointer;padding:0 4px;color:#475569}
 .asset-filters{display:flex;gap:6px;padding:8px 10px 0}

@@ -387,12 +387,17 @@ window.GDHomeAssets = (() => {
       const rect = anchor.getBoundingClientRect();
       const width = Math.min(560,innerWidth-16);
       panel.style.width = width + 'px';
-      const left = Math.min(innerWidth-width-8,Math.max(8,rect.left));
-      const below = innerHeight-rect.bottom > 300 || rect.top < 300;
+      const below = innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const direction = below >= 420 ? 'below' : above >= 420 ? 'above' : 'center';
+      const limit = Math.min(560,innerHeight*.8,direction === 'below' ? below : direction === 'above' ? above : innerHeight-16);
+      const left = direction === 'center' ? (innerWidth-width)/2 : Math.min(innerWidth-width-8,Math.max(8,rect.left));
+      panel.dataset.direction = direction;
       panel.style.left = left + 'px';
-      panel.style.top = below ? Math.min(innerHeight-120,rect.bottom+4) + 'px' : '';
-      panel.style.bottom = below ? '' : (innerHeight-rect.top+4) + 'px';
-      panel.style.maxHeight = Math.min(innerHeight*0.7, (below ? innerHeight-rect.bottom-16 : rect.top-16)) + 'px';
+      panel.style.top = direction === 'below' ? rect.bottom+4+'px' : direction === 'center' ? (innerHeight-limit)/2+'px' : '';
+      panel.style.bottom = direction === 'above' ? innerHeight-rect.top+4+'px' : '';
+      panel.style.height = limit + 'px';
+      panel.style.maxHeight = limit + 'px';
     };
     const outside = event => {
       if (!panel.contains(event.target) && !event.target.closest?.('dialog[open]')) close();
