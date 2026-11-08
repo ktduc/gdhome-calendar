@@ -48,6 +48,11 @@ function printImages(items, base, large = false) {
     return /^[a-f0-9]{64}\.webp$/.test(name) ? '<div class="print-square"><img class="print-material" data-print-img="' + html(base + name) + '" alt="Mẫu vật liệu"></div>' : '';
   }).join('');
 }
+async function decodeMaterialThumbnail(image) {
+  await image.decode();
+  image.dataset.imageAxis = image.naturalWidth >= image.naturalHeight ? 'wide' : 'tall';
+}
+
 async function loadPrintImages(root, headers = {}) {
   await Promise.all([...root.querySelectorAll('[data-print-img]')].map(async img => {
     try {
@@ -62,7 +67,7 @@ async function loadPrintImages(root, headers = {}) {
       }
       const url = URL.createObjectURL(blob);
       img.src = url;
-      try { await img.decode(); } catch (error) { URL.revokeObjectURL(url); throw error; }
+      try { await decodeMaterialThumbnail(img); } catch (error) { URL.revokeObjectURL(url); throw error; }
     } catch { img.alt = 'Ảnh chưa tải được'; }
   }));
 }
@@ -125,7 +130,7 @@ async function showPrint(view,base,headers,stats = false,watermark = stats) {
   const overlay = document.createElement('div');
   overlay.id = 'print-preview';
   overlay.innerHTML = '<div class="print-actions"><button id="do-print" disabled>In / Lưu PDF A4</button> <button id="close-print">Đóng</button><span id="print-extras"></span></div>' +
-    (stats ? '' : '<article id="print-sheet" class="print-sheet">' + printable(view,base) + '</article>');
+    (stats ? '' : '<article id="print-sheet" class="print-sheet" data-image-fit="' + (view.sheet.imageFit === 'fill' ? 'fill' : 'fit') + '">' + printable(view,base) + '</article>');
   if (stats) {
     const paper = materialPaperForExport(view.sheet);
     paper.id = 'print-sheet';

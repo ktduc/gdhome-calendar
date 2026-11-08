@@ -215,6 +215,7 @@ cases['9.1'] = async page => {
 
 cases['9.2'] = async page => {
   await openMaterials(page);
+  await page.locator('[data-action=image-fit][data-id=fit]').click();
   await addFixtureImage(page,'render');
   await addFixtureImage(page,'0');
   await page.evaluate(() => modify(() => {
@@ -757,6 +758,40 @@ cases['12.2'] = async page => {
   assert.equal(await page.locator('[data-print-column-toggle][value=spec]').isChecked(),false);
   await page.locator('[data-print-column-toggle][value=note]').check();
   assert.equal(await printNote.getAttribute('aria-pressed'),'true');
+};
+
+cases['12.3'] = async page => {
+  await openMaterials(page);
+  await addFixtureImage(page,'render');
+  await addFixtureImage(page,'0');
+  const row = page.locator('#materials [data-row="g1-r1"]');
+  const sizes = root => root.locator('.image-open').evaluateAll(slots => slots.map(slot => {
+    const img = slot.querySelector('img');
+    return [slot.offsetWidth,slot.offsetHeight,img.offsetWidth,img.offsetHeight];
+  }));
+  await row.locator('img[data-image-axis]').last().waitFor();
+  const fill = await sizes(row);
+  assert.equal(fill.length,2);
+  for (const [width,height,iw,ih] of fill) {
+    assert.equal(width,height);
+    assert.equal(ih,height);
+    assert.ok(iw > width);
+  }
+  const form = await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  assert.deepEqual(await sizes(page.locator('#print-sheet [data-row="g1-r1"]')),fill);
+  await page.locator('#close-print').click();
+  await page.locator('[data-action=image-fit][data-id=fit]').click();
+  await row.locator('img[data-image-axis]').last().waitFor();
+  for (const [width,height,iw,ih] of await sizes(row)) {
+    assert.equal(width,height);
+    assert.equal(iw,width);
+    assert.ok(ih < height);
+  }
+  await page.locator('[data-action=density][data-id=xs]').click();
+  await row.locator('img[data-image-axis]').last().waitFor();
+  assert.ok((await sizes(row))[0][0] < fill[0][0]);
 };
 
 function viewPosition(page) {

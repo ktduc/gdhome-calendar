@@ -27,6 +27,8 @@ function visibleColumns() {
   return materialColumns.filter(([key]) => !hiddenColumns.has(key) &&
     (!/^pa[12]$/.test(key) || forcedPA.has(key) || Number(key[2]) < count));
 }
+function materialImageFit() { return materialView.imageFit === 'fit' ? 'fit' : 'fill'; }
+
 function printableColumns() {
   return visibleColumns().filter(([key]) => key !== 'actions');
 }
@@ -85,6 +87,9 @@ function displaySidebar() {
     Object.entries({xs:'XS',s:'S',m:'M',l:'L'}).map(([key,label]) =>
       '<button data-action="density" data-id="' + key + '" aria-pressed="' + (key === density) + '">' + label + '</button>').join('') + '</div>' +
 
+    '<div class="sb-row-label">Khung ảnh</div><div class="sb-seg-btns material-image-fit">' +
+    [['fill','Fill'],['fit','Vừa']].map(([key,label]) => '<button data-action="image-fit" data-id="' + key +
+      '" aria-pressed="' + (key === materialImageFit()) + '" title="' + (key === 'fill' ? 'Cắt vừa ô' : 'Thấy toàn ảnh') + '">' + label + '</button>').join('') + '</div>' +
     '<div class="sb-row-label">Độ đậm chữ</div><div class="sb-seg-btns material-font-buttons">' +
     Object.entries({light:'Mảnh',normal:'Thường',bold:'Đậm',heavy:'Rất đậm'}).map(([key,label]) =>
       '<button data-action="font-weight" data-id="' + key + '" aria-pressed="' + (key === (materialView.fontWeight || 'normal')) + '">' + label + '</button>').join('') + '</div>' +
@@ -272,7 +277,7 @@ function renderMaterialPaper(current,columns,widths,groups,editing) {
     label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
     label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + (editing ? printColumnButton(key,label) : '') + '</th>').join('');
   const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + widths[index] + 'px">').join('');
-  return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" style="width:' + width +
+  return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" data-image-fit="' + materialImageFit() + '" style="width:' + width +
     'px;--material-page-scale:' + Math.min(1,1050/width) + '">' + materialPaperHeading(current) +
     '<table class="sheet-grid print-table" style="width:' + width + 'px"><colgroup>' + columnSizes + '</colgroup><thead><tr>' +
     columnHeadings + '</tr></thead>' + renderMaterialGroups(columns,groups,editing) + '</table></article>';

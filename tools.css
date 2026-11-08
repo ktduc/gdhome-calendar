@@ -136,6 +136,7 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-header #release-actions{display:contents}
 .material-header .side-field{padding:0 8px}
 .material-density,.material-font-buttons{--gd-segments:4;margin:4px 0}
+.material-image-fit{--gd-segments:2;margin:4px 0}
 .material-sheet.msp-fw-light :is(td,th,input,select),.print-sheet.msp-fw-light :is(td,th){font-weight:400}
 .material-sheet.msp-fw-bold .sheet-grid,.print-sheet.msp-fw-bold .print-table{-webkit-text-stroke:.3px currentColor}
 .material-sheet.msp-fw-heavy .sheet-grid,.print-sheet.msp-fw-heavy .print-table{-webkit-text-stroke:.65px currentColor}
@@ -225,6 +226,9 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .print-square{display:flex;align-items:center;justify-content:center;width:var(--material-square);max-width:100%;
   aspect-ratio:1;background:#fff;overflow:hidden}
 .print-square img{display:block;max-width:100%;max-height:100%;width:auto;height:auto}
+[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis]{flex:none;max-width:none;max-height:none;object-fit:cover}
+[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis=wide]{width:auto;height:100%}
+[data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis=tall]{width:100%;height:auto}
 
 .material-row-number{display:flex;align-items:center;justify-content:center;gap:3px;font-size:10px;font-variant-numeric:tabular-nums}
 .material-row-number input{flex:none;margin:0}

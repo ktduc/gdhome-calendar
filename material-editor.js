@@ -26,7 +26,7 @@ function showImages(root = box()) {
       if (!assetCache.has(name)) assetCache.set(name,readMaterialAsset(name).then(URL.createObjectURL)
         .catch(error => { assetCache.delete(name); throw error; }));
       img.src = await assetCache.get(name);
-      await img.decode();
+      await decodeMaterialThumbnail(img);
     } catch { img.alt = 'Ảnh chưa tải được'; }
   }));
 }
@@ -372,6 +372,7 @@ document.addEventListener('click', async event => {
         renderEditor();
         break;
       case 'density': density = button.dataset.id; setMaterialView({density}); renderEditor(); break;
+      case 'image-fit': setMaterialView({imageFit:button.dataset.id}); renderEditor(); break;
       case 'font-weight': setMaterialView({fontWeight:button.dataset.id}); renderEditor(); break;
       case 'print-column': {
         const key = button.dataset.id;

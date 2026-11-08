@@ -8,6 +8,7 @@ function renderCustomer() {
   const root = byId('review');
   const view = customerView;
   const { sheet,customer,company,changes } = view;
+  root.dataset.imageFit = sheet.imageFit === 'fill' ? 'fill' : 'fit';
   const committed = customer?.choices || {};
   root.innerHTML = '<h2>' + html(sheet.title) + '</h2><p>' + html([sheet.meta.project,sheet.meta.customer].filter(Boolean).join(' · ')) +
     '</p><button id="customer-print">Xem biên bản A4</button><form id="customer-form">' +
