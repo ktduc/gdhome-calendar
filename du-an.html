@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Quản lý dự án · GD HOME</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shell.css?v=gd105">
+  <link rel="stylesheet" href="/tools.css?v=gd105">
+  <link rel="stylesheet" href="/project-hub.css?v=gd11">
+  <script src="/shell.js?v=gd104" defer></script>
+  <script src="/integrations-client.js?v=gd104" defer></script>
+  <script src="/ai-client.js?v=gd104" defer></script>
+  <script src="/projects-client.js?v=gd105" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+</head>
+<body class="hub-body">
+  <header class="app-header hub-header">
+    <div class="header-left">
+      <details class="gd-tools-menu" data-shell-menu></details>
+      <a class="app-logo" href="/du-an">
+        <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
+        <span>Quản lý dự án</span>
+      </a>
+    </div>
+    <div class="header-right">
+      <div id="hub-header-actions" class="shell-toolbar">
+        <button type="button" id="btn-refresh" class="btn btn-outline" title="Tải lại dữ liệu">⟳ Làm mới</button>
+      </div>
+      <div class="shell-account">
+        <strong id="identity"></strong>
+      </div>
+    </div>
+  </header>
+
+  <main class="hub-main">
+    <div id="login"></div>
+    <p id="notice" role="status"></p>
+
+    <!-- Project Selector Toolbar -->
+    <section class="hub-project-bar">
+      <div class="project-selector-wrapper">
+        <label for="project-select"><strong>Dự án:</strong></label>
+        <select id="project-select" class="form-select">
+          <option value="">-- Đang tải danh sách dự án... --</option>
+        </select>
+        <button type="button" id="btn-edit-profile" class="btn btn-outline" title="Sửa hồ sơ khách hàng & hợp đồng">✏ Sửa hồ sơ</button>
+        <button type="button" id="btn-create-project" class="btn btn-primary">+ Tạo dự án mới</button>
+      </div>
+      <div class="project-quick-links">
+        <a id="link-to-schedule" href="/" target="_blank" class="btn btn-outline" title="Mở bảng Lập tiến độ của dự án">📅 Mở Tiến độ</a>
+        <a id="link-to-materials" href="/chot-ma" target="_blank" class="btn btn-outline" title="Mở bảng Chốt mã vật liệu của dự án">🏷 Mở Chốt mã</a>
+      </div>
+    </section>
+
+    <!-- Overview & Linked Stats Card -->
+    <section id="project-overview-card" class="hub-overview-card">
+      <div class="overview-info">
+        <h2 id="view-project-name">Chưa chọn dự án</h2>
+        <div class="profile-meta-grid">
+          <div><span class="meta-label">Khách hàng:</span> <strong id="view-customer">-</strong></div>
+          <div><span class="meta-label">Số điện thoại:</span> <span id="view-phone">-</span></div>
+          <div><span class="meta-label">Địa chỉ:</span> <span id="view-address">-</span></div>
+          <div><span class="meta-label">Hợp đồng:</span> <span id="view-contract">-</span></div>
+        </div>
+      </div>
+
+      <div class="linked-stats-grid">
+        <!-- Tiến độ -->
+        <div class="stat-card stat-schedule">
+          <div class="stat-header">
+            <span class="stat-title">📅 Tiến độ thi công</span>
+            <span id="stat-schedule-pct" class="stat-badge">0%</span>
+          </div>
+          <div class="stat-progress-bar">
+            <div id="stat-schedule-bar" class="progress-fill" style="width: 0%;"></div>
+          </div>
+          <div class="stat-footer">
+            <span id="stat-schedule-tasks">0 công việc</span>
+            <span id="stat-schedule-end">Chưa có lịch</span>
+          </div>
+        </div>
+
+        <!-- Chốt mã -->
+        <div class="stat-card stat-materials">
+          <div class="stat-header">
+            <span class="stat-title">🏷 Chốt mã vật liệu</span>
+            <span id="stat-materials-badge" class="stat-badge">0/0</span>
+          </div>
+          <div class="stat-body">
+            <div id="stat-materials-detail">Đã chốt 0 mục</div>
+            <div id="stat-materials-overdue" class="stat-alert">0 mục quá hạn</div>
+          </div>
+        </div>
+
+        <!-- Hồ sơ & Soát HSKT -->
+        <div class="stat-card stat-documents">
+          <div class="stat-header">
+            <span class="stat-title">📁 Hồ sơ & Soát HSKT</span>
+            <span id="stat-docs-badge" class="stat-badge">0 tệp</span>
+          </div>
+          <div class="stat-body">
+            <div id="stat-docs-summary">0 báo giá · 0 bản vẽ · 0 3D</div>
+            <div id="stat-docs-issues" class="stat-alert">0 vấn đề cần xử lý</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="hub-tabs" role="tablist">
+      <button type="button" class="tab-button active" data-tab="tab-documents">📁 1. Tải & Quản lý Hồ sơ</button>
+      <button type="button" class="tab-button" data-tab="tab-quote">📋 2. Bảng Báo giá Chuẩn hoá</button>
+      <button type="button" class="tab-button" data-tab="tab-review">🔍 3. Soát Bản vẽ & Phối cảnh</button>
+      <button type="button" class="tab-button" data-tab="tab-push">🚀 4. Đề xuất Tiến độ & Chốt mã</button>
+    </nav>
+
+    <!-- Tab 1: Documents Upload & Management -->
+    <section id="tab-documents" class="tab-pane active">
+      <div class="panel">
+        <div class="dropzone" id="upload-dropzone">
+          <div class="dropzone-icon">☁️</div>
+          <h3>Kéo thả hồ sơ vào đây hoặc bấm để chọn tệp</h3>
+          <p class="dropzone-hint">
+            Hỗ trợ: <strong>Báo giá</strong> (.xlsx, .csv, .pdf), <strong>Bản vẽ HSKT</strong> (.pdf), <strong>Phối cảnh 3D</strong> (.jpg, .png, .webp).
+            <br>Có thể dán trực tiếp ảnh phối cảnh bằng <kbd>Ctrl+V</kbd>.
+          </p>
+          <input type="file" id="file-input" multiple accept=".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png,.webp" hidden>
+          <button type="button" class="btn btn-primary" onclick="document.getElementById('file-input').click()">Chọn tệp từ máy tính</button>
+        </div>
+
+        <div class="documents-header">
+          <h3>Danh sách hồ sơ đã tải lên</h3>
+          <span id="docs-count-label" class="badge">0 tài liệu</span>
+        </div>
+        <div id="documents-table-container">
+          <table class="data-table" id="documents-table">
+            <thead>
+              <tr>
+                <th style="width: 130px;">Phân loại</th>
+                <th>Tên tệp</th>
+                <th style="width: 140px;">Khu vực / Phòng</th>
+                <th style="width: 90px;">Dung lượng</th>
+                <th style="width: 80px;">Phiên bản</th>
+                <th style="width: 140px;">Thời gian tải</th>
+                <th style="width: 160px; text-align: center;">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="documents-tbody">
+              <tr><td colspan="7" class="empty-cell">Chưa có tài liệu nào được tải lên.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 2: Standardized Quote Table -->
+    <section id="tab-quote" class="tab-pane">
+      <div class="panel">
+        <div class="table-toolbar">
+          <div class="toolbar-left">
+            <button type="button" id="btn-parse-from-doc" class="btn btn-outline">📥 Đọc từ Báo giá đã tải</button>
+            <button type="button" id="btn-add-quote-item" class="btn btn-outline">+ Thêm dòng mới</button>
+            <button type="button" id="btn-save-quote-items" class="btn btn-primary">💾 Lưu Bảng Báo Giá</button>
+          </div>
+          <div class="toolbar-right">
+            <input type="search" id="quote-search" placeholder="🔍 Tìm kiếm hạng mục..." class="search-input">
+            <select id="quote-room-filter" class="form-select">
+              <option value="">Tất cả phòng / khu vực</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="quote-table-container">
+          <table class="data-table" id="quote-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">STT</th>
+                <th style="width: 90px;">Mã VT</th>
+                <th>Tên hạng mục</th>
+                <th style="width: 130px;">Phòng</th>
+                <th style="width: 140px;">Nhóm việc</th>
+                <th>Quy cách / Chất liệu</th>
+                <th style="width: 70px;">KL</th>
+                <th style="width: 60px;">ĐVT</th>
+                <th style="width: 90px;">Đơn giá</th>
+                <th style="width: 100px;">Thành tiền</th>
+                <th style="width: 50px;">Xoá</th>
+              </tr>
+            </thead>
+            <tbody id="quote-tbody">
+              <tr><td colspan="11" class="empty-cell">Chưa có danh sách hạng mục. Bấm "Đọc từ Báo giá đã tải" hoặc "+ Thêm dòng mới".</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Drawing & 3D Review & Annotation -->
+    <section id="tab-review" class="tab-pane">
+      <div class="panel">
+        <div class="review-action-bar">
+          <div class="review-summary-box">
+            <h3>Kết quả Soát Bản vẽ HSKT & Phối cảnh 3D theo Báo giá</h3>
+            <p>Hệ thống tự động đối chiếu từng hạng mục trong báo giá với các trang bản vẽ HSKT và ảnh 3D để phát hiện thiếu sót.</p>
+            <div class="review-badges" id="review-badges-container">
+              <span class="badge badge-high" id="badge-count-high">0 thiếu bản vẽ / sai lệch</span>
+              <span class="badge badge-med" id="badge-count-med">0 thiếu phối cảnh 3D</span>
+              <span class="badge badge-success" id="badge-count-ok">0 hợp lệ</span>
+            </div>
+          </div>
+          <div class="review-buttons">
+            <button type="button" id="btn-run-review" class="btn btn-primary btn-large">🚀 Chạy Soát Tự Động</button>
+            <button type="button" id="btn-download-annotated-pdf" class="btn btn-success btn-large" disabled>📥 Tải PDF Đã Ghi Chú Cảnh Báo</button>
+          </div>
+        </div>
+
+        <div class="findings-filter-bar">
+          <label>Lọc mức độ:
+            <select id="finding-severity-filter" class="form-select">
+              <option value="">Tất cả mức độ</option>
+              <option value="high">Cao (Thiếu HSKT / Lệch lớn)</option>
+              <option value="medium">Trung bình (Thiếu 3D)</option>
+              <option value="low">Thấp</option>
+            </select>
+          </label>
+          <label>Trạng thái:
+            <select id="finding-status-filter" class="form-select">
+              <option value="">Tất cả</option>
+              <option value="open">Chưa xử lý</option>
+              <option value="resolved">Đã xử lý</option>
+              <option value="ignored">Bỏ qua</option>
+            </select>
+          </label>
+        </div>
+
+        <div id="findings-table-container">
+          <table class="data-table" id="findings-table">
+            <thead>
+              <tr>
+                <th style="width: 90px;">Mức độ</th>
+                <th style="width: 120px;">Khu vực</th>
+                <th>Tiêu đề phát hiện</th>
+                <th>Chi tiết đối chiếu & Cảnh báo</th>
+                <th style="width: 100px;">Trang PDF</th>
+                <th style="width: 120px;">Trạng thái</th>
+                <th style="width: 180px;">Ghi chú KTS / QS</th>
+              </tr>
+            </thead>
+            <tbody id="findings-tbody">
+              <tr><td colspan="7" class="empty-cell">Chưa chạy soát bản vẽ. Hãy tải hồ sơ và bấm "🚀 Chạy Soát Tự Động".</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 4: Push to Schedule & Materials -->
+    <section id="tab-push" class="tab-pane">
+      <div class="push-cards-container">
+        <!-- Schedule Proposal Card -->
+        <div class="panel push-card">
+          <div class="push-card-header">
+            <h3>📅 Đề xuất Lập Tiến Độ Thi Công</h3>
+            <p>Tự động chuyển đổi các hạng mục báo giá thành chuỗi công việc thi công có liên kết (FS/SS), phân bổ số ngày và giai đoạn chuẩn.</p>
+          </div>
+          <div class="proposal-preview-list" id="schedule-proposal-list">
+            <p class="empty-cell">Bấm "Xem trước đề xuất tiến độ" để tạo danh sách công việc.</p>
+          </div>
+          <div class="push-card-footer">
+            <button type="button" id="btn-preview-schedule" class="btn btn-outline">Xem trước đề xuất</button>
+            <button type="button" id="btn-apply-schedule" class="btn btn-primary" disabled>Đẩy vào Lịch Tiến Độ</button>
+          </div>
+        </div>
+
+        <!-- Materials Proposal Card -->
+        <div class="panel push-card">
+          <div class="push-card-header">
+            <h3>🏷 Đề xuất Bảng Chốt Mã Vật Liệu</h3>
+            <p>Lọc các hạng mục cần lựa chọn chất liệu, phân bổ tự động vào 17 nhóm mẫu chuẩn của GD HOME và tạo bảng chốt mã có liên kết ngược.</p>
+          </div>
+          <div class="proposal-preview-list" id="materials-proposal-list">
+            <p class="empty-cell">Bấm "Xem trước đề xuất vật liệu" để lọc và nhóm danh mục.</p>
+          </div>
+          <div class="push-card-footer">
+            <button type="button" id="btn-preview-materials" class="btn btn-outline">Xem trước đề xuất</button>
+            <button type="button" id="btn-apply-materials" class="btn btn-primary" disabled>Đẩy vào Chốt Mã Vật Liệu</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Modals & Lightbox -->
+  <dialog id="profile-dialog" class="hub-dialog">
+    <div class="dialog-content">
+      <h3 id="profile-dialog-title">Hồ sơ dự án</h3>
+      <form id="profile-form">
+        <label>Tên dự án: <input type="text" name="project" required maxlength="200" placeholder="VD: Chung cư Masteri - Căn 1205"></label>
+        <label>Tên khách hàng: <input type="text" name="customer" placeholder="VD: Anh Đức"></label>
+        <label>Số điện thoại: <input type="tel" name="phone" placeholder="VD: 0912345678"></label>
+        <label>Địa chỉ: <input type="text" name="address" placeholder="VD: Masteri Waterfront, Gia Lâm, Hà Nội"></label>
+        <label>Số hợp đồng: <input type="text" name="contract" placeholder="VD: HĐ-2026/04/GD"></label>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('profile-dialog').close()">Huỷ</button>
+          <button type="submit" class="btn btn-primary">Lưu dự án</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <dialog id="preview-dialog" class="hub-dialog hub-preview-dialog">
+    <div class="dialog-content preview-dialog-content">
+      <div class="preview-header">
+        <h3 id="preview-title">Xem trước tài liệu</h3>
+        <button type="button" class="btn-close" onclick="document.getElementById('preview-dialog').close()">×</button>
+      </div>
+      <div id="preview-body" class="preview-body"></div>
+    </div>
+  </dialog>
+
+  <button type="button" id="save-label" class="save-status" role="status" hidden></button>
+  <div id="hub-toast" class="toast-notification" role="status"></div>
+
+  <script src="/material-guest.js?v=gd105" defer></script>
+  <script src="/tools.js?v=gd103" defer></script>
+  <script src="/project-hub-client.js?v=gd11" defer></script>
+</body>
+</html>

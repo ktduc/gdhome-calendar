@@ -1747,6 +1747,15 @@ function renderCalendarSidebar() {
     });
     actionsHeader.appendChild(renameOwnerBtn);
 
+    const hubOwnerBtn = document.createElement('a');
+    hubOwnerBtn.className = 'owner-mini-btn';
+    hubOwnerBtn.href = `/du-an?project=${encodeURIComponent(owner.id)}`;
+    hubOwnerBtn.target = '_blank';
+    hubOwnerBtn.title = `Mở Hồ sơ dự án & Soát bản vẽ của "${owner.name}"`;
+    hubOwnerBtn.textContent = '📁';
+    hubOwnerBtn.addEventListener('click', (e) => { e.stopPropagation(); });
+    actionsHeader.appendChild(hubOwnerBtn);
+
     if (AppState.projectOwners.length > 1) {
       const delOwnerBtn = document.createElement('button');
       delOwnerBtn.type = 'button';

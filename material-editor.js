@@ -57,7 +57,7 @@ function renderMaterialApp(selectedProject) {
   const requested = selectedProject || byId('project-filter')?.value || query.get('project') || materialView.projectId;
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
   box().innerHTML = '<div class="panel"><label>Dự án <select id="project-filter">' + materials.projects.map(p => option(p.id,p.name,projectId)).join('') +
-    '</select></label> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span> <button data-action="notion">Lấy từ Notion</button> <span id="ai-actions"></span></div>' +
+    '</select></label> <a class="button" href="/du-an?project=' + encodeURIComponent(projectId || '') + '" title="Mở Hồ sơ dự án & Soát bản vẽ">📁 Hồ sơ dự án</a> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span> <button data-action="notion">Lấy từ Notion</button> <span id="ai-actions"></span></div>' +
     materials.sheets.filter(s => s.projectId === projectId || !materials.projects.some(p => p.id === s.projectId)).map(s => '<article><button data-action="open" data-id="' + html(s.id) + '">' + html(s.title) + '</button> · ' + counts(s) + '</article>').join('') +
     (!materials.projects.length ? '<p>Tạo và lưu dự án trong Tiến độ trước.</p>' : '');
   box().insertAdjacentHTML('beforeend','<dialog id="material-dialog"></dialog>');

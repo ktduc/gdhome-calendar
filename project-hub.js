@@ -1,0 +1,1087 @@
+const crypto = require('node:crypto');
+const fs = require('node:fs/promises');
+const fsSync = require('node:fs');
+const path = require('node:path');
+const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+const { projectList, writeProjectProfile } = require('./project-profiles');
+
+const MIME_MAP = {
+  '.pdf': 'application/pdf',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xls': 'application/vnd.ms-excel',
+  '.csv': 'text/csv; charset=utf-8',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp'
+};
+
+function defaultProjectRecord(projectId) {
+  return {
+    projectId,
+    updatedAt: new Date().toISOString(),
+    documents: [],
+    quoteItems: [],
+    reviewFindings: [],
+    reviewSummary: {
+      lastRunAt: null,
+      annotatedAssetKey: null,
+      sourceDrawingDocId: null,
+      pageTags: [],
+      renderTags: []
+    },
+    pushLinks: {
+      schedule: { lastPushedAt: null, calendarId: null, items: {} },
+      materials: { lastPushedAt: null, sheetId: null, items: {} }
+    }
+  };
+}
+
+class ProjectHubStore {
+  constructor(store, dataKey) {
+    this.store = store;
+    this.dataKey = dataKey;
+    this.key = 'proj-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+  }
+
+  async load() {
+    const data = await this.store.get(this.key);
+    return data || { _version: 0, projects: {} };
+  }
+
+  async save(data) {
+    data._version = (data._version || 0) + 1;
+    data._updatedAt = new Date().toISOString();
+    await this.store.put(this.key, data);
+    return data;
+  }
+
+  async getProject(projectId) {
+    const hub = await this.load();
+    return hub.projects?.[projectId] || defaultProjectRecord(projectId);
+  }
+
+  async saveProject(projectId, updater) {
+    const hub = await this.load();
+    hub.projects ||= {};
+    const current = hub.projects[projectId] || defaultProjectRecord(projectId);
+    const updated = typeof updater === 'function' ? updater(current) : Object.assign(current, updater);
+    updated.projectId = projectId;
+    updated.updatedAt = new Date().toISOString();
+    hub.projects[projectId] = updated;
+    await this.save(hub);
+    return updated;
+  }
+}
+
+class ProjectAssets {
+  constructor(dataDir, dataKey) {
+    this.accountHash = crypto.createHash('sha256').update(dataKey).digest('hex').slice(0, 16);
+    this.dir = path.join(dataDir, 'project-files', this.accountHash);
+  }
+
+  async ensureDir() {
+    await fs.mkdir(this.dir, { recursive: true });
+  }
+
+  async save(buf, ext, mime) {
+    await this.ensureDir();
+    const cleanExt = (ext.startsWith('.') ? ext : '.' + ext).toLowerCase();
+    const sha = crypto.createHash('sha256').update(buf).digest('hex');
+    const assetKey = `${sha}${cleanExt}`;
+    const filePath = path.join(this.dir, assetKey);
+    await fs.writeFile(filePath, buf);
+    return { assetKey, size: buf.length, mime: mime || MIME_MAP[cleanExt] || 'application/octet-stream' };
+  }
+
+  async read(assetKey) {
+    if (!/^[a-f0-9]{64}\.[a-z0-9]+$/i.test(assetKey)) {
+      throw Object.assign(new Error('Tên file không hợp lệ.'), { status: 400 });
+    }
+    const filePath = path.join(this.dir, assetKey);
+    try {
+      const buf = await fs.readFile(filePath);
+      const ext = path.extname(assetKey).toLowerCase();
+      return { buf, mime: MIME_MAP[ext] || 'application/octet-stream' };
+    } catch (err) {
+      if (err.code === 'ENOENT') throw Object.assign(new Error('Không tìm thấy tài liệu.'), { status: 404 });
+      throw err;
+    }
+  }
+
+  async send(res, assetKey, downloadName) {
+    const { buf, mime } = await this.read(assetKey);
+    const headers = {
+      'Content-Type': mime,
+      'Content-Length': buf.length,
+      'Cache-Control': 'private, max-age=3600',
+      'X-Content-Type-Options': 'nosniff'
+    };
+    if (downloadName) {
+      headers['Content-Disposition'] = `attachment; filename="${encodeURIComponent(downloadName)}"`;
+    }
+    res.writeHead(200, headers);
+    res.end(buf);
+  }
+}
+
+function calculateProjectStats(projectId, scheduleData, materialsData, hubRecord) {
+  // 1. Tiến độ
+  const tasks = (scheduleData?.tasks || []).filter(t => t.ownerId === projectId);
+  const totalTasks = tasks.length;
+  const completedTasks = tasks.filter(t => (t.progress || 0) >= 100).length;
+  const percentComplete = totalTasks > 0
+    ? Math.round(tasks.reduce((sum, t) => sum + (t.progress || 0), 0) / totalTasks)
+    : 0;
+  const endDate = tasks.reduce((max, t) => (t.endDate && t.endDate > max ? t.endDate : max), '');
+  const startDate = tasks.reduce((min, t) => (!min || (t.startDate && t.startDate < min) ? t.startDate : min), '');
+
+  // 2. Chốt mã
+  const sheets = (materialsData?.sheets || []).filter(s => s.projectId === projectId);
+  const allRows = sheets.flatMap(s => (s.groups || []).flatMap(g => g.rows || []));
+  const totalMaterialRows = allRows.length;
+  const confirmedRows = allRows.filter(r => r.chosen !== null && r.chosen !== undefined && r.chosen !== '').length;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const overdueCount = allRows.filter(r => r.deadline && r.deadline < todayStr && !r.chosen).length;
+
+  // 3. Hồ sơ & Soát HSKT
+  const docs = hubRecord?.documents || [];
+  const quoteItems = hubRecord?.quoteItems || [];
+  const findings = hubRecord?.reviewFindings || [];
+  const openIssues = findings.filter(f => f.status === 'open').length;
+
+  return {
+    schedule: {
+      taskCount: totalTasks,
+      completedCount: completedTasks,
+      percentComplete,
+      startDate: startDate || null,
+      endDate: endDate || null
+    },
+    materials: {
+      sheetCount: sheets.length,
+      totalRows: totalMaterialRows,
+      confirmedRows,
+      overdueCount
+    },
+    hub: {
+      totalDocuments: docs.length,
+      quoteDocuments: docs.filter(d => d.type === 'quote').length,
+      drawingDocuments: docs.filter(d => d.type === 'drawing').length,
+      renderDocuments: docs.filter(d => d.type === 'render').length,
+      quoteItemCount: quoteItems.length,
+      openIssueCount: openIssues,
+      totalFindings: findings.length,
+      lastReviewedAt: hubRecord?.reviewSummary?.lastRunAt || null
+    }
+  };
+}
+
+// -----------------------------------------------------------------------------
+// 11.3: Đọc báo giá & chuẩn hoá hạng mục (SheetJS rows -> QuoteItem[])
+// -----------------------------------------------------------------------------
+const QUOTE_COLUMN_PATTERNS = {
+  stt: ['stt', 'tt', 'no', 'order'],
+  code: ['mã', 'ma', 'mã hiệu', 'ma hieu', 'mã vt', 'code', 'item code'],
+  name: ['hạng mục', 'hang muc', 'nội dung', 'noi dung', 'tên công việc', 'ten cong viec', 'mô tả', 'tên hạng mục', 'ten vat lieu', 'diễn giải'],
+  room: ['phòng', 'phong', 'khu vực', 'khu vuc', 'vị trí', 'vi tri', 'tầng', 'tang'],
+  spec: ['quy cách', 'quy cach', 'chất liệu', 'chat lieu', 'kích thước', 'kich thuoc', 'tiêu chuẩn', 'thông số'],
+  unit: ['đvt', 'dvt', 'đơn vị', 'don vi', 'đơn vị tính', 'unit'],
+  qty: ['khối lượng', 'khoi luong', 'số lượng', 'so luong', 'kl', 'sl', 'qty', 'quantity'],
+  unitPrice: ['đơn giá', 'don gia', 'giá', 'gia', 'price', 'unit price'],
+  amount: ['thành tiền', 'thanh tien', 'tiền', 'tien', 'tổng cộng', 'amount', 'total'],
+  note: ['ghi chú', 'ghi chu', 'note', 'lưu ý']
+};
+
+function normalizeText(val) {
+  return String(val ?? '').trim().toLowerCase().normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/g, 'd');
+}
+
+function detectQuoteHeader(rows) {
+  let bestRowIdx = -1;
+  let bestScore = 0;
+  let bestColMap = {};
+
+  for (let r = 0; r < Math.min(rows.length, 20); r++) {
+    const row = rows[r];
+    if (!Array.isArray(row)) continue;
+    const colMap = {};
+    let matched = 0;
+
+    row.forEach((cell, c) => {
+      const norm = normalizeText(cell);
+      if (!norm) return;
+      for (const [field, patterns] of Object.entries(QUOTE_COLUMN_PATTERNS)) {
+        if (!colMap[field] && patterns.some(p => norm === p || (p.length > 2 && norm.includes(p)))) {
+          colMap[field] = c;
+          matched++;
+          break;
+        }
+      }
+    });
+
+    if (matched > bestScore) {
+      bestScore = matched;
+      bestRowIdx = r;
+      bestColMap = colMap;
+    }
+  }
+
+  return { headerRowIdx: bestRowIdx, colMap: bestColMap, confidence: bestScore };
+}
+
+function parseQuoteSheetRows(rows) {
+  if (!Array.isArray(rows) || rows.length === 0) return [];
+  const { headerRowIdx, colMap } = detectQuoteHeader(rows);
+  const startRow = headerRowIdx >= 0 ? headerRowIdx + 1 : 0;
+
+  let currentRoom = 'Cả nhà';
+  let currentCategory = 'Đồ gỗ nội thất';
+  const items = [];
+
+  for (let r = startRow; r < rows.length; r++) {
+    const row = rows[r];
+    if (!Array.isArray(row) || row.every(cell => !cell || !String(cell).trim())) continue;
+
+    const rawName = colMap.name !== undefined ? String(row[colMap.name] || '').trim() : '';
+    const rawStt = colMap.stt !== undefined ? String(row[colMap.stt] || '').trim() : '';
+    const rawRoom = colMap.room !== undefined ? String(row[colMap.room] || '').trim() : '';
+    const rawSpec = colMap.spec !== undefined ? String(row[colMap.spec] || '').trim() : '';
+    const rawUnit = colMap.unit !== undefined ? String(row[colMap.unit] || '').trim() : '';
+    const rawQty = colMap.qty !== undefined ? String(row[colMap.qty] || '').trim() : '';
+    const rawPrice = colMap.unitPrice !== undefined ? String(row[colMap.unitPrice] || '').trim() : '';
+    const rawAmount = colMap.amount !== undefined ? String(row[colMap.amount] || '').trim() : '';
+    const rawNote = colMap.note !== undefined ? String(row[colMap.note] || '').trim() : '';
+    const rawCode = colMap.code !== undefined ? String(row[colMap.code] || '').trim() : '';
+
+    // Kiểm tra dòng tiêu đề nhóm / phòng (Ví dụ: "I. PHÒNG KHÁCH", "PHẦN THÔ", "A. BẾP")
+    const fullRowText = row.filter(Boolean).map(c => String(c).trim()).join(' ');
+    const normFull = normalizeText(fullRowText);
+
+    if (
+      (!rawUnit && !rawQty && !rawPrice && rawName && rawName.length > 2) ||
+      /^(phong|khu vuc|tang|phan|hang muc lon|i\.|ii\.|iii\.|iv\.|v\.|vi\.|a\.|b\.|c\.)/i.test(normFull)
+    ) {
+      if (/phong|khach|bep|ngu|master|wc|ve sinh|ban cong|logia|sanh/i.test(normFull)) {
+        currentRoom = rawName || fullRowText;
+      }
+      if (/tho|xay|mep|dien nuoc|tran|son|op lat|go|do roi|sofa|rem|thiet bi|nhom kinh/i.test(normFull)) {
+        currentCategory = categorizeItem(fullRowText);
+      }
+      continue;
+    }
+
+    if (!rawName && !rawSpec) continue;
+
+    const cleanQty = parseFloat(rawQty.replace(/[^\d.-]/g, '')) || 1;
+    const cleanPrice = parseFloat(rawPrice.replace(/[^\d.-]/g, '')) || 0;
+    const cleanAmount = parseFloat(rawAmount.replace(/[^\d.-]/g, '')) || (cleanQty * cleanPrice);
+
+    const itemRoom = rawRoom || currentRoom;
+    const itemCat = categorizeItem(rawName + ' ' + rawSpec) || currentCategory;
+
+    items.push({
+      id: 'qi_' + crypto.randomUUID().slice(0, 12),
+      stt: rawStt || String(items.length + 1),
+      code: rawCode || '',
+      name: rawName || rawSpec,
+      room: itemRoom,
+      category: itemCat,
+      spec: rawSpec,
+      qty: cleanQty,
+      unit: rawUnit || 'bộ',
+      unitPrice: cleanPrice,
+      amount: cleanAmount,
+      note: rawNote,
+      sourceDocId: null,
+      updatedAt: new Date().toISOString()
+    });
+  }
+
+  return items;
+}
+
+function categorizeItem(text) {
+  const norm = ' ' + normalizeText(text) + ' ';
+  if (/\b(xay|pha do|thao do|phan tho|be tong|can nen)\b/.test(norm)) return 'Phần thô & Xây trát';
+  if (/\b(dien|nuoc|mep|ong nuoc|day dien|chieu sang)\b/.test(norm)) return 'Điện nước (MEP)';
+  if (/\b(tran thach cao|dong tran|tran chim|son tuong|phao chi)\b/.test(norm) || (/\b(son|ba)\b/.test(norm) && !/\b(son go)\b/.test(norm))) return 'Trần & Sơn bả';
+  if (/\b(da|gach|op lat|granite|marble|lavabo|lat san)\b/.test(norm)) return 'Ốp lát đá & gạch';
+  if (/\b(tu ao|giuong|tu bep|ke tivi|ban lam viec|tab|vach op|go|mdf|melamine|acrylic|an cuong)\b/.test(norm)) return 'Đồ gỗ nội thất';
+  if (/\b(sofa|ban tra|ban an|ghe an|rem|dem|tham)\b/.test(norm)) return 'Đồ rời & Sofa/Rèm';
+  if (/\b(bep tu|hut mui|chau rua|bon cau|sen|phu kien bep|tay nam)\b/.test(norm)) return 'Thiết bị & Phụ kiện';
+  if (/\b(nhom kinh|cua nhom|cua di|vach kinh|kinh|guong)\b/.test(norm)) return 'Nhôm kính & Cửa';
+  return 'Đồ gỗ nội thất';
+}
+
+// -----------------------------------------------------------------------------
+// 11.4: Soát bản vẽ HSKT & phối cảnh theo báo giá + Ghi chú vào PDF bằng pdf-lib
+// -----------------------------------------------------------------------------
+function computeReviewCoverage(quoteItems, drawings = [], renders = []) {
+  const findings = [];
+  const pageTags = [];
+  const renderTags = [];
+
+  // Tạo tags cho từng trang bản vẽ
+  drawings.forEach(doc => {
+    const pageCount = doc.pages || 1;
+    for (let p = 1; p <= pageCount; p++) {
+      const pageInfo = (doc.extractedPages || []).find(ep => ep.pageNumber === p) || {};
+      const detectedItems = pageInfo.items || [];
+      const room = pageInfo.room || doc.room || 'Phòng khách';
+      const drawingType = pageInfo.drawingType || (p === 1 ? 'mat_bang' : 'chi_tiet');
+
+      pageTags.push({
+        docId: doc.id,
+        docName: doc.name,
+        pageNumber: p,
+        drawingType,
+        room,
+        title: pageInfo.title || `Bản vẽ trang ${p}: ${room}`,
+        detectedItems,
+        quantities: pageInfo.quantities || []
+      });
+    }
+  });
+
+  // Tạo tags cho phối cảnh 3D
+  renders.forEach(doc => {
+    const room = doc.room || 'Phòng khách';
+    const detectedItems = doc.detectedItems || [];
+    renderTags.push({
+      docId: doc.id,
+      docName: doc.name,
+      room,
+      detectedItems
+    });
+  });
+
+  // Đối chiếu từng QuoteItem
+  quoteItems.forEach(item => {
+    const normName = normalizeText(item.name);
+    const normRoom = normalizeText(item.room);
+
+    // 1. Tìm bản vẽ HSKT phù hợp
+    const matchedPages = pageTags.filter(pt => {
+      const roomMatch = !normRoom || normRoom === 'ca nha' || normalizeText(pt.room).includes(normRoom) || normRoom.includes(normalizeText(pt.room));
+      const nameMatch = pt.detectedItems.some(di => {
+        const normDi = normalizeText(di);
+        return normName.includes(normDi) || normDi.includes(normName);
+      }) || normalizeText(pt.title).includes(normName);
+      return roomMatch && nameMatch;
+    });
+
+    if (matchedPages.length === 0 && drawings.length > 0) {
+      // Thiếu bản vẽ HSKT
+      findings.push({
+        id: 'rf_' + crypto.randomUUID().slice(0, 12),
+        quoteItemId: item.id,
+        type: 'missing_drawing',
+        severity: 'high',
+        status: 'open',
+        room: item.room,
+        title: `Thiếu bản vẽ HSKT: ${item.name}`,
+        detail: `Hạng mục "${item.name}" thuộc "${item.room}" có trong báo giá (SL: ${item.qty} ${item.unit}) nhưng chưa tìm thấy bản vẽ chi tiết trong hồ sơ HSKT.`,
+        drawingDocId: drawings[0]?.id || null,
+        pageNumber: 1,
+        bbox: [0.1, 0.2, 0.8, 0.15],
+        renderDocId: null,
+        note: ''
+      });
+    } else if (matchedPages.length > 0) {
+      // Kiểm tra lệch khối lượng (nếu trang bản vẽ có đếm)
+      const targetPage = matchedPages[0];
+      const detectedQtyObj = (targetPage.quantities || []).find(q => {
+        const nq = normalizeText(q.name);
+        return nq && (nq.includes(normName) || normName.includes(nq));
+      });
+      if (detectedQtyObj && detectedQtyObj.qty !== item.qty) {
+        findings.push({
+          id: 'rf_' + crypto.randomUUID().slice(0, 12),
+          quoteItemId: item.id,
+          type: 'qty_mismatch',
+          severity: 'medium',
+          status: 'open',
+          room: item.room,
+          title: `Lệch khối lượng: ${item.name}`,
+          detail: `Báo giá ghi ${item.qty} ${item.unit}, nhưng bản vẽ ${targetPage.docName} (Trang ${targetPage.pageNumber}) ghi nhận ${detectedQtyObj.qty} ${detectedQtyObj.unit || item.unit}.`,
+          drawingDocId: targetPage.docId,
+          pageNumber: targetPage.pageNumber,
+          bbox: [0.15, 0.35, 0.7, 0.12],
+          renderDocId: null,
+          note: ''
+        });
+      }
+    }
+
+    // 2. Tìm phối cảnh 3D (với đồ nội thất, đồ rời, thiết bị chính)
+    if (['Đồ gỗ nội thất', 'Đồ rời & Sofa/Rèm', 'Thiết bị & Phụ kiện'].includes(item.category)) {
+      const matchedRenders = renderTags.filter(rt => {
+        const roomMatch = !normRoom || normRoom === 'ca nha' || normalizeText(rt.room).includes(normRoom) || normRoom.includes(normalizeText(rt.room));
+        const itemMatch = rt.detectedItems.some(di => normalizeText(di).includes(normName) || normName.includes(normalizeText(di)));
+        return roomMatch && (itemMatch || rt.detectedItems.length === 0);
+      });
+
+      if (matchedRenders.length === 0 && renders.length > 0) {
+        findings.push({
+          id: 'rf_' + crypto.randomUUID().slice(0, 12),
+          quoteItemId: item.id,
+          type: 'missing_3d',
+          severity: 'medium',
+          status: 'open',
+          room: item.room,
+          title: `Chưa có phối cảnh 3D: ${item.name}`,
+          detail: `Hạng mục nội thất chính "${item.name}" tại "${item.room}" chưa thấy xuất hiện rõ trên các góc render phối cảnh 3D đã tải lên.`,
+          drawingDocId: matchedPages[0]?.docId || drawings[0]?.id || null,
+          pageNumber: matchedPages[0]?.pageNumber || 1,
+          bbox: [0.1, 0.5, 0.8, 0.1],
+          renderDocId: null,
+          note: ''
+        });
+      }
+    }
+  });
+
+  return { findings, pageTags, renderTags };
+}
+
+function toAsciiSafe(text) {
+  return String(text ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[đĐ]/g, d => (d === 'đ' ? 'd' : 'D'))
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .trim();
+}
+
+async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự án') {
+  const pdfDoc = await PDFDocument.load(pdfBuffer);
+  const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  // 1. Chèn Trang 0 (Trang Tổng Hợp Đánh Giá & Phát Hiện)
+  const coverPage = pdfDoc.insertPage(0, [595.28, 841.89]); // A4 chuẩn
+  const { width, height } = coverPage.getSize();
+
+  // Header GD HOME
+  coverPage.drawRectangle({
+    x: 0,
+    y: height - 80,
+    width,
+    height: 80,
+    color: rgb(0.8, 0.05, 0.05) // Đỏ thương hiệu GD HOME
+  });
+
+  coverPage.drawText('GD HOME - BAO CAO SOAT HO SO BAN VE HSKT', {
+    x: 40,
+    y: height - 45,
+    size: 16,
+    font: helveticaBold,
+    color: rgb(1, 1, 1)
+  });
+
+  const safeProj = toAsciiSafe(projectName);
+  coverPage.drawText(`Du an: ${safeProj}  |  Ngay soat: ${new Date().toISOString().slice(0, 10)}`, {
+    x: 40,
+    y: height - 65,
+    size: 11,
+    font: helveticaFont,
+    color: rgb(0.95, 0.95, 0.95)
+  });
+
+  // Summary counts
+  const highCount = findings.filter(f => f.severity === 'high').length;
+  const medCount = findings.filter(f => f.severity === 'medium').length;
+  const lowCount = findings.filter(f => f.severity === 'low').length;
+
+  coverPage.drawRectangle({
+    x: 40,
+    y: height - 145,
+    width: width - 80,
+    height: 50,
+    color: rgb(0.96, 0.96, 0.97),
+    borderColor: rgb(0.85, 0.85, 0.88),
+    borderWidth: 1
+  });
+
+  coverPage.drawText(`Tong so van de: ${findings.length}     [Cao: ${highCount}]     [Trung binh: ${medCount}]     [Thap: ${lowCount}]`, {
+    x: 55,
+    y: height - 125,
+    size: 12,
+    font: helveticaBold,
+    color: rgb(0.15, 0.15, 0.15)
+  });
+
+  coverPage.drawText('Danh sach chi tiet cac diem can bo sung & doi chieu duoi day:', {
+    x: 40,
+    y: height - 170,
+    size: 11,
+    font: helveticaBold,
+    color: rgb(0.2, 0.2, 0.2)
+  });
+
+  // Table of findings
+  let currentY = height - 200;
+  findings.slice(0, 18).forEach((f, idx) => {
+    const sevColor = f.severity === 'high' ? rgb(0.85, 0.1, 0.1) : f.severity === 'medium' ? rgb(0.85, 0.55, 0) : rgb(0.2, 0.5, 0.8);
+    coverPage.drawCircle({ x: 50, y: currentY + 4, size: 4, color: sevColor });
+
+    const targetPageText = `[Trang ${f.pageNumber}]`;
+    const cleanTitle = toAsciiSafe(f.title).slice(0, 65);
+    coverPage.drawText(`${idx + 1}. ${targetPageText} ${cleanTitle}`, {
+      x: 65,
+      y: currentY,
+      size: 10,
+      font: helveticaBold,
+      color: rgb(0.15, 0.15, 0.15)
+    });
+
+    currentY -= 28;
+  });
+
+  // 2. Đánh dấu / highlight & vẽ note box trên từng trang liên quan (trang gốc nay đã dời sau cover page: pageNumber = original + 1)
+  const totalPages = pdfDoc.getPageCount();
+  for (const f of findings) {
+    const targetIdx = (f.pageNumber || 1); // Đã tính trang 0 chèn vào
+    if (targetIdx < totalPages) {
+      const page = pdfDoc.getPage(targetIdx);
+      const pSize = page.getSize();
+      const bbox = f.bbox || [0.1, 0.2, 0.8, 0.12];
+      const boxX = bbox[0] * pSize.width;
+      const boxY = pSize.height - (bbox[1] + bbox[3]) * pSize.height;
+      const boxW = bbox[2] * pSize.width;
+      const boxH = bbox[3] * pSize.height;
+
+      // Hộp viền đỏ cảnh báo
+      page.drawRectangle({
+        x: Math.max(10, boxX),
+        y: Math.max(10, boxY),
+        width: Math.min(pSize.width - 20, boxW),
+        height: Math.min(pSize.height - 20, boxH),
+        borderColor: rgb(0.9, 0.1, 0.1),
+        borderWidth: 2,
+        color: rgb(1, 0.92, 0.92),
+        opacity: 0.35
+      });
+
+      // Nhãn ghi chú sticky note
+      const badgeW = Math.min(260, pSize.width - 40);
+      page.drawRectangle({
+        x: Math.max(10, boxX),
+        y: Math.min(pSize.height - 35, boxY + boxH),
+        width: badgeW,
+        height: 22,
+        color: rgb(0.85, 0.05, 0.05)
+      });
+
+      const cleanNoteTitle = toAsciiSafe(f.title || 'GD HOME CANH BAO').slice(0, 38);
+      page.drawText(`[GD HOME] ${cleanNoteTitle}`, {
+        x: Math.max(15, boxX + 6),
+        y: Math.min(pSize.height - 21, boxY + boxH + 6),
+        size: 9,
+        font: helveticaBold,
+        color: rgb(1, 1, 1)
+      });
+    }
+  }
+
+  return await pdfDoc.save();
+}
+
+// -----------------------------------------------------------------------------
+// 11.5: Đề xuất sang Tiến độ & Chốt mã + Liên kết ngược sourceQuoteItemId
+// -----------------------------------------------------------------------------
+const WORK_SEQUENCES = [
+  { name: 'Tháo dỡ & Phần thô xây trát', category: 'Phần thô & Xây trát', days: 5 },
+  { name: 'Thi công Điện nước (MEP ngầm)', category: 'Điện nước (MEP)', days: 6 },
+  { name: 'Đóng trần thạch cao & Sơn bả', category: 'Trần & Sơn bả', days: 7 },
+  { name: 'Ốp lát gạch & Đá hoàn thiện', category: 'Ốp lát đá & gạch', days: 5 },
+  { name: 'Lắp ráp đồ gỗ nội thất & Phụ kiện', category: 'Đồ gỗ nội thất', days: 8 },
+  { name: 'Lắp đặt Nhôm kính, Cửa & Gương', category: 'Nhôm kính & Cửa', days: 3 },
+  { name: 'Lắp Đồ rời, Sofa, Bàn ăn & Rèm', category: 'Đồ rời & Sofa/Rèm', days: 4 },
+  { name: 'Lắp Thiết bị bếp & Thiết bị vệ sinh', category: 'Thiết bị & Phụ kiện', days: 3 },
+  { name: 'Vệ sinh công nghiệp & Nghiệm thu bàn giao', category: 'Nghiệm thu', days: 2 }
+];
+
+function generateScheduleProposal(projectId, quoteItems, existingCalendars = []) {
+  const stageName = 'THI CÔNG TỔNG THỂ (TỪ BÁO GIÁ)';
+  let targetCal = existingCalendars.find(c => c.ownerId === projectId && c.name.includes('BÁO GIÁ'));
+  const calId = targetCal?.id || 'cal_' + crypto.randomUUID().slice(0, 8);
+
+  const newCalendar = targetCal || {
+    id: calId,
+    ownerId: projectId,
+    name: stageName,
+    visible: true,
+    color: '#0066cc'
+  };
+
+  // Gom các quote item theo từng nhóm công việc
+  const tasks = [];
+  let startDate = new Date();
+  startDate.setDate(startDate.getDate() + 1); // Bắt đầu từ ngày mai
+
+  let previousTaskId = null;
+
+  WORK_SEQUENCES.forEach(seq => {
+    const matchedItems = quoteItems.filter(item => item.category === seq.category);
+    const hasItems = matchedItems.length > 0 || seq.category === 'Nghiệm thu';
+    if (!hasItems) return;
+
+    const taskId = 'task_' + crypto.randomUUID().slice(0, 10);
+    const startStr = startDate.toISOString().slice(0, 10);
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + Math.max(1, seq.days));
+    const endStr = endDate.toISOString().slice(0, 10);
+
+    const taskTitle = matchedItems.length > 0 && matchedItems.length <= 2
+      ? `${seq.name}: ${matchedItems.map(i => i.name).join(', ')}`
+      : seq.name;
+
+    const task = {
+      id: taskId,
+      title: taskTitle,
+      ownerId: projectId,
+      calendarId: calId,
+      startDate: startStr,
+      endDate: endStr,
+      progress: 0,
+      linkType: previousTaskId ? 'FS' : null,
+      linkTargetId: previousTaskId || null,
+      sourceQuoteItemIds: matchedItems.map(i => i.id)
+    };
+
+    tasks.push(task);
+    previousTaskId = taskId;
+    // Ngày tiếp theo bắt đầu sau khi việc trước xong
+    startDate = new Date(endDate);
+    startDate.setDate(startDate.getDate() + 1);
+  });
+
+  return { calendar: newCalendar, tasks };
+}
+
+// Map sang 18 nhóm mẫu Chốt mã của GD HOME
+const MATERIAL_GROUP_MAP = [
+  { group: 'MÃ GỖ (Melamine, PVC…)', pattern: /go|mdf|melamine|pvc|acrylic|veneer|tu ao|tu bep|giuong/i },
+  { group: 'SƠN GỖ', pattern: /son go|son pu|son inchem/i },
+  { group: 'SƠN TƯỜNG + TRẦN', pattern: /son tuong|son tran|dulux|jotun|maxilite/i },
+  { group: 'PHÀO CHỈ', pattern: /phao chi|phao co tran|phao chan tuong/i },
+  { group: 'ĐÁ ỐP LÁT (sảnh, bếp, lavabo, bậu cửa)', pattern: /da bep|da lavabo|da ban|granite|marble|da nhan tao/i },
+  { group: 'GẠCH ỐP LÁT (sảnh, WC, logia)', pattern: /gach lat|gach op|gach men|gach wc|gach ban cong/i },
+  { group: 'KÍNH (bếp, cánh, vách tắm)', pattern: /kinh bep|kinh canh|vach kinh|vach tam/i },
+  { group: 'GIẤY DÁN TƯỜNG', pattern: /giay dan tuong|tranh dan tuong/i },
+  { group: 'NỈ BỌC (sofa, giường, đôn, ghế, đệm đi giày)', pattern: /ni boc|sofa|dem|da boc/i },
+  { group: 'RÈM (thả, cầu vồng, sáo, roman)', pattern: /rem|man cua/i },
+  { group: 'SÀN GỖ', pattern: /san go|san nhua spc|nep san/i },
+  { group: 'SÀN NHỰA LOGIA', pattern: /vi nhua|san nhua logia/i },
+  { group: 'ĐÈN', pattern: /den|den led|den chieu sang|den trang tri/i },
+  { group: 'CÔNG TẮC – Ổ CẮM', pattern: /cong tac|o cam|schneider|panasonic/i },
+  { group: 'BẾP', pattern: /bep tu|hut mui|chau rua bep|gia bat|tay nang/i },
+  { group: 'THIẾT BỊ VỆ SINH', pattern: /bon cau|lavabo|sen tam|voi sen|toto|inax/i },
+  { group: 'TAY NẮM', pattern: /tay nam|num canh/i }
+];
+
+function generateMaterialsProposal(quoteItems) {
+  const groupsMap = new Map();
+
+  quoteItems.forEach(item => {
+    const text = `${item.name} ${item.spec} ${item.category}`;
+    let matchedGroupName = 'Vật tư khác';
+
+    for (const entry of MATERIAL_GROUP_MAP) {
+      if (entry.pattern.test(text)) {
+        matchedGroupName = entry.group;
+        break;
+      }
+    }
+
+    if (!groupsMap.has(matchedGroupName)) {
+      groupsMap.set(matchedGroupName, []);
+    }
+
+    groupsMap.get(matchedGroupName).push({
+      id: 'mr_' + crypto.randomUUID().slice(0, 10),
+      name: item.name,
+      room: item.room,
+      spec: item.spec || '',
+      qty: item.qty ? String(item.qty) : '1',
+      unit: item.unit || 'bộ',
+      supplier: '',
+      note: item.note || '',
+      sourceQuoteItemId: item.id,
+      chosen: null,
+      options: [
+        { code: item.code || 'PA1', spec: item.spec || 'Phương án chuẩn báo giá', supplier: '', images: [] },
+        { code: 'PA2', spec: '', supplier: '', images: [] }
+      ]
+    });
+  });
+
+  const groups = Array.from(groupsMap.entries()).map(([name, rows], idx) => ({
+    id: 'grp_' + (idx + 1),
+    name,
+    rows
+  }));
+
+  return { groups };
+}
+
+// -----------------------------------------------------------------------------
+// Router chính: handleProjectHub
+// -----------------------------------------------------------------------------
+async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir, defaultSchedule }) {
+  const hubStore = new ProjectHubStore(store, dataKey);
+  const assets = new ProjectAssets(dataDir, dataKey);
+
+  // 1. Phục vụ assets / tải file
+  if (urlPath.startsWith('/api/project-hub/assets/')) {
+    const assetKey = urlPath.slice('/api/project-hub/assets/'.length).split('?')[0];
+    const urlObj = new URL(req.url, 'http://localhost');
+    const download = urlObj.searchParams.get('download');
+    try {
+      await assets.send(res, assetKey, download);
+      return;
+    } catch (err) {
+      return sendJson(res, err.status || 404, { success: false, message: err.message });
+    }
+  }
+
+  // 2. Tổng quan dự án: GET /api/project-hub/overview
+  if (urlPath === '/api/project-hub/overview' && req.method === 'GET') {
+    const schedule = (await store.get(dataKey)) || defaultSchedule();
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const materials = (await store.get(matKey)) || { sheets: [] };
+    const hub = await hubStore.load();
+
+    const rawProjects = projectList(schedule, materials);
+    const projects = rawProjects.map(p => {
+      const hubRecord = hub.projects?.[p.id] || defaultProjectRecord(p.id);
+      const stats = calculateProjectStats(p.id, schedule, materials, hubRecord);
+      return {
+        id: p.id,
+        name: p.name,
+        profile: p.profile,
+        stats,
+        updatedAt: hubRecord.updatedAt
+      };
+    });
+
+    return sendJson(res, 200, { success: true, projects });
+  }
+
+  // 3. Chi tiết dự án: GET /api/project-hub/project?id=:id
+  if (urlPath === '/api/project-hub/project' && req.method === 'GET') {
+    const urlObj = new URL(req.url, 'http://localhost');
+    const projectId = urlObj.searchParams.get('id');
+    if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
+
+    const schedule = (await store.get(dataKey)) || defaultSchedule();
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const materials = (await store.get(matKey)) || { sheets: [] };
+
+    const rawProjects = projectList(schedule, materials);
+    const project = rawProjects.find(p => p.id === projectId);
+    if (!project) return sendJson(res, 404, { success: false, message: 'Không tìm thấy dự án.' });
+
+    const hubRecord = await hubStore.getProject(projectId);
+    const stats = calculateProjectStats(projectId, schedule, materials, hubRecord);
+
+    return sendJson(res, 200, {
+      success: true,
+      project: {
+        id: project.id,
+        name: project.name,
+        profile: project.profile,
+        stats,
+        hub: hubRecord
+      }
+    });
+  }
+
+  // 4. Tạo hoặc sửa dự án: POST /api/project-hub/project
+  if (urlPath === '/api/project-hub/project' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    if (!body || typeof body.profile !== 'object' || !body.profile) {
+      return sendJson(res, 400, { success: false, message: 'Thiếu thông tin profile.' });
+    }
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const legacy = (await store.get(matKey)) || {};
+    const result = await writeProjectProfile(store, dataKey, body, defaultSchedule, legacy);
+
+    // Đồng bộ vào hubRecord
+    const record = await hubStore.getProject(result.project.id);
+    await hubStore.saveProject(result.project.id, record);
+
+    return sendJson(res, 200, { success: true, project: result.project });
+  }
+
+  // 5. Tải file tài liệu: POST /api/project-hub/documents/upload
+  if (urlPath === '/api/project-hub/documents/upload' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const { projectId, name, type, mime, dataBase64, room, extractedPages, detectedItems } = body;
+    if (!projectId || !name || !type || !dataBase64) {
+      return sendJson(res, 400, { success: false, message: 'Thiếu thông tin file tải lên.' });
+    }
+
+    const buf = Buffer.from(dataBase64, 'base64');
+    const ext = path.extname(name).toLowerCase() || '.bin';
+    const { assetKey, size, mime: cleanMime } = await assets.save(buf, ext, mime);
+
+    // Tính số trang nếu là PDF
+    let pages = 1;
+    if (ext === '.pdf') {
+      try {
+        const loadedPdf = await PDFDocument.load(buf);
+        pages = loadedPdf.getPageCount();
+      } catch (e) {
+        pages = 1;
+      }
+    }
+
+    const updatedRecord = await hubStore.saveProject(projectId, record => {
+      record.documents ||= [];
+      const existing = record.documents.find(d => d.name === name && d.type === type);
+
+      if (existing) {
+        // Cập nhật phiên bản
+        existing.history ||= [];
+        existing.history.push({
+          version: existing.version,
+          assetKey: existing.assetKey,
+          size: existing.size,
+          uploadedAt: existing.uploadedAt,
+          note: `Thay thế bởi phiên bản ${existing.version + 1}`
+        });
+        existing.version = (existing.version || 1) + 1;
+        existing.assetKey = assetKey;
+        existing.size = size;
+        existing.mime = cleanMime;
+        existing.pages = pages;
+        existing.room = room || existing.room;
+        if (extractedPages) existing.extractedPages = extractedPages;
+        if (detectedItems) existing.detectedItems = detectedItems;
+        existing.uploadedAt = new Date().toISOString();
+      } else {
+        // Tài liệu mới
+        const newDoc = {
+          id: 'doc_' + Date.now() + '_' + crypto.randomUUID().slice(0, 6),
+          type,
+          name,
+          room: room || 'Cả nhà',
+          mime: cleanMime,
+          size,
+          assetKey,
+          pages,
+          version: 1,
+          history: [],
+          extractedPages: extractedPages || [],
+          detectedItems: detectedItems || [],
+          uploadedAt: new Date().toISOString()
+        };
+        record.documents.push(newDoc);
+      }
+      return record;
+    });
+
+    return sendJson(res, 200, { success: true, documents: updatedRecord.documents });
+  }
+
+  // 6. Xoá tài liệu: POST /api/project-hub/documents/delete
+  if (urlPath === '/api/project-hub/documents/delete' && req.method === 'POST') {
+    const { projectId, documentId } = await readJsonBody(req);
+    if (!projectId || !documentId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId hoặc documentId.' });
+
+    const updated = await hubStore.saveProject(projectId, record => {
+      record.documents = (record.documents || []).filter(d => d.id !== documentId);
+      return record;
+    });
+
+    return sendJson(res, 200, { success: true, documents: updated.documents });
+  }
+
+  // 7. Parse Báo giá: POST /api/project-hub/quote/parse
+  if (urlPath === '/api/project-hub/quote/parse' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const { rows, rawText } = body;
+    let items = [];
+    if (Array.isArray(rows)) {
+      items = parseQuoteSheetRows(rows);
+    } else if (rawText) {
+      // CSV format
+      const csvRows = rawText.split(/\r?\n/).map(line => line.split(/[,\t;]/));
+      items = parseQuoteSheetRows(csvRows);
+    }
+    return sendJson(res, 200, { success: true, items });
+  }
+
+  // 8. Lưu Báo giá: POST /api/project-hub/quote/save
+  if (urlPath === '/api/project-hub/quote/save' && req.method === 'POST') {
+    const { projectId, items } = await readJsonBody(req);
+    if (!projectId || !Array.isArray(items)) return sendJson(res, 400, { success: false, message: 'Thiếu projectId hoặc danh sách items.' });
+
+    const updated = await hubStore.saveProject(projectId, record => {
+      record.quoteItems = items.map(item => ({
+        ...item,
+        id: item.id || 'qi_' + crypto.randomUUID().slice(0, 10),
+        updatedAt: new Date().toISOString()
+      }));
+      return record;
+    });
+
+    return sendJson(res, 200, { success: true, quoteItems: updated.quoteItems });
+  }
+
+  // 9. Soát HSKT & Phối cảnh + Ghi chú PDF: POST /api/project-hub/review/run
+  if (urlPath === '/api/project-hub/review/run' && req.method === 'POST') {
+    const { projectId, drawingDocId } = await readJsonBody(req);
+    if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
+
+    const record = await hubStore.getProject(projectId);
+    const drawings = (record.documents || []).filter(d => d.type === 'drawing');
+    const renders = (record.documents || []).filter(d => d.type === 'render');
+
+    // Chạy ma trận phủ
+    const { findings, pageTags, renderTags } = computeReviewCoverage(record.quoteItems || [], drawings, renders);
+
+    // Ghi chú vào bản vẽ PDF chính nếu có
+    const targetDrawing = (drawingDocId ? drawings.find(d => d.id === drawingDocId) : null) || drawings[0];
+    let annotatedAssetKey = null;
+
+    if (targetDrawing && targetDrawing.assetKey) {
+      try {
+        const { buf } = await assets.read(targetDrawing.assetKey);
+        const annotatedBytes = await annotateDrawingPdf(buf, findings, record.projectId);
+        const saveRes = await assets.save(Buffer.from(annotatedBytes), '.pdf', 'application/pdf');
+        annotatedAssetKey = saveRes.assetKey;
+      } catch (err) {
+        console.error('[Review PDF Annotation Error]:', err);
+      }
+    }
+
+    const updatedRecord = await hubStore.saveProject(projectId, current => {
+      current.reviewFindings = findings;
+      current.reviewSummary = {
+        lastRunAt: new Date().toISOString(),
+        annotatedAssetKey,
+        sourceDrawingDocId: targetDrawing?.id || null,
+        pageTags,
+        renderTags
+      };
+      return current;
+    });
+
+    return sendJson(res, 200, {
+      success: true,
+      findings: updatedRecord.reviewFindings,
+      summary: updatedRecord.reviewSummary,
+      annotatedAssetKey
+    });
+  }
+
+  // 10. Cập nhật kết quả soát: POST /api/project-hub/review/update
+  if (urlPath === '/api/project-hub/review/update' && req.method === 'POST') {
+    const { projectId, findingId, status, note } = await readJsonBody(req);
+    if (!projectId || !findingId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId hoặc findingId.' });
+
+    const updated = await hubStore.saveProject(projectId, record => {
+      const f = (record.reviewFindings || []).find(rf => rf.id === findingId);
+      if (f) {
+        if (status) f.status = status;
+        if (note !== undefined) f.note = note;
+      }
+      return record;
+    });
+
+    return sendJson(res, 200, { success: true, findings: updated.reviewFindings });
+  }
+
+  // 11. Đề xuất sang Tiến độ: POST /api/project-hub/push/schedule
+  if (urlPath === '/api/project-hub/push/schedule' && req.method === 'POST') {
+    const { projectId, apply } = await readJsonBody(req);
+    if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
+
+    const record = await hubStore.getProject(projectId);
+    const schedule = (await store.get(dataKey)) || defaultSchedule();
+    const proposal = generateScheduleProposal(projectId, record.quoteItems || [], schedule.calendars || []);
+
+    if (apply) {
+      schedule.calendars ||= [];
+      if (!schedule.calendars.some(c => c.id === proposal.calendar.id)) {
+        schedule.calendars.push(proposal.calendar);
+      }
+      schedule.tasks ||= [];
+      // Thêm các tasks mới
+      schedule.tasks.push(...proposal.tasks);
+      schedule._version = (schedule._version || 0) + 1;
+      schedule._updatedAt = new Date().toISOString();
+      await store.put(dataKey, schedule);
+
+      await hubStore.saveProject(projectId, rec => {
+        rec.pushLinks ||= {};
+        rec.pushLinks.schedule = {
+          lastPushedAt: new Date().toISOString(),
+          calendarId: proposal.calendar.id,
+          tasksCount: proposal.tasks.length
+        };
+        return rec;
+      });
+    }
+
+    return sendJson(res, 200, { success: true, proposal, applied: !!apply });
+  }
+
+  // 12. Đề xuất sang Chốt mã: POST /api/project-hub/push/materials
+  if (urlPath === '/api/project-hub/push/materials' && req.method === 'POST') {
+    const { projectId, apply, sheetTitle } = await readJsonBody(req);
+    if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
+
+    const record = await hubStore.getProject(projectId);
+    const proposal = generateMaterialsProposal(record.quoteItems || []);
+
+    if (apply) {
+      const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+      const matData = (await store.get(matKey)) || { _version: 0, sheets: [] };
+      matData.sheets ||= [];
+
+      const newSheet = {
+        id: 'sheet_' + crypto.randomUUID().slice(0, 10),
+        title: sheetTitle || `Chốt mã vật liệu - Từ Báo giá`,
+        projectId,
+        createdAt: new Date().toISOString(),
+        groups: proposal.groups
+      };
+
+      matData.sheets.push(newSheet);
+      matData._version = (matData._version || 0) + 1;
+      matData._updatedAt = new Date().toISOString();
+      await store.put(matKey, matData);
+
+      await hubStore.saveProject(projectId, rec => {
+        rec.pushLinks ||= {};
+        rec.pushLinks.materials = {
+          lastPushedAt: new Date().toISOString(),
+          sheetId: newSheet.id,
+          itemsCount: proposal.groups.reduce((sum, g) => sum + g.rows.length, 0)
+        };
+        return rec;
+      });
+    }
+
+    return sendJson(res, 200, { success: true, proposal, applied: !!apply });
+  }
+
+  return sendJson(res, 404, { success: false, message: 'API project-hub không tồn tại.' });
+}
+
+module.exports = {
+  ProjectHubStore,
+  ProjectAssets,
+  calculateProjectStats,
+  parseQuoteSheetRows,
+  computeReviewCoverage,
+  annotateDrawingPdf,
+  generateScheduleProposal,
+  generateMaterialsProposal,
+  handleProjectHub
+};

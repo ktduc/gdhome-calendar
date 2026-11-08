@@ -24,6 +24,7 @@ const integrations = require('./integrations');
 const { handleMaterials, MaterialStore } = require('./materials');
 const {projectList,writeProjectProfile,withScheduleWrite} = require('./project-profiles');
 const { handlePublicReview } = require('./material-review');
+const { handleProjectHub } = require('./project-hub');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -56,7 +57,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-timeline.js', 'export-canvas.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -330,7 +331,9 @@ function safeEqual(a, b) {
 function resolveDataKey(req) {
   if (AUTH_MODE === 'google') {
     const auth = req.headers.authorization || '';
-    const sess = verifySession(auth.startsWith('Bearer ') ? auth.slice(7) : '');
+    let rawToken = auth.startsWith('Bearer ') ? auth.slice(7) : '';
+    if (!rawToken && req.url && req.url.includes('token=')) { try { rawToken = new URL(req.url, 'http://localhost').searchParams.get('token') || ''; } catch (e) {} }
+    const sess = verifySession(rawToken);
     return sess ? sess.email : null;
   }
   if (AUTH_MODE === 'password') {
@@ -382,6 +385,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === '/' || rel === '') rel = '/index.html';
   if (rel === '/tools') rel = '/tools.html';
   if (rel === '/chot-ma') rel = '/chot-ma.html';
+  if (rel === '/du-an') rel = '/du-an.html';
   if (rel.startsWith('/duyet/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(7))) rel = '/duyet.html';
   const filePath = path.normalize(path.join(ROOT_DIR, rel));
   const relFromRoot = path.relative(ROOT_DIR, filePath);
@@ -477,6 +481,9 @@ async function handleApi(req, res, urlPath) {
     }
   }
 
+  if (urlPath === '/api/project-hub' || urlPath.startsWith('/api/project-hub/')) {
+    return handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET, defaultSchedule: defaultData });
+  }
   if (urlPath === '/api/materials' || urlPath.startsWith('/api/materials/')) {
     return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET, defaultSchedule: defaultData });
   }
