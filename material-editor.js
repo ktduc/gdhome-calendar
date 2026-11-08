@@ -316,6 +316,7 @@ document.addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
   const {group,row,slot} = context(event.target);
   if (!button) {
+    if (row && event.target.matches('input[data-field="note"]')) return openMaterialNotes(event.target,group,row);
     const cell = event.target.closest('.image-cell');
     if (row && cell && !event.target.closest('input,select,textarea,a')) focusMaterialImageCell(cell);
     return;
@@ -466,6 +467,10 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!row) return;
+  if (event.altKey && event.key === 'ArrowDown' && target.matches('input[data-field="note"]')) {
+    event.preventDefault();
+    return openMaterialNotes(target,group,row);
+  }
   if (event.key === 'Enter' && target.matches('button,select,input[type=checkbox]')) return;
 
   const cell = target.closest('td');

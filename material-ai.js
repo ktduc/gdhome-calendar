@@ -187,7 +187,7 @@ function reviewMaterialsAi() {
 function mergeAiRows(groups,selected) {
   const groupKey = name => normalized(name.split('(')[0]);
   let added = 0;
-  for (const {group:name,...values} of selected) {
+  for (const {group:name,note,...values} of selected) {
     const category = name || 'Vật liệu khác';
     const key = groupKey(category);
     let group = groups.find(g => groupKey(g.name) === key);
@@ -196,7 +196,7 @@ function mergeAiRows(groups,selected) {
       groups.push(group);
     }
     if (group.rows.some(row => normalized(row.name) === normalized(values.name) && normalized(row.room) === normalized(values.room))) continue;
-    group.rows.push({ ...newRow(values.name),...values });
+    group.rows.push({ ...newRow(values.name),...values,...(note ? {noteSuggestions:[note]} : {}) });
     added++;
   }
   return added;

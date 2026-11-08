@@ -105,7 +105,7 @@ function renderImport(tabs, filename) {
         for (const key of ['room','spec','qty','unit','note','supplier']) row[key] = val(key);
         for (const [i,key] of ['p1','p2','p3'].entries()) row.options[i].code = val(key);
         if (val('render') || row.options.some(pa => /^(https?:|=IMAGE)/i.test(pa.code))) imageRefs++;
-        if (val('render')) row.note = [row.note,'Phối cảnh nguồn: '+val('render')].filter(Boolean).join(' · ');
+        if (val('render')) row.noteSuggestions = ['Phối cảnh nguồn: ' + val('render')];
         group.rows.push(row);
         count++;
         if (count > 500) throw new Error('Mỗi lần nhập tối đa 500 dòng.');

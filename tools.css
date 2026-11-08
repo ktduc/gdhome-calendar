@@ -88,6 +88,13 @@ dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px)}dial
 .lightbox-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px}
 .lightbox-actions output{margin-right:auto}
 
+.material-notes-form{display:grid;gap:8px;width:min(72vw,500px)}
+.material-notes-form>label{display:grid;gap:4px}
+.material-notes-form textarea{min-height:4em;resize:vertical}
+.material-note-choices{display:grid;gap:4px;max-height:35vh;overflow:auto;border:1px solid #d5dce5;padding:8px}
+.material-note-choices input{vertical-align:middle}
+.material-notes-message{margin:0}
+
 .crop-dialog{width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box}
 .crop-dialog h2,.crop-dialog p{margin:0 0 8px}
 .crop-stage{position:relative;width:max-content;max-width:100%;overflow:hidden}
