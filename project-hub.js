@@ -13,7 +13,9 @@ const {
   callOpenAI,
   callAnthropic,
   resolveModel,
-  extractJson
+  extractJson,
+  aiError,
+  toAiError
 } = require('./integrations');
 
 const {
@@ -843,74 +845,122 @@ const RENDER_AI_SYSTEM = `Bạn là chuyên gia thiết kế nội thất GD HOM
 Chỉ trả về JSON theo mẫu:
 {"room":"Phòng khách","detectedItems":["Sofa","Bàn trà","Kệ tivi"]}`;
 
-async function runAiAnalysis(ai, drawings, renders, assets, buildingType = 'Chung cư', onProgress = null) {
+// GĐ18B.4: PDF lớn được chia nhỏ ≤10 trang/lần để AI đọc nhanh, không bị hết thời gian; Gemini tự dùng File API khi phần PDF vẫn nặng.
+const PDF_CHUNK_PAGES = 10;
+const AI_MAX_INLINE_BYTES = 14 * 1024 * 1024;
+const AI_MAX_GEMINI_BYTES = 60 * 1024 * 1024;
+const FATAL_AI_CODES = new Set(['no_key', 'bad_key', 'cancelled']);
+
+async function splitPdfPages(buf, size = PDF_CHUNK_PAGES) {
+  let src;
+  try { src = await PDFDocument.load(buf, { ignoreEncryption: true }); } catch { return [{ from: 1, to: 1, total: 1, buf }]; }
+  const total = src.getPageCount();
+  if (total <= size) return [{ from: 1, to: total, total, buf }];
+  const chunks = [];
+  for (let start = 0; start < total; start += size) {
+    const out = await PDFDocument.create();
+    const idx = Array.from({ length: Math.min(size, total - start) }, (_, i) => start + i);
+    (await out.copyPages(src, idx)).forEach(page => out.addPage(page));
+    chunks.push({ from: start + 1, to: start + idx.length, total, buf: Buffer.from(await out.save()) });
+  }
+  return chunks;
+}
+
+async function runAiAnalysis(ai, drawings, renders, assets, buildingType = 'Chung cư', onProgress = null, signal = null) {
   const model = await resolveModel(ai);
   const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
   const contextPrompt = getBuildingContextPrompt(buildingType);
   const drawingSystem = DRAWING_AI_SYSTEM + contextPrompt;
   const renderSystem = RENDER_AI_SYSTEM + contextPrompt;
+  const maxBytes = ai.provider === 'gemini' ? AI_MAX_GEMINI_BYTES : AI_MAX_INLINE_BYTES;
+  const warnings = [];
+  let attempted = 0;
 
-  const total = drawings.length + renders.length;
-  let doneCount = 0;
-
-  // 1. Phân tích các bản vẽ HSKT
-  for (let i = 0; i < drawings.length; i++) {
-    const doc = drawings[i];
-    if (onProgress) onProgress({ step: `AI đang đọc bản vẽ ${i + 1}/${drawings.length}: ${doc.name}`, percent: Math.round(20 + (doneCount / Math.max(1, total)) * 50) });
-    if (!doc.assetKey) { doneCount++; continue; }
+  // Chuẩn bị trước danh sách phần việc (mỗi phần PDF ≤10 trang hoặc 1 ảnh) để tính % chính xác.
+  const units = [];
+  drawings.forEach(doc => { delete doc.aiSkipped; });
+  for (const doc of drawings) {
+    if (!doc.assetKey) continue;
     try {
       const { buf, mime } = await assets.read(doc.assetKey);
-      let rawJson = '';
-      // Các dịch vụ AI nhận tối đa ~20 MB mỗi lần (base64 to thêm 1/3): bỏ qua file quá lớn thay vì làm hỏng cả lượt soát.
-      if (buf.length > 14 * 1024 * 1024) {
-        doc.aiSkipped = 'Bản vẽ ' + Math.round(buf.length / 1048576) + ' MB vượt giới hạn AI (14 MB). Hãy tách file theo tầng hoặc in PDF nhẹ hơn.';
-        doneCount++;
+      const isPdf = mime === 'application/pdf' || doc.name.toLowerCase().endsWith('.pdf');
+      if (isPdf) (await splitPdfPages(buf)).forEach(chunk => units.push({ doc, kind: 'drawing-pdf', ...chunk }));
+      else if (mime.startsWith('image/')) units.push({ doc, kind: 'drawing-image', buf, mime, from: 1, to: 1, total: 1 });
+    } catch (e) {
+      doc.aiSkipped = 'Không đọc được tệp: ' + e.message;
+      warnings.push({ name: doc.name, message: doc.aiSkipped });
+    }
+  }
+  renders.forEach(doc => { if (doc.assetKey) units.push({ doc, kind: 'render' }); });
+  const drawingPages = new Map();
+
+  for (let u = 0; u < units.length; u++) {
+    if (signal?.aborted) throw aiError('cancelled');
+    const unit = units[u];
+    const { doc } = unit;
+    const percent = Math.round(20 + (u / Math.max(1, units.length)) * 50);
+    const where = unit.kind === 'render'
+      ? `AI đang phân tích phối cảnh 3D: ${doc.name}`
+      : `AI đang đọc bản vẽ ${doc.name} – trang ${unit.from === unit.to ? unit.from : unit.from + '–' + unit.to}/${unit.total}`;
+    const progress = (step = where) => onProgress?.({ step, percent, page: unit.kind === 'render' ? null : { name: doc.name, from: unit.from, to: unit.to, total: unit.total } });
+    progress();
+    const opts = {
+      signal,
+      onStep: step => progress(where + ' · ' + step),
+      onRetry: ({ attempt, max, error }) => progress(`${where} · ${error.message.split('.')[0]}. Thử lại lần ${attempt}/${max}…`)
+    };
+    try {
+      if (unit.kind === 'render') {
+        const { buf, mime } = await assets.read(doc.assetKey);
+        if (!(mime.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(doc.name))) continue;
+        attempted++;
+        const cleanMime = mime.startsWith('image/') ? mime : 'image/jpeg';
+        const res = await callWithFallback(ai, model, call, [{ mediaType: cleanMime, data: buf.toString('base64') }], [], 'Phân tích phối cảnh 3D này.', renderSystem, opts);
+        let parsed;
+        try { parsed = extractJson(res.raw); } catch { throw aiError('bad_output'); }
+        if (parsed?.room) doc.room = parsed.room;
+        if (Array.isArray(parsed?.detectedItems)) doc.detectedItems = parsed.detectedItems;
         continue;
       }
-      delete doc.aiSkipped;
-      if (mime === 'application/pdf' || doc.name.toLowerCase().endsWith('.pdf')) {
-        const res = await callWithFallback(ai, model, call, [], [{ data: buf.toString('base64') }], 'Phân tích bản vẽ HSKT này.', drawingSystem);
-        rawJson = res.raw;
-      } else if (mime.startsWith('image/')) {
-        const res = await callWithFallback(ai, model, call, [{ mediaType: mime, data: buf.toString('base64') }], [], 'Phân tích bản vẽ HSKT này.', drawingSystem);
-        rawJson = res.raw;
-      }
-      if (rawJson) {
-        const parsed = extractJson(rawJson);
-        if (Array.isArray(parsed?.pages) && parsed.pages.length > 0) {
-          doc.extractedPages = parsed.pages;
-          doc.pages = Math.max(doc.pages || 1, parsed.pages.length);
-        }
-      }
-    } catch (e) {
-      console.error(`[AI Drawing Analysis Error for ${doc.name}]:`, e.message);
-      throw e;
-    }
-    doneCount++;
-  }
-
-  // 2. Phân tích các ảnh phối cảnh 3D
-  for (let j = 0; j < renders.length; j++) {
-    const doc = renders[j];
-    if (onProgress) onProgress({ step: `AI đang phân tích phối cảnh 3D ${j + 1}/${renders.length}: ${doc.name}`, percent: Math.round(20 + (doneCount / Math.max(1, total)) * 50) });
-    if (!doc.assetKey) { doneCount++; continue; }
-    try {
-      const { buf, mime } = await assets.read(doc.assetKey);
-      if (mime.startsWith('image/') || /\.(png|jpe?g|webp)$/i.test(doc.name)) {
-        const cleanMime = mime.startsWith('image/') ? mime : 'image/jpeg';
-        const res = await callWithFallback(ai, model, call, [{ mediaType: cleanMime, data: buf.toString('base64') }], [], 'Phân tích phối cảnh 3D này.', renderSystem);
-        const parsed = extractJson(res.raw);
-        if (parsed) {
-          if (parsed.room) doc.room = parsed.room;
-          if (Array.isArray(parsed.detectedItems)) doc.detectedItems = parsed.detectedItems;
-        }
+      attempted++;
+      if (unit.buf.length > maxBytes) throw aiError('too_large', `${doc.name} (trang ${unit.from}–${unit.to}) nặng ${Math.round(unit.buf.length / 1048576)} MB, vượt giới hạn ${Math.round(maxBytes / 1048576)} MB.`);
+      const note = unit.total > 1 && (unit.from !== 1 || unit.to !== unit.total)
+        ? ` Đây là trang ${unit.from}–${unit.to} trong tổng ${unit.total} trang; đánh số pageNumber theo trang gốc (bắt đầu từ ${unit.from}).` : '';
+      const res = unit.kind === 'drawing-pdf'
+        ? await callWithFallback(ai, model, call, [], [{ data: unit.buf.toString('base64'), name: doc.name }], 'Phân tích bản vẽ HSKT này.' + note, drawingSystem, opts)
+        : await callWithFallback(ai, model, call, [{ mediaType: unit.mime, data: unit.buf.toString('base64') }], [], 'Phân tích bản vẽ HSKT này.', drawingSystem, opts);
+      let parsed;
+      try { parsed = extractJson(res.raw); } catch { throw aiError('bad_output'); }
+      if (Array.isArray(parsed?.pages)) {
+        const list = drawingPages.get(doc) || [];
+        parsed.pages.forEach((page, i) => {
+          let n = Number(page?.pageNumber) || (i + 1);
+          // AI có thể đánh số lại từ 1 cho từng phần: đổi về số trang gốc.
+          if (unit.from > 1 && n < unit.from) n += unit.from - 1;
+          list.push({ ...page, pageNumber: n });
+        });
+        drawingPages.set(doc, list);
       }
     } catch (e) {
-      console.error(`[AI Render Analysis Error for ${doc.name}]:`, e.message);
-      throw e;
+      const err = toAiError(e);
+      if (FATAL_AI_CODES.has(err.aiCode) || (err.aiCode === 'quota' && !err.retryable)) throw err;
+      const label = unit.kind === 'render' ? doc.name : `${doc.name} (trang ${unit.from}–${unit.to})`;
+      console.error(`[AI Analysis Error for ${label}]:`, err.message);
+      doc.aiSkipped = err.message;
+      warnings.push({ name: label, code: err.aiCode, message: err.message });
     }
-    doneCount++;
   }
+  for (const [doc, pages] of drawingPages) {
+    if (!pages.length) continue;
+    doc.extractedPages = pages.sort((a, b) => a.pageNumber - b.pageNumber);
+    doc.pages = Math.max(doc.pages || 1, pages.length);
+  }
+  // Mọi phần đều lỗi -> báo lỗi rõ ràng thay vì "hoàn tất" mà không có dữ liệu.
+  if (attempted && warnings.filter(w => w.code).length >= attempted) {
+    const last = warnings.filter(w => w.code).at(-1);
+    throw Object.assign(new Error(last.message), { aiCode: last.code, retryable: true });
+  }
+  return { warnings, units: units.length };
 }
 
 // -----------------------------------------------------------------------------
@@ -921,7 +971,7 @@ class HubJobManager {
     this.jobs = new Map();
   }
 
-  createJob({ projectId, projectName, dataKey, runFn }) {
+  createJob({ projectId, projectName, dataKey, runFn, kind = 'review', params = null }) {
     this.prune();
     const jobId = 'job_' + crypto.randomUUID();
     const controller = new AbortController();
@@ -930,6 +980,12 @@ class HubJobManager {
       projectId,
       projectName: projectName || 'Dự án',
       dataKey,
+      kind,
+      params,
+      page: null,
+      errorCode: null,
+      retryable: false,
+      warnings: [],
       status: 'running',
       progress: 5,
       step: 'Khởi tạo tiến trình...',
@@ -951,11 +1007,15 @@ class HubJobManager {
           job.step = 'Hoàn tất phân tích!';
           job.finishedAt = new Date().toISOString();
           job.result = result;
+          if (Array.isArray(result?.aiWarnings)) job.warnings = result.aiWarnings;
         }
       } catch (err) {
         if (job.status !== 'cancelled') {
+          const aiErr = toAiError(err);
           job.status = 'error';
-          job.error = err.message || 'Lỗi không xác định khi chạy phân tích AI.';
+          job.error = aiErr.message || 'Lỗi không xác định khi chạy phân tích AI.';
+          job.errorCode = aiErr.aiCode || 'unknown';
+          job.retryable = !['no_key', 'bad_key'].includes(job.errorCode);
           job.step = `Lỗi: ${job.error}`;
           job.finishedAt = new Date().toISOString();
         }
@@ -1028,6 +1088,7 @@ async function executeProjectReview({
   const buildingType = record.buildingType || record.profile?.buildingType || 'Chung cư';
   const drawings = (record.documents || []).filter(d => d.type === 'drawing');
   const renders = (record.documents || []).filter(d => d.type === 'render');
+  let aiWarnings = [];
 
   if (!skipAi) {
     if (signal?.aborted) throw Object.assign(new Error('Tiến trình đã bị huỷ.'), { name: 'AbortError' });
@@ -1035,9 +1096,10 @@ async function executeProjectReview({
     const userCfg = await loadUserCfg(store, dataKey);
     const ai = resolveAi(userCfg);
     if (!ai) {
-      throw Object.assign(new Error('Chưa kết nối AI. Hãy vào ⚙ Kết nối để dán API key (Gemini / ChatGPT / Claude).'), { status: 400 });
+      throw aiError('no_key');
     }
-    await runAiAnalysis(ai, drawings, renders, assets, buildingType, onProgress);
+    const analysis = await runAiAnalysis(ai, drawings, renders, assets, buildingType, onProgress, signal);
+    aiWarnings = analysis?.warnings || [];
   }
 
   if (signal?.aborted) throw Object.assign(new Error('Tiến trình đã bị huỷ.'), { name: 'AbortError' });
@@ -1145,7 +1207,8 @@ async function executeProjectReview({
     annotatedAssetKey,
     findingsCount: updatedRecord.reviewFindings.length,
     scheduleProposed,
-    materialsProposed
+    materialsProposed,
+    aiWarnings
   };
 }
 
@@ -1470,6 +1533,8 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
       projectId,
       projectName,
       dataKey,
+      kind: 'review',
+      params: { projectId, drawingDocId, skipAi, autoPush },
       runFn: async (j, signal) => {
         return await executeProjectReview({
           projectId,
@@ -1481,9 +1546,11 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
           store,
           dataKey,
           defaultSchedule,
-          onProgress: ({ step, percent }) => {
+          onProgress: ({ step, percent, page }) => {
+            if (j.status !== 'running') return;
             j.step = step;
             if (typeof percent === 'number') j.progress = percent;
+            if (page !== undefined) j.page = page;
           },
           signal
         });

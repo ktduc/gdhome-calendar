@@ -201,6 +201,34 @@ window.GDHomeShell = (() => {
     return headers;
   }
 
+  // GĐ18B.4: nội dung thông báo tiến trình dùng chung (tên dự án, bước, trang đang đọc, %).
+  const JOB_DONE_TEXT = {
+    review:'AI đã hoàn thành soát bản vẽ & tự động tạo đề xuất!',
+    schedule:'AI đã lập xong đề xuất tiến độ.',
+    'review-timeline':'AI đã soát xong tiến độ.'
+  };
+  function hubJobBody(job) {
+    const name = '<strong>' + escape(job.projectName || 'Dự án') + '</strong>: ';
+    if (job.status === 'running') return name + escape(job.step || 'Đang xử lý...') + ' (' + (job.progress || 0) + '%)' +
+      '<div class="ai-bg-progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + (job.progress || 0) + '"><span style="width:' + (job.progress || 0) + '%"></span></div>';
+    if (job.status === 'done') return name + escape(JOB_DONE_TEXT[job.kind] || JOB_DONE_TEXT.review) +
+      (job.warnings?.length ? '<br><small>⚠ ' + job.warnings.length + ' phần chưa đọc được: ' + escape(job.warnings.map(w => w.name).slice(0,3).join(', ')) + '</small>' : '');
+    return name + escape(job.error || 'Lỗi khi chạy AI.');
+  }
+  // Thử lại: lỗi khoá/thiếu khoá thì mở ⚙ Kết nối, còn lại chạy lại đúng tiến trình đó.
+  function hubJobRetryAction(job,restart) {
+    if (['no_key','bad_key'].includes(job.errorCode)) {
+      return {label:'⚙ Mở Kết nối AI',onAction:() => window.GDHomeConnections ? GDHomeConnections.open('ai') : (location.href = '/tools')};
+    }
+    return {label:'Thử lại',onAction:async () => {
+      if (restart) return restart();
+      if (job.kind !== 'review' || !job.params) { location.href = job.kind === 'review' ? '/du-an' : '/'; return; }
+      const res = await fetch('/api/project-hub/jobs/start',{method:'POST',headers:getShellAuthHeaders(),body:JSON.stringify(job.params)});
+      if (res.ok) { if (!hubJobPollTimer) hubJobPollTimer = setInterval(checkHubActiveJob,2500); checkHubActiveJob(); }
+      else toast((await res.json().catch(() => ({}))).message || 'Không chạy lại được tiến trình.');
+    }};
+  }
+
   async function checkHubActiveJob() {
     try {
       const res = await fetch('/api/project-hub/jobs/active', {
@@ -222,7 +250,7 @@ window.GDHomeShell = (() => {
       if (job.status === 'running') {
         aiNotice(noticeId, {
           state: 'running',
-          body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.step || 'Đang xử lý...')} (${job.progress || 0}%)`,
+          body: hubJobBody(job),
           label: 'Huỷ',
           onAction: async () => {
             if (!confirm('Bạn muốn huỷ tiến trình phân tích AI đang chạy?')) return;
@@ -248,9 +276,10 @@ window.GDHomeShell = (() => {
         if (finishedMs < 120000) {
           aiNotice(noticeId, {
             state: 'done',
-            body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: AI đã hoàn thành soát bản vẽ & tự động tạo đề xuất!`,
-            label: 'Xem kết quả',
+            body: hubJobBody(job),
+            label: job.kind === 'review' || !job.kind ? 'Xem kết quả' : 'Đóng',
             onAction: () => {
+              if (job.kind && job.kind !== 'review') { const p = document.getElementById(noticeId); if (p) p.style.display = 'none'; return; }
               window.location.href = `/du-an?project=${encodeURIComponent(job.projectId)}`;
             }
           });
@@ -264,12 +293,8 @@ window.GDHomeShell = (() => {
         if (finishedMs < 60000) {
           aiNotice(noticeId, {
             state: 'error',
-            body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.error || 'Lỗi khi chạy AI.')}`,
-            label: 'Đóng',
-            onAction: () => {
-              const p = document.getElementById(noticeId);
-              if (p) p.style.display = 'none';
-            }
+            body: hubJobBody(job),
+            ...hubJobRetryAction(job)
           });
         }
       }
@@ -340,5 +365,5 @@ window.GDHomeShell = (() => {
     }
   }
 
-  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob };
+  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders };
 })();

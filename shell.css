@@ -444,6 +444,11 @@
 .ai-bg-panel.is-done { border-left-color: #16a34a; border-color: #bbf7d0; }
 .ai-bg-panel.is-error { border-left-color: #d97706; border-color: #fde68a; }
 .ai-bg-panel small { color: #64748b; }
+.ai-bg-progress { height: 5px; margin-top: 6px; background: #ede9fe; border-radius: 3px; overflow: hidden; }
+.ai-bg-progress span { display: block; height: 100%; background: #7c3aed; transition: width .4s ease; }
+.ai-test-result { margin: 6px 0 0; font-size: 13px; }
+.ai-test-result.is-ok { color: #15803d; }
+.ai-test-result.is-error { color: #b45309; }
 .ai-bg-icon { font-size: 18px; line-height: 1; padding-top: 1px; }
 .ai-bg-body { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; min-width: 0; word-break: break-word; }
 .ai-bg-close { position: absolute; top: 6px; right: 8px; border: none; background: transparent; font-size: 18px; color: #94a3b8; cursor: pointer; line-height: 1; }

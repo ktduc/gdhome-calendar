@@ -117,6 +117,41 @@ window.GDHomeAI = (() => {
     return payload;
   }
 
+  function getAuthHeaders() {
+    if (window.GDHomeShell?.authHeaders) return GDHomeShell.authHeaders();
+    const headers = {'Content-Type':'application/json'};
+    try {
+      const token = localStorage.getItem('gdhome_token') || JSON.parse(localStorage.getItem('gdhome_session'))?.token;
+      if (token) headers.Authorization = 'Bearer ' + token;
+      const appKey = localStorage.getItem('gdhome_app_key');
+      if (appKey) headers['x-app-key'] = appKey;
+    } catch {}
+    return headers;
+  }
+
+  async function startJob(payload,{onProgress,intervalMs = 2000} = {}) {
+    const startRes = await fetch('/api/ai/jobs/start',{
+      method:'POST',headers:getAuthHeaders(),body:JSON.stringify(payload)
+    });
+    const startJson = await startRes.json().catch(() => ({}));
+    if (!startRes.ok || !startJson.success || !startJson.job?.id) {
+      throw new Error(startJson.message || 'Không khởi tạo được tiến trình AI.');
+    }
+    const jobId = startJson.job.id;
+    onProgress?.(startJson.job);
+    while (true) {
+      await new Promise(r => setTimeout(r,intervalMs));
+      const res = await fetch('/api/project-hub/jobs/status?jobId=' + encodeURIComponent(jobId),{headers:getAuthHeaders()});
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.job) throw new Error(json.message || 'Tiến trình AI đã kết thúc hoặc bị ngắt.');
+      const job = json.job;
+      onProgress?.(job);
+      if (job.status === 'done') return job.result;
+      if (job.status === 'error') throw Object.assign(new Error(job.error || 'Lỗi khi chạy AI.'),{code:job.errorCode,retryable:job.retryable});
+      if (job.status === 'cancelled') throw Object.assign(new Error('Đã huỷ tiến trình AI.'),{code:'cancelled'});
+    }
+  }
+
   async function run(state,{request,onStart,onDone,onError,onFinish}) {
     if (state.running) return;
     state.running = true;
@@ -128,5 +163,5 @@ window.GDHomeAI = (() => {
     finally { state.running = false; onFinish?.(); }
   }
 
-  return {attachments,prepare,run,loadWorkbook};
+  return {attachments,prepare,run,startJob,loadWorkbook};
 })();

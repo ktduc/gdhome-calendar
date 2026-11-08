@@ -46,7 +46,9 @@ window.GDHomeConnections = (() => {
       '<label>API key<input type="password" name="aiKey" autocomplete="off" placeholder="' + html(aiHint) + '"></label>' +
       '<label>Model<input name="aiModel" value="' + html(ai.source === 'user' ? ai.model : '') + '" placeholder="Để trống để tự chọn"></label>' +
       '<div class="connection-actions"><button class="btn btn-primary">Lưu &amp; kiểm tra</button>' +
-      '<button type="button" class="btn btn-outline" data-clear-connection="ai">Gỡ kết nối</button></div></form></section>' +
+      '<button type="button" class="btn btn-outline" data-clear-connection="ai">Gỡ kết nối</button>' +
+      '<button type="button" class="btn btn-outline" data-test-ai>Kiểm tra kết nối AI</button></div>' +
+      '<p class="ai-test-result" data-ai-test-result role="status"></p></form></section>' +
       '<section data-connection-section="google"><h3>Tìm ảnh trực tuyến</h3><p>' +
       (data.imageSearch?.configured ? 'Đã kết nối' : 'Chưa kết nối') + '</p>' +
       '<form data-connection-form="google"><label>Nhà cung cấp<select name="imageSearchProvider">' +
@@ -82,9 +84,41 @@ window.GDHomeConnections = (() => {
     root.querySelectorAll('[data-clear-connection]').forEach(button => {
       button.onclick = () => save({clear:button.dataset.clearConnection},button.dataset.clearConnection);
     });
+    const testButton = root.querySelector('[data-test-ai]');
+    if (testButton) testButton.onclick = async () => {
+      const out = root.querySelector('[data-ai-test-result]');
+      testButton.disabled = true;
+      out.className = 'ai-test-result';
+      out.textContent = 'Đang gọi thử AI…';
+      try {
+        const result = await testAi();
+        out.classList.add(result.ok ? 'is-ok' : 'is-error');
+        out.textContent = result.ok
+          ? '✓ AI hoạt động · ' + result.providerLabel + ' · model ' + result.model + ' · phản hồi sau ' + (result.ms / 1000).toFixed(1) + ' giây'
+          : '⚠ ' + result.message;
+      } catch (error) {
+        out.classList.add('is-error');
+        out.textContent = '⚠ ' + error.message;
+      } finally { testButton.disabled = false; }
+    };
     const date = root.querySelector('[name=notionDateProp]');
     if (date) date.onchange = () => save({notionDateProp:date.value},'notion');
     if (focus) root.querySelector('[data-connection-section="' + focus + '"] :is(input,select)')?.focus();
+  }
+
+  // Gọi thử 1 câu ngắn để biết AI có chạy không, model nào và mất bao lâu.
+  async function testAi() {
+    const headers = {'Content-Type':'application/json'};
+    try {
+      const token = JSON.parse(localStorage.getItem('gdhome_session'))?.token;
+      if (token) headers.Authorization = 'Bearer ' + token;
+    } catch { /* Password or shared mode can still be used. */ }
+    const password = localStorage.getItem('gdhome_app_key');
+    if (password) headers['x-app-key'] = password;
+    const response = await fetch('/api/ai/test',{method:'POST',headers,body:'{}'});
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok && !result.message) throw new Error('Máy chủ lỗi ' + response.status);
+    return result;
   }
 
   async function open(section) {
@@ -112,5 +146,5 @@ window.GDHomeConnections = (() => {
     if (details) details.open = false;
     open(button.dataset.openConnections);
   });
-  return {settings,open};
+  return {settings,open,testAi};
 })();

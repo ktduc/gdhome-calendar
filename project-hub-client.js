@@ -871,7 +871,7 @@
           if (window.GDHomeShell?.aiNotice) {
             GDHomeShell.aiNotice('shell-hub-active-job', {
               state: 'running',
-              body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.step)} (${job.progress}%)`,
+              body: GDHomeShell.hubJobBody ? GDHomeShell.hubJobBody(job) : `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.step)} (${job.progress}%)`,
               label: 'Huỷ',
               onAction: async () => {
                 if (!confirm('Huỷ phân tích AI?')) return;
@@ -883,11 +883,11 @@
           clearInterval(activeReviewPollTimer);
           activeReviewPollTimer = null;
           updateBtnText('🚀 Soát bản vẽ', false);
-          toast('AI đã hoàn tất soát hồ sơ và tự động tạo đề xuất Tiến độ & Chốt mã!');
+          toast(job.warnings?.length ? `AI đã soát xong, còn ${job.warnings.length} phần chưa đọc được (xem chi tiết ở thông báo).` : 'AI đã hoàn tất soát hồ sơ và tự động tạo đề xuất Tiến độ & Chốt mã!');
           if (window.GDHomeShell?.aiNotice) {
             GDHomeShell.aiNotice('shell-hub-active-job', {
               state: 'done',
-              body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: AI đã hoàn tất soát bản vẽ & tự động tạo đề xuất!`,
+              body: GDHomeShell.hubJobBody ? GDHomeShell.hubJobBody(job) : `<strong>${escape(job.projectName || 'Dự án')}</strong>: AI đã hoàn tất soát bản vẽ & tự động tạo đề xuất!`,
               label: 'Xem kết quả',
               onAction: () => {
                 const tab = document.querySelector('[data-tab="tab-review"]');
@@ -908,9 +908,8 @@
           if (window.GDHomeShell?.aiNotice) {
             GDHomeShell.aiNotice('shell-hub-active-job', {
               state: 'error',
-              body: `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.error || 'Lỗi phân tích')}`,
-              label: 'Thử lại',
-              onAction: () => runReview()
+              body: GDHomeShell.hubJobBody ? GDHomeShell.hubJobBody(job) : `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.error || 'Lỗi phân tích')}`,
+              ...(GDHomeShell.hubJobRetryAction ? GDHomeShell.hubJobRetryAction(job,() => runReview()) : {label:'Thử lại',onAction:() => runReview()})
             });
           }
         } else if (job.status === 'cancelled') {

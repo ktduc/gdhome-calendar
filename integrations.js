@@ -271,6 +271,82 @@ async function notionPush(nc, list) {
 const _modelCache = new Map();
 const verNum = v => v.split('.').map(Number).reduce((a, x, i) => a + x / Math.pow(1000, i), 0);
 
+// GĐ18B.4: thời gian chờ & thử lại dùng chung cho mọi lần gọi AI (test có thể thu nhỏ qua setAiTiming).
+const AI_TIMING = { callTimeoutMs: 120000, retries: 2, retryDelaysMs: [3000, 8000], listTimeoutMs: 15000 };
+function setAiTiming(patch = {}) { Object.assign(AI_TIMING, patch); return { ...AI_TIMING }; }
+
+// Thông báo lỗi AI bằng tiếng Việt, nêu rõ nguyên nhân để người dùng biết phải làm gì.
+const AI_ERROR_TEXT = {
+  no_key: 'Chưa kết nối AI (chưa có API key). Vào ⚙ Kết nối → AI để dán key (Gemini / ChatGPT / Claude).',
+  bad_key: 'API key AI không đúng, đã hết hạn hoặc đã bị thu hồi. Vào ⚙ Kết nối → AI để dán lại key.',
+  quota: 'Đã hết hạn mức AI (gọi quá nhiều lượt hoặc hết lượt miễn phí). Chờ vài phút rồi bấm Thử lại, hoặc bật thanh toán trong Google AI Studio.',
+  too_large: 'Tệp quá lớn để AI đọc. Hãy tách file theo tầng hoặc in PDF nhẹ hơn rồi thử lại.',
+  timeout: 'AI không phản hồi sau {s} giây (hết thời gian). Tệp có thể quá nặng hoặc máy chủ AI đang chậm – bấm Thử lại.',
+  overloaded: 'Máy chủ AI đang quá tải. Chờ vài phút rồi bấm Thử lại.',
+  network: 'Không kết nối được tới máy chủ AI (lỗi mạng). Kiểm tra mạng rồi bấm Thử lại.',
+  bad_request: 'AI từ chối yêu cầu.',
+  bad_output: 'AI trả về dữ liệu không đúng định dạng. Bấm Thử lại.',
+  cancelled: 'Đã huỷ tiến trình AI.',
+  unknown: 'Lỗi AI không xác định.'
+};
+const AI_RETRYABLE = new Set(['quota', 'timeout', 'overloaded', 'network', 'bad_output']);
+function aiError(code, detail = '', status) {
+  const base = (AI_ERROR_TEXT[code] || AI_ERROR_TEXT.unknown).replace('{s}', Math.round(AI_TIMING.callTimeoutMs / 1000));
+  const message = detail && ['bad_request', 'unknown', 'too_large'].includes(code) ? base + ' Chi tiết: ' + String(detail).slice(0, 300) : base;
+  return Object.assign(new Error(message), {
+    status: status || ({ no_key: 400, bad_key: 400, quota: 429, too_large: 413, timeout: 504, bad_request: 400, cancelled: 499 }[code] || 502),
+    aiCode: code,
+    retryable: AI_RETRYABLE.has(code),
+    aiDetail: String(detail || '').slice(0, 500)
+  });
+}
+function aiHttpError(provider, status, json) {
+  const raw = (json && json.error && (json.error.message || json.error.type)) || (json && json.message) || '';
+  const text = String(raw) + ' ' + JSON.stringify((json && json.error) || '').slice(0, 400);
+  if (status === 401 || status === 403 || /api[ _-]?key not valid|API_KEY_INVALID|invalid x-api-key|invalid api key|incorrect api key/i.test(text)) return aiError('bad_key', raw, status);
+  if (status === 413 || /too large|exceeds the (maximum|limit)|payload size|request entity|maximum (context|number of tokens)|token count|input is too long/i.test(text)) return aiError('too_large', raw, status);
+  if (status === 429 || /RESOURCE_EXHAUSTED|insufficient_quota|rate limit/i.test(text)) {
+    const err = aiError('quota', raw, 429);
+    if (/insufficient_quota|billing/i.test(text)) err.retryable = false;
+    return err;
+  }
+  if ([500, 502, 503, 504, 529].includes(status) || /high demand|overloaded|unavailable/i.test(text)) return aiError('overloaded', raw, status);
+  return aiError(status >= 400 && status < 500 ? 'bad_request' : 'unknown', raw || `${PROVIDER_LABEL[provider] || 'AI'} lỗi ${status}`, status);
+}
+// Mỗi lần gọi có hạn chờ riêng (mặc định 120 s) và có thể bị huỷ theo tiến trình nền (opts.signal).
+function aiSignal(opts = {}, ms = AI_TIMING.callTimeoutMs) {
+  const timeout = AbortSignal.timeout(ms);
+  return opts.signal ? AbortSignal.any([timeout, opts.signal]) : timeout;
+}
+async function aiFetch(provider, url, init, opts = {}, ms) {
+  const signal = aiSignal(opts, ms);
+  let res, json;
+  try {
+    res = await fetch(url, { ...init, signal });
+    json = await res.json().catch(e => { if (signal.aborted) throw e; return {}; });
+  } catch (e) {
+    if (opts.signal && opts.signal.aborted) throw aiError('cancelled');
+    if (e && e.aiCode) throw e;
+    if (e && (e.name === 'TimeoutError' || e.name === 'AbortError' || signal.aborted)) throw aiError('timeout');
+    throw aiError('network', e && e.message);
+  }
+  if (!res.ok) throw aiHttpError(provider, res.status, json);
+  return json;
+}
+const abortableSleep = (ms, signal) => new Promise((resolve, reject) => {
+  if (signal && signal.aborted) return reject(aiError('cancelled'));
+  const timer = setTimeout(() => { if (signal) signal.removeEventListener('abort', onAbort); resolve(); }, ms);
+  function onAbort() { clearTimeout(timer); reject(aiError('cancelled')); }
+  if (signal) signal.addEventListener('abort', onAbort, { once: true });
+});
+// Gói lỗi bất kỳ thành lỗi AI có mã (giữ nguyên lỗi đã phân loại).
+function toAiError(e) {
+  if (e && e.aiCode) return e;
+  if (e && (e.name === 'TimeoutError' || /aborted due to timeout|timed out/i.test(e.message || ''))) return aiError('timeout');
+  if (e && /Chưa kết nối AI/i.test(e.message || '')) return aiError('no_key');
+  return Object.assign(e instanceof Error ? e : new Error(String(e)), { aiCode: 'unknown' });
+}
+
 async function listModels(ai) {
   if (ai.provider === 'anthropic') {
     const res = await fetch('https://api.anthropic.com/v1/models?limit=100', {signal:AbortSignal.timeout(15000),headers:{'x-api-key':ai.key,'anthropic-version':'2023-06-01'}});
@@ -354,44 +430,87 @@ function buildPrompt(body) {
   return lines.join('\n\n') + '\n\nHãy lập danh sách công việc và trả về JSON.';
 }
 
-async function callAnthropic(ai, model, images, pdfs, text, system = AI_SYSTEM) {
+async function callAnthropic(ai, model, images, pdfs, text, system = AI_SYSTEM, opts = {}) {
   const content = [];
   images.forEach(img => content.push({ type: 'image', source: { type: 'base64', media_type: img.mediaType, data: img.data } }));
   pdfs.forEach(p => content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.data } }));
   content.push({ type: 'text', text });
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    signal:AbortSignal.timeout(60000),
+  const json = await aiFetch('anthropic', 'https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: { 'x-api-key': ai.key, 'anthropic-version': '2023-06-01', 'content-type': 'application/json' },
-    body: JSON.stringify({ model, max_tokens: 8000, system, messages: [{ role: 'user', content }] })
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(httpError(502, res.status === 401 ? 'API key Claude không đúng' : ((json.error && json.error.message) || `Claude lỗi ${res.status}`)), { retryable: [429, 500, 502, 503, 529].includes(res.status) });
+    body: JSON.stringify({ model, max_tokens: opts.maxTokens || 8000, system, messages: [{ role: 'user', content }] })
+  }, opts);
   return (json.content || []).filter(c => c.type === 'text').map(c => c.text).join('\n');
 }
 
-async function callOpenAI(ai, model, images, pdfs, text, system = AI_SYSTEM) {
+async function callOpenAI(ai, model, images, pdfs, text, system = AI_SYSTEM, opts = {}) {
   const content = [{ type: 'text', text }];
   images.forEach(img => content.push({ type: 'image_url', image_url: { url: `data:${img.mediaType};base64,${img.data}` } }));
   pdfs.forEach((p, i) => content.push({ type: 'file', file: { filename: `tai-lieu-${i + 1}.pdf`, file_data: `data:application/pdf;base64,${p.data}` } }));
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    signal:AbortSignal.timeout(60000),
+  const json = await aiFetch('openai', 'https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: { Authorization: `Bearer ${ai.key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content }] })
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw Object.assign(httpError(502, res.status === 401 ? 'API key OpenAI không đúng' : ((json.error && json.error.message) || `OpenAI lỗi ${res.status}`)), { retryable: [429, 500, 502, 503].includes(res.status) && !/quota/i.test(JSON.stringify(json)) });
+  }, opts);
   return ((json.choices || [])[0] || {}).message ? json.choices[0].message.content : '';
 }
 
-async function callGemini(ai, model, images, pdfs, text, system = AI_SYSTEM) {
+// Gemini nhận tối đa ~20 MB dữ liệu nhúng mỗi yêu cầu. PDF lớn hơn được tải qua Gemini File API rồi gửi đường dẫn.
+const GEMINI_INLINE_MAX = 14 * 1024 * 1024; // tính theo độ dài base64
+const GEMINI_BASE = 'https://generativelanguage.googleapis.com';
+async function geminiUploadFile(ai, buf, mime, displayName, opts = {}) {
+  const signal = aiSignal(opts);
+  try {
+    const start = await fetch(`${GEMINI_BASE}/upload/v1beta/files`, {
+      method: 'POST', signal,
+      headers: {
+        'x-goog-api-key': ai.key, 'X-Goog-Upload-Protocol': 'resumable', 'X-Goog-Upload-Command': 'start',
+        'X-Goog-Upload-Header-Content-Length': String(buf.length), 'X-Goog-Upload-Header-Content-Type': mime, 'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ file: { display_name: String(displayName || 'tai-lieu').slice(0, 120) } })
+    });
+    if (!start.ok) throw aiHttpError('gemini', start.status, await start.json().catch(() => ({})));
+    const uploadUrl = start.headers.get('x-goog-upload-url');
+    if (!uploadUrl) throw aiError('unknown', 'Gemini File API không trả về địa chỉ tải lên');
+    const done = await fetch(uploadUrl, {
+      method: 'POST', signal,
+      headers: { 'Content-Length': String(buf.length), 'X-Goog-Upload-Offset': '0', 'X-Goog-Upload-Command': 'upload, finalize' },
+      body: buf
+    });
+    const json = await done.json().catch(() => ({}));
+    if (!done.ok) throw aiHttpError('gemini', done.status, json);
+    let file = json.file || {};
+    for (let i = 0; i < 30 && file.state === 'PROCESSING'; i++) {
+      await abortableSleep(2000, opts.signal);
+      const poll = await fetch(`${GEMINI_BASE}/v1beta/${file.name}`, { signal, headers: { 'x-goog-api-key': ai.key } });
+      file = await poll.json().catch(() => file);
+    }
+    if (file.state === 'FAILED' || !file.uri) throw aiError('bad_request', 'Gemini không xử lý được tệp đã tải lên');
+    return { uri: file.uri, mime: file.mimeType || mime };
+  } catch (e) {
+    if (opts.signal && opts.signal.aborted) throw aiError('cancelled');
+    if (e && e.aiCode) throw e;
+    if (e && (e.name === 'TimeoutError' || e.name === 'AbortError')) throw aiError('timeout');
+    throw aiError('network', e && e.message);
+  }
+}
+
+async function callGemini(ai, model, images, pdfs, text, system = AI_SYSTEM, opts = {}) {
   const parts = [];
+  const inlineSize = [...images, ...pdfs].reduce((sum, item) => sum + String(item.data || '').length, 0);
   images.forEach(img => parts.push({ inline_data: { mime_type: img.mediaType, data: img.data } }));
-  pdfs.forEach(p => parts.push({ inline_data: { mime_type: 'application/pdf', data: p.data } }));
+  for (const [i, p] of pdfs.entries()) {
+    if (p.fileUri) parts.push({ file_data: { mime_type: 'application/pdf', file_uri: p.fileUri } });
+    else if (inlineSize > GEMINI_INLINE_MAX) {
+      // Tải lên 1 lần rồi nhớ lại đường dẫn để các lần thử lại không phải tải lại.
+      opts.onStep?.(`Đang tải PDF ${i + 1}/${pdfs.length} lên Gemini File API…`);
+      const uploaded = await geminiUploadFile(ai, Buffer.from(p.data, 'base64'), 'application/pdf', p.name || `tai-lieu-${i + 1}.pdf`, opts);
+      p.fileUri = uploaded.uri;
+      parts.push({ file_data: { mime_type: 'application/pdf', file_uri: uploaded.uri } });
+    } else parts.push({ inline_data: { mime_type: 'application/pdf', data: p.data } });
+  }
   parts.push({ text });
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-    signal:AbortSignal.timeout(60000),
+  const json = await aiFetch('gemini', `${GEMINI_BASE}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     headers: { 'x-goog-api-key': ai.key, 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -399,15 +518,9 @@ async function callGemini(ai, model, images, pdfs, text, system = AI_SYSTEM) {
       contents: [{ role: 'user', parts }],
       generationConfig: { responseMimeType: 'application/json', temperature: 0.4 }
     })
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    let msg = (json.error && json.error.message) || `Gemini lỗi ${res.status}`;
-    if (res.status === 429) msg = 'Gemini báo hết hạn mức miễn phí (thử lại sau ít phút, hoặc bật thanh toán trong Google AI Studio)';
-    if (res.status === 503 || /high demand|overloaded|unavailable/i.test(msg)) msg = 'Máy chủ Gemini đang quá tải';
-    throw Object.assign(httpError(502, msg), { retryable: [429, 500, 502, 503, 504].includes(res.status) });
-  }
+  }, opts);
   const cand = (json.candidates || [])[0] || {};
+  if (!cand.content && json.promptFeedback && json.promptFeedback.blockReason) throw aiError('bad_request', 'Gemini chặn nội dung: ' + json.promptFeedback.blockReason);
   return ((cand.content || {}).parts || []).map(p => p.text || '').join('\n');
 }
 
@@ -427,27 +540,46 @@ async function fallbackModels(ai, first) {
   } else {
     ids.filter(id => /sonnet|haiku/i.test(id)).forEach(id => { if (!list.includes(id)) list.push(id); });
   }
-  return list.slice(0, 4);
+  return list.slice(0, 3);
 }
 
-async function callWithFallback(ai, model, call, images, pdfs, text, system) {
+// GĐ18B.4: mỗi model được gọi tối đa 1 + AI_TIMING.retries lần (mặc định thử lại 2 lần), mỗi lần chờ tối đa 120 s.
+// Lỗi không thể thử lại (key sai, tệp quá lớn, yêu cầu sai) báo ngay. Chỉ quá tải / hết hạn mức mới đổi sang model khác.
+async function callWithFallback(ai, model, call, images, pdfs, text, system, opts = {}) {
   const models = await fallbackModels(ai, model);
+  const maxAttempts = 1 + AI_TIMING.retries;
   let lastErr;
   for (const m of models) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      if (opts.signal && opts.signal.aborted) throw aiError('cancelled');
       try {
-        return { raw: await call(ai, m, images, pdfs, text, system), usedModel: m };
+        return { raw: await call(ai, m, images, pdfs, text, system, opts), usedModel: m };
       } catch (e) {
-        lastErr = e;
-        if (!e.retryable && !/quá tải|overloaded|high demand|unavailable/i.test(e.message)) throw e;
-        await sleep(attempt === 0 ? 2500 : 5000);
+        lastErr = toAiError(e);
+        if (!lastErr.retryable) throw lastErr;
+        if (attempt < maxAttempts - 1) {
+          opts.onRetry?.({ attempt: attempt + 1, max: AI_TIMING.retries, error: lastErr, model: m });
+          await abortableSleep(AI_TIMING.retryDelaysMs[attempt] ?? AI_TIMING.retryDelaysMs.at(-1) ?? 0, opts.signal);
+        }
       }
     }
+    if (!['overloaded', 'quota'].includes(lastErr.aiCode)) break;
   }
-  throw httpError(503, (lastErr ? lastErr.message : 'AI quá tải') + '. Đã thử lại nhiều lần và đổi model khác nhưng vẫn bận – thử lại sau vài phút.');
+  lastErr.message += ` (Đã thử lại ${AI_TIMING.retries} lần.)`;
+  throw lastErr;
 }
 
-async function requestAiPlan(ai, body, userKey, text, system) {
+// Kiểm tra kết nối AI: gọi thử 1 câu ngắn, báo model và thời gian phản hồi.
+async function testAiConnection(ai) {
+  if (!ai) throw aiError('no_key');
+  const startedAt = Date.now();
+  const model = await resolveModel(ai);
+  const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
+  const raw = await call(ai, model, [], [], 'Trả lời đúng JSON {"ok":true,"reply":"Xin chào GD HOME"}', 'Bạn là trợ lý kiểm tra kết nối. Chỉ trả về JSON.', { maxTokens: 200 });
+  return { ok: true, provider: ai.provider, providerLabel: PROVIDER_LABEL[ai.provider], model, source: ai.source, ms: Date.now() - startedAt, reply: String(raw || '').slice(0, 200) };
+}
+
+async function requestAiPlan(ai, body, userKey, text, system, opts = {}) {
   const images = (Array.isArray(body.images) ? body.images.slice(0, 6) : [])
     .filter(img => img && img.data && /^image\/(png|jpeg|webp|gif)$/.test(String(img.mediaType || '')))
     .map(img => ({ mediaType: String(img.mediaType), data: String(img.data) }));
@@ -456,14 +588,15 @@ async function requestAiPlan(ai, body, userKey, text, system) {
   if (ai.source === 'env') checkSharedQuota(userKey);
   const model = await resolveModel(ai);
   const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
-  const { raw, usedModel } = await callWithFallback(ai,model,call,images,pdfs,text,system);
+  const { raw, usedModel } = await callWithFallback(ai,model,call,images,pdfs,text,system,opts);
   let plan;
-  try { plan = extractJson(raw); } catch { throw httpError(502,'AI không trả về JSON hợp lệ. Thử lại.'); }
+  try { plan = extractJson(raw); } catch { throw aiError('bad_output'); }
   return { plan,model:PROVIDER_LABEL[ai.provider] + ' · ' + usedModel };
 }
 
-async function aiSchedule(ai, body, userKey) {
-  const { plan,model } = await requestAiPlan(ai,body,userKey,buildPrompt(body));
+
+async function aiSchedule(ai, body, userKey, opts = {}) {
+  const { plan,model } = await requestAiPlan(ai,body,userKey,buildPrompt(body),undefined,opts);
 
   if (!Array.isArray(plan.tasks)) plan.tasks = [];
   plan.tasks = plan.tasks.slice(0, 120).map(t => ({
@@ -653,6 +786,45 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     sendJson(res, 200, { success: true, plan: await planner(ai,prepared.body,dataKey),aiSkipped:prepared.aiSkipped });
     return true;
   }
+  if (urlPath === '/api/ai/test' && req.method === 'POST') {
+    const ai = resolveAi(await loadUserCfg(store, dataKey));
+    try {
+      sendJson(res, 200, { success: true, ...(await testAiConnection(ai)) });
+    } catch (e) {
+      const err = toAiError(e);
+      sendJson(res, 200, { success: false, ok: false, code: err.aiCode, message: err.message, provider: ai && ai.provider, providerLabel: ai && PROVIDER_LABEL[ai.provider] });
+    }
+    return true;
+  }
+  // GĐ18B.4/5: chạy AI thành tiến trình nền (dùng chung HubJobManager) để không bị ngắt khi chuyển tab
+  if (urlPath === '/api/ai/jobs/start' && req.method === 'POST') {
+    const ai = resolveAi(await loadUserCfg(store, dataKey));
+    if (!ai) throw aiError('no_key');
+    const body = (await readJsonBody(req)) || {};
+    const kind = body.kind === 'review-timeline' ? 'review-timeline' : 'schedule';
+    const { globalJobManager } = require('./project-hub');
+    const job = globalJobManager.createJob({
+      projectId: String(body.projectId || body.ownerId || 'calendar').slice(0, 200),
+      projectName: String(body.projectName || 'Lịch').slice(0, 200),
+      dataKey, kind,
+      params: { kind },
+      runFn: async (j, signal) => {
+        const opts = {
+          signal,
+          onStep: step => { j.step = step; },
+          onRetry: ({ attempt, max, error }) => { j.step = `${error.message.split('.')[0]}. Đang thử lại lần ${attempt}/${max}…`; }
+        };
+        j.step = 'Đang gửi dữ liệu cho AI…'; j.progress = 20;
+        const tick = setInterval(() => { if (j.status === 'running' && j.progress < 90) j.progress += 2; }, 4000);
+        try {
+          if (kind === 'review-timeline') return await require('./integrations-review').aiReviewTimeline(ai, body, dataKey, opts);
+          return await aiSchedule(ai, body, dataKey, opts);
+        } finally { clearInterval(tick); }
+      }
+    });
+    sendJson(res, 200, { success: true, job: globalJobManager.serialize(job) });
+    return true;
+  }
   if (urlPath === '/api/google/search' && req.method === 'GET') {
     const params = new URL(req.url, 'http://localhost').searchParams;
     const q = String(params.get('q') || '').trim();
@@ -698,5 +870,15 @@ module.exports = {
   callOpenAI,
   callAnthropic,
   resolveModel,
+  aiError,
+  aiHttpError,
+  toAiError,
+  setAiTiming,
+  AI_TIMING,
+  testAiConnection,
+  geminiUploadFile,
+  requestAiPlan,
+  aiSchedule,
+  checkSharedQuota,
   PROVIDER_LABEL
 };

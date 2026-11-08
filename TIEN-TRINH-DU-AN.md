@@ -205,3 +205,11 @@
 **XONG GĐ14B**
 
 
+## GĐ18B — Giao diện chung, Quản lý dự án, AI
+
+- [x] **18B.4. Sửa tận gốc lỗi AI timeout & chạy nền bền vững**
+  - Tăng timeout mỗi lần gọi Gemini/OpenAI/Claude lên 120s (`AI_TIMING.callTimeoutMs = 120000`), tự động thử lại 2 lần (`retries = 2`) với lỗi tạm thời (429, 503, timeout, lỗi mạng), không retry vô ích khi sai key (401/403) hoặc tệp quá lớn (413/400).
+  - PDF lớn (>10 trang) tự động chia nhỏ ≤10 trang/lần (`splitPdfPages`) hoặc tải qua Gemini File API (`geminiUploadFile`), cập nhật % tiến trình và số trang đang đọc vào `HubJobManager` (không ngắt khi chuyển tab).
+  - Chuẩn hoá thông báo lỗi tiếng Việt (`AI_ERROR_TEXT`) nêu rõ nguyên nhân (chưa có key, key sai, hết hạn mức, tệp quá lớn, hết thời gian) kèm nút **Thử lại** / **⚙ Mở Kết nối AI** trong `shell.js` và `project-hub-client.js`.
+  - Thêm nút **Kiểm tra kết nối AI** trong `⚙ Kết nối` (`integrations-client.js` → `POST /api/ai/test`) báo rõ hãng AI, model và thời gian phản hồi.
+  - Thêm bộ kiểm thử `tests/gd18b-ai.test.js` (giả lập chậm 90s, lỗi 429, lỗi 400, chia PDF 15 trang, kiểm tra kết nối).
