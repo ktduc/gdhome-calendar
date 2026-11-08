@@ -386,7 +386,7 @@ cases['9.6'] = async page => {
   await find.fill('phong khach');
   await notes.getByRole('checkbox',{name:'Sơn mẫu tại phòng khách'}).check();
   await notes.getByRole('button',{name:'Lưu ghi chú'}).click();
-  const expected = 'So khớp mẫu dưới ánh sáng tự nhiên; Sơn 2 nước phủ; Sơn mẫu tại phòng khách';
+  const expected = 'Sơn 2 nước phủ; So khớp mẫu dưới ánh sáng tự nhiên; Sơn mẫu tại phòng khách';
   assert.equal(await note.inputValue(),expected);
   await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
   await openMaterials(page);
@@ -827,11 +827,49 @@ cases['12.4'] = async page => {
   await page.locator('#print-preview').waitFor({state:'detached'});
 };
 
+cases['12.5'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => modify(() => {
+    const group = sheet.groups[0];
+    group.name = 'Gỗ MDF';
+    group.rows[0].name = 'Tủ MDF';
+    group.rows[0].options[0].code = 'PA-TEST';
+    group.rows[0].chosen = 0;
+    group.rows[0].decision = 'chosen';
+    group.rows[1].spec = 'MDF 17 mm vân sồi đặt riêng';
+    group.rows[2].spec = 'MDF 17 mm vân sồi đặt riêng';
+    group.rows[3].spec = 'MDF 18 mm ép vân óc chó';
+  }));
+  const field = page.locator('[data-row="g1-r1"] textarea[data-field=spec]');
+  await field.click();
+  const form = page.locator('.material-notes-form');
+  const choices = form.locator('input[name=suggestion]');
+  assert.ok(await choices.count() >= 15);
+  assert.equal(await choices.first().inputValue(),'MDF 17 mm vân sồi đặt riêng');
+  const search = form.getByRole('searchbox',{name:'Tìm gợi ý'});
+  await search.fill('plywood');
+  await form.getByRole('checkbox',{name:'Plywood 18mm phủ Laminate'}).check();
+  await search.fill('bong guong');
+  await form.getByRole('checkbox',{name:'Cánh Acrylic bóng gương'}).check();
+  await form.getByRole('button',{name:'Lưu quy cách'}).click();
+  const expected = 'Plywood 18mm phủ Laminate; Cánh Acrylic bóng gương';
+  assert.equal(await field.inputValue(),expected);
+  assert.equal(await page.evaluate(() => sheet.groups[0].rows[0].options[0].finish),expected);
+  await page.locator('[data-row="g1-r1"] textarea[data-field=note]').click();
+  assert.ok(await choices.count() >= 15);
+  await form.getByRole('checkbox',{name:'Chốt chiều vân theo cánh tủ'}).waitFor();
+  await page.keyboard.press('Escape');
+  const library = await page.evaluate(() => materialSuggestionLibrary.map(group => [group.spec.length,group.note.length+materialNoteCommon.length]));
+  assert.ok(library.length >= 16);
+  assert.ok(library.every(([spec,note]) => spec >= 15 && spec <= 30 && note >= 15 && note <= 30));
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
 async function openMaterials(page) {
   await page.goto('/chot-ma');
+  await page.locator('#materials:not([inert])').waitFor();
   const listButton = page.getByRole('button',{name:'Bảng mẫu GĐ8',exact:true});
   const firstRow = page.locator('[data-row="g1-r1"]');
   await listButton.or(firstRow).first().waitFor();

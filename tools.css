@@ -88,6 +88,7 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .material-notes-form textarea{min-height:4em;resize:vertical}
 .material-note-choices{display:grid;gap:4px;max-height:35vh;overflow:auto;border:1px solid #d5dce5;padding:8px}
 .material-note-choices input{vertical-align:middle}
+.material-suggestion-frequency{margin-left:6px;color:#5a6b83}
 .material-notes-message{margin:0}
 
 .crop-dialog{width:max-content;max-width:calc(100vw - 32px);box-sizing:border-box}
