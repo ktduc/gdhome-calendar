@@ -2,11 +2,14 @@ function labeledInput(key, value, label) {
   return '<label><span>' + label + '</span>' + input(key,value,label) + '</label>';
 }
 
+const materialColumnLabels = Object.fromEntries(materialPrintColumns);
 const materialColumns = [
-  ['select','Chọn dòng'],['name','Hạng mục'],['room','Vị trí'],['render','Phối cảnh 3D'],['spec','Chất liệu / Quy cách'],
-  ['pa0','PA1'],['pa1','PA2'],['pa2','PA3'],['qty','KL'],['unit','Đơn vị'],
-  ['supplier','NCC / Nhà thầu'],['note','Ghi chú'],['decision','Trạng thái'],['actions','Thao tác']
+  ['select',materialColumnLabels.number],['name',materialColumnLabels.name],['render',materialColumnLabels.render],
+  ['pa0',materialColumnLabels.sample],['pa1','PA2'],['pa2','PA3'],['qty',materialColumnLabels.qty],['unit','ĐVT'],
+  ['note',materialColumnLabels.note],['room','Vị trí'],['spec','Chất liệu / Quy cách'],
+  ['supplier','NCC / Nhà thầu'],['decision','Trạng thái'],['actions','Thao tác']
 ];
+
 const optionalColumns = new Set(['render','spec','qty','unit','supplier','note','decision']);
 const hiddenColumns = new Set();
 const forcedPA = new Set();
@@ -70,7 +73,7 @@ function materialKpis() {
     counts(sheet),nearest ? 'Hạn gần nhất ' + nearest : 'Chưa có hạn'].map(value => '<span>' + html(value) + '</span>').join('');
 }
 
-const defaultColumnWidths = {select:36,room:112,render:110,spec:152,pa0:118,pa1:118,pa2:118,qty:68,unit:75,supplier:136,note:156,decision:130,actions:134};
+const defaultColumnWidths = {select:46,room:112,render:110,spec:152,pa0:118,pa1:118,pa2:118,qty:104,unit:70,supplier:136,note:156,decision:130,actions:134};
 const clampColumnWidth = width => Math.round(Math.min(720,Math.max(48,width)));
 
 function columnWidth(key) {
@@ -218,7 +221,7 @@ function renderEditor() {
 function renderMaterialTable(columns,widths) {
   const projectName = sheet.meta?.project || materials.projects.find(p => p.id === sheet.projectId)?.name || sheet.title;
   const columnHeadings = columns.map(([key,label]) => '<th data-column="' + key + '">' + (key === 'select' ?
-    '<input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện">' :
+    '<label class="material-row-number"><input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện"><span>STT</span></label>' :
     label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
     label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + '</th>').join('');
   const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + widths[index] + 'px">').join('');
@@ -227,7 +230,7 @@ function renderMaterialTable(columns,widths) {
     (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm.</p>') +
     '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid" style="width:' + widths.reduce((sum,w) => sum+w,0) +
     'px"><colgroup>' + columnSizes + '</colgroup><thead><tr>' + columnHeadings + '</tr></thead>' +
-    sheet.groups.filter(group => !hiddenGroups.has(group.id)).map(group => renderGroup(group,columns)).join('') +
+    renderMaterialGroups(columns) +
     '</table></div></section>';
 }
 
@@ -299,14 +302,19 @@ function visibleGroupRows(group) {
   if (collapsed.has(group.id)) return [];
   return group.rows.filter(row => (!sheetRoom || row.room === sheetRoom) && (!sheetStatus || rowState(row) === sheetStatus));
 }
-function renderGroup(group,columns) {
+function renderMaterialGroups(columns) {
+  let number = 0;
+  return sheet.groups.filter(group => !hiddenGroups.has(group.id))
+    .map(group => renderGroup(group,columns,() => ++number)).join('');
+}
+function renderGroup(group,columns,nextNumber) {
   const span = columns.length;
   const heading = '<tr class="group"><th colspan="' + span + '">' +
     '<input type="checkbox" data-select-group="' + html(group.id) + '" aria-label="Chọn cả nhóm ' + html(group.name) + '"> ' +
     '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
     input('groupName',group.name,'Nhóm') + ' <label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
     scheduleControls(group) + ' <button data-action="del-group">Bỏ nhóm</button></th></tr>';
-  const rows = visibleGroupRows(group).map(row => renderRow(row,columns)).join('');
+  const rows = visibleGroupRows(group).map(row => renderRow(row,columns,nextNumber())).join('');
   const add = collapsed.has(group.id) ? '' : '<tr><td colspan="' + span + '"><button data-action="add-row">＋ Dòng</button></td></tr>';
   return '<tbody data-group="' + html(group.id) + '">' + heading + rows + add + '</tbody>';
 }
@@ -323,11 +331,11 @@ function imageCell(list, slot, content = '', state = '', removable = false) {
     '</div><button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' + (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
 }
 
-function renderRow(row,columns) {
+function renderRow(row,columns,number) {
   const chosen = row.options[row.chosen];
   const count = rowPaCount(row);
   const cells = {
-    select:'<input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '">',
+    select:'<label class="material-row-number"><input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '"><span>' + number + '</span></label>',
     name:input('name',row.name,'Hạng mục'),
     room:input('room',row.room,'Vị trí'),
     render:imageCell(row.render,'render'),
