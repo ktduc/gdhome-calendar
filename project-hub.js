@@ -15,7 +15,8 @@ const {
   resolveModel,
   extractJson,
   aiError,
-  toAiError
+  toAiError,
+  notionCustomers
 } = require('./integrations');
 
 const {
@@ -1213,6 +1214,178 @@ async function executeProjectReview({
 }
 
 // -----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
+// GĐ18B.3: Tự điền Hồ sơ dự án từ Notion (tìm theo SĐT -> tên dự án) + AI đọc hợp đồng/báo giá
+// -----------------------------------------------------------------------------
+const PROFILE_FIELDS = [
+  { key: 'customer', label: 'Tên khách hàng' },
+  { key: 'address', label: 'Địa chỉ' },
+  { key: 'phone', label: 'SĐT' },
+  { key: 'email', label: 'Email' },
+  { key: 'contract', label: 'Hợp đồng' }
+];
+
+const PROFILE_AI_SYSTEM = `Bạn là trợ lý hồ sơ dự án của GD HOME. Hãy đọc văn bản hoặc tài liệu hợp đồng / báo giá đính kèm và trích xuất thông tin khách hàng.
+Chỉ trả về đúng JSON theo mẫu:
+{"customer":"Tên khách hàng hoặc chuỗi rỗng","address":"Địa chỉ công trình hoặc chuỗi rỗng","phone":"Số điện thoại hoặc chuỗi rỗng","email":"Email hoặc chuỗi rỗng","contract":"Số hợp đồng / mã báo giá hoặc chuỗi rỗng"}
+Không suy đoán thông tin không có trong tài liệu.`;
+
+function inferColumnKey(colName, colType) {
+  const n = normalizeText(colName);
+  if (colType === 'phone_number' || /sdt|so dien thoai|dien thoai|phone|mobile|tel/.test(n)) return 'phone';
+  if (colType === 'email' || /email|mail/.test(n)) return 'email';
+  if (/hop dong|so hd|ma hd|contract/.test(n)) return 'contract';
+  if (/dia chi|address|cong trinh|vi tri/.test(n)) return 'address';
+  if (/khach hang|ten kh|chu nha|chu dau tu|customer|client/.test(n)) return 'customer';
+  if (colType === 'title' && !/du an|project/.test(n)) return 'customer';
+  return null;
+}
+
+function mapNotionRowToProfile(rowValues, columns = [], map = {}) {
+  const out = {};
+  for (const { key } of PROFILE_FIELDS) {
+    const mappedCol = map[key];
+    if (mappedCol && rowValues[mappedCol]) {
+      out[key] = String(rowValues[mappedCol]).trim();
+    }
+  }
+  for (const col of columns) {
+    const val = String(rowValues[col.name] || '').trim();
+    if (!val) continue;
+    const guessed = inferColumnKey(col.name, col.type);
+    if (guessed && !out[guessed]) out[guessed] = val;
+  }
+  return out;
+}
+
+function extractRegexProfileFromText(text) {
+  const s = String(text || '');
+  const out = {};
+  const phoneMatch = s.match(/(?:\+?84|0)(?:[\s.-]*\d){8,10}/);
+  if (phoneMatch) out.phone = phoneMatch[0].replace(/[^\d+]/g, '');
+  const emailMatch = s.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+  if (emailMatch) out.email = emailMatch[0].trim();
+  const contractMatch = s.match(/(?:số\s*hợp\s*đồng|hợp\s*đồng\s*số|số\s*hđ|mã\s*hđ|hđ\s*số)\s*[:\-]?\s*([A-Z0-9/_.-]{3,40})/i);
+  if (contractMatch) out.contract = contractMatch[1].trim();
+  const custMatch = s.match(/(?:khách\s*hàng|chủ\s*đầu\s*tư|bên\s*a|họ\s*và\s*tên)\s*[:\-]\s*([^\r\n,;|\t]{2,80})/i);
+  if (custMatch) out.customer = custMatch[1].trim();
+  const addrMatch = s.match(/(?:địa\s*chỉ(?:\s*công\s*trình|\s*thi\s*công)?|địa\s*điểm\s*thi\s*công)\s*[:\-]\s*([^\r\n|\t]{4,160})/i);
+  if (addrMatch) out.address = addrMatch[1].trim();
+  return out;
+}
+
+async function suggestProjectProfile({ projectId, project, hubRecord, store, dataKey, assets }) {
+  const currentProfile = project?.profile || {};
+  const projectName = project?.name || currentProfile.project || '';
+  const suggestions = {};
+  const sources = [];
+
+  const mergeCandidate = (candidate, sourceLabel) => {
+    let added = false;
+    for (const { key } of PROFILE_FIELDS) {
+      const val = String(candidate?.[key] || '').trim();
+      if (val && !suggestions[key]?.value) {
+        suggestions[key] = { value: val, source: sourceLabel };
+        added = true;
+      }
+    }
+    if (added && !sources.includes(sourceLabel)) sources.push(sourceLabel);
+  };
+
+  // (a) Nguồn Notion: tìm theo SĐT trước, rồi theo tên dự án
+  const userCfg = await loadUserCfg(store, dataKey);
+  try {
+    const phoneQuery = String(currentProfile.phone || '').replace(/\D/g, '');
+    const queries = [];
+    if (phoneQuery.length >= 6) queries.push({ q: phoneQuery, label: 'Notion (theo SĐT)' });
+    if (projectName.trim()) queries.push({ q: projectName.trim(), label: 'Notion (theo tên dự án)' });
+
+    for (const { q, label } of queries) {
+      const params = new URLSearchParams({ q });
+      const res = await notionCustomers(userCfg, params);
+      if (Array.isArray(res?.items) && res.items.length > 0) {
+        const mapped = mapNotionRowToProfile(res.items[0].values || {}, res.columns || [], res.map || {});
+        mergeCandidate(mapped, label);
+        break;
+      }
+    }
+  } catch {
+    // Notion chưa cấu hình hoặc lỗi mạng thì chuyển sang đọc tệp hợp đồng/báo giá
+  }
+
+  // (b) Nguồn tệp đã tải lên dự án (hợp đồng, báo giá): đọc Excel/CSV/PDF + gọi AI
+  const docs = (hubRecord?.documents || []).filter(d =>
+    d.type === 'quote' || /hop[-_ ]?dong|contract|bao[-_ ]?gia|quote/i.test(d.name || '')
+  );
+
+  if (docs.length > 0) {
+    let combinedText = '';
+    const pdfAttachments = [];
+    const imageAttachments = [];
+
+    for (const doc of docs.slice(0, 3)) {
+      if (!doc.assetKey) continue;
+      try {
+        const { buf, mime } = await assets.read(doc.assetKey);
+        if (/\.csv$/i.test(doc.name) || mime.startsWith('text/')) {
+          combinedText += `\n--- ${doc.name} ---\n` + buf.toString('utf8').slice(0, 15000);
+        } else if (/\.xlsx?$/i.test(doc.name)) {
+          const xlsx = require('xlsx');
+          const book = xlsx.read(buf, { sheetRows: 120 });
+          for (const sName of book.SheetNames.slice(0, 2)) {
+            combinedText += `\n--- ${doc.name} (${sName}) ---\n` +
+              xlsx.utils.sheet_to_csv(book.Sheets[sName], { blankrows: false }).slice(0, 12000);
+          }
+        } else if ((mime === 'application/pdf' || /\.pdf$/i.test(doc.name)) && buf.length <= 14 * 1024 * 1024 && pdfAttachments.length < 1) {
+          const chunks = await splitPdfPages(buf, 5);
+          pdfAttachments.push({ data: chunks[0].buf.toString('base64'), name: doc.name });
+        } else if (mime.startsWith('image/') && buf.length <= 10 * 1024 * 1024 && imageAttachments.length < 2) {
+          imageAttachments.push({ mediaType: mime, data: buf.toString('base64') });
+        }
+      } catch {}
+    }
+
+    if (combinedText) {
+      mergeCandidate(extractRegexProfileFromText(combinedText), 'Tệp hợp đồng / báo giá');
+    }
+
+    const ai = resolveAi(userCfg);
+    if (ai && (combinedText || pdfAttachments.length || imageAttachments.length)) {
+      try {
+        const model = await resolveModel(ai);
+        const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
+        const promptText = `Tên dự án: ${projectName}\n` +
+          (combinedText ? `Nội dung tệp hợp đồng/báo giá:\n${combinedText.slice(0, 25000)}\n` : '') +
+          'Hãy trích xuất Tên khách hàng, Địa chỉ, SĐT, Email, Số hợp đồng và trả về JSON.';
+        const res = await callWithFallback(ai, model, call, imageAttachments, pdfAttachments, promptText, PROFILE_AI_SYSTEM);
+        const parsed = extractJson(res.raw);
+        if (parsed && typeof parsed === 'object') {
+          mergeCandidate(parsed, 'AI đọc hợp đồng / báo giá');
+        }
+      } catch {}
+    }
+  }
+
+  const fields = PROFILE_FIELDS.map(({ key, label }) => {
+    const currentVal = String(currentProfile[key] || '').trim();
+    const proposedObj = suggestions[key] || null;
+    const proposedVal = proposedObj?.value || '';
+    // Trường đang có giá trị thì không tự tích ghi đè (checked = false)
+    const hasDiff = !!proposedVal && proposedVal !== currentVal;
+    return {
+      key,
+      label,
+      current: currentVal,
+      proposed: proposedVal,
+      source: proposedObj?.source || '',
+      checked: hasDiff && !currentVal
+    };
+  });
+
+  const hasSuggestions = fields.some(f => f.proposed && f.proposed !== f.current);
+  return { projectId, projectName, fields, sources, hasSuggestions };
+}
+
 // Router chính: handleProjectHub
 // -----------------------------------------------------------------------------
 async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBody, readRawBody, sendJson, dataDir, defaultSchedule }) {
@@ -1319,6 +1492,24 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     await hubStore.saveProject(result.project.id, record);
 
     return sendJson(res, 200, { success: true, project: result.project });
+  }
+
+  // 4b. GĐ18B.3: Tự điền Hồ sơ dự án từ Notion + tệp hợp đồng/báo giá (AI)
+  if (urlPath === '/api/project-hub/profile/autofill' && req.method === 'POST') {
+    const { projectId } = await readJsonBody(req);
+    if (!projectId) return sendJson(res, 400, { success: false, message: 'Thiếu projectId.' });
+    const schedule = (await store.get(dataKey)) || (defaultSchedule ? defaultSchedule() : { calendars: [], tasks: [] });
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const materials = (await store.get(matKey)) || { sheets: [] };
+    const project = projectList(schedule, materials).find(p => p.id === projectId);
+    if (!project) return sendJson(res, 404, { success: false, message: 'Không tìm thấy dự án.' });
+    const hubRecord = await hubStore.getProject(projectId);
+    const suggestion = await suggestProjectProfile({ projectId, project, hubRecord, store, dataKey, assets });
+    await hubStore.saveProject(projectId, rec => {
+      rec.profileSuggestions = { ...suggestion, updatedAt: new Date().toISOString() };
+      return rec;
+    });
+    return sendJson(res, 200, { success: true, ...suggestion });
   }
 
   // 5. Tải file tài liệu: POST /api/project-hub/documents/upload
@@ -1879,5 +2070,6 @@ module.exports = {
   getBuildingContextPrompt,
   executeProjectReview,
   globalJobManager,
-  runAiAnalysis
+  runAiAnalysis,
+  suggestProjectProfile
 };

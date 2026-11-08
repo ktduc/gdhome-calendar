@@ -206,6 +206,8 @@
       renderQuoteItems(currentProject.hub?.quoteItems || []);
       renderFindings(currentProject.hub?.reviewFindings || [], currentProject.hub?.reviewSummary);
       resetProposals();
+      cachedProfileSuggestions = currentProject.hub?.profileSuggestions || null;
+      updateProfileSuggestDot(!!cachedProfileSuggestions?.hasSuggestions);
     } catch (err) {
       toast('Lỗi tải chi tiết dự án: ' + err.message);
     }
@@ -217,8 +219,10 @@
     byId('view-building-type').textContent = '-';
     byId('view-customer').textContent = '-';
     byId('view-phone').textContent = '-';
+    if (byId('view-email')) byId('view-email').textContent = '-';
     byId('view-address').textContent = '-';
     byId('view-contract').textContent = '-';
+    updateProfileSuggestDot(false);
     clearDocumentThumbnails(byId('documents-tbody'));
     byId('documents-tbody').innerHTML = '<tr><td colspan="7" class="empty-cell">Chưa có dự án nào.</td></tr>';
     const gal = byId('renders-gallery-container');
@@ -239,6 +243,7 @@
 
     byId('view-customer').textContent = prof.customer || '-';
     byId('view-phone').textContent = prof.phone || '-';
+    if (byId('view-email')) byId('view-email').textContent = prof.email || '-';
     byId('view-address').textContent = prof.address || '-';
     byId('view-contract').textContent = prof.contract || '-';
 
@@ -420,6 +425,9 @@
       if (!res.ok) throw new Error(data.message || `Lỗi tải tệp (${res.status})`);
       if (type === 'render') broadcastAssetsChange('upload', { name: file.name });
       toast(reduction ? 'Đã tải ảnh · ' + reduction : `Đã tải lên: ${file.name}`);
+      if (type === 'quote' || /hop[-_ ]?dong|contract|bao[-_ ]?gia|quote/i.test(file.name)) {
+        runSilentProfileAutofill(projectId);
+      }
     } catch (err) {
       toast(`Lỗi tải tệp ${file.name}: ${err.message}`);
     }
@@ -1309,6 +1317,132 @@
   // ---------------------------------------------------------------------------
   // Profile modal: Tạo & Sửa dự án (B2: Loại công trình)
   // ---------------------------------------------------------------------------
+  // ---------------------------------------------------------------------------
+  // GĐ18B.3: Tự điền Hồ sơ dự án từ Notion & hợp đồng/báo giá (so sánh Hiện tại → Đề xuất)
+  // ---------------------------------------------------------------------------
+  let cachedProfileSuggestions = null;
+
+  function updateProfileSuggestDot(show) {
+    const dot1 = byId('profile-suggest-dot');
+    const dot2 = byId('btn-autofill-dot');
+    if (dot1) dot1.hidden = !show;
+    if (dot2) dot2.hidden = !show;
+  }
+
+  async function runSilentProfileAutofill(projectId) {
+    if (!projectId) return;
+    try {
+      const res = await api('/api/project-hub/profile/autofill', { projectId });
+      if (projectId === currentProjectId) {
+        cachedProfileSuggestions = res;
+        updateProfileSuggestDot(!!res?.hasSuggestions);
+        if (res?.hasSuggestions) {
+          toast('✨ Đã tìm thấy đề xuất Tự điền Hồ sơ dự án! Bấm nút "Tự điền" để xem.');
+        }
+      }
+    } catch {}
+  }
+
+  function renderAutofillModal(data) {
+    const dialog = byId('autofill-profile-dialog');
+    const tbody = byId('autofill-compare-tbody');
+    const noteEl = byId('autofill-sources-note');
+    if (!dialog || !tbody) return;
+
+    const sources = Array.isArray(data?.sources) && data.sources.length
+      ? 'Nguồn phát hiện: ' + data.sources.join(' · ')
+      : 'Chưa tìm thấy dữ liệu mới từ Notion hoặc tệp hợp đồng/báo giá.';
+    if (noteEl) noteEl.textContent = sources;
+
+    const fields = data?.fields || [];
+    tbody.innerHTML = fields.map(f => {
+      const hasProposed = !!f.proposed;
+      const isDiff = hasProposed && f.proposed !== f.current;
+      // Trường đang có giá trị thì không tự tích ghi đè (f.checked đã false từ server)
+      const checkedAttr = f.checked ? 'checked' : '';
+      const disabledAttr = !isDiff ? 'disabled' : '';
+      return `
+        <tr>
+          <td style="text-align: center;">
+            <input type="checkbox" name="apply_${escape(f.key)}" data-field-key="${escape(f.key)}" data-proposed-val="${escape(f.proposed || '')}" ${checkedAttr} ${disabledAttr}>
+          </td>
+          <td><strong>${escape(f.label)}</strong></td>
+          <td>${f.current ? escape(f.current) : '<span style="color:#94a3b8">(Trống)</span>'}</td>
+          <td>${hasProposed ? `<strong style="color:${isDiff ? '#15803d' : '#475569'}">→ ${escape(f.proposed)}</strong>` : '<span style="color:#94a3b8">—</span>'}</td>
+          <td><small style="color:#64748b">${escape(f.source || '—')}</small></td>
+        </tr>
+      `;
+    }).join('');
+
+    if (!dialog.open) dialog.showModal();
+  }
+
+  function initAutofillProfileModal() {
+    const btn = byId('btn-autofill-profile');
+    const form = byId('autofill-profile-form');
+    const dialog = byId('autofill-profile-dialog');
+    if (!btn || !form) return;
+
+    btn.onclick = async () => {
+      if (!currentProjectId) return toast('Vui lòng chọn hoặc tạo dự án trước.');
+      btn.disabled = true;
+      const origText = btn.innerHTML;
+      btn.textContent = '⏳ Đang dò Notion & hợp đồng...';
+      try {
+        const res = await api('/api/project-hub/profile/autofill', { projectId: currentProjectId });
+        cachedProfileSuggestions = res;
+        updateProfileSuggestDot(!!res?.hasSuggestions);
+        renderAutofillModal(res);
+      } catch (err) {
+        toast('Lỗi tự điền hồ sơ: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origText;
+        updateProfileSuggestDot(!!cachedProfileSuggestions?.hasSuggestions);
+      }
+    };
+
+    form.onsubmit = async e => {
+      e.preventDefault();
+      if (!currentProject) return;
+      const checkboxes = [...form.querySelectorAll('input[type="checkbox"][data-field-key]:checked')];
+      if (!checkboxes.length) {
+        dialog?.close();
+        return;
+      }
+      const prof = { ...(currentProject.profile || {}) };
+      const nextProfile = {
+        project: currentProject.name || prof.project || '',
+        buildingType: currentProject.buildingType || prof.buildingType || 'Chung cư',
+        customer: prof.customer || '',
+        address: prof.address || '',
+        phone: prof.phone || '',
+        email: prof.email || '',
+        contract: prof.contract || ''
+      };
+      checkboxes.forEach(cb => {
+        const key = cb.dataset.fieldKey;
+        const val = cb.dataset.proposedVal || '';
+        if (key && val) nextProfile[key] = val;
+      });
+      try {
+        await api('/api/project-hub/project', {
+          create: false,
+          projectId: currentProjectId,
+          buildingType: nextProfile.buildingType,
+          profile: nextProfile
+        });
+        dialog?.close();
+        updateProfileSuggestDot(false);
+        cachedProfileSuggestions = null;
+        toast('Đã áp dụng thông tin tự điền vào Hồ sơ dự án!');
+        await selectProject(currentProjectId);
+      } catch (err) {
+        toast('Lỗi áp dụng hồ sơ: ' + err.message);
+      }
+    };
+  }
+
   function guessBuildingType(name = '', address = '') {
     const text = (String(name || '') + ' ' + String(address || '')).toLowerCase();
     if (/văn\s*phòng|office|co-working|trụ\s*sở/i.test(text)) return 'Văn phòng nhỏ';
@@ -1357,6 +1491,7 @@
       }
       form.elements.customer.value = prof.customer || '';
       form.elements.phone.value = prof.phone || '';
+      if (form.elements.email) form.elements.email.value = prof.email || '';
       form.elements.address.value = prof.address || '';
       form.elements.contract.value = prof.contract || '';
       form.dataset.mode = 'edit';
@@ -1372,6 +1507,7 @@
         buildingType,
         customer: form.elements.customer.value.trim(),
         phone: form.elements.phone.value.trim(),
+        email: (form.elements.email?.value || '').trim(),
         address: form.elements.address.value.trim(),
         contract: form.elements.contract.value.trim()
       };
@@ -1387,10 +1523,12 @@
         dialog.close();
         toast(isCreate ? 'Đã tạo dự án thành công!' : 'Đã cập nhật hồ sơ!');
         await loadProjects(res.project?.id);
+        if (isCreate && res.project?.id) runSilentProfileAutofill(res.project.id);
       } catch (err) {
         toast('Lỗi lưu dự án: ' + err.message);
       }
     };
+    initAutofillProfileModal();
   }
 
   // Chạy khi trang sẵn sàng

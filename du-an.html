@@ -104,28 +104,33 @@
 
       <!-- Khối 2: Hồ sơ dự án -->
       <details class="sb-collapsible" open>
-        <summary class="sb-head">Hồ sơ dự án</summary>
+        <summary class="sb-head">Hồ sơ dự án <span id="profile-suggest-dot" class="profile-suggest-dot" hidden title="Có đề xuất tự điền hồ sơ"></span></summary>
         <div class="sb-body">
           <div class="sidebar-meta-item">
             <span class="sb-row-label">Loại công trình</span>
             <span id="view-building-type" class="badge badge-outline">-</span>
           </div>
           <div class="sidebar-meta-item">
-            <span class="sb-row-label">Khách hàng</span>
+            <span class="sb-row-label">Tên khách hàng</span>
             <strong id="view-customer">-</strong>
-          </div>
-          <div class="sidebar-meta-item">
-            <span class="sb-row-label">Số điện thoại</span>
-            <span id="view-phone">-</span>
           </div>
           <div class="sidebar-meta-item">
             <span class="sb-row-label">Địa chỉ</span>
             <span id="view-address">-</span>
           </div>
           <div class="sidebar-meta-item">
-            <span class="sb-row-label">Số hợp đồng</span>
+            <span class="sb-row-label">SĐT</span>
+            <span id="view-phone">-</span>
+          </div>
+          <div class="sidebar-meta-item">
+            <span class="sb-row-label">Email</span>
+            <span id="view-email">-</span>
+          </div>
+          <div class="sidebar-meta-item">
+            <span class="sb-row-label">Hợp đồng</span>
             <span id="view-contract">-</span>
           </div>
+          <button type="button" id="btn-autofill-profile" class="btn btn-outline btn-sm" style="width: 100%; margin-top: 6px; position: relative;">✨ Tự điền <span id="btn-autofill-dot" class="profile-suggest-dot" hidden></span></button>
         </div>
       </details>
 
@@ -407,9 +412,10 @@
           </select>
         </label>
         <label>Tên khách hàng: <input type="text" name="customer" placeholder="VD: Anh Đức"></label>
-        <label>Số điện thoại: <input type="tel" name="phone" placeholder="VD: 0912345678"></label>
         <label>Địa chỉ: <input type="text" name="address" placeholder="VD: Masteri Waterfront, Gia Lâm, Hà Nội"></label>
-        <label>Số hợp đồng: <input type="text" name="contract" placeholder="VD: HĐ-2026/04/GD"></label>
+        <label>SĐT: <input type="tel" name="phone" placeholder="VD: 0912345678"></label>
+        <label>Email: <input type="email" name="email" placeholder="VD: khachhang@gmail.com"></label>
+        <label>Hợp đồng: <input type="text" name="contract" placeholder="VD: HĐ-2026/04/GD"></label>
         <div class="dialog-actions">
           <button type="button" class="btn btn-outline" onclick="document.getElementById('profile-dialog').close()">Huỷ</button>
           <button type="submit" class="btn btn-primary">Lưu dự án</button>
@@ -449,6 +455,35 @@
         <div class="dialog-actions">
           <button type="button" class="btn btn-outline" onclick="document.getElementById('assign-render-dialog').close()">Huỷ</button>
           <button type="submit" class="btn btn-primary">Xác nhận gắn ảnh</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- GĐ18B.3: Hộp thoại so sánh Hiện tại → Đề xuất khi Tự điền Hồ sơ dự án -->
+  <dialog id="autofill-profile-dialog" class="hub-dialog shell-dialog" style="max-width: 660px;">
+    <div class="dialog-content">
+      <div class="preview-header">
+        <h3>✨ Tự điền Hồ sơ dự án</h3>
+        <button type="button" class="btn-close" onclick="document.getElementById('autofill-profile-dialog').close()">×</button>
+      </div>
+      <p id="autofill-sources-note" style="font-size: 12.5px; color: #475569; margin: 0 0 10px;">Nguồn: Notion &amp; tệp hợp đồng / báo giá</p>
+      <form id="autofill-profile-form">
+        <table class="data-table" id="autofill-compare-table">
+          <thead>
+            <tr>
+              <th style="width: 36px; text-align: center;">Chọn</th>
+              <th style="width: 130px;">Trường</th>
+              <th>Hiện tại</th>
+              <th>Đề xuất mới</th>
+              <th style="width: 130px;">Nguồn</th>
+            </tr>
+          </thead>
+          <tbody id="autofill-compare-tbody"></tbody>
+        </table>
+        <div class="dialog-actions">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('autofill-profile-dialog').close()">Đóng</button>
+          <button type="submit" id="btn-apply-autofill" class="btn btn-primary">Áp dụng</button>
         </div>
       </form>
     </div>

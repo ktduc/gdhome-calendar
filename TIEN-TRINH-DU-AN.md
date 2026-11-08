@@ -219,3 +219,11 @@
   - Hỗ trợ kéo thả (`draggable="true"` + API `POST /api/project-hub/documents/reorder`) để đổi thứ tự ảnh.
   - Xoá tài liệu cập nhật giao diện tức thì (`applyLocalDocumentsUpdate`) không chờ F5, đồng thời phát `BroadcastChannel('gdhome-assets')` để tab Chốt mã tự làm mới.
   - Thêm bộ kiểm thử `tests/gd18b-documents.test.js`.
+- [x] **18B.3. Hồ sơ dự án tự điền (Notion + AI đọc hợp đồng/báo giá)**
+  - Bổ sung đầy đủ 5 trường trong hộp Hồ sơ dự án (`Tên khách hàng`, `Địa chỉ`, `SĐT`, `Email`, `Hợp đồng`) cùng nút **✨ Tự điền** và chấm báo đỏ (`.profile-suggest-dot`).
+  - API `POST /api/project-hub/profile/autofill` (`suggestProjectProfile`):
+    - (a) Tìm trên Notion Customer DB theo SĐT trước, sau đó theo tên dự án.
+    - (b) Trích xuất từ các tệp hợp đồng / báo giá đã tải lên (Excel, CSV, PDF) kết hợp AI.
+  - Hiển thị bảng đối chiếu **Hiện tại → Đề xuất** từng trường có ô tích chọn và nút **Áp dụng**; các trường đang có giá trị không bị tự tích ghi đè (`checked: false`).
+  - Tự động chạy ngầm (`runSilentProfileAutofill`) khi tạo dự án mới hoặc tải hợp đồng/báo giá lên và bật chấm báo đề xuất.
+  - Thêm bộ kiểm thử `tests/gd18b-profile-autofill.test.js`.

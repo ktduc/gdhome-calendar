@@ -936,6 +936,7 @@ module.exports = {
   pickModel,
   resolveAi,
   loadUserCfg,
+  notionCustomers,
   callWithFallback,
   callGemini,
   callOpenAI,
