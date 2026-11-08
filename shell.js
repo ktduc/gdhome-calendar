@@ -131,7 +131,7 @@ window.GDHomeShell = (() => {
     return panel;
   }
 
-  function lightbox({title,count,render,crop,remove,onClose,onError,extraClass = ''}) {
+  function lightbox({title,count,render,crop,remove,onClose,onError,extraClass = '',initialIndex = 0}) {
     if (!count()) return;
     const element = document.createElement('dialog');
     element.className = 'shell-dialog shell-lightbox ' + extraClass;
@@ -143,7 +143,7 @@ window.GDHomeShell = (() => {
       (crop ? '<button data-lightbox="crop">Cắt ảnh</button>' : '') +
       (remove ? '<button data-lightbox="remove">Xoá ảnh</button>' : '') + '</div>';
     const figure = element.querySelector('figure');
-    let index = 0;
+    let index = Math.min(count()-1,Math.max(0,initialIndex));
     function show() {
       render(index,figure);
       element.querySelector('output').value = (index+1) + ' / ' + count();

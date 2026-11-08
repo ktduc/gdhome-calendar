@@ -40,11 +40,12 @@ async function attachImages(row, slot, files, render = false) {
   say('');
 }
 
-function openMaterialLightbox(row,slot) {
+function openMaterialLightbox(row,slot,initialIndex = 0) {
   const list = slot === 'render' ? row.render : row.options[Number(slot)].images;
   GDHomeShell.lightbox({
     title:(row.name || 'Ảnh vật liệu') + ' · ' + (slot === 'render' ? 'Phối cảnh 3D' : 'PA' + (Number(slot)+1)),
     count:() => list.length,
+    initialIndex,
     render(index,figure) {
       figure.innerHTML = images([list[index]],true);
       showImages(figure);

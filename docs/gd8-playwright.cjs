@@ -120,7 +120,7 @@ cases['8.5'] = async page => {
   assert.equal(await pasteFixture(page,'items'),true,'paste vào ô đã focus');
   await cell.locator('img').waitFor().catch(async error => { throw new Error((await page.locator('#notice').textContent()) || error.message); });
   await pasteFixture(page,'html');
-  await cell.locator('.image-count').getByText('+1',{exact:true}).waitFor();
+  await cell.locator('.material-image-thumbs img[src]').waitFor();
 
   const view = page.locator('[data-row="g1-r2"] [data-slot="render"]');
   await page.locator('header.app-header .app-logo').focus();
@@ -139,7 +139,7 @@ cases['8.5'] = async page => {
   await pasteFixture(page,'fallback');
   await fallback.locator('img').waitFor();
   await pasteFixture(page,'url');
-  await fallback.locator('.image-count').getByText('+1',{exact:true}).waitFor();
+  await fallback.locator('.material-image-thumbs img[src]').waitFor();
 
   const code = cell.locator('input[data-field="code"]');
   await code.focus();
@@ -301,8 +301,8 @@ cases['9.3'] = async page => {
     return {top,width,height};
   }));
   assert.equal(images.length,2);
-  assert.deepEqual(images[0],images[1]);
-  assert.equal(images[0].width,images[0].height);
+  assert.equal(images[0].top,images[1].top);
+  images.forEach(({width,height}) => assert.ok(Math.abs(width-height)<1));
   const groupColor = await page.locator('.sheet-grid .group th').first().evaluate(el => getComputedStyle(el).backgroundColor);
   const form = await openImageScope(page);
   await form.getByRole('button',{name:'Xem trước'}).click();
@@ -401,12 +401,10 @@ async function openImageScope(page) {
 
 async function addFixtureImage(page,slot) {
   const cell = page.locator('[data-row="g1-r1"] [data-slot="' + slot + '"]');
-  const previous = await cell.locator('.image-count').count() ? Number(await cell.locator('.image-count').textContent())+1 :
-    await cell.locator('img').count();
+  const previous = await cell.locator('img').count();
   await cell.focus();
   assert.equal(await pasteFixture(page,'items'),true);
-  if (previous) await cell.locator('.image-count').getByText('+' + previous,{exact:true}).waitFor();
-  else await cell.locator('img[src]').waitFor();
+  await cell.locator('img[src]').nth(previous).waitFor();
 }
 
 cases['10.1'] = async page => {
@@ -793,7 +791,7 @@ cases['12.3'] = async page => {
   }
   await page.locator('[data-action=density][data-id=xs]').click();
   await row.locator('img[data-image-axis]').last().waitFor();
-  assert.ok((await sizes(row))[0][0] < fill[0][0]);
+  assert.equal((await sizes(row))[0][0],fill[0][0]);
 };
 
 cases['12.4'] = async page => {
@@ -974,6 +972,53 @@ cases['13.1'] = async page => {
       await page.locator('#close-print').click();
     }
   }
+};
+
+cases['13.2'] = async page => {
+  await openMaterials(page);
+  await addFixtureImage(page,'render');
+  await addFixtureImage(page,'0');
+  await page.evaluate(() => modify(() => {
+    const row = sheet.groups[0].rows[0];
+    row.render.push(row.render[0],row.render[0]);
+    row.options[0].code = 'MÃ VUÔNG';
+    sheet.groups = [{...sheet.groups[0],rows:sheet.groups[0].rows.slice(0,2)}];
+    materials.columnWidths = {render:245,pa0:200};
+  }));
+  const read = root => root.evaluate(paper => {
+    const row = paper.querySelector('[data-row]');
+    return {sizes:[...row.querySelectorAll('.image-open')].map(slot => [slot.offsetWidth,slot.offsetHeight,slot.closest('td').offsetWidth]),
+      row:row.offsetHeight,empty:row.nextElementSibling.offsetHeight,thumbs:row.querySelectorAll('.material-image-thumbs img').length};
+  });
+  const work = page.locator('.material-paper');
+  const initial = await read(work);
+  for (const [w,h,cell] of initial.sizes) assert.ok(Math.abs(w-h)<=1 && cell-w<=10,JSON.stringify(initial));
+  assert.ok(initial.row >= 245 && initial.empty < 100);
+  assert.equal(initial.thumbs,2);
+  await page.locator('[data-action=density][data-id=xs]').click();
+  assert.deepEqual((await read(work)).sizes,initial.sizes);
+  await page.locator('[data-resize=render]').press('ArrowRight');
+  assert.equal((await read(work)).sizes[0][0],initial.sizes[0][0]+12);
+  await page.locator('.material-image-thumbs button').first().click();
+  assert.equal(await page.locator('.shell-lightbox output').textContent(),'2 / 3');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-row=g1-r1] [data-slot="0"] [data-action=pick-pa]').click();
+  await page.locator('[data-header-command="file"]').click();
+  await page.locator('#material-publish').click();
+  await page.goto(await page.locator('#issued-link').inputValue());
+  const photo = page.locator('#review .print-square img').first();
+  await photo.waitFor();
+  assert.ok(await photo.evaluate(img => {
+    const square = img.closest('.print-square'), parent = square.parentElement;
+    return Math.abs(square.offsetWidth-square.offsetHeight) <= 1 && square.offsetWidth >= parent.clientWidth-2;
+  }));
+  await photo.click();
+  await page.locator('.shell-lightbox figure img[src]').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('#customer-print').click();
+  await page.locator('#do-print:enabled').waitFor();
+  assert.equal(await page.locator('#print-sheet .print-square img').count(),2);
+  assert.equal(await page.locator('#print-sheet .material-image-thumb img').count(),2);
 };
 
 async function main() {

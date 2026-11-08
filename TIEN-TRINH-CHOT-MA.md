@@ -183,11 +183,13 @@ XONG GĐ12
 | Bước | Trạng thái | Kết quả |
 |---|---|---|
 | 13.1 | ✅ | giữ bảng xuất trong khổ giấy và bỏ viền nhập liệu |
-| 13.2 | ⏳ | Ảnh vuông lấp cột |
+| 13.2 | ✅ | ảnh 3D và PA lấp đầy cột và mở được từng ảnh |
 | 13.3 | ⏳ | Gợi ý theo tài khoản |
 | 13.4 | ⏳ | Nén ảnh |
 | 13.5 | ⏳ | Kiểm tra và bàn giao |
 
-Bước kế tiếp GĐ13: 13.2
+Bước kế tiếp GĐ13: 13.3
 
 - 13.1: test tái hiện tràn 16 px và viền dashed; bản sửa qua 6 cấu hình khổ/cột, Node 36/36 và Playwright 28/28.
+
+- 13.2: ảnh chính vuông theo độ rộng cột, ảnh phụ ở dải riêng; PDF dùng ảnh đầy đủ, trang khách có lightbox. Node 36/36; Playwright qua 28 ca hồi quy và ca 13.2.

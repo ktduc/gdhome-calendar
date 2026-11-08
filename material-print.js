@@ -42,12 +42,25 @@ function signatureMark(record) {
     (record.strokes || []).map(stroke => '<polyline fill="none" stroke="#222" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" points="' +
       stroke.map(point => (Number(point[0])*0.6) + ',' + (Number(point[1])*0.19)).join(' ') + '"/>').join('') + '</svg><strong>' + html(record.name) + '</strong><br><small>' + html(vnDate(record.at)) + '</small>';
 }
-function printImages(items, base, large = false) {
-  return (items || []).map(image => {
-    const name = typeof image === 'string' ? image : (large ? image.full : image.thumb);
-    return /^[a-f0-9]{64}\.webp$/.test(name) ? '<div class="print-square"><img class="print-material" data-print-img="' + html(base + name) + '" alt="Mẫu vật liệu"></div>' : '';
-  }).join('');
+function printImages(items,base,large = false,interactive = false) {
+  const asset = (image,full) => typeof image === 'string' ? image : (full ? image.full : image.thumb);
+  const list = (items || []).filter(image => [asset(image,false),asset(image,true)].every(name => /^[a-f0-9]{64}\.webp$/.test(name)));
+  const slots = list.map((image,index) => {
+    const cls = index ? 'material-image-thumb' : 'print-square';
+    const tag = interactive ? 'button' : 'span';
+    const extra = interactive ? ' type="button" aria-label="Xem ảnh ' + (index+1) + '" data-review-image="' +
+      html(base+asset(image,true)) + '"' : '';
+    return '<' + tag + ' class="' + cls + '"' + extra + '><img class="print-material" data-print-img="' +
+      html(base+asset(image,large)) + '" alt="Ảnh vật liệu"></' + tag + '>';
+  });
+  return slots.length ? slots[0] + (slots.length > 1 ? '<div class="material-image-thumbs">' + slots.slice(1).join('') + '</div>' : '') : '';
 }
+function clearPrintImages(root) {
+  root.querySelectorAll('img[data-print-img]').forEach(img => {
+    if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+  });
+}
+
 async function decodeMaterialThumbnail(image) {
   await image.decode();
   image.dataset.imageAxis = image.naturalWidth >= image.naturalHeight ? 'wide' : 'tall';
@@ -65,6 +78,7 @@ async function loadPrintImages(root, headers = {}) {
         if (!res.ok) throw new Error();
         blob = await res.blob();
       }
+      if (!img.isConnected) return;
       const url = URL.createObjectURL(blob);
       img.src = url;
       try { await decodeMaterialThumbnail(img); } catch (error) { URL.revokeObjectURL(url); throw error; }
@@ -97,12 +111,13 @@ function rowsForPrint(view, base) {
       const index = view.customer?.choices?.[row.id] ?? row.chosen;
       const pa = row.options[index];
       const options = row.options.filter(hasPrintOption);
-      const name = html(row.name) + (row.room ? '<br><small>' + html(row.room) + '</small>' : '');
+      const name = html(row.name) + (row.room ? '<br><small>' + html(row.room) + '</small>' : '') +
+        '<div class="print-squares">' + printImages(row.render,base,true) + '</div>';
 
       return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td class="material-copy-secondary">' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
         (pa ? '<br><small>' + html(options.filter(o => o !== pa && o.code).map(o => 'Dự phòng: '+o.code).join(' · ')) + '</small>' : '') +
-        '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base) + '</div></td></tr>';
+        '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base,true) + '</div></td></tr>';
     }).join('')).join('');
 }
 function printable(view,base) {
@@ -144,9 +159,7 @@ async function showPrint(view,base,headers,stats = false,watermark = stats) {
   document.body.append(overlay);
   document.body.classList.add('printing-material');
   overlay.addEventListener('close',() => {
-    overlay.querySelectorAll('img[data-print-img]').forEach(img => {
-      if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
-    });
+    clearPrintImages(overlay);
     overlay.remove();
     if (!byId('print-preview')) document.body.classList.remove('printing-material');
   },{once:true});

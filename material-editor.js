@@ -410,7 +410,7 @@ document.addEventListener('click', async event => {
       }
       case 'duplicate': modify(() => group.rows.splice(group.rows.indexOf(row)+1,0,duplicate(row))); break;
       case 'detail': editDetail(row,slot); break;
-      case 'view-image': openMaterialLightbox(row,slot); break;
+      case 'view-image': openMaterialLightbox(row,slot,Number(button.dataset.index || 0)); break;
       case 'pick-pa': pick(row,slot); break;
       case 'undo': undo(false); break;
       case 'redo': undo(true); break;

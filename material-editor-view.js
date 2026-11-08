@@ -131,7 +131,6 @@ function columnWidth(key) {
     const longest = Math.max(0,...sheet.groups.flatMap(g => g.rows.map(row => context.measureText(row.name).width)));
     return Math.ceil(Math.min(460,Math.max(148,longest+24)));
   }
-  if (density === 'l' && (key === 'render' || /^pa[012]$/.test(key))) return 176;
   return defaultColumnWidths[key];
 }
 
@@ -369,7 +368,7 @@ function materialPaperForExport(current) {
   template.innerHTML = renderMaterialPaper(current,columns,columns.map(([key]) => columnWidth(key)),current.groups,false);
   const paper = template.content.firstElementChild;
   paper.classList.add('material-paper-output');
-  for (const imageButton of paper.querySelectorAll('.image-open')) {
+  for (const imageButton of paper.querySelectorAll('.image-open,.material-image-thumb')) {
     const slot = document.createElement('span');
     slot.className = imageButton.className;
     slot.append(...imageButton.childNodes);
@@ -514,19 +513,20 @@ function renderGroup(group,columns,nextNumber,editing) {
   return '<tbody data-group="' + html(group.id) + '">' + heading + rows + add + '</tbody>';
 }
 
-function imageCell(list, slot, content = '', state = '', removable = false) {
+function imageCell(list, slot, content = '', state = '', removable = false, editing = true) {
   const hasImage = list.length > 0;
   const photo = hasImage ? '<button class="image-open" data-action="view-image" aria-label="Xem ảnh lớn">' +
-    images(list.slice(0,1)) + '</button>' : '<span class="image-plus" aria-hidden="true">＋</span>';
+    images(list.slice(0,1),!editing) + '</button>' : '<span class="image-plus" aria-hidden="true">＋</span>';
   const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (slot+1);
   const choose = slot === 'render' ? '' : '<button class="image-pick" data-action="pick-pa" aria-label="Chốt PA' +
     (slot+1) + '" aria-pressed="' + (state === 'chosen') + '" title="Chốt phương án">✓</button>';
   return '<div class="image-cell ' + state + (hasImage ? ' has-image' : '') + '" tabindex="0" data-slot="' + slot +
     '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả."><div class="image-preview">' + photo +
     (!hasImage ? '<small class="paste-cell-hint">Ctrl+V để dán ảnh</small>' : '') +
-    (list.length > 1 ? '<small class="image-count">+' + (list.length-1) + '</small>' : '') +
     (state === 'reserve' ? '<span class="image-state">Dự phòng</span>' : '') +
-    '</div>' + choose + '<button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' +
+    '</div>' + (list.length > 1 ? '<div class="material-image-thumbs">' +
+      list.slice(1).map((image,i) => '<button class="material-image-thumb" data-action="view-image" data-index="' + (i+1) +
+        '" aria-label="Xem ảnh ' + (i+2) + '">' + images([image],!editing) + '</button>').join('') + '</div>' : '') + choose + '<button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' +
     (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
 }
 
@@ -543,7 +543,7 @@ function renderRow(row,columns,number,editing) {
     select:'<label class="material-row-number"><input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '"><span>' + number + '</span></label>',
     name:input('name',row.name,'Hạng mục'),
     room:input('room',row.room,'Vị trí'),
-    render:imageCell(row.render,'render'),
+    render:imageCell(row.render,'render','','',false,editing),
     spec:materialTextField('spec',chosen?.finish || row.spec,'Quy cách'),
     qty:input('qty',row.qty,'Khối lượng'),
     unit:input('unit',displayMaterialUnit(row.unit),'Đơn vị'),
@@ -563,7 +563,7 @@ function renderRow(row,columns,number,editing) {
     const code = '<div class="pa-caption">' + input('code',pa.code,'Mã PA' + (i+1)) +
       (detail ? '<small title="' + html(detail) + '"> · ' + html(detail) + '</small>' : '') + '</div>';
     const canRemove = i > 0 && i === count-1 && !paHasData(pa) && row.chosen !== i;
-    cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove);
+    cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove,editing);
   }
   return '<tr data-row="' + html(row.id) + '">' + columns.map(([key]) => '<td data-column="' + key + '"' + materialColumnClass(key,editing) + '>' + cells[key] + '</td>').join('') + '</tr>';
 }
