@@ -156,10 +156,10 @@ XONG GĐ10
 | 12.3 | ✅ | thêm khung ảnh vuông Fill và Vừa cho 3D và PA |
 | 12.4 | ✅ | đóng xem trước bằng Esc và thu chữ ghi chú quy cách |
 | 12.5 | ✅ | thêm gợi ý Ghi chú và Quy cách cho 17 nhóm vật liệu |
-| 12.6 | ⏳ | Đổi thứ tự cột |
+| 12.6 | ✅ | kéo đổi thứ tự cột và lưu cho bảng xuất |
 | 12.7 | ⏳ | Tự liên kết Việc Tiến độ |
 
-Bước kế tiếp GĐ12: 12.6 kéo tiêu đề đổi thứ tự cột.
+Bước kế tiếp GĐ12: 12.7 tự liên kết nhóm với công việc Tiến độ.
 
 - 12.1: dùng cùng bộ dựng đầu tờ, cột, nhóm và dòng. Thao tác được bỏ khỏi bản xuất. PDF thống kê thu đều vào A4 ngang. Ca Playwright 12.1 đối chiếu thứ tự, tỷ lệ cột trong ±5%, kích thước ô ảnh và logo; ca 9.2 xác nhận ảnh PNG thực tế.
 
@@ -170,3 +170,5 @@ Bước kế tiếp GĐ12: 12.6 kéo tiêu đề đổi thứ tự cột.
 - 12.4: xem trước dùng hộp thoại, Esc hoặc bấm nền để đóng. Chữ Ghi chú/Quy cách bằng 85% cỡ hạng mục và cùng cỡ giữa bảng làm việc và bản xuất. Kiểm tra thống kê, PNG và A4 trang khách.
 
 - 12.5: mỗi nhóm có 15–16 Quy cách và 18 Ghi chú mặc định, cộng giá trị đã dùng. Tìm không dấu, chọn nhiều theo thứ tự chọn, xếp gợi ý theo tần suất. Playwright kiểm tra học quy cách và lưu vào PA đã chốt.
+
+- 12.6: kéo nhãn cột có vạch chỉ trước/sau, Alt+mũi tên để đổi bằng bàn phím và Về mặc định để khôi phục. Playwright kiểm tra kéo, lưu qua server và thứ tự giống nhau khi xuất.

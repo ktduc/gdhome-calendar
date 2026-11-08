@@ -164,7 +164,7 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 }
 .material-sheet .sheet-grid [data-column=select]{padding:3px;text-align:center}
 .material-sheet .sheet-grid [data-column=select] input{width:15px;height:15px}
-.material-sheet .sheet-grid [data-column=name]{position:sticky;left:46px}
+.material-sheet .material-paper:not(.material-paper-output) .sheet-grid:has(thead th[data-column=select]:first-child + th[data-column=name]) [data-column=name]{position:sticky;left:46px}
 .material-sheet .sheet-grid td[data-column=name]{background:#fff;z-index:2}
 .material-sheet .sheet-grid th[data-column=name]{z-index:7}
 .material-sheet .sheet-grid .material-selected td{background:#e8f0fe}
@@ -200,6 +200,11 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .print-column-button:disabled{opacity:.35;cursor:default}
 .sheet-grid th[data-column=select] .print-column-button{right:0;width:14px}
 .material-print-columns{margin-top:4px}
+.material-column-label{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;vertical-align:top;cursor:grab}
+.material-column-label:active{cursor:grabbing}
+.material-column-reset{margin-top:6px;font-size:11px}
+.material-paper .sheet-grid th[data-column-drop=before]{box-shadow:inset 3px 0 var(--gd-primary)}
+.material-paper .sheet-grid th[data-column-drop=after]{box-shadow:inset -3px 0 var(--gd-primary)}
 .export-print-columns summary{cursor:pointer;margin:3px 0}
 #material-image-scope .export-print-columns label{display:flex;justify-content:flex-start;gap:4px}
 .export-print-columns .sb-chip-grid input{width:13px}

@@ -22,9 +22,14 @@ const paHasData = pa => !!pa && (pa.images?.length || fields.some(key => pa[key]
 function rowPaCount(row) {
   return Math.max(1,row.paCount || 1,(row.chosen ?? -1)+1,row.options.findLastIndex(paHasData)+1);
 }
+function orderedMaterialColumns() {
+  const columns = new Map(materialColumns);
+  const order = [...new Set([...(materialView.columnOrder || []),...columns.keys()])];
+  return order.filter(key => columns.has(key)).map(key => [key,columns.get(key)]);
+}
 function visibleColumns() {
   const count = Math.max(1,...sheet.groups.flatMap(g => g.rows.map(rowPaCount)));
-  return materialColumns.filter(([key]) => !hiddenColumns.has(key) &&
+  return orderedMaterialColumns().filter(([key]) => !hiddenColumns.has(key) &&
     (!/^pa[12]$/.test(key) || forcedPA.has(key) || Number(key[2]) < count));
 }
 function materialImageFit() { return materialView.imageFit === 'fit' ? 'fit' : 'fill'; }
@@ -103,7 +108,8 @@ function displaySidebar() {
       .map(([key,label]) => '<label class="sb-chip" title="' + label + '"><input type="checkbox" data-column-toggle="' + key + '"' +
         ((optionalColumns.has(key) ? !hiddenColumns.has(key) : forcedPA.has(key)) ? ' checked' : '') + '> ' +
         (optionalColumns.has(key) ? label : 'Luôn hiện ' + label) + '</label>').join('') + '</div>' +
-    '<div class="sb-row-label">Cột in</div><div class="sb-chip-grid material-print-columns">' + printColumnCheckboxes('data-print-column-toggle') + '</div>');
+    '<div class="sb-row-label">Cột in</div><div class="sb-chip-grid material-print-columns">' + printColumnCheckboxes('data-print-column-toggle') + '</div>' +
+    '<button type="button" class="material-column-reset" data-action="reset-columns" title="Đặt lại thứ tự cột">Về mặc định</button>');
 }
 function materialKpis() {
   const nearest = sheet.groups.map(g => deadlineFor(g).due).filter(Boolean).sort()[0];
@@ -126,6 +132,63 @@ function columnWidth(key) {
   }
   if (density === 'l' && (key === 'render' || /^pa[012]$/.test(key))) return 176;
   return defaultColumnWidths[key];
+}
+
+function moveMaterialColumn(source,target,after) {
+  if (!source || source === target) return;
+  const order = orderedMaterialColumns().map(([key]) => key);
+  const from = order.indexOf(source);
+  if (from < 0 || !order.includes(target)) return;
+  order.splice(from,1);
+  order.splice(order.indexOf(target)+(after ? 1 : 0),0,source);
+  setMaterialView({columnOrder:order});
+  renderEditor();
+}
+
+function installColumnOrder(table) {
+  const header = table.tHead;
+  const kind = 'application/gdhome-column';
+  let marker;
+  function mark(cell,after) {
+    if (marker && marker !== cell) delete marker.dataset.columnDrop;
+    marker = cell;
+    if (cell) cell.dataset.columnDrop = after ? 'after' : 'before';
+  }
+  function dropSide(event,cell) {
+    const rect = cell.getBoundingClientRect();
+    return event.clientX >= rect.left+rect.width/2;
+  }
+  header.ondragstart = event => {
+    const handle = event.target.closest('[data-column-drag]');
+    if (!handle) return;
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData(kind,handle.dataset.columnDrag);
+  };
+  header.ondragover = event => {
+    const cell = event.target.closest('th[data-column]');
+    if (!cell || !event.dataTransfer.types.includes(kind)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+    mark(cell,dropSide(event,cell));
+  };
+  header.ondragleave = event => { if (!header.contains(event.relatedTarget)) mark(null); };
+  header.ondragend = () => mark(null);
+  header.ondrop = event => {
+    const cell = event.target.closest('th[data-column]');
+    if (!cell || !event.dataTransfer.types.includes(kind)) return;
+    event.preventDefault();
+    mark(null);
+    moveMaterialColumn(event.dataTransfer.getData(kind),cell.dataset.column,dropSide(event,cell));
+  };
+  header.onkeydown = event => {
+    const cell = event.target.closest('[data-column-drag]')?.closest('th');
+    if (!cell || !event.altKey || !['ArrowLeft','ArrowRight'].includes(event.key)) return;
+    const after = event.key === 'ArrowRight';
+    const target = after ? cell.nextElementSibling : cell.previousElementSibling;
+    if (!target) return;
+    event.preventDefault();
+    moveMaterialColumn(cell.dataset.column,target.dataset.column,after);
+  };
 }
 
 function installColumnResize(table) {
@@ -172,7 +235,7 @@ function installColumnResize(table) {
 }
 let restoreViewFrame;
 const editorScrollAreas = ['.sheet-scroll','.material-sidebar'];
-const focusAttributes = ['id','data-field','data-action','data-group-toggle','data-column-toggle','data-resize','data-sidebar','data-select-row','data-select-group','data-select-all','data-bulk','data-id','data-header-command'];
+const focusAttributes = ['id','data-field','data-action','data-group-toggle','data-column-toggle','data-resize','data-sidebar','data-select-row','data-select-group','data-select-all','data-bulk','data-id','data-header-command','data-column-drag'];
 
 function captureEditorView() {
   const root = box();
@@ -251,7 +314,11 @@ function renderEditor() {
   installEditorSidebar();
   if (!viewAsPrint) refreshRowSelection();
   installMaterialsAi();
-  if (!viewAsPrint) installColumnResize(updatedScroll.querySelector('table'));
+  if (!viewAsPrint) {
+    const table = updatedScroll.querySelector('table');
+    installColumnResize(table);
+    installColumnOrder(table);
+  }
   if (typeof installRelease === 'function') installRelease();
   window.lucide?.createIcons({root:byId('material-header-actions')});
   restoreEditorView(view);
@@ -270,11 +337,17 @@ function materialPaperHeading(current) {
       .map(([label,value]) => '<span><strong>' + label + '</strong> ' + html(value) + '</span>').join('') + '</div></header>';
 }
 
+function materialColumnHeading(key,label,editing) {
+  if (!editing) return html(label);
+  return '<span class="material-column-label" data-column-drag="' + key + '" draggable="true" tabindex="0" title="Kéo đổi thứ tự cột · Alt và mũi tên">' +
+    html(label) + '</span>';
+}
+
 function renderMaterialPaper(current,columns,widths,groups,editing) {
   const width = widths.reduce((sum,value) => sum+value,0);
   const columnHeadings = columns.map(([key,label]) => '<th data-column="' + key + '"' + materialColumnClass(key,editing) + '>' + (key === 'select' ?
-    '<label class="material-row-number"><input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện"><span>STT</span></label>' :
-    label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
+    '<label class="material-row-number"><input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện">' + materialColumnHeading(key,label,editing) + '</label>' :
+    materialColumnHeading(key,label,editing) + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
     label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + (editing ? printColumnButton(key,label) : '') + '</th>').join('');
   const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + widths[index] + 'px">').join('');
   return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" data-image-fit="' + materialImageFit() + '" style="width:' + width +

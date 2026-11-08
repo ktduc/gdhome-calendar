@@ -864,6 +864,35 @@ cases['12.5'] = async page => {
   assert.ok(library.every(([spec,note]) => spec >= 15 && spec <= 30 && note >= 15 && note <= 30));
 };
 
+cases['12.6'] = async page => {
+  await page.setViewportSize({width:1550,height:900});
+  await openMaterials(page);
+  const order = root => root.locator('thead th[data-column]').evaluateAll(cells => cells.map(cell => cell.dataset.column));
+  const work = page.locator('#materials .sheet-grid');
+  const original = await order(work);
+  const from = work.locator('[data-column-drag=qty]');
+  const target = work.locator('th[data-column=render]');
+  await from.dragTo(target,{targetPosition:{x:5,y:10}});
+  const moved = await order(work);
+  assert.equal(moved.indexOf('qty')+1,moved.indexOf('render'));
+  await page.waitForFunction(async () => {
+    const {viewSettings} = await fetch('/api/materials/preferences').then(res => res.json());
+    const order = viewSettings.columnOrder || [];
+    return order.includes('qty') && order.indexOf('qty')+1 === order.indexOf('render');
+  });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await work.waitFor();
+  assert.deepEqual(await order(work),moved);
+  const form = await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  assert.deepEqual(await order(page.locator('#print-sheet')),moved.filter(key => key !== 'actions'));
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Về mặc định',exact:true}).click();
+  assert.deepEqual(await order(work),original);
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

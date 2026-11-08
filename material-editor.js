@@ -376,6 +376,7 @@ document.addEventListener('click', async event => {
       case 'density': density = button.dataset.id; setMaterialView({density}); renderEditor(); break;
       case 'image-fit': setMaterialView({imageFit:button.dataset.id}); renderEditor(); break;
       case 'font-weight': setMaterialView({fontWeight:button.dataset.id}); renderEditor(); break;
+      case 'reset-columns': setMaterialView({columnOrder:[]}); renderEditor(); break;
       case 'print-column': {
         const key = button.dataset.id;
         savePrintColumns(printableColumns().filter(([id]) => id === key ? !columnPrints(id) : columnPrints(id)).map(([id]) => id));
