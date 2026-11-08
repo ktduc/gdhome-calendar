@@ -42,11 +42,11 @@ window.GDHomeAI = (() => {
         chip.append(remove);
         list.append(chip);
       });
+      onChange?.(state.files.length);
     }
     function add(files) {
       const valid = [...files].filter(file => file.type.startsWith('image/') || /\.(xlsx|xls|csv|pdf)$/i.test(file.name));
       state.files = [...state.files,...valid].slice(0,8);
-      onChange?.(valid.length);
       render();
     }
     input.onchange = () => { add(input.files); input.value = ''; };

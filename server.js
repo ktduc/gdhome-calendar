@@ -584,7 +584,7 @@ async function handleApi(req, res, urlPath) {
 
   // Notion + AI (chỉ cho người đã đăng nhập)
   if (urlPath.startsWith('/api/notion/') || urlPath.startsWith('/api/ai/') || urlPath.startsWith('/api/integrations/') || urlPath.startsWith('/api/google/')) {
-    if (await integrations.handleIntegrations(req, res, urlPath, { sendJson, readJsonBody, dataKey, store })) return;
+    if (await integrations.handleIntegrations(req, res, urlPath, { sendJson, readJsonBody, dataKey, store, dataDir:DATA_DIR })) return;
   }
 
   if (urlPath === '/api/schedule' && req.method === 'GET') {

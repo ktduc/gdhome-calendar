@@ -23,25 +23,46 @@ function renderMaterialsAiNotice() {
 }
 
 async function openMaterialsAi() {
-  const settings = await request('/api/integrations/settings');
+  const projectId = sheet?.projectId || byId('project-filter')?.value || '';
+  const [settings,project] = await Promise.all([
+    request('/api/integrations/settings'),
+    projectId && !materialGuest ? request('/api/project-hub/project?id=' + encodeURIComponent(projectId)).catch(error => ({error:error.message})) : null
+  ]);
+  const docs = (project?.project?.hub?.documents || []).filter(doc => doc.assetKey);
+  const labels = {contract:'Hợp đồng',quote:'Báo giá',quantity:'Bảng khối lượng',boq:'Bảng khối lượng',drawing:'Bản vẽ',render:'Phối cảnh'};
+  const docList = project?.error ? '<p>' + html(project.error) + '</p>' : docs.length ? docs.map(doc => {
+    const name = String(doc.name || '');
+    const inferred = doc.type !== 'render' && /hợp đồng|hop[ _-]?dong/i.test(name) ? 'contract' :
+      doc.type !== 'render' && /khối lượng|khoi[ _-]?luong|\bboq\b/i.test(name) ? 'boq' : doc.type;
+    return '<label><input type="checkbox" name="documentId" value="' + html(doc.id) + '"' +
+      (['contract','quote','quantity','boq'].includes(inferred) ? ' checked' : '') + '> ' + html(name) + ' · ' +
+      html(labels[inferred] || 'Tài liệu') + ' · ' + Math.ceil((doc.size || 0)/1024) + ' KB</label>';
+  }).join('') : '<p>Dự án chưa có tài liệu – tải lên ở <a href="/du-an?id=' + encodeURIComponent(projectId) + '">Quản lý dự án</a></p>';
   const element = dialog('<h2>AI đề xuất hạng mục chốt mã</h2><p>Chọn hợp đồng, báo giá hoặc bảng khối lượng để gửi tới AI của tài khoản.</p>' +
     '<p><button type="button" class="btn btn-outline btn-sm" data-open-connections="ai">⚙ Kết nối AI</button> ' +
     html(settings.ai.providerLabel || 'Chưa cấu hình') + '</p>' +
-    '<form id="material-ai-form" class="stack"><div class="material-ai-drop" tabindex="0">Kéo PDF, Excel, CSV hoặc ảnh vào đây. Có thể dán ảnh bằng Ctrl+V.' +
+    '<form id="material-ai-form" class="stack"><fieldset><legend>Tài liệu của dự án</legend>' + docList + '</fieldset><div class="material-ai-drop" tabindex="0">Kéo PDF, Excel, CSV hoặc ảnh vào đây. Có thể dán ảnh bằng Ctrl+V.' +
     '<label>Chọn tệp <input id="material-ai-files" type="file" accept=".pdf,.xlsx,.xls,.csv,image/*" multiple></label></div>' +
     '<div id="material-ai-file-list"></div><label>Ghi chú<textarea id="material-ai-notes" maxlength="4000">' + html(aiJob.notes) + '</textarea></label>' +
-    '<p id="material-ai-message" role="status"></p><button class="primary">Gửi AI đề xuất</button></form>');
+    '<p id="material-ai-message" role="status"></p><button type="submit" class="primary">Gửi AI đề xuất</button></form>');
   const message = byId('material-ai-message');
+  const form = byId('material-ai-form');
+  const notes = byId('material-ai-notes');
+  const selectedDocs = () => [...form.querySelectorAll('input[name=documentId]:checked')].map(input => input.value);
+  const sync = () => { form.querySelector('button[type=submit]').disabled = !(aiJob.files.length || notes.value.trim() || selectedDocs().length); };
+  form.onchange = sync;
+  notes.oninput = sync;
   GDHomeAI.attachments({
     state:aiJob,input:byId('material-ai-files'),drop:element.querySelector('.material-ai-drop'),
     list:byId('material-ai-file-list'),root:element,
-    onChange:count => { message.textContent = count ? '' : 'Chọn PDF, Excel, CSV hoặc ảnh.'; }
+    onChange:sync
   });
   byId('material-ai-form').onsubmit = event => {
     event.preventDefault();
     aiJob.notes = byId('material-ai-notes').value.trim();
-    if (!aiJob.files.length && !aiJob.notes) { message.textContent = 'Chọn tài liệu hoặc nhập khối lượng trước.'; return; }
-    aiJob.projectId = sheet?.projectId || byId('project-filter')?.value;
+    aiJob.documentIds = selectedDocs();
+    if (!aiJob.files.length && !aiJob.notes && !aiJob.documentIds.length) { message.textContent = 'Chọn tài liệu hoặc nhập khối lượng trước.'; return; }
+    aiJob.projectId = projectId;
     element.close();
     runMaterialsAi();
   };
@@ -51,7 +72,8 @@ function runMaterialsAi() {
     onStart() { aiJob.error = ''; aiJob.plan = null; renderMaterialsAiNotice(); },
     async request() {
       const payload = await GDHomeAI.prepare(aiJob.files,aiJob.notes);
-      return (await post('/api/ai/materials',payload)).plan;
+      const {plan,aiSkipped} = await post('/api/ai/materials',{...payload,projectId:aiJob.projectId,documentIds:aiJob.documentIds});
+      return {...plan,aiSkipped};
     },
     onDone(plan) { aiJob.plan = plan; },
     onError(error) { aiJob.error = error.message; },
@@ -63,6 +85,7 @@ function reviewMaterialsAi() {
   const {plan} = aiJob;
   const rows = plan.groups.flatMap(group => group.rows.map(row => ({ group:group.name,...row })));
   const element = dialog('<h2>Duyệt hạng mục do AI đề xuất</h2><p>' + html(plan.model) + '</p>' +
+    (plan.aiSkipped?.length ? '<p>Tài liệu bỏ qua:</p><ul>' + plan.aiSkipped.map(doc => '<li>' + html(doc.name + ': ' + doc.reason) + '</li>').join('') + '</ul>' : '') +
     (plan.questions.length ? '<ul>' + plan.questions.map(q => '<li>' + html(q) + '</li>').join('') + '</ul>' : '') +
     (rows.length ? '' : '<p>AI chưa tìm thấy hạng mục cần chốt trong tài liệu.</p>') +
     '<form id="material-ai-review"><div class="ai-review-scroll"><table class="print-table"><thead><tr><th>Chọn</th>' +

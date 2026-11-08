@@ -621,7 +621,13 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     if (!ai) throw httpError(400, 'Chưa kết nối AI. Bấm "⚙ Kết nối AI" để chọn Gemini / ChatGPT / Claude và dán API key.');
     const body = await readJsonBody(req);
     const planner = urlPath === '/api/ai/materials' ? aiMaterials : aiSchedule;
-    sendJson(res, 200, { success: true, plan: await planner(ai, body || {}, dataKey) });
+    const prepared = urlPath === '/api/ai/materials'
+      ? await require('./project-hub').attachProjectAiDocuments(ctx,body || {})
+      : {body:body || {},aiSkipped:[]};
+    if (prepared.aiSkipped.length && !prepared.body.images.length && !prepared.body.pdfs.length && !prepared.body.sheetText && !prepared.body.notes) {
+      throw httpError(400,prepared.aiSkipped.map(doc => doc.name + ': ' + doc.reason).join('; '));
+    }
+    sendJson(res, 200, { success: true, plan: await planner(ai,prepared.body,dataKey),aiSkipped:prepared.aiSkipped });
     return true;
   }
   if (urlPath === '/api/google/search' && req.method === 'GET') {

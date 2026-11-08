@@ -1569,6 +1569,31 @@ cases['17.0'] = async page => {
   assert.equal(await page.locator('[data-render-strip] [data-id=render-test]').count(),0);
 };
 
+cases['17.1'] = async page => {
+  await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents:[
+    {id:'quote',type:'quote',name:'Báo giá.pdf',assetKey:'quote.pdf',size:2048},
+    {id:'drawing',type:'drawing',name:'Bản vẽ.pdf',assetKey:'drawing.pdf',size:3072}
+  ]}}}}));
+  await page.route('**/api/ai/materials',route => {
+    const payload = route.request().postDataJSON();
+    assert.deepEqual(payload.documentIds,['quote']);
+    assert.deepEqual(payload.pdfs,[]);
+    assert.equal(payload.projectId,'p1');
+    return route.fulfill({json:{plan:{groups:[],questions:[],model:'Test'},aiSkipped:[]}});
+  });
+  await openMaterials(page);
+  await page.locator('#material-ai').click();
+  const form = page.locator('#material-ai-form');
+  assert.ok(await form.locator('[value=quote]').isChecked());
+  assert.ok(!(await form.locator('[value=drawing]').isChecked()));
+  const send = form.getByRole('button',{name:'Gửi AI đề xuất'});
+  await form.locator('[value=quote]').uncheck();
+  assert.ok(await send.isDisabled());
+  await form.locator('[value=quote]').check();
+  await send.click();
+  await page.getByRole('button',{name:'Duyệt đề xuất'}).waitFor();
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

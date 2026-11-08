@@ -23,3 +23,22 @@ test('AI Chốt mã dùng kết nối tài khoản, nhận ảnh/PDF và trả n
   assert.deepEqual(result.groups[0].rows,[{name:'Mặt bếp',room:'Bếp',qty:'2.5',unit:'m²',spec:'Đá trắng',note:''}]);
   assert.deepEqual(result.questions,['Cần xác nhận chiều dày']);
 });
+
+test('AI chỉ đọc tài liệu thuộc dự án của dataKey và báo bỏ qua tệp vượt 14 MB', async t => {
+  const {attachProjectAiDocuments,ProjectAssets,ProjectHubStore} = require('../project-hub');
+  const store = {get: async key => key === new ProjectHubStore(null,'owner').key ? {projects:{p1:{documents:[
+    {id:'quote',name:'Báo giá.csv',assetKey:'safe.csv',size:20},
+    {id:'large',name:'Large.pdf',assetKey:'large.pdf',size:15*1024*1024}
+  ]}}} : null};
+  const reads = t.mock.method(ProjectAssets.prototype,'read',async key => {
+    assert.equal(key,'safe.csv');
+    return {buf:Buffer.from('name,qty\nOak,12'),mime:'text/csv'};
+  });
+  const payload = {projectId:'p1',documentIds:['quote','large']};
+  await assert.rejects(attachProjectAiDocuments({store,dataKey:'other',dataDir:'.'},payload),{status:404});
+  await assert.rejects(attachProjectAiDocuments({store,dataKey:'owner',dataDir:'.'},{...payload,documentIds:['foreign']}),{status:404});
+  assert.equal(reads.mock.callCount(),0);
+  const result = await attachProjectAiDocuments({store,dataKey:'owner',dataDir:'.'},payload);
+  assert.match(result.body.sheetText,/Oak,12/);
+  assert.deepEqual(result.aiSkipped.map(doc => doc.id),['large']);
+});

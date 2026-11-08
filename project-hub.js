@@ -1719,7 +1719,57 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
   return sendJson(res, 404, { success: false, message: 'API project-hub không tồn tại.' });
 }
 
+async function attachProjectAiDocuments({store,dataKey,dataDir},body) {
+  if (body.documentIds == null) return {body,aiSkipped:[]};
+  const {projectId,documentIds} = body;
+  const invalid = (message,status = 400) => Object.assign(new Error(message),{status});
+  if (!Array.isArray(documentIds) || documentIds.length > 40 || documentIds.some(id => typeof id !== 'string')) throw invalid('Danh sách tài liệu không hợp lệ.');
+  if (!documentIds.length) return {body,aiSkipped:[]};
+  const hub = await new ProjectHubStore(store,dataKey).load();
+  const record = typeof projectId === 'string' && Object.hasOwn(hub.projects || {},projectId) && hub.projects[projectId];
+  if (!record) throw invalid('Không tìm thấy dự án.',404);
+  const documents = [...new Set(documentIds)].map(id => record.documents?.find(doc => doc.id === id));
+  if (documents.some(doc => !doc?.assetKey)) throw invalid('Không tìm thấy tài liệu trong dự án.',404);
+  const assets = new ProjectAssets(dataDir,dataKey);
+  const prepared = {
+    images:Array.isArray(body.images) ? body.images.slice(0,6) : [],
+    pdfs:Array.isArray(body.pdfs) ? body.pdfs.slice(0,2) : [],
+    sheetText:String(body.sheetText || ''),notes:body.notes
+  };
+  const aiSkipped = [];
+  const max = 9 * 1024 * 1024;
+  for (const doc of documents) {
+    const skip = reason => aiSkipped.push({id:doc.id,name:doc.name,reason});
+    try {
+      if (doc.size > 14 * 1024 * 1024) { skip('Vượt 14 MB'); continue; }
+      const {buf,mime} = await assets.read(doc.assetKey);
+      if (buf.length > 14 * 1024 * 1024) { skip('Vượt 14 MB'); continue; }
+      const next = {...prepared};
+      if (mime === 'application/pdf') {
+        if (prepared.pdfs.length >= 2) { skip('Tối đa 2 PDF mỗi lượt'); continue; }
+        next.pdfs = [...prepared.pdfs,{data:buf.toString('base64')}];
+      } else if (/^image\/(png|jpeg|webp|gif)$/.test(mime)) {
+        if (prepared.images.length >= 6) { skip('Tối đa 6 ảnh mỗi lượt'); continue; }
+        next.images = [...prepared.images,{mediaType:mime,data:buf.toString('base64')}];
+      } else if (/\.csv$/i.test(doc.name)) {
+        next.sheetText += '\n' + doc.name + '\n' + buf.toString('utf8');
+      } else if (/\.xlsx?$/i.test(doc.name)) {
+        const xlsx = require('xlsx');
+        const book = xlsx.read(buf,{sheetRows:2000});
+        for (const name of book.SheetNames) {
+          next.sheetText += '\n' + doc.name + ' / ' + name + '\n' + xlsx.utils.sheet_to_csv(book.Sheets[name],{blankrows:false});
+          if (next.sheetText.length > 60000) break;
+        }
+      } else { skip('Định dạng chưa hỗ trợ'); continue; }
+      if (next.sheetText.length > 60000 || Buffer.byteLength(JSON.stringify(next)) > max) { skip('Vượt giới hạn tổng tài liệu mỗi lượt'); continue; }
+      Object.assign(prepared,next);
+    } catch { skip('Không đọc được tệp'); }
+  }
+  return {body:prepared,aiSkipped};
+}
+
 module.exports = {
+  attachProjectAiDocuments,
   ProjectHubStore,
   ProjectAssets,
   calculateProjectStats,
