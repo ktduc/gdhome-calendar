@@ -60,3 +60,16 @@ Bước kế tiếp GĐ7: Claude review commit GĐ7. Tất cả commit là cục
 5. Mở ✨ AI, dán ảnh thử, gửi, mở Duyệt đề xuất từ ô trạng thái góc phải. Gộp hai đề xuất trùng vào bảng và xác nhận chỉ thêm một dòng. Gemini được giả lập; API test kiểm tra ảnh/PDF và chuẩn hoá JSON. Chưa dùng dữ liệu hoặc khoá thật.
 
 XONG GĐ7
+
+## Giai đoạn 8
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| 8.1 | ✅ | giữ vị trí cuộn và focus sau thao tác |
+| 8.2 | ⏳ | Hover sidebar Lịch |
+| 8.3 | ⏳ | Đồng bộ giao diện |
+| 8.4 | ⏳ | Thao tác nhiều dòng |
+| 8.5 | ⏳ | Dán ảnh |
+| 8.6 | ⏳ | Tinh chỉnh và đo hiệu năng |
+
+Bước kế tiếp GĐ8: 8.2 đo sidebar trước và sau hover.

@@ -187,8 +187,72 @@ function installColumnResize(table) {
     };
   });
 }
+let restoreViewFrame;
+const editorScrollAreas = ['.sheet-scroll','.material-sidebar'];
+const focusAttributes = ['id','data-field','data-action','data-group-toggle','data-column-toggle','data-resize','data-sidebar','data-select-row'];
+
+function captureEditorView() {
+  const root = box();
+  const active = document.activeElement;
+  const view = {
+    page:[window.scrollX,window.scrollY],
+    areas:editorScrollAreas.map(selector => {
+      const area = root.querySelector(selector);
+      return [selector,area?.scrollLeft || 0,area?.scrollTop || 0];
+    })
+  };
+  if (!root.contains(active) || active.closest('dialog')) return view;
+  const row = active.closest('[data-row]');
+  const rows = row ? [...root.querySelectorAll('tr[data-row]')] : [];
+  const index = rows.indexOf(row);
+  const candidates = row ? [row,...rows.slice(index+1),...rows.slice(0,index).reverse()] : [];
+  view.focus = {
+    rowIds:candidates.map(candidate => candidate.dataset.row),
+    groupId:active.closest('[data-group]')?.dataset.group,
+    column:active.closest('td[data-column]')?.dataset.column,
+    slot:active.closest('[data-slot]')?.dataset.slot,
+    keys:focusAttributes.filter(key => active.hasAttribute(key))
+      .map(key => '[' + key + '="' + CSS.escape(active.getAttribute(key)) + '"]').join(''),
+    range:active.selectionStart == null ? null : [active.selectionStart,active.selectionEnd,active.selectionDirection]
+  };
+  return view;
+}
+
+function restoreEditorView(view) {
+  const root = box();
+  const restoreScroll = () => {
+    for (const [selector,left,top] of view.areas) {
+      const area = root.querySelector(selector);
+      if (area) { area.scrollLeft = left; area.scrollTop = top; }
+    }
+    window.scrollTo(...view.page);
+  };
+  restoreScroll();
+  const focus = view.focus;
+  if (focus) {
+    let row;
+    for (const id of focus.rowIds) {
+      row = root.querySelector('[data-row="' + CSS.escape(id) + '"]');
+      if (row) break;
+    }
+    const group = focus.groupId && root.querySelector('[data-group="' + CSS.escape(focus.groupId) + '"]');
+    const column = row && focus.column && row.querySelector('[data-column="' + focus.column + '"]');
+    const slot = column && focus.slot != null && column.querySelector('[data-slot="' + focus.slot + '"]');
+    const scope = slot || column || row || group || root;
+    const target = (focus.keys && scope.querySelector(focus.keys)) || slot ||
+      (row && row.querySelector('td[data-column="name"] input')) ||
+      (group && group.querySelector('button[data-action="fold"]'));
+    if (target) {
+      target.focus({preventScroll:true});
+      if (focus.range && target.selectionStart != null) target.setSelectionRange(...focus.range);
+    }
+  }
+  cancelAnimationFrame(restoreViewFrame);
+  restoreViewFrame = requestAnimationFrame(restoreScroll);
+}
+
 function renderEditor() {
-  const scroll = box().querySelector('.sheet-scroll');
+  const view = captureEditorView();
   const columns = visibleColumns();
   const widths = columns.map(([key]) => columnWidth(key));
   box().innerHTML = '<div class="material-toolbar"><details class="material-export"><summary>File ▾</summary><div>' +
@@ -209,12 +273,13 @@ function renderEditor() {
     '</tr></thead>' + sheet.groups.filter(g => !hiddenGroups.has(g.id)).map(g => renderGroup(g,columns)).join('') +
     '</table></div></section></div><dialog id="material-dialog"></dialog>';
   const updatedScroll = box().querySelector('.sheet-scroll');
-  if (scroll) { updatedScroll.scrollTop = scroll.scrollTop; updatedScroll.scrollLeft = scroll.scrollLeft; }
+
   showImages();
   installEditorSidebar();
   installMaterialsAi();
   installColumnResize(updatedScroll.querySelector('table'));
   if (typeof installRelease === 'function') installRelease();
+  restoreEditorView(view);
 }
 
 function installEditorSidebar() {
@@ -571,6 +636,7 @@ document.addEventListener('click', async event => {
         hiddenGroups.delete(button.dataset.id);
         collapsed.delete(button.dataset.id);
         renderEditor();
+        cancelAnimationFrame(restoreViewFrame);
         box().querySelector('[data-group="' + button.dataset.id + '"]')?.scrollIntoView({block:'start'});
         break;
       }
