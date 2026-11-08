@@ -237,3 +237,17 @@ Bước kế tiếp GĐ14A: A5
 Kiểm tra: `node --test` 42/42. Playwright: 8.1–8.5, 9.1, 9.4–9.6, 10.x, 12.x, 13.1–13.4, 15.1, 15.2 đạt (9.3 lỗi sẵn từ trước, 8.6 dao động ~200 ms trong máy ảo chậm như bản trước).
 
 XONG GĐ15
+
+
+## Rà soát code (Claude, 09/11/2026)
+
+| Mục | Kết quả |
+|---|---|
+| Lưu Gist | Sửa lỗi mất dữ liệu: thay đổi đến lúc đang gửi lên Gist không được gửi tiếp (hẹn giờ bị bỏ qua). Khi tắt server gửi hết phần còn lại. Có test `tests/gist-store.test.js`. |
+| Ảnh | Ảnh trả về `private, max-age=31536000, immutable` (tên = mã băm) thay cho `no-store`; server giữ đệm ~48 MB ảnh lấy từ B2 → mở lại bảng không phải tải lại ảnh từ kho ở Mỹ. |
+| AI soát bản vẽ | Bỏ qua file > 14 MB (giới hạn AI) kèm cảnh báo thay vì làm hỏng cả lượt và tốn bộ nhớ. |
+| Tiến trình AI | Chỉ chủ tài khoản xem/huỷ được job; mã job ngẫu nhiên UUID; dọn job xong quá 2 giờ; trang Dự án ngừng thăm dò khi job mất do server khởi động lại. |
+| Thư viện ảnh | Lỗi tải danh sách 3D/dữ liệu dùng chung được giữ 30 giây, không gọi lại ở mỗi lần vẽ bảng. |
+| Khác | `/favicon.ico` hết 404. |
+
+Đo: tải trang Lịch ~0,44 s (đã nén Brotli); log Render 24 giờ không có request chậm/nghẽn. Timeline 450 việc ~160–250 ms trong máy ảo chậm (khoảng 80 ms máy thật) – chấp nhận được, có thể tối ưu sau bằng gắn sự kiện chung thay vì từng dòng.

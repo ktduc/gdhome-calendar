@@ -482,7 +482,7 @@
       return `
         <tr>
           <td>${typeBadges[d.type] || d.type}</td>
-          <td>${d.thumbAssetKey ? '<img class="hub-render-thumbnail" alt="" data-hub-thumbnail="' + escape(d.thumbAssetKey) + '">' : ''}<strong>${escape(d.name)}</strong></td>
+          <td>${d.thumbAssetKey ? '<img class="hub-render-thumbnail" alt="" data-hub-thumbnail="' + escape(d.thumbAssetKey) + '">' : ''}<strong>${escape(d.name)}</strong>${d.aiSkipped ? '<br><small style="color:#b45309">⚠ ' + escape(d.aiSkipped) + '</small>' : ''}</td>
           <td>${escape(d.room || 'Cả nhà')}</td>
           <td>${sizeStr}</td>
           <td>${verBadge}</td>
@@ -918,7 +918,17 @@
           updateBtnText('🚀 Soát bản vẽ', false);
           toast('Đã huỷ tiến trình phân tích AI.');
         }
-      } catch (err) {}
+      } catch (err) {
+        // Tiến trình đã mất (máy chủ khởi động lại) thì dừng thăm dò, không lặp mãi.
+        if (err?.status === 404 || /không còn|Không tìm thấy job/i.test(err?.message || '')) {
+          clearInterval(activeReviewPollTimer);
+          activeReviewPollTimer = null;
+          updateBtnText('🚀 Soát bản vẽ', false);
+          toast(err.message || 'Tiến trình soát đã dừng. Hãy chạy lại.');
+          const notice = document.getElementById('shell-hub-active-job');
+          if (notice) notice.style.display = 'none';
+        }
+      }
     }, 2000);
   }
 

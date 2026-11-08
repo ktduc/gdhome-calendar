@@ -52,6 +52,29 @@ async function putImageOnce(key,buf,mime) {
 }
 
 
+// Bộ nhớ đệm ảnh trên server: tên ảnh là mã băm nội dung nên không bao giờ đổi.
+// Giữ tối đa ~48 MB để không phải kéo lại từ kho B2 (ở Mỹ) cho mỗi lượt xem.
+const assetCache = new Map();
+const assetCacheLimit = 48 * 1024 * 1024;
+let assetCacheBytes = 0;
+function cacheGet(key) {
+  const hit = assetCache.get(key);
+  if (!hit) return null;
+  assetCache.delete(key);
+  assetCache.set(key,hit);
+  return hit;
+}
+function cachePut(key,buf) {
+  if (buf.length > 3 * 1024 * 1024 || assetCache.has(key)) return;
+  assetCache.set(key,buf);
+  assetCacheBytes += buf.length;
+  for (const [oldKey,oldBuf] of assetCache) {
+    if (assetCacheBytes <= assetCacheLimit) break;
+    assetCache.delete(oldKey);
+    assetCacheBytes -= oldBuf.length;
+  }
+}
+
 class MaterialAssets {
   constructor(dataDir, accountKey) {
     this.dir = path.join(dataDir, 'assets', accountKey);
@@ -71,6 +94,7 @@ class MaterialAssets {
     const mime = imageMimes[ext];
     if (isConfigured()) {
       await putImageOnce(this.prefix + name,buf,mime);
+      cachePut(this.prefix + name,buf);
     } else {
       await fs.mkdir(this.dir,{recursive:true});
       await fs.writeFile(path.join(this.dir,name),buf,{flag:'wx'}).catch(error => { if (error.code !== 'EEXIST') throw error; });
@@ -80,9 +104,11 @@ class MaterialAssets {
 
   async read(name) {
     if (!imageName(name)) throw Object.assign(new Error('Không tìm thấy ảnh.'),{status:404});
-    let buf;
+    let buf = cacheGet(this.prefix + name);
+    if (buf) return {buf,mime:imageMimes[name.split('.').at(-1)]};
     if (isConfigured()) {
       buf = (await getObject(this.prefix + name,{timeout:20000})).buffer;
+      cachePut(this.prefix + name,buf);
     } else {
       buf = await fs.readFile(path.join(this.dir,name)).catch(error => {
         if (error.code === 'ENOENT') throw Object.assign(new Error('Không tìm thấy ảnh.'),{status:404});
@@ -94,7 +120,8 @@ class MaterialAssets {
 
   async send(res,name) {
     const {buf,mime} = await this.read(name);
-    res.writeHead(200,{'Content-Type':mime,'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'});
+    // Tên ảnh = mã băm nội dung, nên trình duyệt giữ lâu dài được mà không lo ảnh cũ.
+    res.writeHead(200,{'Content-Type':mime,'Cache-Control':'private, max-age=31536000, immutable','X-Content-Type-Options':'nosniff'});
     res.end(buf);
   }
 }

@@ -268,15 +268,21 @@ class GistStore {
     this.dirty.clear();
     const files = {};
     names.forEach(n => { files[n] = { content: JSON.stringify(this.cache.get(n), null, 2) }; });
+    let failed = false;
     this.flushing = this.api('PATCH', `/gists/${this.gistId}`, { files })
       .then(() => { this.lastError = null; this.lastSyncAt = new Date().toISOString(); })
       .catch(err => {
+        failed = true;
         this.lastError = err.message;
         console.error('[GIST] Lỗi đẩy dữ liệu, sẽ thử lại:', err.message);
         names.forEach(n => this.dirty.add(n));
         this.schedule(10000);
       })
-      .finally(() => { this.flushing = null; });
+      .finally(() => {
+        this.flushing = null;
+        // Thay đổi đến trong lúc đang gửi: lượt hẹn giờ khi đó đã bị bỏ qua, phải hẹn lại để không bị kẹt.
+        if (!failed && this.dirty.size) this.schedule(1500);
+      });
     return this.flushing;
   }
   info() {
@@ -447,6 +453,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === '/tools') rel = '/tools.html';
   if (rel === '/chot-ma') rel = '/chot-ma.html';
   if (rel === '/du-an') rel = '/du-an.html';
+  if (rel === '/favicon.ico') rel = '/gdhome-icon.png';
   if (rel.startsWith('/duyet/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(7))) rel = '/duyet.html';
   const filePath = path.normalize(path.join(ROOT_DIR, rel));
   const relFromRoot = path.relative(ROOT_DIR, filePath);
@@ -680,7 +687,14 @@ const server = http.createServer(async (req,res) => {
 
 // Render / Windows tắt server -> đẩy nốt dữ liệu chưa lên Gist
 async function gracefulExit() {
-  try { if (store) await Promise.race([store.flush(), new Promise(r => setTimeout(r, 8000))]); } catch (e) { /* bỏ qua */ }
+  const deadline = Date.now() + 8000;
+  try {
+    // Gửi hết cả những thay đổi đến trong lúc đang gửi dở.
+    while (store && Date.now() < deadline) {
+      await Promise.race([store.flush(), new Promise(r => setTimeout(r, Math.max(0, deadline - Date.now())))]);
+      if (!store.dirty?.size || store.lastError) break;
+    }
+  } catch (e) { /* bỏ qua */ }
   process.exit(0);
 }
 process.on('SIGTERM', gracefulExit);

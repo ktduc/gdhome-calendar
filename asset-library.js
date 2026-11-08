@@ -116,7 +116,8 @@ window.GDHomeAssets = (() => {
         thumb:String(doc.thumbAssetKey || doc.assetKey).replace(/^render-/,'')
       })).filter(item => GDHomeImages.isAssetName(item.full) && GDHomeImages.isAssetName(item.thumb)));
     renderCache.set(projectId,promise);
-    promise.catch(() => renderCache.delete(projectId));
+    // Lỗi cũng giữ 30 giây để không gọi lại máy chủ ở mỗi lần vẽ lại bảng.
+    promise.catch(() => setTimeout(() => { if (renderCache.get(projectId) === promise) renderCache.delete(projectId); },30000));
     return promise;
   }
   async function uploadRenders(projectId,files,onStatus = toast) {
@@ -168,10 +169,14 @@ window.GDHomeAssets = (() => {
     try { localStorage.setItem(guestLibraryKey,JSON.stringify(data)); } catch { throw new Error('Bộ nhớ trình duyệt đã đầy.'); }
     return data;
   }
+  let libraryError = null;
   async function loadLibrary(force = false) {
     if (library && !force) return library;
     if (isGuest()) return (library = guestLibrary());
-    libraryLoading ||= api('/api/library').then(data => (library = data)).finally(() => { libraryLoading = null; });
+    if (!force && libraryError && Date.now()-libraryError.at < 30000) throw libraryError.error;
+    libraryLoading ||= api('/api/library').then(data => { libraryError = null; return (library = data); })
+      .catch(error => { libraryError = {error,at:Date.now()}; throw error; })
+      .finally(() => { libraryLoading = null; });
     return libraryLoading;
   }
   async function libraryCall(path,body,guestChange) {

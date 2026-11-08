@@ -861,6 +861,13 @@ async function runAiAnalysis(ai, drawings, renders, assets, buildingType = 'Chun
     try {
       const { buf, mime } = await assets.read(doc.assetKey);
       let rawJson = '';
+      // Các dịch vụ AI nhận tối đa ~20 MB mỗi lần (base64 to thêm 1/3): bỏ qua file quá lớn thay vì làm hỏng cả lượt soát.
+      if (buf.length > 14 * 1024 * 1024) {
+        doc.aiSkipped = 'Bản vẽ ' + Math.round(buf.length / 1048576) + ' MB vượt giới hạn AI (14 MB). Hãy tách file theo tầng hoặc in PDF nhẹ hơn.';
+        doneCount++;
+        continue;
+      }
+      delete doc.aiSkipped;
       if (mime === 'application/pdf' || doc.name.toLowerCase().endsWith('.pdf')) {
         const res = await callWithFallback(ai, model, call, [], [{ data: buf.toString('base64') }], 'Phân tích bản vẽ HSKT này.', drawingSystem);
         rawJson = res.raw;
@@ -915,7 +922,8 @@ class HubJobManager {
   }
 
   createJob({ projectId, projectName, dataKey, runFn }) {
-    const jobId = 'job_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    this.prune();
+    const jobId = 'job_' + crypto.randomUUID();
     const controller = new AbortController();
     const job = {
       id: jobId,
@@ -957,8 +965,18 @@ class HubJobManager {
     return job;
   }
 
-  getJob(jobId) {
-    return this.jobs.get(jobId) || null;
+  getJob(jobId, dataKey) {
+    const job = this.jobs.get(jobId) || null;
+    // Chỉ chủ tài khoản mới xem / huỷ được tiến trình của mình.
+    return job && (dataKey === undefined || job.dataKey === dataKey) ? job : null;
+  }
+
+  prune() {
+    // Bỏ các tiến trình đã xong quá 2 giờ để không giữ kết quả cũ trong bộ nhớ mãi.
+    const limit = Date.now() - 2 * 3600 * 1000;
+    for (const [id, job] of this.jobs) {
+      if (job.status !== 'running' && job.finishedAt && Date.parse(job.finishedAt) < limit) this.jobs.delete(id);
+    }
   }
 
   getActiveJob(dataKey, projectId = null) {
@@ -973,9 +991,9 @@ class HubJobManager {
     return userJobs.at(-1) || null;
   }
 
-  cancelJob(jobId) {
-    const job = this.jobs.get(jobId);
-    if (!job) return false;
+  cancelJob(jobId, dataKey) {
+    const job = this.getJob(jobId, dataKey);
+    if (!job || job.status !== 'running') return false;
     job.status = 'cancelled';
     job.step = 'Đã huỷ tiến trình.';
     job.finishedAt = new Date().toISOString();
@@ -1480,8 +1498,8 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     const urlObj = new URL(req.url, 'http://localhost');
     const jobId = urlObj.searchParams.get('jobId');
     if (!jobId) return sendJson(res, 400, { success: false, message: 'Thiếu jobId.' });
-    const job = globalJobManager.getJob(jobId);
-    if (!job) return sendJson(res, 404, { success: false, message: 'Không tìm thấy job.' });
+    const job = globalJobManager.getJob(jobId, dataKey);
+    if (!job) return sendJson(res, 404, { success: false, message: 'Tiến trình không còn (máy chủ có thể vừa khởi động lại). Hãy chạy soát lại.' });
     return sendJson(res, 200, { success: true, job: globalJobManager.serialize(job) });
   }
 
@@ -1497,7 +1515,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
   if (urlPath === '/api/project-hub/jobs/cancel' && req.method === 'POST') {
     const { jobId } = await readJsonBody(req);
     if (!jobId) return sendJson(res, 400, { success: false, message: 'Thiếu jobId.' });
-    const cancelled = globalJobManager.cancelJob(jobId);
+    const cancelled = globalJobManager.cancelJob(jobId, dataKey);
     return sendJson(res, 200, { success: true, cancelled });
   }
 
