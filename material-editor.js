@@ -352,7 +352,7 @@ function editDetail(row, slot) {
     const i = Number(button.dataset.index);
     try {
       if (button.dataset.detail === 'pick') { element.close(); return pick(row,slot); }
-      if (button.dataset.detail === 'remove') modify(() => list.splice(i,1),false);
+      if (button.dataset.detail === 'remove') modify(() => list.splice(i,1));
       if (button.dataset.detail === 'left' && i > 0) modify(() => { [list[i-1],list[i]] = [list[i],list[i-1]]; },false);
       if (button.dataset.detail === 'crop') {
         const view = await GDHomeAssets.editView(list[i]);
@@ -845,7 +845,7 @@ function openImageCellMenu(anchor, row, group, slot) {
       if (view) modify(() => { setImageView(list, 0, view); }, false);
     });
     addItem('🗑', 'Xoá ảnh', () => {
-      modify(() => { list.splice(0, 1); }, false);
+      modify(() => { list.splice(0, 1); });
     }, true);
   } else if (pa?.paint) {
     addItem('🗑', 'Xoá màu sơn', () => {
@@ -854,7 +854,7 @@ function openImageCellMenu(anchor, row, group, slot) {
         pa.brand = '';
         pa.code = '';
         pa.color = '';
-      }, false);
+      });
     }, true);
   }
 

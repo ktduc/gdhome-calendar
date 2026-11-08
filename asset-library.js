@@ -10,6 +10,11 @@ window.GDHomeAssets = (() => {
   const hooks = { headers:defaultHeaders, guest:() => false, storeAsset:null, readAsset:null };
   const urlCache = new Map();
   const renderCache = new Map();
+  const removedRenders = new Map();
+  const pendingLibraryDeletes = new Set();
+  const visibleRenders = (projectId,items) => items.filter(item => !removedRenders.get(projectId)?.has(item.id));
+  const visibleLibrary = data => ({...data,items:data.items.filter(item => !pendingLibraryDeletes.has(item.id))});
+  const notifyLibrary = () => document.dispatchEvent(new Event('gdhome:library-changed'));
   let library = null, libraryLoading = null;
 
   const renderChanges = typeof BroadcastChannel === 'function' ? new BroadcastChannel('gdhome-project-renders') : null;
@@ -115,7 +120,7 @@ window.GDHomeAssets = (() => {
   async function loadRenders(projectId,force = false) {
     if (!projectId) return [];
     if (isGuest()) throw Object.assign(new Error('Đăng nhập để dùng kho phối cảnh 3D của dự án.'),{guest:true});
-    if (!force && renderCache.has(projectId)) return renderCache.get(projectId);
+    if (!force && renderCache.has(projectId)) return visibleRenders(projectId,await renderCache.get(projectId));
     const promise = api('/api/project-hub/project?id=' + encodeURIComponent(projectId)).then(data =>
       (data.project?.hub?.documents || []).filter(doc => doc.type === 'render' && doc.assetKey).map(doc => ({
         id:doc.id,name:doc.name || '',room:doc.room || '',page:doc.pageNumber || null,source:doc.sourcePdf || '',
@@ -126,7 +131,7 @@ window.GDHomeAssets = (() => {
     renderCache.set(projectId,promise);
     // Lỗi cũng giữ 30 giây để không gọi lại máy chủ ở mỗi lần vẽ lại bảng.
     promise.catch(() => setTimeout(() => { if (renderCache.get(projectId) === promise) renderCache.delete(projectId); },30000));
-    return promise;
+    return visibleRenders(projectId,await promise);
   }
   async function uploadRenders(projectId,files,onStatus = toast) {
     if (!projectId) throw new Error('Chọn dự án trước khi tải phối cảnh 3D.');
@@ -182,13 +187,13 @@ window.GDHomeAssets = (() => {
   }
   let libraryError = null;
   async function loadLibrary(force = false) {
-    if (library && !force) return library;
+    if (library && !force) return visibleLibrary(library);
     if (isGuest()) return (library = guestLibrary());
     if (!force && libraryError && Date.now()-libraryError.at < 30000) throw libraryError.error;
-    libraryLoading ||= api('/api/library').then(data => { libraryError = null; return (library = data); })
+    libraryLoading ||= api('/api/library').then(data => { libraryError = null; if (!library || data._version >= library._version) library = data; return library; })
       .catch(error => { libraryError = {error,at:Date.now()}; throw error; })
       .finally(() => { libraryLoading = null; });
-    return libraryLoading;
+    return visibleLibrary(await libraryLoading);
   }
   async function libraryCall(path,body,guestChange) {
     if (isGuest()) {
@@ -199,7 +204,7 @@ window.GDHomeAssets = (() => {
       return {...library,...result};
     }
     const data = await api('/api/library/' + path,{method:'POST',body:JSON.stringify(body)});
-    library = {_version:data._version,categories:data.categories,items:data.items};
+    if (!library || data._version >= library._version) library = data;
     document.dispatchEvent(new Event('gdhome:library-changed'));
     return data;
   }
@@ -224,7 +229,18 @@ window.GDHomeAssets = (() => {
     }
     return {};
   });
-  const deleteItems = ids => libraryCall('items/delete',{ids},data => { data.items = data.items.filter(item => !ids.includes(item.id)); return {}; });
+  async function deleteItems(ids) {
+    ids = ids.filter(id => !pendingLibraryDeletes.has(id));
+    if (!ids.length) return;
+    ids.forEach(id => pendingLibraryDeletes.add(id));
+    notifyLibrary();
+    try {
+      return await libraryCall('items/delete',{ids},data => { data.items = data.items.filter(item => !ids.includes(item.id)); return {}; });
+    } finally {
+      ids.forEach(id => pendingLibraryDeletes.delete(id));
+      notifyLibrary();
+    }
+  }
   const saveCategory = (name,id) => libraryCall('categories',{name,id},data => {
     if (id) { const category = data.categories.find(c => c.id === id); if (category) category.name = name; return {category}; }
     const category = {id:'cat-' + uid().slice(0,8),name};
@@ -987,7 +1003,7 @@ window.GDHomeAssets = (() => {
       };
       body.querySelectorAll('[data-asset-remove]').forEach(button => button.onclick = async () => {
         if (!confirm('Xoá ảnh khỏi dữ liệu dùng chung? Các bảng đã dùng ảnh này vẫn giữ ảnh.')) return;
-        try { await deleteItems([button.closest('[data-asset-id]').dataset.assetId]); paint(); } catch (error) { toast(error.message); }
+        try { await deleteItems([button.closest('[data-asset-id]').dataset.assetId]); } catch (error) { toast(error.message); }
       });
       body.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
         const item = data.items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
@@ -1007,6 +1023,8 @@ window.GDHomeAssets = (() => {
       });
       await hydrate(body);
     }
+    document.addEventListener('gdhome:library-changed',paint);
+    dialog.addEventListener('close',() => document.removeEventListener('gdhome:library-changed',paint),{once:true});
     body.innerHTML = '<p class="asset-empty">Đang tải…</p>';
     paint();
     return dialog;
@@ -1045,11 +1063,19 @@ window.GDHomeAssets = (() => {
         });
         list.querySelectorAll('[data-asset-remove]').forEach(button => button.onclick = async () => {
           if (!confirm('Xoá ảnh 3D khỏi dự án?')) return;
-          button.disabled = true;
+          const documentId = button.closest('[data-asset-id]').dataset.assetId;
+          if (!removedRenders.has(projectId)) removedRenders.set(projectId,new Set());
+          const removed = removedRenders.get(projectId);
+          removed.add(documentId);
+          document.dispatchEvent(new CustomEvent('gdhome:renders-changed',{detail:projectId}));
           try {
-            await api('/api/project-hub/documents/delete',{method:'POST',body:JSON.stringify({projectId,documentId:button.closest('[data-asset-id]').dataset.assetId})});
+            await api('/api/project-hub/documents/delete',{method:'POST',body:JSON.stringify({projectId,documentId})});
             invalidateRenders(projectId);
-          } catch (error) { toast(error.message); button.disabled = false; }
+          } catch (error) {
+            removed.delete(documentId);
+            document.dispatchEvent(new CustomEvent('gdhome:renders-changed',{detail:projectId}));
+            toast(error.message);
+          }
         });
         await hydrate(list);
       } catch (error) {

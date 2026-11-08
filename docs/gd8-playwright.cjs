@@ -1581,6 +1581,57 @@ cases['17.0'] = async page => {
   assert.equal(await page.locator('[data-render-strip] [data-id=render-test]').count(),0);
 };
 
+cases['18.1'] = async page => {
+  const asset = 'a'.repeat(64) + '.webp';
+  await page.route('**/api/materials/assets/' + asset,route => route.fulfill({status:404}));
+  let documents = [{id:'render-test',name:'3D mẫu',type:'render',assetKey:'render-' + asset}];
+  await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents}}}}));
+  await page.route('**/api/project-hub/documents/delete',async route => {
+    await new Promise(resolve => setTimeout(resolve,1500));
+    documents = [];
+    return route.fulfill({json:{ok:true}});
+  });
+  for (const pattern of ['**/api/materials*','**/api/library*','**/api/library/items/delete']) {
+    await page.route(pattern,async route => { await new Promise(resolve => setTimeout(resolve,1500)); await route.continue(); });
+  }
+  await openMaterials(page);
+  const data = await page.evaluate(async asset => {
+    const {categories} = await GDHomeAssets.loadLibrary();
+    return GDHomeAssets.addItems(categories[0].id,[{name:'Ảnh mẫu',full:asset,thumb:asset}]);
+  },asset);
+  assert.equal(data.added.length,1);
+  await page.locator('[data-library-summary]').filter({hasText:'1 ảnh mẫu'}).waitFor();
+  await page.locator('.material-sidebar-actions [data-action=open-library]').click();
+  page.on('dialog',dialog => dialog.accept());
+  await page.locator('.asset-library-dialog [data-asset-remove]').click();
+  await page.locator('.asset-library-dialog [data-asset-remove]').waitFor({state:'detached',timeout:100});
+  await page.keyboard.press('Escape');
+  await page.locator('[data-library-summary]').filter({hasText:'0 ảnh mẫu'}).waitFor();
+  await page.locator('[data-render-strip] [data-id=render-test]').waitFor();
+  await page.locator('[data-sidebar=renders] [data-action=open-renders]').click();
+  await page.locator('.asset-render-dialog [data-asset-remove]').click();
+  await page.locator('.asset-render-dialog [data-asset-remove]').waitFor({state:'detached',timeout:100});
+  assert.equal(await page.locator('[data-render-strip] [data-id=render-test]').count(),0);
+  await page.keyboard.press('Escape');
+  await page.evaluate(asset => modify(() => {
+    const row = sheet.groups[0].rows[0];
+    row.options[0].images = [{full:asset,thumb:asset}];
+    row.paCount = 3;
+  }),asset);
+  const row = page.locator('[data-row="g1-r1"]');
+  const cell = row.locator('.image-cell[data-slot="0"]');
+  await cell.locator('[data-action=cell-menu]').click();
+  await page.locator('.image-cell-dropdown-menu').getByRole('button',{name:/Xoá ảnh/}).click();
+  await cell.locator('.image-open').waitFor({state:'detached',timeout:100});
+  const removePa = row.locator('[data-action=remove-pa]').last();
+  if (await removePa.count()) {
+    await removePa.click();
+    await row.locator('.image-cell[data-slot="2"]').waitFor({state:'detached',timeout:100});
+  }
+  await row.locator('[data-action=del-row]').dispatchEvent('click');
+  await row.waitFor({state:'detached',timeout:100});
+};
+
 cases['17.1'] = async page => {
   await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents:[
     {id:'quote',type:'quote',name:'Báo giá.pdf',assetKey:'quote.pdf',size:2048},
