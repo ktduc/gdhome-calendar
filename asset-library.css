@@ -53,9 +53,9 @@
 [data-image-fit=fill] :is(.image-open,.print-square) img[data-image-axis][style*="--view"]{transform:var(--view)}
 
 /* Chốt mã: nút chọn ảnh và mục thư viện ở menu trái */
-.image-library-pick{position:absolute;left:3px;bottom:3px;z-index:2;display:none;padding:1px 5px;border:1px solid #cbd5e1;border-radius:5px;
-  background:rgba(255,255,255,.95);font-size:11px;line-height:16px;cursor:pointer}
-.image-cell:is(:hover,:focus,:focus-within) .image-library-pick{display:block}
+.image-library-pick{display:none!important} /*
+
+
 .material-paper-output .image-library-pick,.material-paper-output .header-asset-upload{display:none!important}
 .header-asset-upload{position:absolute;right:27px;top:50%;transform:translateY(-50%);width:16px;height:17px;padding:0;border:1px solid #cbd5e1;
   border-radius:4px;background:#fff;font-size:10px;line-height:15px;cursor:pointer}

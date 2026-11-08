@@ -297,6 +297,10 @@ function pick(row, slot) {
   const i = Number(slot);
   if (slot === 'render' || !row.options[i]) return;
   const pa = row.options[i];
+  if (row.chosen === i) {
+    modify(() => { row.chosen = null; row.decision = 'draft'; });
+    return;
+  }
   if (!pa.images.length && !['brand','code','finish','color','size'].some(key => pa[key])) {
     say('Điền thông tin hoặc thêm ảnh trước khi chốt phương án.');
     return;
@@ -314,7 +318,7 @@ function editDetail(row, slot) {
   const pa = slot === 'render' ? null : row.options[Number(slot)];
   const list = pa?.images || row.render;
   const element = dialog('<h2>' + html(row.name) + ' · ' + (pa ? 'PA' + (Number(slot)+1) : 'Phối cảnh 3D') + '</h2><div data-slot="' + slot +
-    '"><div class="toolbar">' + (pa ? fields.map(k => input(k,pa[k],labels[k])).join('') + '<button data-detail="pick">✓ Chốt PA</button>' : '') +
+    '"><div class="toolbar">' + (pa ? fields.map(k => input(k,pa[k],labels[k])).join('') + (row.chosen === Number(slot) ? '<button data-detail="pick" class="danger">✕ Bỏ chốt PA</button>' : '<button data-detail="pick">✓ Chốt PA</button>') : '') +
     '</div><label>Thêm ảnh <input type="file" accept="image/*" multiple data-detail="upload"></label><div class="detail-images">' +
     list.map((image,i) => '<article>' + images([image],true) + '<button data-detail="left" data-index="' + i + '">←</button> <button data-detail="crop" data-index="' +
       i + '">Vùng nhìn</button> <button data-detail="remove" data-index="' + i + '">Xóa</button></article>').join('') + '</div></div>');
@@ -422,6 +426,7 @@ function suggestions(field,pa,refresh = false) {
   });
   currentMenu.append(materialSuggestionActions(key,group,() => field.value,() => suggestions(field,pa,true)));
   (field.closest('dialog') || document.body).append(currentMenu);
+  field.addEventListener('blur', () => { setTimeout(() => { if (!currentMenu.contains(document.activeElement)) currentMenu.remove(); }, 120); }, { once: true });
   const place = () => {
     if (!field.isConnected) { currentMenu.remove(); return; }
     const rect = field.getBoundingClientRect();
@@ -573,6 +578,7 @@ document.addEventListener('click', async event => {
         saveMaterialSuggestionValue(field,'');
         break;
       }
+      case 'cell-menu': openImageCellMenu(button,row,group,slot); break;
       case 'detail': editDetail(row,slot); break;
       case 'view-image': openMaterialLightbox(row,slot,Number(button.dataset.index || 0)); break;
       case 'pick-asset': {
@@ -774,6 +780,101 @@ function libraryPicked(row,slot,item) {
   const pa = row.options[Number(slot)];
   addPickedImage(row,slot,item,() => { if (pa && !pa.code && item.name) pa.code = item.name; });
 }
+let openCellMenuElement = null;
+function closeCellMenu() {
+  if (openCellMenuElement) { openCellMenuElement.remove(); openCellMenuElement = null; }
+}
+function openImageCellMenu(anchor, row, group, slot) {
+  closeCellMenu();
+  const pa = slot === 'render' ? null : row.options[Number(slot)];
+  const list = pa ? pa.images : row.render;
+  const hasImage = list && list.length > 0;
+  const isChosen = row.chosen === Number(slot);
+
+  const menu = document.createElement('div');
+  menu.className = 'image-cell-dropdown-menu';
+  menu.style.cssText = 'position:fixed;z-index:10000;background:#fff;border:1px solid #cbd5e1;border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.18);padding:4px;display:flex;flex-direction:column;gap:2px;min-width:185px;font-size:12px;font-family:var(--gd-font,sans-serif);';
+
+  const addItem = (icon, text, onClick, danger = false) => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.innerHTML = '<span style="width:16px;display:inline-block;text-align:center">' + icon + '</span> ' + html(text);
+    btn.style.cssText = 'display:flex;align-items:center;gap:6px;padding:6px 10px;border:none;background:transparent;text-align:left;border-radius:4px;cursor:pointer;color:' + (danger ? '#dc2626' : '#1e293b') + ';font-size:12px;';
+    btn.onmouseover = () => { btn.style.background = danger ? '#fef2f2' : '#f1f5f9'; };
+    btn.onmouseout = () => { btn.style.background = 'transparent'; };
+    btn.onclick = e => { e.stopPropagation(); closeCellMenu(); onClick(); };
+    menu.appendChild(btn);
+  };
+
+  const addDivider = () => {
+    const hr = document.createElement('div');
+    hr.style.cssText = 'height:1px;background:#e2e8f0;margin:3px 0;';
+    menu.appendChild(hr);
+  };
+
+  if (slot === 'render') {
+    addItem('🎨', 'Chọn từ phối cảnh 3D', () => {
+      const cell = anchor.closest('.image-cell');
+      focusMaterialImageCell(cell);
+      openAssetPicker(cell, row, group, slot);
+    });
+  } else {
+    addItem('🖼', 'Chọn từ thư viện', () => {
+      const cell = anchor.closest('.image-cell');
+      focusMaterialImageCell(cell);
+      openAssetPicker(cell, row, group, slot);
+    });
+  }
+
+  addItem('⬆', 'Tải ảnh lên…', async () => {
+    const files = await GDHomeAssets.filePicker('image/*');
+    if (files.length) attachImages(row, slot, files, true).catch(showError);
+  });
+
+  if (hasImage) {
+    addItem('🔍', 'Chỉnh vùng nhìn…', async () => {
+      const view = await GDHomeAssets.editView(list[0]);
+      if (view) modify(() => { setImageView(list, 0, view); }, false);
+    });
+    addItem('🗑', 'Xoá ảnh', () => {
+      modify(() => { list.splice(0, 1); }, false);
+    }, true);
+  }
+
+  if (slot !== 'render') {
+    addDivider();
+    if (isChosen) {
+      addItem('✕', 'Bỏ chốt phương án', () => pick(row, slot), true);
+    } else {
+      addItem('✓', 'Chốt phương án này', () => pick(row, slot));
+    }
+    addItem('⚙', 'Chi tiết phương án…', () => editDetail(row, slot));
+  }
+
+  document.body.appendChild(menu);
+  openCellMenuElement = menu;
+
+  const rect = anchor.getBoundingClientRect();
+  const menuWidth = 190;
+  let left = rect.right - menuWidth;
+  if (left < 8) left = 8;
+  if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+  let top = rect.bottom + 4;
+  if (top + 160 > window.innerHeight - 8) {
+    top = Math.max(8, rect.top - 160);
+  }
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
+
+  const onDocClick = e => {
+    if (!menu.contains(e.target) && e.target !== anchor) {
+      closeCellMenu();
+      document.removeEventListener('pointerdown', onDocClick, true);
+    }
+  };
+  setTimeout(() => document.addEventListener('pointerdown', onDocClick, true), 0);
+}
+
 function openAssetPicker(cell,row,group,slot) {
   if (!window.GDHomeAssets || !row) return;
   if (slot === 'render') {

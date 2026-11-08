@@ -541,19 +541,20 @@ function renderGroup(group,columns,nextNumber,editing) {
 function imageCell(list, slot, content = '', state = '', removable = false, editing = true) {
   const hasImage = list.length > 0;
   const photo = hasImage ? '<button class="image-open" data-action="view-image" aria-label="Xem ảnh lớn">' +
-    images(list.slice(0,1),!editing) + '</button>' : '<span class="image-plus" aria-hidden="true">＋</span>';
+    images(list.slice(0,1),!editing) + '</button>' : '';
   const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (slot+1);
-  const choose = slot === 'render' ? '' : '<button class="image-pick" data-action="pick-pa" aria-label="Chốt PA' +
-    (slot+1) + '" aria-pressed="' + (state === 'chosen') + '" title="Chốt phương án">✓</button>';
+  const isChosen = state === 'chosen';
+  const choose = slot === 'render' ? '' : '<button type="button" class="image-pick' + (isChosen ? ' chosen' : '') + '" data-action="pick-pa" aria-label="' + (isChosen ? 'Bỏ chốt PA' : 'Chốt PA') + (slot+1) + '" aria-pressed="' + isChosen + '" title="' + (isChosen ? 'Phương án đã chốt · Bấm để bỏ chốt' : 'Chốt phương án') + '">' + (isChosen ? '✓ Đã chốt' : '✓') + '</button>'; //
+
   return '<div class="image-cell ' + state + (hasImage ? ' has-image' : '') + '" tabindex="0" data-slot="' + slot +
     '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả."><div class="image-preview">' + photo +
-    (!hasImage ? '<small class="paste-cell-hint">Ctrl+V để dán ảnh</small>' : '') +
+    (!hasImage ? '<div class="image-empty-hint">Bấm để chọn<br>·<br>Ctrl+V để dán</div>' : '') +
     (state === 'reserve' ? '<span class="image-state">Dự phòng</span>' : '') +
-    (editing ? '<button type="button" class="image-library-pick" data-action="pick-asset" title="' +
-      (slot === 'render' ? 'Chọn từ phối cảnh 3D của dự án' : 'Chọn từ dữ liệu dùng chung') + '">🖼 Chọn</button>' : '') +
+
+
     '</div>' + (list.length > 1 ? '<div class="material-image-thumbs">' +
       list.slice(1).map((image,i) => '<button class="material-image-thumb" data-action="view-image" data-index="' + (i+1) +
-        '" aria-label="Xem ảnh ' + (i+2) + '">' + images([image],!editing) + '</button>').join('') + '</div>' : '') + choose + '<button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' +
+        '" aria-label="Xem ảnh ' + (i+2) + '">' + images([image],!editing) + '</button>').join('') + '</div>' : '') + choose + '<button type="button" class="image-detail" data-action="cell-menu" aria-label="' + label + '" title="Tuỳ chọn ô ảnh">⋯</button>' +
     (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
 }
 

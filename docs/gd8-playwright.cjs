@@ -1310,6 +1310,53 @@ cases['13.5'] = async page => {
   }
 };
 
+cases['16.1'] = async page => {
+  await openMaterials(page);
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  assert.ok(await cell.locator('.image-empty-hint').isVisible(), 'Ô trống phải có chữ gợi ý mờ');
+  await cell.click();
+  await page.locator('.asset-popover').waitFor();
+  await pasteFixture(page, 'items');
+  await page.waitForTimeout(300);
+  assert.equal(await page.locator('.asset-popover').count(), 0, 'Popover thư viện phải đóng sau khi dán');
+  await cell.locator('.image-open img').waitFor();
+  assert.equal(await cell.locator('[data-action="cell-menu"]').count(), 1, 'Chỉ 1 nút ⋯ góc trên phải');
+  await cell.locator('[data-action="cell-menu"]').click();
+  await page.locator('.image-cell-dropdown-menu').waitFor();
+  assert.ok(await page.locator('.image-cell-dropdown-menu').getByText('Chỉnh vùng nhìn').isVisible());
+  assert.ok(await page.locator('.image-cell-dropdown-menu').getByText('Xoá ảnh').isVisible());
+  await page.keyboard.press('Escape');
+};
+
+cases['16.2'] = async page => {
+  await openMaterials(page);
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  await cell.focus();
+  await pasteFixture(page, 'items');
+  await cell.locator('.image-open img').waitFor();
+  // Chốt PA
+  await cell.locator('[data-action="pick-pa"]').click();
+  const badge = cell.locator('.image-pick.chosen');
+  await badge.waitFor();
+  assert.equal(await badge.textContent(), '✓ Đã chốt');
+  assert.ok((await badge.getAttribute('title')).includes('bỏ chốt'));
+  // Bỏ chốt bằng cách bấm lại vào nhãn
+  await badge.click();
+  await page.waitForTimeout(200);
+  assert.equal(await cell.locator('.image-pick.chosen').count(), 0, 'Đã bỏ chốt PA');
+  // Hoàn tác
+  await page.keyboard.press('Control+z');
+  await page.waitForTimeout(200);
+  assert.equal(await cell.locator('.image-pick.chosen').count(), 1, 'Hoàn tác khôi phục trạng thái đã chốt');
+  // Kiểm tra menu ⋯ có Bỏ chốt
+  await cell.locator('[data-action="cell-menu"]').click();
+  await page.locator('.image-cell-dropdown-menu').waitFor();
+  assert.ok(await page.locator('.image-cell-dropdown-menu').getByText('Bỏ chốt phương án').isVisible());
+  await page.locator('.image-cell-dropdown-menu').getByText('Bỏ chốt phương án').click();
+  await page.waitForTimeout(200);
+  assert.equal(await cell.locator('.image-pick.chosen').count(), 0, 'Bỏ chốt qua menu ⋯');
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

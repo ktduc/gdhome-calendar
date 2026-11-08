@@ -172,6 +172,7 @@ let selectedImageCell, hoveredImageCell;
 
 function focusMaterialImageCell(cell) {
   if (!cell) return;
+  window.GDHomeAssets?.closePicker?.();
   const {row,slot} = context(cell);
   selectedImageCell = { sheetId:sheet.id, rowId:row.id, slot };
   cell.focus({preventScroll:true});
@@ -244,8 +245,12 @@ document.addEventListener('paste', event => {
     if (plainText || (!files.length && !sources.length) || !row || selected?.sheetId !== sheet.id || selected?.rowId !== row.dataset.row) return;
     cell = row.querySelector('[data-slot="' + selected.slot + '"]');
   } else if (!cell && hoveredImageCell?.isConnected) cell = hoveredImageCell;
+  if (!cell && (files.length || sources.length) && selectedImageCell && selectedImageCell.sheetId === sheet.id) {
+    cell = document.querySelector('tr[data-row="' + selectedImageCell.rowId + '"] .image-cell[data-slot="' + selectedImageCell.slot + '"]');
+  }
   if (!cell || (plainText && !files.length && !sources.length)) return;
   event.preventDefault();
+  window.GDHomeAssets?.closePicker?.();
   const {row,slot} = context(cell);
   if (files.length) attachImages(row,slot,files,true).catch(showError);
   else {
@@ -264,6 +269,7 @@ document.addEventListener('drop', event => {
   const cell = event.target.closest('.sheet-grid [data-slot]');
   if (!cell || !event.dataTransfer.files.length) return;
   event.preventDefault();
+  window.GDHomeAssets?.closePicker?.();
   const {row,slot} = context(cell);
   attachImages(row,slot,event.dataTransfer.files,true).catch(showError);
 });
