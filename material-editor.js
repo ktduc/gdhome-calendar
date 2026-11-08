@@ -46,12 +46,13 @@ function renderMaterialApp(selectedProject) {
   const requested = selectedProject || byId('project-filter')?.value || query.get('project');
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
   box().innerHTML = '<div class="panel"><label>Dự án <select id="project-filter">' + materials.projects.map(p => option(p.id,p.name,projectId)).join('') +
-    '</select></label> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span> <button data-action="notion">Lấy từ Notion</button></div>' +
+    '</select></label> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span> <button data-action="notion">Lấy từ Notion</button> <span id="ai-actions"></span></div>' +
     materials.sheets.filter(s => s.projectId === projectId || !materials.projects.some(p => p.id === s.projectId)).map(s => '<article><button data-action="open" data-id="' + html(s.id) + '">' + html(s.title) + '</button> · ' + counts(s) + '</article>').join('') +
     (!materials.projects.length ? '<p>Tạo và lưu dự án trong Tiến độ trước.</p>' : '');
   box().insertAdjacentHTML('beforeend','<dialog id="material-dialog"></dialog>');
   byId('project-filter').onchange = event => renderMaterialApp(event.target.value);
   if (typeof installImport === 'function') installImport();
+  installMaterialsAi();
 }
 
 function counts(current) {
@@ -211,6 +212,7 @@ function renderEditor() {
   if (scroll) { updatedScroll.scrollTop = scroll.scrollTop; updatedScroll.scrollLeft = scroll.scrollLeft; }
   showImages();
   installEditorSidebar();
+  installMaterialsAi();
   installColumnResize(updatedScroll.querySelector('table'));
   if (typeof installRelease === 'function') installRelease();
 }

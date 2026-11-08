@@ -123,3 +123,6 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-sheet .row-actions{overflow:hidden}
 .material-sheet .msp-col-resizer{position:absolute;inset:0 0 0 auto;width:8px;cursor:col-resize;touch-action:none;border-right:2px solid transparent}
 .material-sheet .msp-col-resizer:hover,.material-sheet .msp-col-resizer:focus{border-right-color:#a41d24}
+.material-ai-job{position:fixed;right:14px;bottom:14px;z-index:15;width:min(310px,88vw);padding:10px;background:white;border:1px solid #c7ced9;border-left:4px solid #a41d24;border-radius:6px;box-shadow:0 5px 18px #0002}
+.material-ai-job button{margin-top:5px}.material-ai-drop{border:2px dashed #adbacc;padding:12px;border-radius:6px}
+.ai-review-scroll{overflow:auto;max-height:50dvh}.ai-review-scroll input:not([type=checkbox]){width:100px}

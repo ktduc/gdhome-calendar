@@ -153,6 +153,15 @@
 - **GĐ6 hoàn thiện**: các nút dòng nằm ngang, tiêu đề cột dính khi cuộn, mật độ Gọn/Vừa/Ảnh lớn đo được khoảng 44/72/130 px với thumbnail Vừa 90×64. Nhãn khách nằm trên ô, Xuất gom hai chức năng. Gõ mã tại PA và chọn từ thư viện bằng Alt+1…9.
 - Crop trong `material-image-ui.js` dùng khung kéo bốn góc, hỗ trợ phím mũi tên ở từng góc, Lưu/Huỷ. Nét ký giữ tỷ lệ 600×190 trong khung vẽ, bản khách, lịch sử và A4. Hai script trên `index.html` có phiên bản cache, `material-terms.js` đã vào danh sách deploy.
 - Kiểm tra GĐ6: 21/21 test; localhost đã tạo bảng, dán/chốt, thử crop, duyệt và ký A/B, mở lịch sử và A4, gửi yêu cầu đổi, thấy ⚠ trên Timeline. Thử khởi động module server trên bản sao không có `docs/`.
+## 3m. Chốt mã GĐ7
+
+- Menu trái có hồ sơ, danh mục kéo đổi thứ tự, hiển thị cột, mật độ và bộ lọc. Mỗi dòng mở PA1 trước, thêm bằng ＋ PA. Dữ liệu cũ vẫn mở đủ các PA đã có dữ liệu. Độ rộng cột lưu trong `columnWidths` của kho Chốt mã theo tài khoản.
+- Hồ sơ trong `profiles[projectOwners.id]` của kho Chốt mã. Tên trong hồ sơ và biên bản có thể khác tên Lịch sau khi xác nhận. `POST /api/materials/profile` điền hồ sơ hoặc thêm dự án và giai đoạn bên Lịch, giữ lịch hiện có. Hồ sơ được chụp vào bản phát hành mới.
+- `GET /api/notion/customers?q=&cursor=` dùng kết nối đã lưu, database khách riêng, ghép cột theo tài khoản. Lọc tên/địa chỉ/SĐT và phân trang phía server. Giữ phiên bản API Notion của tích hợp Lịch. `material-projects.js` điều khiển hộp chọn.
+- Menu Copy ảnh có bộ lọc nhóm đang bật, dòng đã chốt và phòng. Bản xuất dùng logo, hồ sơ và watermark; PDF A4 lưu qua hộp in. PNG và clipboard dùng html2canvas cùng `export-canvas.js`.
+- `POST /api/ai/materials` dùng nhà cung cấp của tài khoản qua `callWithFallback`, prompt nhóm vật liệu riêng. `material-ai.js` nhận PDF, Excel, CSV hoặc ảnh, báo tiến độ góc phải và cho sửa, chọn dòng. Khi gộp, bỏ trùng theo nhóm, tên hạng mục và vị trí.
+- 23/23 test đạt. Kiểm tra localhost với Notion và Gemini giả lập. Các bước bấm thử và giới hạn trong [TIEN-TRINH-CHOT-MA.md](TIEN-TRINH-CHOT-MA.md).
+
 ## 4. Các script hỗ trợ trên Desktop
 - `C:\Users\KTDUC\Desktop\Mo-Web-Lich-Tien-Do.bat`: Nháy đúp để khởi động nhanh server `localhost:3000` và tự mở trình duyệt.
 - `C:\Users\KTDUC\Desktop\Cap-Nhat-Web-Len-Mang.bat`: Nháy đúp để tự động commit và đẩy code lên GitHub / Render.com.

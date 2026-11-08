@@ -22,3 +22,5 @@ const initialPresets = {
   unit: ['m²','md','bộ','cái'], size: ['600×300','600×600','300×300','200×300'],
   finish: ['Mờ','Bóng','Vân gỗ'], color: ['Trắng','Trắng ngà'], supplier: []
 };
+
+if (typeof module !== 'undefined' && module.exports) module.exports = materialTemplate;

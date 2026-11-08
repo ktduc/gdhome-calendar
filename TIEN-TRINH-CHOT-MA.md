@@ -47,6 +47,16 @@ XONG GĐ6
 | 7.2 | ✅ | kéo và lưu độ rộng cột |
 | 7.3 | ✅ | hồ sơ dự án và lọc khách từ Notion |
 | 7.4 | ✅ | xuất ảnh và A4 theo phạm vi |
-| 7.5 | ⏳ | AI và duyệt |
+| 7.5 | ✅ | AI đọc khối lượng, duyệt và gộp hạng mục |
 
-Bước kế tiếp GĐ7: 7.5 AI đọc khối lượng, chạy nền và duyệt dòng.
+Bước kế tiếp GĐ7: Claude review commit GĐ7. Tất cả commit là cục bộ.
+
+### Kiểm tra localhost GĐ7
+
+1. Tạo bảng mẫu, bấm ＋ PA, xoá PA trống và kiểm tra cột biến mất. Bật/tắt nhóm và cột Phối cảnh 3D. Bấm tên nhóm để hiện lại và cuộn tới.
+2. Kéo mép Hạng mục. Kiểm tra cột đổi từ 334 px lên 414 px, tải lại vẫn 414 px, nháy đúp về 334 px.
+3. Mở Lấy từ Notion, tìm theo số điện thoại và bấm Điền dự án đang chọn. Kiểm tra ô Kính gửi và bản xem trước xuất có khách vừa chọn. Kết nối Notion và dữ liệu khách đã dùng phản hồi giả lập. Tên khác tên Lịch cần xác nhận trước khi điền.
+4. Chốt một dòng, mở Copy ảnh → Tải PNG → Chỉ nhóm đang bật + Chỉ dòng đã chốt → Xem trước. Đã xác nhận bản xem trước có tiêu đề, hồ sơ, watermark và đúng một dòng. Trình duyệt từ chối quyền tải PNG trong lượt kiểm tra. PDF A4 lưu qua hộp in.
+5. Mở ✨ AI, dán ảnh thử, gửi, mở Duyệt đề xuất từ ô trạng thái góc phải. Gộp hai đề xuất trùng vào bảng và xác nhận chỉ thêm một dòng. Gemini được giả lập; API test kiểm tra ảnh/PDF và chuẩn hoá JSON. Chưa dùng dữ liệu hoặc khoá thật.
+
+XONG GĐ7
