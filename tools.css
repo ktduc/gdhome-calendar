@@ -1,5 +1,5 @@
 @import url('/tools-menu.css?v=gd86');
-body:has(>main){margin:0;background:#eef1f5;color:#253142;font:15px/1.5 system-ui,sans-serif}
+body:has(>main){margin:0;background:#eef1f5;color:#253142;font:15px/1.5 var(--gd-font)}
 body>header:has(+main):not(.app-header){display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:#fff;border-bottom:1px solid #d5dce5}
 body>main{max-width:1500px;margin:auto;padding:18px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px}
@@ -57,7 +57,7 @@ dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px)}dial
 .signature-mark{display:block;margin:auto;width:min(100%,300px);height:auto;aspect-ratio:600/190}.stack label,.stack input,.stack textarea{display:block;width:100%}
 #print-preview{position:fixed;inset:0;overflow:auto;background:#e5eaf0;z-index:9999}
 .print-actions{position:sticky;top:0;z-index:1;padding:8px;background:#fff;text-align:center}
-#print-sheet{width:210mm;max-width:100%;margin:14px auto;padding:6mm;background:#fff;font:14px/1.35 Georgia,serif;color:#111;box-sizing:border-box}
+#print-sheet{width:210mm;max-width:100%;margin:14px auto;padding:6mm;background:#fff;font:14px/1.35 var(--gd-font);color:#111;box-sizing:border-box}
 #print-sheet h1,.print-center{text-align:center}#print-sheet h1{font-size:23px}
 .print-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.print-heading img{width:min(224px,45%);height:auto}
 .print-table{border-collapse:collapse;width:100%;font-size:13px}.print-table th,.print-table td{padding:6px;border:1px solid #a7b5c5;vertical-align:top;overflow-wrap:anywhere}
@@ -111,7 +111,7 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-ai-job{position:fixed;right:14px;bottom:14px;z-index:15;width:min(310px,88vw);padding:10px;background:white;border:1px solid #c7ced9;border-left:4px solid #a41d24;border-radius:6px;box-shadow:0 5px 18px #0002}
 .material-ai-job button{margin-top:5px}.material-ai-drop{border:2px dashed #adbacc;padding:12px;border-radius:6px}
 .ai-review-scroll{overflow:auto;max-height:50dvh}.ai-review-scroll input:not([type=checkbox]){width:100px}
-body:has(.material-header){font-family:var(--gd-font)}
+
 .material-header,.material-header *{box-sizing:border-box}
 .material-header .app-logo{text-decoration:none}
 .material-header #identity,.material-header #save-label{font-size:11px;white-space:nowrap}

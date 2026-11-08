@@ -94,9 +94,9 @@ XONG GĐ8
 | 9.1 | ✅ | mặc định nhóm đang bật và nhớ phạm vi xuất |
 | 9.2 | ✅ | nới bảng in và căn ảnh vuông ngang hàng |
 | 9.3 | ✅ | đồng bộ thứ tự cột và hình thức bảng nhập với bản in |
-| 9.4 | ⏳ | Font Tiến độ |
+| 9.4 | ✅ | dùng font Roboto chung với Tiến độ cho bảng và bản in |
 | 9.5 | ⏳ | Xem ảnh và chốt PA |
 | 9.6 | ⏳ | Gợi ý ghi chú |
 | 9.7 | ⏳ | Kiểm tra và bàn giao |
 
-Bước kế tiếp GĐ9: 9.4 dùng font chung của Tiến độ.
+Bước kế tiếp GĐ9: 9.5 tách xem ảnh và chốt phương án.

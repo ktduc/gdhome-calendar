@@ -145,7 +145,7 @@ async function showPrint(view,base,headers,stats = false) {
     document.body.classList.remove('printing-material');
   };
   byId('do-print').onclick = () => window.print();
-  await loadPrintImages(overlay,headers);
+  await Promise.all([loadPrintImages(overlay,headers), document.fonts.ready]);
   if (overlay.isConnected) byId('do-print').disabled = false;
   return overlay;
 }
