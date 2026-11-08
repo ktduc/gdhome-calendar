@@ -17,6 +17,26 @@ function cleanColumnWidths(widths) {
     .map(([key,value]) => [key,Math.min(720,Math.max(48,Math.round(value)))]));
 }
 
+const suggestionFields = ['note','spec','room','unit','supplier','name','brand','code','color','size'];
+function cleanMaterialSuggestions(patch,previous) {
+  const result = {...previous};
+  for (const key of suggestionFields) {
+    if (!Array.isArray(patch[key])) continue;
+    const clean = new Map();
+    for (const item of patch[key].slice(0,80)) {
+      if (!item || typeof item.value !== 'string' || typeof item.group !== 'string') continue;
+      const value = item.value.trim().slice(0,500);
+      const group = item.group.trim().slice(0,160);
+      if (!value) continue;
+      const entry = {value,group,count:Math.min(100000,Math.max(0,Math.floor(Number(item.count) || 0)))};
+      if (item.disabled === true) entry.disabled = true;
+      clean.set(JSON.stringify([group,value.toLocaleLowerCase()]),entry);
+    }
+    result[key] = [...clean.values()];
+  }
+  return result;
+}
+
 function cleanMaterialView(patch,previous = {},sheets = []) {
   const result = { ...previous };
   const flags = (value,allowed) => Array.isArray(value) ? [...new Set(value.filter(key => allowed.includes(key)))] : [];
@@ -39,6 +59,9 @@ function cleanMaterialView(patch,previous = {},sheets = []) {
     result.export = {groups:patch.export.groups === 'all' ? 'all' : 'visible',rows:patch.export.rows === 'chosen' ? 'chosen' : 'all',
       room:typeof patch.export.room === 'string' ? patch.export.room.slice(0,500) : '',
       watermark:patch.export.watermark !== false};
+  }
+  if (patch.suggestions && typeof patch.suggestions === 'object') {
+    result.suggestions = cleanMaterialSuggestions(patch.suggestions,previous.suggestions);
   }
   if (patch.sheets && typeof patch.sheets === 'object') {
     result.sheets = Object.fromEntries(sheets.flatMap(sheet => {

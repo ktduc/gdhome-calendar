@@ -1021,6 +1021,53 @@ cases['13.2'] = async page => {
   assert.equal(await page.locator('#print-sheet .material-image-thumb img').count(),2);
 };
 
+cases['13.3'] = async page => {
+  await openMaterials(page);
+  const field = page.locator('[data-row=g1-r1] [data-field=room]');
+  const value = 'Ban công thử GĐ13';
+  await field.fill(value);
+  await page.locator('.suggestions').getByLabel('Dùng cho mọi nhóm').check();
+  await page.locator('.suggestions').getByRole('button',{name:"＋ Thêm '"+value+"' vào gợi ý",exact:true}).click();
+  await page.waitForFunction(async value => {
+    const {viewSettings} = await fetch('/api/materials/preferences').then(r => r.json());
+    return viewSettings.suggestions?.room?.some(item => item.value === value && !item.group);
+  },value);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await field.waitFor();
+  await field.fill('Ban cong thu');
+  await page.locator('.suggestions').getByRole('button',{name:'★ '+value}).waitFor();
+  await page.evaluate(() => {
+    createSheet('gd13-other','Bảng dự án thứ hai',[newGroup('Nhóm khác',['Dòng khác'])]);
+  });
+  const other = page.locator('[data-row] [data-field=room]').first();
+  await other.focus();
+  await page.locator('.suggestions').getByRole('button',{name:'★ '+value}).click();
+  assert.equal(await other.inputValue(),value);
+  await other.fill('');
+  await page.locator('.suggestions').getByRole('button',{name:'Quản lý gợi ý',exact:true}).click();
+  const manager = page.getByRole('dialog',{name:'Quản lý gợi ý'});
+  const item = manager.locator('[data-suggestion-item]:has(input[value="' + value + '"])');
+  await item.getByRole('textbox').fill('Ban công đã sửa GĐ13');
+  await item.getByRole('button',{name:'Lưu',exact:true}).click();
+  const edited = manager.locator('[data-suggestion-item]:has(input[value="Ban công đã sửa GĐ13"])');
+  await edited.getByRole('button',{name:'Xóa',exact:true}).click();
+  await manager.getByRole('button',{name:'Xong',exact:true}).click();
+  await other.fill('Ban cong thu');
+  assert.equal(await page.locator('.suggestions').getByRole('button',{name:'★ '+value}).count(),0);
+  await page.waitForFunction(async value => {
+    const {viewSettings} = await fetch('/api/materials/preferences').then(r => r.json());
+    return viewSettings.suggestions?.room?.some(item => item.value === value && item.disabled) &&
+      viewSettings.suggestions.room.some(item => item.value === 'Ban công đã sửa GĐ13' && item.disabled);
+  },value);
+  await page.locator('[data-row] textarea[data-field=note]').first().click();
+  await page.getByRole('searchbox',{name:'Tìm gợi ý'}).fill('Gợi ý mới cho nhóm khác');
+  await page.getByRole('button',{name:"＋ Thêm 'Gợi ý mới cho nhóm khác' vào gợi ý",exact:true}).click();
+  await page.locator('.material-note-choices').getByText('★ Gợi ý mới cho nhóm khác',{exact:true}).waitFor();
+  const scope = await page.evaluate(() => materialView.suggestions.note[0].group);
+  assert.equal(scope,'nhom khac');
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });
@@ -1045,7 +1092,9 @@ async function main() {
     })) };
     browser = await chromium.launch({ channel:'msedge',headless:true });
     for (const key of process.argv.length > 2 ? process.argv.slice(2) : Object.keys(cases)) {
-      await getStore().put('shared',structuredClone(schedule));
+      const caseSchedule = structuredClone(schedule);
+      if (key === '13.3') caseSchedule.projectOwners.push({id:'gd13-other',name:'Dự án thứ hai'});
+      await getStore().put('shared',caseSchedule);
       await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; data.viewSettings = {}; return {}; });
       const page = await browser.newPage({ baseURL:'http://127.0.0.1:'+server.address().port,viewport:{width:1050,height:720},acceptDownloads:false });
       page.setDefaultTimeout(4000);

@@ -286,44 +286,86 @@ function learnPreset(key, value) {
   if (!values.some(v => v.toLocaleLowerCase() === value.trim().toLocaleLowerCase())) values.push(value.trim());
 }
 
-let menu;
-function suggestions(field, pa) {
+let menu, suggestionAnchor, positionSuggestionMenu;
+document.addEventListener('pointerdown',event => {
+  if (menu?.isConnected && event.target !== suggestionAnchor && !menu.contains(event.target)) menu.remove();
+},true);
+window.addEventListener('scroll',event => {
+  if (menu?.isConnected && !menu.contains(event.target)) positionSuggestionMenu?.();
+},true);
+function suggestions(field,pa,refresh = false) {
   menu?.remove();
-  const key = field.dataset.field;
-  const q = field.value.toLocaleLowerCase();
-  const presets = [...new Set([...(initialPresets[key] || []),...(materials.presets[key] || []),...(sheet.presets?.[key] || [])])]
-    .filter(value => !q || value.toLocaleLowerCase().includes(q));
-  if (key === 'code' && !pa) {
-    const {row,slot} = context(field);
-    pa = row?.options[Number(slot)];
-  }
-  const library = typeof librarySuggestions === 'function' ? librarySuggestions(key,q,pa) : [];
-  const choices = [...library, ...presets.map(value => ({ label:value, apply:() => {
+  const key = materialSuggestionField(field.dataset.field);
+  if (!materialSuggestionFields.has(key) || key === 'note' || (!pa && key === 'spec')) return;
+  const rowContext = context(field);
+  const row = rowContext.row || (pa ? activeDetail?.row : undefined);
+  const group = rowContext.group || (row && sheet.groups.find(group => group.rows.includes(row)));
+  const query = normalized(field.value);
+  const catalog = materialCustomChoices(key,group);
+  const matches = value => normalized(value).includes(query) && !catalog.hidden.has(normalized(value));
+  const presets = [...new Set([...(initialPresets[field.dataset.field] || []),...(materials.presets[field.dataset.field] || []),
+    ...(sheet.presets?.[field.dataset.field] || []),...(key === 'name' ? materialTemplate.flatMap(([, ...names]) => names) : [])])].filter(matches);
+  if (key === 'code' && !pa) pa = row?.options[Number(rowContext.slot)];
+  const library = librarySuggestions(field.dataset.field,field.value.toLocaleLowerCase(),pa)
+    .filter(choice => !catalog.hidden.has(normalized(choice.value)) && !catalog.keys.has(normalized(choice.value)));
+  const apply = value => {
     field.value = value;
     field.dispatchEvent(new Event('change',{bubbles:true}));
-  } }))].slice(0,9);
-  if (!choices.length) return;
+  };
+  const choices = [...catalog.items.filter(item => matches(item.value)).map(item => ({
+    label:'★ ' + item.value,apply:() => { useMaterialSuggestion(key,item); apply(item.value); }
+  })), ...library,...presets.filter(value => !catalog.keys.has(normalized(value))).map(value => ({label:value,apply:() => apply(value)}))].slice(0,9);
   menu = document.createElement('div');
   menu.className = 'suggestions';
+  const currentMenu = menu;
+  suggestionAnchor = field;
   choices.forEach((choice,i) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = (i+1) + ' · ' + choice.label;
+    button.textContent = (choice.label.startsWith('★ ') ? '' : (i+1) + ' · ') + choice.label;
     button.onmousedown = event => event.preventDefault();
-    button.onclick = () => { menu?.remove(); choice.apply(field); };
-    menu.append(button);
+    button.onclick = () => { currentMenu.remove(); choice.apply(field); };
+    currentMenu.append(button);
   });
-  field.after(menu);
+  currentMenu.append(materialSuggestionActions(key,group,() => field.value,() => suggestions(field,pa,true)));
+  (field.closest('dialog') || document.body).append(currentMenu);
+  const place = () => {
+    if (!field.isConnected) { currentMenu.remove(); return; }
+    const rect = field.getBoundingClientRect();
+    if (rect.bottom < 0 || rect.top > innerHeight) { currentMenu.remove(); return; }
+    const width = Math.min(innerWidth-16,Math.max(240,rect.width));
+    currentMenu.style.width = width + 'px';
+    currentMenu.style.left = Math.max(8,Math.min(rect.left,innerWidth-width-8)) + 'px';
+    const below = innerHeight - rect.bottom - 8;
+    const above = rect.top - 8;
+    const useAbove = below < 210 && above > below;
+    currentMenu.style.maxHeight = Math.max(64,Math.min(360,useAbove ? above : below)) + 'px';
+    currentMenu.style.top = (useAbove ? rect.top-currentMenu.offsetHeight : rect.bottom) + 'px';
+  };
+  positionSuggestionMenu = place;
+  place();
   field.onkeydown = event => {
     const number = Number(event.key);
     if (event.altKey && number > 0 && choices[number-1]) {
-      event.preventDefault(); event.stopPropagation(); menu?.remove(); choices[number-1].apply(field);
+      event.preventDefault(); event.stopPropagation(); currentMenu.remove(); choices[number-1].apply(field);
     }
-    if (event.key === 'Escape') menu?.remove();
+    if (event.key === 'Escape' && currentMenu.isConnected) {
+      event.preventDefault(); event.stopPropagation(); currentMenu.remove();
+    }
   };
-  const currentMenu = menu;
-  field.onblur = () => setTimeout(() => currentMenu.remove(),120);
+  currentMenu.onkeydown = event => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault(); event.stopPropagation();
+    currentMenu.remove();
+  };
+  field.onblur = event => { if (!currentMenu.contains(event.relatedTarget)) currentMenu.remove(); };
+  currentMenu.onfocusout = event => {
+    if (event.relatedTarget !== field && !currentMenu.contains(event.relatedTarget)) currentMenu.remove();
+  };
+
+  if (refresh && currentMenu.isConnected) currentMenu.querySelector('[data-suggestion-add]').focus({preventScroll:true});
 }
+
 
 document.addEventListener('click', async event => {
   if (!event.target.closest('#materials,#material-header-actions')) return;

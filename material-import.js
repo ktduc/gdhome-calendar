@@ -136,7 +136,7 @@ function labelsForPreset(key) { return ({size:'Kích thước',finish:'Bề mặ
 function librarySuggestions(key,q,pa) {
   if (!pa || !['brand','code','color','finish','size'].includes(key) || !q) return [];
   return materials.library.filter(item => normalized([item.name,item.brand,item.code,item.color,item.finish,item.size,item.supplier].join(' ')).includes(normalized(q)))
-    .slice(0,6).map(item => ({ label:[item.code,item.brand,item.color,item.name].filter(Boolean).join(' · '),
+    .slice(0,6).map(item => ({ value:item[key],label:[item.code,item.brand,item.color,item.name].filter(Boolean).join(' · '),
       apply:field => {
         modify(() => Object.assign(pa,structuredClone(Object.fromEntries([...fields,'images'].map(name => [name,item[name]])))),false);
         if (field.closest('dialog')) {

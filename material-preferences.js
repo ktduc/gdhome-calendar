@@ -3,6 +3,7 @@ let viewAsPrint = false;
 
 function mergeMaterialView(base,patch) {
   const merged = { ...base,...patch };
+  if (patch.suggestions) merged.suggestions = {...base.suggestions,...patch.suggestions};
   if (patch.sheets) {
     merged.sheets = { ...base.sheets };
     for (const [id,values] of Object.entries(patch.sheets)) merged.sheets[id] = { ...merged.sheets[id],...values };
@@ -83,9 +84,12 @@ async function flushMaterialView() {
   sentMaterialView = pendingMaterialView;
   pendingMaterialView = {};
   let saved = false;
-  const send = () => request('/api/materials/preferences',{
-    method:'POST',body:JSON.stringify({_version:materialViewVersion,patch:sentMaterialView}),keepalive:true,signal:AbortSignal.timeout(15000)
-  });
+  const send = () => {
+    const body = JSON.stringify({_version:materialViewVersion,patch:sentMaterialView});
+    return request('/api/materials/preferences',{
+      method:'POST',body,keepalive:new Blob([body]).size < 60*1024,signal:AbortSignal.timeout(15000)
+    });
+  };
   try {
     let result;
     try { result = await send(); }

@@ -271,6 +271,155 @@ const materialSuggestionLibrary = [
   }
 ];
 
+const materialSuggestionFields = new Set(['note','spec','room','unit','supplier','name','brand','code','color','size']);
+const materialSuggestionField = key => key === 'finish' ? 'spec' : key;
+const suggestionScope = group => normalized(group?.name?.split('(')[0] || '').slice(0,160);
+const suggestionEntries = key => materialView.suggestions?.[key] || [];
+const sameSuggestion = (a,b) => a.group === b.group && normalized(a.value) === normalized(b.value);
+
+function materialCustomChoices(key,group) {
+  const scope = suggestionScope(group);
+  const applicable = suggestionEntries(key).filter(item => !item.group || item.group === scope);
+  // A group-specific choice (including a deletion) takes precedence over a global choice.
+  const distinct = new Map();
+  for (const item of applicable) {
+    const id = normalized(item.value);
+    if (!distinct.has(id) || item.group) distinct.set(id,item);
+  }
+  return {items:[...distinct.values()].filter(item => !item.disabled).sort((a,b) => b.count-a.count),
+    hidden:new Set([...distinct].filter(([,item]) => item.disabled).map(([id]) => id)),keys:new Set(distinct.keys())};
+}
+
+function writeMaterialSuggestions(key,items) {
+  if (!materialGuest && !materialServerReady) {
+    say('Chờ kết nối máy chủ để lưu gợi ý.');
+    return false;
+  }
+  setMaterialView({suggestions:{[key]:items.slice(0,80)}});
+  return true;
+}
+
+function useMaterialSuggestion(key,item) {
+  writeMaterialSuggestions(key,suggestionEntries(key).map(entry => sameSuggestion(entry,item) ?
+    {...entry,count:Math.min(100000,entry.count+1)} : entry));
+}
+
+function materialSuggestionActions(key,group,getValue,refresh) {
+  const section = document.createElement('div');
+  section.className = 'material-suggestion-actions';
+  const scope = suggestionScope(group);
+  section.innerHTML = (scope ? '<label><input type="checkbox" data-suggestion-global> Dùng cho mọi nhóm</label>' : '') +
+    '<button type="button" data-suggestion-add></button><button type="button" data-suggestion-manage>Quản lý gợi ý</button>' +
+    '<small role="status"></small>';
+  const add = section.querySelector('[data-suggestion-add]');
+  const status = section.querySelector('[role=status]');
+  const scopeControl = section.querySelector('[data-suggestion-global]');
+  section.update = () => {
+    const value = getValue().trim();
+    add.textContent = value ? "＋ Thêm '" + value + "' vào gợi ý" : '＋ Thêm tùy chọn';
+    add.disabled = !value;
+  };
+  section.update();
+  add.onclick = () => {
+    const value = getValue().trim();
+    if (!value || value.length > 500) {
+      status.textContent = 'Gợi ý tối đa 500 ký tự.';
+      return;
+    }
+    const entry = {value,group:scopeControl?.checked ? '' : scope,count:0};
+    const items = suggestionEntries(key);
+    const existing = items.find(item => sameSuggestion(item,entry));
+    if (existing && !existing.disabled) { status.textContent = 'Tùy chọn này đã có.'; return; }
+    const next = [entry,...items.filter(item => !sameSuggestion(item,entry))];
+    if (next.filter(item => !item.disabled).length > 80) { status.textContent = 'Đã đủ 80 tùy chọn cho trường này.'; return; }
+    if (writeMaterialSuggestions(key,next)) refresh();
+  };
+  section.querySelector('[data-suggestion-manage]').onclick = () => openMaterialSuggestionManager(key,group,refresh);
+  return section;
+}
+
+function openMaterialSuggestionManager(key,group,onClose) {
+  const panel = document.createElement('dialog');
+  panel.className = 'material-suggestion-manager';
+  panel.setAttribute('aria-labelledby','material-suggestion-title');
+  document.body.append(panel);
+  GDHomeShell.dialog(panel,'<h2 id="material-suggestion-title">Quản lý gợi ý</h2>' +
+    '<p>Gợi ý tự thêm được xếp theo số lượt chọn. Kéo để đổi thứ tự khi số lượt bằng nhau.</p>' +
+    '<ol></ol><p role="status"></p><button type="button" data-suggestion-done>Xong</button>');
+  const list = panel.querySelector('ol');
+  const scope = suggestionScope(group);
+  let dragged = -1;
+  function draw() {
+    const all = suggestionEntries(key);
+    const visible = all.map((item,index) => ({...item,index})).filter(item => !item.disabled && (!item.group || item.group === scope));
+    list.innerHTML = visible.map(({value,count,group,index}) => '<li data-suggestion-item="' + index + '">' +
+      '<button type="button" draggable="true" data-suggestion-move title="Kéo hoặc dùng phím lên/xuống" aria-label="Đổi thứ tự">⋮⋮</button>' +
+      '<input aria-label="Tên gợi ý" maxlength="500" value="' + html(value) + '">' +
+      '<small>' + html(group ? 'Nhóm ' + (groupLabel || scope) : 'Mọi nhóm') + ' · ' + count + ' lượt</small>' +
+      '<button type="button" data-suggestion-edit>Lưu</button><button type="button" data-suggestion-delete>Xóa</button></li>').join('');
+    if (!visible.length) list.innerHTML = '<li>Chưa có gợi ý tự thêm.</li>';
+  }
+  const groupLabel = group?.name;
+  const indexOf = node => Number(node.closest('[data-suggestion-item]')?.dataset.suggestionItem ?? -1);
+  const save = (items,focusIndex = -1) => {
+    if (!writeMaterialSuggestions(key,items)) return;
+    panel.querySelector('[role=status]').textContent = '';
+    draw();
+    list.querySelector('[data-suggestion-item="' + focusIndex + '"] [data-suggestion-move]')?.focus();
+  };
+  function move(from,to) {
+    if (from < 0 || to < 0 || from === to) return;
+    const items = [...suggestionEntries(key)];
+    items.splice(to,0,items.splice(from,1)[0]);
+    save(items,to);
+  }
+  list.ondragstart = event => {
+    dragged = indexOf(event.target);
+    event.dataTransfer.setData('text/plain',String(dragged));
+    event.dataTransfer.effectAllowed = 'move';
+  };
+  list.ondragend = () => { dragged = -1; };
+  list.ondragover = event => { if (dragged >= 0 && indexOf(event.target) >= 0) event.preventDefault(); };
+  list.ondrop = event => {
+    if (dragged < 0) return;
+    event.preventDefault();
+    move(dragged,indexOf(event.target));
+    dragged = -1;
+  };
+  list.onkeydown = event => {
+    if (!event.target.matches('[data-suggestion-move]') || !['ArrowUp','ArrowDown'].includes(event.key)) return;
+    event.preventDefault();
+    const li = event.target.closest('li');
+    move(indexOf(li),indexOf(event.key === 'ArrowUp' ? li.previousElementSibling || li : li.nextElementSibling || li));
+  };
+  list.onclick = event => {
+    const target = event.target;
+    const index = indexOf(target);
+    if (index < 0) return;
+    const items = [...suggestionEntries(key)];
+    const previous = items[index];
+    if (target.matches('[data-suggestion-delete]')) {
+      items[index] = {...previous,disabled:true};
+      save(items);
+    } else if (target.matches('[data-suggestion-edit]')) {
+      const value = target.closest('li').querySelector('input').value.trim();
+      if (!value) return;
+      const edited = {...previous,value};
+      if (items.some((item,i) => i !== index && !item.disabled && sameSuggestion(item,edited))) {
+        panel.querySelector('[role=status]').textContent = 'Tùy chọn này đã có.';
+        return;
+      }
+      items[index] = edited;
+      const next = items.filter((item,i) => i === index || !sameSuggestion(item,edited));
+      if (!sameSuggestion(previous,edited)) next.push({...previous,disabled:true});
+      save(next);
+    }
+  };
+  panel.querySelector('[data-suggestion-done]').onclick = () => panel.close();
+  panel.addEventListener('close',() => { panel.remove(); onClose(); },{once:true});
+  draw();
+}
+
 function splitMaterialSuggestions(value) {
   return String(value || '').split(';').map(text => text.trim()).filter(Boolean);
 }
@@ -321,29 +470,42 @@ function openMaterialSuggestions(field,group,row) {
   const element = dialog('<h2>' + label + ' · ' + html(row.name || group.name) + '</h2>' +
     '<form class="material-notes-form"><label>' + label + ' hiện tại<textarea name="text" maxlength="' + maxLength + '">' +
     html(field.value) + '</textarea></label><label>Tìm gợi ý<input type="search" name="query" autofocus></label>' +
-    '<strong>' + html(category || 'Gợi ý chung') + '</strong><div class="material-note-choices">' + choices.map(({value,count}) =>
-      '<label><input type="checkbox" name="suggestion" value="' + html(value) + '"> ' + html(value) +
-      (count ? '<small class="material-suggestion-frequency" aria-hidden="true">' + count + ' lượt</small>' : '') + '</label>').join('') +
-    '<p class="material-notes-empty" hidden>Không có gợi ý phù hợp.</p></div>' +
-    '<p class="material-notes-message" role="status"></p><div class="toolbar">' +
+    '<strong>' + html(category || 'Gợi ý chung') + '</strong><div class="material-note-choices"></div>' +
+    '<div class="material-note-actions"></div><p class="material-notes-message" role="status"></p><div class="toolbar">' +
     '<button type="button" data-note-cancel>Huỷ</button><button class="primary">' +
     (key === 'note' ? 'Lưu ghi chú' : 'Lưu quy cách') + '</button></div></form>');
   const form = element.querySelector('.material-notes-form');
   const query = form.elements.query;
-  const entries = [...form.querySelectorAll('input[name="suggestion"]')];
-  const chosen = new Set();
+  const chosen = new Map();
+  const list = form.querySelector('.material-note-choices');
+  const actions = materialSuggestionActions(key,group,() => query.value.trim() || form.elements.text.value,refresh);
+  form.querySelector('.material-note-actions').append(actions);
   query.focus();
-  query.oninput = () => {
-    const search = normalized(query.value);
-    for (const entry of entries) entry.closest('label').hidden = !normalized(entry.value).includes(search);
-    form.querySelector('.material-notes-empty').hidden = entries.some(entry => !entry.closest('label').hidden);
-  };
-  for (const entry of entries) entry.onchange = () => setMembership(chosen,entry.value,entry.checked);
+  function refresh() {
+    const custom = materialCustomChoices(key,group);
+    const builtIn = choices.filter(item => !custom.keys.has(normalized(item.value)));
+    const matches = [...custom.items.map(item => ({...item,custom:item})),...builtIn]
+      .filter(item => normalized(item.value).includes(normalized(query.value)));
+    list.innerHTML = matches.map(({value,count,custom}) =>
+      '<label><input type="checkbox" name="suggestion" value="' + html(value) + '"' + (chosen.has(value) ? ' checked' : '') +
+      '> <span>' + (custom ? '★ ' : '') + html(value) + '</span>' +
+      (count ? '<small class="material-suggestion-frequency" aria-hidden="true">' + count + ' lượt</small>' : '') + '</label>').join('') ||
+      '<p>Không có gợi ý phù hợp.</p>';
+    for (const [i,entry] of [...list.querySelectorAll('input')].entries()) entry.onchange = () => {
+      if (entry.checked) chosen.set(entry.value,matches[i].custom);
+      else chosen.delete(entry.value);
+    };
+    actions.update();
+  }
+  refresh();
+  query.oninput = refresh;
+  form.elements.text.oninput = actions.update;
+
   form.querySelector('[data-note-cancel]').onclick = () => element.close();
   form.onsubmit = event => {
     event.preventDefault();
     const manual = form.elements.text.value.trim();
-    const values = [...splitMaterialSuggestions(manual),...chosen];
+    const values = [...splitMaterialSuggestions(manual),...chosen.keys()];
     const unique = new Map();
     for (const value of values) {
       const normalizedValue = normalized(value);
@@ -358,6 +520,7 @@ function openMaterialSuggestions(field,group,row) {
       field.value = value;
       field.dispatchEvent(new Event('change',{bubbles:true}));
     }
+    for (const item of chosen.values()) if (item) useMaterialSuggestion(key,item);
     field.defaultValue = value;
     element.close();
   };
