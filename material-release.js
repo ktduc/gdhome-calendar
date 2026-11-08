@@ -183,7 +183,13 @@ async function exportStatsImage(copy,watermark = true) {
   }
   const root = byId('print-sheet');
   if (root.scrollHeight > 12000) throw new Error('Bảng quá dài để xuất một ảnh. Lọc theo phòng hoặc dùng PDF.');
-  const canvas = await html2canvas(root,{ scale:2,backgroundColor:'#fff',onclone:doc => doc.getElementById('print-sheet').classList.remove('watermark') });
+  const canvas = await html2canvas(root,{
+    scale:2,backgroundColor:'#fff',windowWidth:Math.max(innerWidth,root.offsetWidth+32),
+    onclone:doc => {
+      doc.getElementById('print-sheet').classList.remove('watermark');
+      doc.getElementById('print-preview').style.overflow = 'visible';
+    }
+  });
   if (copy) return copyCanvasToClipboard(canvas,{ watermark,notify:message => { const notice = byId('export-image-status'); if (notice) notice.textContent = message; },fallbackName:'GD-HOME-vat-lieu.png' });
   downloadCanvas(canvas,'GD-HOME-vat-lieu.png',watermark);
 }

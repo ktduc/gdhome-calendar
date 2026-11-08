@@ -20,14 +20,15 @@ function say(message) {
 }
 
 function showImages(root = box()) {
-  root.querySelectorAll('img[data-asset]').forEach(async img => {
+  return Promise.all([...root.querySelectorAll('img[data-asset]')].map(async img => {
     try {
       const name = img.dataset.asset;
       if (!assetCache.has(name)) assetCache.set(name,readMaterialAsset(name).then(URL.createObjectURL)
         .catch(error => { assetCache.delete(name); throw error; }));
       img.src = await assetCache.get(name);
+      await img.decode();
     } catch { img.alt = 'Ảnh chưa tải được'; }
-  });
+  }));
 }
 
 async function readMaterialAsset(name) {

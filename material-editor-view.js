@@ -99,6 +99,7 @@ function installColumnResize(table) {
   const apply = (key,width) => {
     table.querySelector('col[data-column="' + key + '"]').style.width = width + 'px';
     table.style.width = [...table.querySelectorAll('col')].reduce((sum,col) => sum+parseInt(col.style.width,10),0) + 'px';
+    table.closest('.material-paper').style.width = table.style.width;
   };
   const save = (key,width) => {
     materials.columnWidths ||= {};
@@ -225,29 +226,68 @@ function renderEditor() {
 
 function materialFontClass() { return 'msp-fw-' + (materialView.fontWeight || 'normal'); }
 
-function renderMaterialPreview() {
-  const groups = sheet.groups.filter(group => !hiddenGroups.has(group.id))
-    .map(group => ({...group,rows:visibleGroupRows(group)})).filter(group => group.rows.length);
-  const markup = printable({sheet:{...sheet,groups}},'/api/materials/assets/',true)
-    .replaceAll('data-print-img="/api/materials/assets/','data-asset="');
-  return '<section class="material-sheet ' + materialFontClass() + '"><div class="sheet-scroll material-preview-scroll">' +
-    '<article class="print-sheet" id="material-table-preview">' + markup + '</article></div></section>';
+function materialPaperHeading(current) {
+  const meta = current.meta || {};
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(meta.date) ? Date.parse(meta.date+'T12:00:00+07:00') : Date.now();
+  const fields = [['Kính gửi',meta.customer],['Địa chỉ',meta.address],['SĐT',meta.phone],['Email',meta.email],
+    ['Hợp đồng',meta.contract],['Số',meta.number]];
+  return '<header class="material-paper-heading"><div class="print-heading"><img src="/gdhome-logo.png" alt="GD HOME">' +
+    '<i>Hà Nội, ' + html(materialPrintDate(date || Date.now())) + '</i></div><h1>BẢNG CHỐT MÃ VẬT LIỆU – ' +
+    html(meta.project || current.title) + '</h1><div class="material-paper-meta">' + fields.filter(([,value]) => value)
+      .map(([label,value]) => '<span><strong>' + label + '</strong> ' + html(value) + '</span>').join('') + '</div></header>';
 }
 
-function renderMaterialTable(columns,widths) {
-  const projectName = sheet.meta?.project || materials.projects.find(p => p.id === sheet.projectId)?.name || sheet.title;
+function renderMaterialPaper(current,columns,widths,groups,editing) {
+  const width = widths.reduce((sum,value) => sum+value,0);
   const columnHeadings = columns.map(([key,label]) => '<th data-column="' + key + '">' + (key === 'select' ?
     '<label class="material-row-number"><input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện"><span>STT</span></label>' :
     label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
     label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + '</th>').join('');
   const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + widths[index] + 'px">').join('');
-  return '<section class="material-sheet ' + materialFontClass() + '"><div class="material-title"><h1>BẢNG CHỐT MÃ VẬT LIỆU – ' +
-    html(projectName) + '</h1><div id="material-count">' + materialKpis() + '</div></div>' +
-    (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm.</p>') +
-    '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid" style="width:' + widths.reduce((sum,w) => sum+w,0) +
-    'px"><colgroup>' + columnSizes + '</colgroup><thead><tr>' + columnHeadings + '</tr></thead>' +
-    renderMaterialGroups(columns) +
-    '</table></div></section>';
+  return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" style="width:' + width +
+    'px;--material-page-scale:' + Math.min(1,1050/width) + '">' + materialPaperHeading(current) +
+    '<table class="sheet-grid print-table" style="width:' + width + 'px"><colgroup>' + columnSizes + '</colgroup><thead><tr>' +
+    columnHeadings + '</tr></thead>' + renderMaterialGroups(columns,groups,editing) + '</table></article>';
+}
+
+function materialPaperForExport(current) {
+  const columns = visibleColumns().filter(([key]) => key !== 'actions');
+  const template = document.createElement('template');
+  template.innerHTML = renderMaterialPaper(current,columns,columns.map(([key]) => columnWidth(key)),current.groups,false);
+  const paper = template.content.firstElementChild;
+  paper.classList.add('material-paper-output');
+  for (const imageButton of paper.querySelectorAll('.image-open')) {
+    const slot = document.createElement('span');
+    slot.className = imageButton.className;
+    slot.append(...imageButton.childNodes);
+    imageButton.replaceWith(slot);
+  }
+  paper.querySelectorAll('button,input[type="checkbox"],[data-resize],.image-plus,.paste-cell-hint,.image-count,.material-group-controls')
+    .forEach(element => element.remove());
+  paper.querySelectorAll('input,textarea,select').forEach(field => {
+    const value = document.createElement('span');
+    value.className = 'sheet-value';
+    value.dataset.field = field.dataset.field || '';
+    value.textContent = field.tagName === 'SELECT' ? field.selectedOptions[0]?.textContent || '' : field.value;
+    field.replaceWith(value);
+  });
+  paper.querySelectorAll('[tabindex]').forEach(element => element.removeAttribute('tabindex'));
+  return paper;
+}
+
+function renderMaterialPreview() {
+  const groups = sheet.groups.filter(group => !hiddenGroups.has(group.id))
+    .map(group => ({...group,rows:visibleGroupRows(group)})).filter(group => group.rows.length);
+  const paper = materialPaperForExport({...sheet,groups});
+  paper.id = 'material-table-preview';
+  return '<section class="material-sheet"><div class="sheet-scroll material-preview-scroll">' + paper.outerHTML + '</div></section>';
+}
+
+function renderMaterialTable(columns,widths) {
+  const groups = sheet.groups.filter(group => !hiddenGroups.has(group.id));
+  return '<section class="material-sheet ' + materialFontClass() + '"><div class="material-title"><div id="material-count">' +
+    materialKpis() + '</div></div>' + (materials.r2 ? '' : '<p class="asset-warning">Đang dùng thư mục ảnh tạm.</p>') +
+    '<div class="sheet-scroll">' + renderMaterialPaper(sheet,columns,widths,groups,true) + '</div></section>';
 }
 
 const headerIcon = GDHomeShell.icon;
@@ -336,20 +376,19 @@ function visibleGroupRows(group) {
   if (collapsed.has(group.id)) return [];
   return group.rows.filter(row => (!sheetRoom || row.room === sheetRoom) && (!sheetStatus || rowState(row) === sheetStatus));
 }
-function renderMaterialGroups(columns) {
+function renderMaterialGroups(columns,groups,editing) {
   let number = 0;
-  return sheet.groups.filter(group => !hiddenGroups.has(group.id))
-    .map(group => renderGroup(group,columns,() => ++number)).join('');
+  return groups.map(group => renderGroup(group,columns,() => ++number,editing)).join('');
 }
-function renderGroup(group,columns,nextNumber) {
+function renderGroup(group,columns,nextNumber,editing) {
   const span = columns.length;
-  const heading = '<tr class="group"><th colspan="' + span + '">' +
+  const heading = '<tr class="group print-group"><th colspan="' + span + '">' +
     '<input type="checkbox" data-select-group="' + html(group.id) + '" aria-label="Chọn cả nhóm ' + html(group.name) + '"> ' +
     '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
-    input('groupName',group.name,'Nhóm') + ' <label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
-    scheduleControls(group) + ' <button data-action="del-group">Bỏ nhóm</button></th></tr>';
-  const rows = visibleGroupRows(group).map(row => renderRow(row,columns,nextNumber())).join('');
-  const add = collapsed.has(group.id) ? '' : '<tr><td colspan="' + span + '"><button data-action="add-row">＋ Dòng</button></td></tr>';
+    input('groupName',group.name,'Nhóm') + ' <span class="material-group-controls"><label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
+    scheduleControls(group) + ' <button data-action="del-group">Bỏ nhóm</button></span></th></tr>';
+  const rows = (editing ? visibleGroupRows(group) : group.rows).map(row => renderRow(row,columns,nextNumber())).join('');
+  const add = !editing || collapsed.has(group.id) ? '' : '<tr><td colspan="' + span + '"><button data-action="add-row">＋ Dòng</button></td></tr>';
   return '<tbody data-group="' + html(group.id) + '">' + heading + rows + add + '</tbody>';
 }
 
@@ -380,7 +419,7 @@ function renderRow(row,columns,number) {
     render:imageCell(row.render,'render'),
     spec:input('spec',chosen?.finish || row.spec,'Quy cách'),
     qty:input('qty',row.qty,'Khối lượng'),
-    unit:input('unit',row.unit,'Đơn vị'),
+    unit:input('unit',displayMaterialUnit(row.unit),'Đơn vị'),
     supplier:input('supplier',row.supplier,'NCC / Nhà thầu'),
     note:input('note',row.note,'Ghi chú'),
     decision:'<select data-field="decision" aria-label="Trạng thái">' + Object.entries({...statusLabels,ordered:'Đã đặt hàng'})

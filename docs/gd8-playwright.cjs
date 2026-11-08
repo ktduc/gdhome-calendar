@@ -228,7 +228,7 @@ cases['9.2'] = async page => {
   await form.getByRole('button',{name:'Xem trước'}).click();
   await page.locator('#stats-copy').waitFor();
   const measure = () => page.locator('#print-sheet').evaluate(root => {
-    const images = [...root.querySelectorAll('.print-square img')];
+    const images = [...root.querySelectorAll('.image-open img')];
     const bounds = node => {
       const {top,width,height} = node.getBoundingClientRect();
       return {top,width,height};
@@ -246,12 +246,12 @@ cases['9.2'] = async page => {
   const desktop = await measure();
   verifyFit(desktop);
   assert.ok(desktop.logo >= 120*1.8);
-  assert.equal(await page.locator('.print-qty').textContent(),'141,90 m²');
-  assert.equal(await page.locator('.print-option-caption').textContent(),'TEST-01');
+  assert.equal(await page.locator('#print-sheet [data-row] [data-column=qty]').textContent(),'141,90');
+  assert.equal(await page.locator('#print-sheet [data-row] [data-column=unit]').textContent(),'m²');
   await page.evaluate(() => {
     window.downloadCanvas = canvas => {
       const root = document.querySelector('#print-sheet').getBoundingClientRect();
-      const slot = document.querySelector('.print-square').getBoundingClientRect();
+      const slot = document.querySelector('#print-sheet .image-open').getBoundingClientRect();
       const pixel = (x,y) => [...canvas.getContext('2d').getImageData(Math.round(x*2),Math.round(y*2),1,1).data];
       const x = slot.left-root.left+slot.width/2;
       window.gd9Png = { width:canvas.width,top:pixel(x,slot.top-root.top+4),center:pixel(x,slot.top-root.top+slot.height/2) };
@@ -271,7 +271,8 @@ cases['9.2'] = async page => {
   await page.emulateMedia({media:'print'});
   const print = await measure();
   verifyFit(print);
-  assert.ok(print.logo >= 120*1.8);
+  const zoom = await page.locator('#print-sheet').evaluate(root => parseFloat(getComputedStyle(root).zoom));
+  assert.ok(print.logo/zoom >= 120*1.8);
   assert.ok((await page.pdf({preferCSSPageSize:true})).length > 1000);
   await page.emulateMedia({media:'screen'});
   await page.locator('#close-print').click();
@@ -283,7 +284,7 @@ cases['9.2'] = async page => {
   await form.getByRole('button',{name:'Xem trước'}).click();
   await page.locator('#stats-copy').waitFor();
   verifyFit(await measure());
-  assert.deepEqual(await page.locator('.print-option-caption').allTextContents(),['PA2 ','PA1 TEST-01']);
+  assert.equal(await page.locator('#print-sheet [data-column=pa1] img').count(),1);
   console.log('Khung ảnh ' + desktop.slots[0].width + '×' + desktop.slots[0].height + ' px, logo ' + desktop.logo + ' px');
 };
 
@@ -295,19 +296,19 @@ cases['9.3'] = async page => {
   const headers = await page.locator('.sheet-grid thead th').evaluateAll((cells,keys) =>
     cells.filter(cell => keys.includes(cell.dataset.column)).map(cell => cell.textContent.trim()),columns);
   const row = page.locator('[data-row="g1-r1"]');
-  const images = await row.locator('.image-open img').evaluateAll(nodes => nodes.map(node => {
+  const images = await row.locator('.image-open').evaluateAll(nodes => nodes.map(node => {
     const {top,width,height} = node.getBoundingClientRect();
-    return {top,width,height,fit:getComputedStyle(node).objectFit};
+    return {top,width,height};
   }));
   assert.equal(images.length,2);
   assert.deepEqual(images[0],images[1]);
   assert.equal(images[0].width,images[0].height);
-  assert.equal(images[0].fit,'contain');
   const groupColor = await page.locator('.sheet-grid .group th').first().evaluate(el => getComputedStyle(el).backgroundColor);
   const form = await openImageScope(page);
   await form.getByRole('button',{name:'Xem trước'}).click();
   await page.locator('#stats-copy').waitFor();
-  assert.deepEqual(await page.locator('#print-sheet thead th').allTextContents(),headers);
+  assert.deepEqual(await page.locator('#print-sheet thead th').evaluateAll((cells,keys) =>
+    cells.filter(cell => keys.includes(cell.dataset.column)).map(cell => cell.textContent.trim()),columns),headers);
   assert.equal(await page.locator('#print-sheet .print-group th').first().evaluate(el => getComputedStyle(el).backgroundColor),groupColor);
 };
 
@@ -697,6 +698,35 @@ cases['10.6-recovery'] = async page => {
     assert.equal(await page.locator('[data-column-toggle=supplier]').isChecked(),false);
     assert.equal(await page.locator('[data-group-toggle=g2]').isChecked(),false);
   });
+};
+
+cases['12.1'] = async page => {
+  await openMaterials(page);
+  await addFixtureImage(page,'render');
+  await addFixtureImage(page,'0');
+  await page.locator('[data-resize="name"]').press('ArrowRight');
+  const measure = root => root.evaluate(paper => {
+    const cols = [...paper.querySelectorAll('thead th[data-column]:not([data-column=actions])')];
+    const widths = cols.map(col => col.getBoundingClientRect().width);
+    const total = widths.reduce((sum,width) => sum+width,0);
+    return {
+      columns:cols.map(col => col.dataset.column),ratios:widths.map(width => width/total),
+      images:[...paper.querySelectorAll('[data-row="g1-r1"] .image-open')].map(slot => [slot.offsetWidth,slot.offsetHeight]),
+      title:paper.querySelector('h1').textContent,logo:paper.querySelector('.print-heading img').getBoundingClientRect().width
+    };
+  });
+  const work = await measure(page.locator('.material-paper'));
+  const form = await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  const exported = await measure(page.locator('#print-sheet'));
+  assert.deepEqual(exported.columns,work.columns);
+  assert.deepEqual(exported.images,work.images);
+  assert.equal(exported.title,work.title);
+  assert.equal(exported.logo,work.logo);
+  exported.ratios.forEach((ratio,index) => assert.ok(Math.abs(ratio-work.ratios[index])/work.ratios[index] <= 0.05));
+  assert.equal(await page.locator('#print-sheet :is(button,input,select)').count(),0);
+  assert.ok((await page.pdf({preferCSSPageSize:true})).length > 1000);
 };
 
 function viewPosition(page) {

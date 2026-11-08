@@ -72,36 +72,27 @@ function formatTerms(value) {
 }
 const materialPrintColumns = [['number','STT'],['name','Danh mục'],['render','Phối cảnh 3D'],
   ['sample','Mẫu vật liệu'],['qty','Khối lượng'],['note','Ghi chú']];
-function formatMaterialQuantity(quantity,unit) {
-  const normalizedUnit = String(unit || '').trim().replace(/^m\^?2$/i,'m²').replace(/^m\^?3$/i,'m³');
-  return [quantity,normalizedUnit].filter(value => value !== '' && value != null).join(' ');
+function displayMaterialUnit(unit) {
+  return String(unit || '').trim().replace(/^m\^?2$/i,'m²').replace(/^m\^?3$/i,'m³');
 }
-function printMaterialSample(row,option,index,selected,base) {
-  const showLabel = row.options.filter(hasPrintOption).length > 1 || index > 0;
-  const description = [option.brand,option.code,option.color,option.size,option.finish || row.spec].filter(Boolean).join(' · ');
-  return '<div class="print-option"><div class="print-squares">' + printImages(option.images,base) +
-    '</div><div class="print-option-caption">' + (showLabel ? '<strong>PA' + (index+1) + '</strong> ' : '') +
-    (selected ? '<span aria-label="Đã chốt">✓</span> ' : '') + html(description) + '</div></div>';
+function materialPrintDate(timestamp) {
+  const date = new Intl.DateTimeFormat('vi-VN',{timeZone:'Asia/Ho_Chi_Minh',day:'numeric',month:'numeric',year:'numeric'})
+    .formatToParts(timestamp);
+  const parts = Object.fromEntries(date.map(part => [part.type,part.value]));
+  return 'ngày ' + parts.day + ' tháng ' + parts.month + ' năm ' + parts.year;
 }
 function hasPrintOption(option) {
   return !!(option.code || option.brand || option.finish || option.color || option.size || option.images?.length);
 }
 
-function rowsForPrint(view, base, stats) {
+function rowsForPrint(view, base) {
   let i = 0;
-  return view.sheet.groups.map(group => '<tr class="print-group"><th colspan="' + (stats ? 6 : 5) + '">' + html(group.name) + '</th></tr>' +
+  return view.sheet.groups.map(group => '<tr class="print-group"><th colspan="' + 5 + '">' + html(group.name) + '</th></tr>' +
     group.rows.map(row => {
       const index = view.customer?.choices?.[row.id] ?? row.chosen;
       const pa = row.options[index];
       const options = row.options.filter(hasPrintOption);
       const name = html(row.name) + (row.room ? '<br><small>' + html(row.room) + '</small>' : '');
-      if (stats) {
-        const samples = options.toSorted((a,b) => Number(!!b.images?.length)-Number(!!a.images?.length))
-          .map(option => printMaterialSample(row,option,row.options.indexOf(option),option === pa,base)).join('');
-        return '<tr><td class="print-number">' + (++i) + '</td><td>' + name + '</td><td><div class="print-squares">' +
-          printImages(row.render,base) + '</div></td><td>' + (samples || html(row.spec)) +
-          '</td><td class="print-qty">' + html(formatMaterialQuantity(row.qty,row.unit)) + '</td><td>' + html(row.note) + '</td></tr>';
-      }
 
       return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td>' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
@@ -109,24 +100,14 @@ function rowsForPrint(view, base, stats) {
         '</td><td>' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base) + '</div></td></tr>';
     }).join('')).join('');
 }
-function printable(view, base, stats = false) {
+function printable(view,base) {
   const meta = view.sheet.meta || {};
   const settings = view.settings || {};
-  const date = new Intl.DateTimeFormat('vi-VN',{ timeZone:'Asia/Ho_Chi_Minh',day:'numeric',month:'numeric',year:'numeric' })
-    .formatToParts((stats && /^\d{4}-\d{2}-\d{2}$/.test(meta.date) && Date.parse(meta.date + 'T12:00:00+07:00')) || view.customer?.at || view.publishedAt || Date.now());
-  const parts = Object.fromEntries(date.map(p => [p.type,p.value]));
-  const day = 'ngày ' + parts.day + ' tháng ' + parts.month + ' năm ' + parts.year;
+  const day = materialPrintDate(view.customer?.at || view.publishedAt || Date.now());
   const heading = '<div class="print-heading"><img src="/gdhome-logo.png" alt="GD HOME"><i>Hà Nội, ' + day + '</i></div>';
-  const colgroup = stats ? '<colgroup>' + materialPrintColumns.map(([key]) => '<col class="print-col-' + key + '">').join('') + '</colgroup>' : '';
-  const table = '<table class="print-table' + (stats ? ' material-print-grid' : '') + '">' + colgroup + '<thead><tr>' + (stats ?
-    materialPrintColumns.map(([,label]) => label) :
-    ['STT','Hạng mục','Chất liệu / Quy cách','Màu / Mã / Kích thước','Ghi chú / Hình ảnh minh hoạ']).map(t => '<th>' + t + '</th>').join('') +
-    '</tr></thead><tbody>' + rowsForPrint(view,base,stats) + '</tbody></table>';
-  if (stats) {
-    const details = [['Khách hàng',meta.customer],['Địa chỉ',meta.address],['SĐT',meta.phone],['Email',meta.email],['Hợp đồng',meta.contract],['Số bảng',meta.number]];
-    return heading + '<h1>BẢNG CHỐT MÃ VẬT LIỆU – ' + html(meta.project || view.sheet.title) +
-      '</h1><p>' + details.filter(([,value]) => value).map(([label,value]) => '<strong>' + label + '</strong> ' + html(value)).join(' · ') + '</p>' + table;
-  }
+  const table = '<table class="print-table"><thead><tr>' +
+    ['STT','Hạng mục','Chất liệu / Quy cách','Màu / Mã / Kích thước','Ghi chú / Hình ảnh minh hoạ'].map(label => '<th>' + label + '</th>').join('') +
+    '</tr></thead><tbody>' + rowsForPrint(view,base) + '</tbody></table>';
   return heading + '<h1>BIÊN BẢN XÁC NHẬN</h1><div class="print-center">* * *<br><strong><i>(V/v: Thống nhất quy cách vật liệu, kích thước thiết bị nội thất)</i></strong></div>' +
     '<p><strong>BÊN A: CHỦ ĐẦU TƯ - KHÁCH HÀNG</strong><br>Họ và tên khách hàng - Ông/Bà: ' + html(meta.customer) +
     '<br>Địa chỉ lắp đặt: ' + html(meta.address) + '<br>Số điện thoại liên hệ: ' + html(meta.phone) + '</p>' +
@@ -144,7 +125,13 @@ async function showPrint(view,base,headers,stats = false,watermark = stats) {
   const overlay = document.createElement('div');
   overlay.id = 'print-preview';
   overlay.innerHTML = '<div class="print-actions"><button id="do-print" disabled>In / Lưu PDF A4</button> <button id="close-print">Đóng</button><span id="print-extras"></span></div>' +
-    '<article id="print-sheet" class="print-sheet ' + (watermark ? 'watermark ' : '') + (stats ? materialFontClass() : '') + '">' + printable(view,base,stats) + '</article>';
+    (stats ? '' : '<article id="print-sheet" class="print-sheet">' + printable(view,base) + '</article>');
+  if (stats) {
+    const paper = materialPaperForExport(view.sheet);
+    paper.id = 'print-sheet';
+    paper.classList.toggle('watermark',watermark);
+    overlay.append(paper);
+  }
   document.body.append(overlay);
   document.body.classList.add('printing-material');
   byId('close-print').onclick = () => {
@@ -153,7 +140,7 @@ async function showPrint(view,base,headers,stats = false,watermark = stats) {
     document.body.classList.remove('printing-material');
   };
   byId('do-print').onclick = () => window.print();
-  await Promise.all([loadPrintImages(overlay,headers), document.fonts.ready]);
+  await Promise.all([stats ? showImages(overlay) : loadPrintImages(overlay,headers),document.fonts.ready]);
   if (overlay.isConnected) byId('do-print').disabled = false;
   return overlay;
 }
