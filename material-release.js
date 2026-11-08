@@ -35,7 +35,7 @@ function replaceSaved(result) {
   sheet.meta = {...sheet.meta,...materials.profiles?.[sheet.projectId]};
 }
 async function publish() {
-  const result = await post(releasePath(),{ _version:materials._version,action:'publish' });
+  const result = await post(releasePath(),{ _version:materials._version,action:'publish',imageFit:materialImageFit() });
   replaceSaved(result);
   renderEditor();
   const url = location.origin + result.path;

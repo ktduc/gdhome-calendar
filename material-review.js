@@ -219,7 +219,7 @@ async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, 
     if (!sheet) error(404,'Không tìm thấy bảng.');
     if (body.action === 'publish') {
       const snapshot = publicSheet({ ...sheet,meta:{ ...sheet.meta,...await resolveProfile(sheet,data) } });
-      snapshot.imageFit = data.viewSettings?.imageFit === 'fit' ? 'fit' : 'fill';
+      snapshot.imageFit = (['fill','fit'].includes(body.imageFit) ? body.imageFit : data.viewSettings?.imageFit) === 'fit' ? 'fit' : 'fill';
       if (!snapshot.groups.length) error(400,'Điền ít nhất một phương án trước khi phát hành.');
       const token = encryptToken(repo.key,secret);
       const publishedAt = Date.now();

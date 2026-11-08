@@ -61,7 +61,9 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .review-option:has(:checked){border:2px solid #a41d24;background:#fff5f5}.review-option img{display:block;max-width:100%;max-height:210px;object-fit:contain}
 .signature-pad{display:block;width:min(100%,600px);height:auto;aspect-ratio:600/190;border:1px solid #acb8c5;background:#fff;touch-action:none;margin:8px 0}
 .signature-mark{display:block;margin:auto;width:min(100%,300px);height:auto;aspect-ratio:600/190}.stack label,.stack input,.stack textarea{display:block;width:100%}
-#print-preview{position:fixed;inset:0;overflow:auto;background:#e5eaf0;z-index:9999}
+#print-preview{position:fixed;inset:0;width:calc(100vw - 20px);height:calc(100dvh - 20px);max-width:none;max-height:none;
+  margin:auto;padding:0;overflow:auto;background:#e5eaf0;border:1px solid #cbd5e1;box-sizing:border-box}
+#print-preview::backdrop{background:#18202bbb}
 .print-actions{position:sticky;top:0;z-index:1;padding:8px;background:#fff;text-align:center}
 .print-sheet{--material-square:min(92px,calc(16vw - 22px));width:210mm;max-width:100%;margin:14px auto;padding:6mm;background:#fff;font:14px/1.35 var(--gd-font);color:#111;box-sizing:border-box}
 .print-sheet h1,.print-center{text-align:center}.print-sheet h1{font-size:23px}
@@ -75,7 +77,8 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 @page{size:A4;margin:9mm}
 @media print{
   body.printing-material > :not(#print-preview),.print-actions{display:none!important}
-  #print-preview{position:static;overflow:visible;background:white}.print-sheet{width:auto;margin:0;padding:0;border:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  #print-preview{position:static;width:auto;height:auto;margin:0;overflow:visible;background:white;border:0}
+  #print-preview::backdrop{display:none}.print-sheet{width:auto;margin:0;padding:0;border:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .print-table thead{display:table-header-group}.print-table tr,.print-signatures{break-inside:avoid}.print-terms{break-before:page}
 }.deadline{display:inline-block;background:#fff;color:#273245;border-radius:4px;padding:4px;margin:2px}.deadline.late,.deadline.missing{background:#ffe0e0;color:#921d28}.deadline.soon{background:#fff0c4;color:#694600}
 .sheet-grid .group input[data-field=leadDays]{width:68px}
@@ -202,16 +205,24 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-paper .sheet-grid tr[data-row]>td{vertical-align:top}
 .material-paper .sheet-grid :is(th,td).is-no-print{background:#dce1e7;color:#354256}
 .material-paper .sheet-grid .group th{min-height:32px;height:32px;vertical-align:middle}
-.material-paper .sheet-grid :is(input:not([type=checkbox]),select){box-sizing:border-box;color:inherit;border-color:transparent;background:transparent}
-.material-paper .sheet-grid :is(input:not([type=checkbox]),select):is(:hover,:focus){border-color:#a7b5c5;background:#fff}
-.material-paper .sheet-grid input::placeholder{color:transparent}
-.material-paper .sheet-grid input:is(:hover,:focus)::placeholder{color:#66768b}
+.material-paper .sheet-grid :is(input:not([type=checkbox]),select,textarea){box-sizing:border-box;color:inherit;border-color:transparent;background:transparent}
+.material-paper .sheet-grid :is(input:not([type=checkbox]),select,textarea):is(:hover,:focus){border-color:#a7b5c5;background:#fff}
+.material-paper .sheet-grid :is(input,textarea)::placeholder{color:transparent}
+.material-paper .sheet-grid :is(input,textarea):is(:hover,:focus)::placeholder{color:#66768b}
 .material-paper .image-cell{min-width:0;border-color:transparent}
 .material-paper .image-cell:is(:hover,:focus-within){border-color:#bdc8d5}
 .material-paper .image-open{display:flex;align-items:center;justify-content:center;flex:none;aspect-ratio:1;overflow:hidden}
 .material-paper .image-open img{display:block;width:auto;height:auto;max-width:100%;max-height:100%;aspect-ratio:auto}
 .material-paper .image-cell.chosen{border-color:#a41d24}
 .material-paper .sheet-value{display:block;box-sizing:border-box;width:100%;padding:4px;line-height:1.25;overflow-wrap:anywhere}
+.material-paper :is(textarea,.sheet-value):is([data-field=note],[data-field=spec]){
+  box-sizing:border-box;display:block;width:100%;min-width:0;min-height:1.8em;
+  border:1px solid transparent;padding:3px;font:inherit;font-size:.85em;color:#475569;line-height:1.25;
+  white-space:pre-wrap;overflow-wrap:anywhere
+}
+.material-paper textarea{height:auto;field-sizing:content;resize:none}
+.material-paper .sheet-grid textarea{color:#475569}
+.material-copy-secondary{font-size:.85em;color:#475569}
 .material-paper .sheet-value[data-field=groupName]{display:inline;padding:3px;font-weight:700}
 .material-paper .pa-caption .sheet-value{width:auto;padding:2px;font-size:11px;text-align:center}
 .material-paper [data-column=qty] .sheet-value{text-align:right;font-variant-numeric:tabular-nums}

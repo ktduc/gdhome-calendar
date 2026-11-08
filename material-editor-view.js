@@ -456,6 +456,11 @@ function imageCell(list, slot, content = '', state = '', removable = false) {
 }
 
 
+function materialTextField(key,value,label) {
+  return '<textarea rows="1" data-field="' + key + '" aria-label="' + label + '" placeholder="' + label +
+    '" maxlength="' + (key === 'note' ? 2000 : 500) + '">' + html(value) + '</textarea>';
+}
+
 function renderRow(row,columns,number,editing) {
   const chosen = row.options[row.chosen];
   const count = rowPaCount(row);
@@ -464,11 +469,11 @@ function renderRow(row,columns,number,editing) {
     name:input('name',row.name,'Hạng mục'),
     room:input('room',row.room,'Vị trí'),
     render:imageCell(row.render,'render'),
-    spec:input('spec',chosen?.finish || row.spec,'Quy cách'),
+    spec:materialTextField('spec',chosen?.finish || row.spec,'Quy cách'),
     qty:input('qty',row.qty,'Khối lượng'),
     unit:input('unit',displayMaterialUnit(row.unit),'Đơn vị'),
     supplier:input('supplier',row.supplier,'NCC / Nhà thầu'),
-    note:input('note',row.note,'Ghi chú'),
+    note:materialTextField('note',row.note,'Ghi chú'),
     decision:'<select data-field="decision" aria-label="Trạng thái">' + Object.entries({...statusLabels,ordered:'Đã đặt hàng'})
       .map(([key,label]) => option(key,label,rowState(row))).join('') + '</select>',
     actions:'<div class="row-actions">' +

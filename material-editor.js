@@ -330,7 +330,7 @@ document.addEventListener('click', async event => {
   const button = event.target.closest('[data-action]');
   const {group,row,slot} = context(event.target);
   if (!button) {
-    if (row && event.target.matches('input[data-field="note"]')) return openMaterialNotes(event.target,group,row);
+    if (row && event.target.matches('[data-field="note"]')) return openMaterialNotes(event.target,group,row);
     const cell = event.target.closest('.image-cell');
     if (row && cell && !event.target.closest('input,select,textarea,a')) focusMaterialImageCell(cell);
     return;
@@ -487,8 +487,6 @@ document.addEventListener('keydown', event => {
   const target = event.target;
   if (target.closest('dialog')) return;
   if (event.key === 'Escape') {
-    const close = byId('close-print');
-    if (close) { close.click(); event.preventDefault(); return; }
     if (GDHomeShell.closeMenus()) { event.preventDefault(); return; }
     if (viewAsPrint && byId('material-print-view')) { byId('material-print-view').click(); event.preventDefault(); return; }
   }
@@ -503,7 +501,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!row) return;
-  if (event.altKey && event.key === 'ArrowDown' && target.matches('input[data-field="note"]')) {
+  if (event.altKey && event.key === 'ArrowDown' && target.matches('[data-field="note"]')) {
     event.preventDefault();
     return openMaterialNotes(target,group,row);
   }
@@ -511,7 +509,8 @@ document.addEventListener('keydown', event => {
 
   const cell = target.closest('td');
   if (!cell) return;
-  if (event.key === 'Escape') { if (target.tagName === 'INPUT') {
+  if (event.key === 'Enter' && target.matches('textarea') && !event.ctrlKey) return;
+  if (event.key === 'Escape') { if (target.matches('input,textarea')) {
       target.value = target.defaultValue;
       if (target.dataset.field === 'code' && row.options[Number(slot)]) updateInlineCode(target,row.options[Number(slot)]);
     }
@@ -525,7 +524,7 @@ document.addEventListener('keydown', event => {
     const direction = event.key === 'ArrowLeft' || event.shiftKey ? -1 : 1;
     next = cell.parentElement.cells[col+direction] || rows[index+direction]?.cells[direction > 0 ? 0 : rows[index+direction].cells.length-1];
   }
-  const control = next?.querySelector('.pa-caption input') || next?.querySelector('input,select,[tabindex],button');
+  const control = next?.querySelector('.pa-caption input') || next?.querySelector('input,textarea,select,[tabindex],button');
   if (control) { event.preventDefault(); control.focus(); if (control.matches('input:not([type=checkbox])')) control.select?.(); }
 });
 

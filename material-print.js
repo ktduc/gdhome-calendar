@@ -99,10 +99,10 @@ function rowsForPrint(view, base) {
       const options = row.options.filter(hasPrintOption);
       const name = html(row.name) + (row.room ? '<br><small>' + html(row.room) + '</small>' : '');
 
-      return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td>' + html(pa?.finish || row.spec) + '</td><td>' +
+      return '<tr><td>' + (++i) + '</td><td>' + name + '</td><td class="material-copy-secondary">' + html(pa?.finish || row.spec) + '</td><td>' +
         html([pa?.color,pa?.code,pa?.size].filter(Boolean).join(' · ')) +
         (pa ? '<br><small>' + html(options.filter(o => o !== pa && o.code).map(o => 'Dự phòng: '+o.code).join(' · ')) + '</small>' : '') +
-        '</td><td>' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base) + '</div></td></tr>';
+        '</td><td class="material-copy-secondary">' + html(row.note) + '<div class="print-squares">' + printImages(pa?.images,base) + '</div></td></tr>';
     }).join('')).join('');
 }
 function printable(view,base) {
@@ -126,10 +126,14 @@ function printable(view,base) {
     signatureMark(view.customer) + '</div><div><strong>ĐẠI DIỆN BÊN B</strong>' + signatureMark(view.company) + '</div></div>';
 }
 async function showPrint(view,base,headers,stats = false,watermark = stats) {
-  byId('print-preview')?.remove();
-  const overlay = document.createElement('div');
+  const previous = byId('print-preview');
+  if (previous?.open) previous.close();
+  previous?.remove();
+  const overlay = document.createElement('dialog');
   overlay.id = 'print-preview';
-  overlay.innerHTML = '<div class="print-actions"><button id="do-print" disabled>In / Lưu PDF A4</button> <button id="close-print">Đóng</button><span id="print-extras"></span></div>' +
+  overlay.className = 'shell-dialog';
+  overlay.setAttribute('aria-label',stats ? 'Xem trước bảng Chốt mã' : 'Xem trước biên bản A4');
+  overlay.innerHTML = '<div class="print-actions"><button id="do-print" disabled>In / Lưu PDF A4</button> <button id="close-print" autofocus>Đóng</button><span id="print-extras"></span></div>' +
     (stats ? '' : '<article id="print-sheet" class="print-sheet" data-image-fit="' + (view.sheet.imageFit === 'fill' ? 'fill' : 'fit') + '">' + printable(view,base) + '</article>');
   if (stats) {
     const paper = materialPaperForExport(view.sheet);
@@ -139,12 +143,17 @@ async function showPrint(view,base,headers,stats = false,watermark = stats) {
   }
   document.body.append(overlay);
   document.body.classList.add('printing-material');
-  byId('close-print').onclick = () => {
-    overlay.querySelectorAll('img[data-print-img]').forEach(img => { if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src); });
+  overlay.addEventListener('close',() => {
+    overlay.querySelectorAll('img[data-print-img]').forEach(img => {
+      if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    });
     overlay.remove();
-    document.body.classList.remove('printing-material');
-  };
+    if (!byId('print-preview')) document.body.classList.remove('printing-material');
+  },{once:true});
+  overlay.onclick = event => { if (event.target === overlay) overlay.close(); };
+  byId('close-print').onclick = () => overlay.close();
   byId('do-print').onclick = () => window.print();
+  overlay.showModal();
   await Promise.all([stats ? showImages(overlay) : loadPrintImages(overlay,headers),document.fonts.ready]);
   if (overlay.isConnected) byId('do-print').disabled = false;
   return overlay;

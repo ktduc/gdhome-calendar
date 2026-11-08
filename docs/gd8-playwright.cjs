@@ -371,7 +371,7 @@ cases['9.6'] = async page => {
     mergeAiRows(sheet.groups,[{group:'Sơn tường',name:'Sơn trần',room:'',note:'So khớp mẫu dưới ánh sáng tự nhiên'}]);
   }));
   const newRow = page.locator('tr[data-row]').filter({has:page.locator('input[data-field="name"][value="Sơn trần"]')});
-  const note = newRow.locator('input[data-field="note"]');
+  const note = newRow.locator('textarea[data-field="note"]');
   assert.equal(await note.inputValue(),'');
   await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
   await openMaterials(page);
@@ -737,7 +737,7 @@ cases['12.2'] = async page => {
   await printNote.click();
   assert.equal(await printNote.getAttribute('aria-pressed'),'false');
   assert.match(await note.getAttribute('class'),/is-no-print/);
-  assert.equal(await note.locator('input').isEditable(),true);
+  assert.equal(await note.locator('textarea').isEditable(),true);
   assert.equal(await page.locator('[data-print-column-toggle][value=note]').isChecked(),false);
   const form = await openImageScope(page);
   await form.locator('.export-print-columns summary').click();
@@ -792,6 +792,39 @@ cases['12.3'] = async page => {
   await page.locator('[data-action=density][data-id=xs]').click();
   await row.locator('img[data-image-axis]').last().waitFor();
   assert.ok((await sizes(row))[0][0] < fill[0][0]);
+};
+
+cases['12.4'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => modify(() => {
+    const row = sheet.groups[0].rows[0];
+    row.note = 'Ghi chú mẫu';
+    row.spec = 'Quy cách mẫu';
+  }));
+  const readSizes = root => root.locator('[data-row="g1-r1"]').evaluate(row =>
+    ['name','note','spec'].map(key => parseFloat(getComputedStyle(row.querySelector('[data-field="'+key+'"]')).fontSize)));
+  const work = await readSizes(page.locator('#materials'));
+  assert.ok(Math.abs(work[1]/work[0]-.85) < .03 && Math.abs(work[2]/work[0]-.85) < .03);
+  const form = await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('dialog#print-preview[open]').waitFor();
+  assert.deepEqual(await readSizes(page.locator('#print-sheet')),work);
+  await page.keyboard.press('Escape');
+  await page.locator('#print-preview').waitFor({state:'detached'});
+  await openImageScope(page);
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  await page.mouse.click(0,0);
+  await page.locator('#print-preview').waitFor({state:'detached'});
+
+  await addFixtureImage(page,'0');
+  await page.locator('[data-header-command="file"]').click();
+  await page.locator('#material-publish').click();
+  await page.goto(await page.locator('#issued-link').inputValue());
+  await page.locator('#customer-print').click();
+  await page.locator('#do-print:enabled').waitFor();
+  await page.keyboard.press('Escape');
+  await page.locator('#print-preview').waitFor({state:'detached'});
 };
 
 function viewPosition(page) {
