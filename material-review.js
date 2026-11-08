@@ -33,6 +33,7 @@ function cleanSheet(sheet) {
           const decision = ['draft','sent','chosen','changed'].includes(row.decision) ? row.decision : 'draft';
           return { id:unique(row.id), ...pick(row,['name','room','qty','unit','supplier','note','spec']), render:assetsOnly(row.render),
             options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size','supplier','price']), images:assetsOnly(pa?.images) })),
+            paCount:Math.min(3,Math.max(1,Number.isInteger(row.paCount) ? row.paCount : 1)),
             chosen, decision, ordered:!!row.ordered && chosen !== null };
         })
       };

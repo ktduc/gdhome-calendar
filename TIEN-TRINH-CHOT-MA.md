@@ -38,3 +38,15 @@ XONG
 - GĐ6.3: phát hành link, gửi yêu cầu đổi, kiểm tra ⚠ trên Timeline và xem trước thống kê ảnh. So khớp Điều 2–4 với mẫu, nạp server từ bản sao thiếu `docs/`. Cập nhật danh sách deploy trong repo và phiên bản cache. 21/21 test đạt. Render và xuất file từ trình duyệt chưa chạy trong lượt kiểm tra này.
 
 XONG GĐ6
+
+## Giai đoạn 7
+
+| Bước | Trạng thái | Kết quả |
+|---|---|---|
+| 7.1 | ✅ | bố cục, danh mục và phương án theo dòng |
+| 7.2 | ⏳ | Độ rộng cột |
+| 7.3 | ⏳ | Hồ sơ và Notion |
+| 7.4 | ⏳ | Xuất ảnh |
+| 7.5 | ⏳ | AI và duyệt |
+
+Bước kế tiếp GĐ7: 7.2 kéo và lưu độ rộng cột theo tài khoản.

@@ -40,16 +40,16 @@ function images(list, large = false) {
   }).join('');
 }
 
-function renderMaterialApp() {
+function renderMaterialApp(selectedProject) {
   if (sheet) return renderEditor();
   const query = new URLSearchParams(location.search);
-  const requested = byId('project-filter')?.value || query.get('project');
+  const requested = selectedProject || byId('project-filter')?.value || query.get('project');
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
   box().innerHTML = '<div class="panel"><label>Dự án <select id="project-filter">' + materials.projects.map(p => option(p.id,p.name,projectId)).join('') +
     '</select></label> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span></div>' +
     materials.sheets.filter(s => s.projectId === projectId || !materials.projects.some(p => p.id === s.projectId)).map(s => '<article><button data-action="open" data-id="' + html(s.id) + '">' + html(s.title) + '</button> · ' + counts(s) + '</article>').join('') +
     (!materials.projects.length ? '<p>Tạo và lưu dự án trong Tiến độ trước.</p>' : '');
-  byId('project-filter').onchange = () => renderMaterialApp();
+  byId('project-filter').onchange = event => renderMaterialApp(event.target.value);
   if (typeof installImport === 'function') installImport();
 }
 
@@ -62,37 +62,156 @@ function labeledInput(key, value, label) {
   return '<label><span>' + label + '</span>' + input(key,value,label) + '</label>';
 }
 
+const materialColumns = [
+  ['name','Hạng mục'],['room','Vị trí'],['render','Phối cảnh 3D'],['spec','Chất liệu / Quy cách'],
+  ['pa0','PA1'],['pa1','PA2'],['pa2','PA3'],['qty','KL'],['unit','Đơn vị'],
+  ['supplier','NCC / Nhà thầu'],['note','Ghi chú'],['decision','Trạng thái'],['actions','Thao tác']
+];
+const optionalColumns = new Set(['render','spec','qty','unit','supplier','note','decision']);
+const hiddenColumns = new Set();
+const forcedPA = new Set();
+const hiddenGroups = new Set();
+const collapsed = new Set();
+const sidebarOpen = new Map();
+let sheetRoom = '', sheetStatus = '';
+const rowState = row => row.ordered ? 'ordered' : row.decision;
+const paHasData = pa => !!pa && (pa.images?.length || fields.some(key => pa[key]));
+function rowPaCount(row) {
+  return Math.max(1,row.paCount || 1,(row.chosen ?? -1)+1,row.options.findLastIndex(paHasData)+1);
+}
+function visibleColumns() {
+  const count = Math.max(1,...sheet.groups.flatMap(g => g.rows.map(rowPaCount)));
+  return materialColumns.filter(([key]) => !hiddenColumns.has(key) &&
+    (!/^pa[12]$/.test(key) || forcedPA.has(key) || Number(key[2]) < count));
+}
+function sidebarSection(key,title,content) {
+  return '<details class="sb-collapsible" data-sidebar="' + key + '"' + (sidebarOpen.get(key) !== false ? ' open' : '') +
+    '><summary>' + title + '</summary><div class="material-sidebar-body">' + content + '</div></details>';
+}
+function projectSidebar() {
+  const project = materials.projects.find(p => p.id === sheet.projectId);
+  const meta = sheet.meta || {};
+  return sidebarSection('project','Dự án & khách hàng',
+    '<label class="side-field">Dự án Tiến độ<select id="editor-project">' + option(sheet.projectId,project?.name || meta.project || 'Dự án đã lưu',sheet.projectId) +
+    materials.projects.filter(p => p.id !== sheet.projectId).map(p => option(p.id,p.name,sheet.projectId)).join('') + '</select></label>' +
+    '<label class="side-field">Bảng chốt mã<select id="editor-sheet">' +
+    (!sheet.id ? '<option value="">Bảng mới</option>' : '') + materials.sheets.filter(s => s.projectId === sheet.projectId)
+      .map(s => option(s.id,s.id === sheet.id ? sheet.title : s.title,sheet.id)).join('') + '</select></label>' +
+    '<div class="material-meta-fields">' + labeledInput('title',sheet.title,'Tên bảng') +
+    [['customer','Kính gửi'],['address','Địa chỉ'],['project','Tên dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']]
+      .map(([key,label]) => labeledInput(key,meta[key],label)).join('') + '</div>');
+}
+function catalogSidebar() {
+  return sidebarSection('catalog','Danh mục',
+    '<ul class="material-catalog">' + sheet.groups.map(group => '<li data-catalog="' + html(group.id) + '" draggable="true">' +
+      '<input type="checkbox" data-group-toggle="' + html(group.id) + '" aria-label="Hiện ' + html(group.name) + '"' +
+      (hiddenGroups.has(group.id) ? '' : ' checked') + '><button data-action="jump-group" data-id="' + html(group.id) + '">' +
+      html(group.name) + '</button><small>' + group.rows.filter(r => r.chosen != null && r.decision !== 'changed').length + '/' + group.rows.length +
+      '</small><span title="Kéo để đổi thứ tự">⋮⋮</span></li>').join('') + '</ul><button data-action="add-group">＋ Thêm danh mục</button>');
+}
+function displaySidebar() {
+  return sidebarSection('display','Hiển thị',
+    '<label class="side-field">Mật độ<select id="density-filter">' + Object.entries({gon:'Gọn',vua:'Vừa',lon:'Ảnh lớn'})
+      .map(([key,label]) => option(key,label,density)).join('') + '</select></label>' +
+    '<label class="side-field">Phòng<select id="room-filter"><option value="">Tất cả</option>' +
+      [...new Set(sheet.groups.flatMap(g => g.rows.map(r => r.room)).filter(Boolean))].map(r => option(r,r,sheetRoom)).join('') + '</select></label>' +
+    '<label class="side-field">Trạng thái<select id="status-filter"><option value="">Tất cả</option>' +
+      Object.entries({...statusLabels,ordered:'Đã đặt hàng'}).map(([key,label]) => option(key,label,sheetStatus)).join('') + '</select></label>' +
+    '<div class="column-switches">' + materialColumns.filter(([key]) => optionalColumns.has(key) || /^pa[12]$/.test(key))
+      .map(([key,label]) => '<label><input type="checkbox" data-column-toggle="' + key + '"' +
+        ((optionalColumns.has(key) ? !hiddenColumns.has(key) : forcedPA.has(key)) ? ' checked' : '') + '> ' +
+        (optionalColumns.has(key) ? label : 'Luôn hiện ' + label) + '</label>').join('') + '</div>');
+}
+function materialKpis() {
+  const nearest = sheet.groups.map(g => deadlineFor(g).due).filter(Boolean).sort()[0];
+  return [sheet.groups.length + ' nhóm',sheet.groups.reduce((n,g) => n+g.rows.length,0) + ' hạng mục',
+    counts(sheet),nearest ? 'Hạn gần nhất ' + nearest : 'Chưa có hạn'].map(value => '<span>' + html(value) + '</span>').join('');
+}
+
 function renderEditor() {
   const scroll = box().querySelector('.sheet-scroll');
-  const meta = sheet.meta || {};
-  box().innerHTML = '<div class="panel" id="material-meta"><div class="toolbar"><button data-action="back">← Danh sách</button>' +
-    '<button data-action="undo">Hoàn tác</button><button data-action="redo">Làm lại</button><button data-action="density">' +
-    ({ gon:'Gọn', vua:'Vừa', lon:'Ảnh lớn' })[density] + '</button><label>Phòng <select id="room-filter"><option value="">Tất cả</option>' +
-    [...new Set(sheet.groups.flatMap(g => g.rows.map(r => r.room)).filter(Boolean))].map(r => option(r,r,sheetRoom)).join('') +
-    '</select></label><strong id="material-count">' + counts(sheet) + '</strong><span id="save-label">' + (conflict?'Xung đột':dirty?'Chờ lưu':saving?'Đang lưu':'Đã lưu') +
-    '</span><span id="release-actions"></span></div><div class="material-meta-fields">' + labeledInput('title',sheet.title,'Tên bảng') +
-    [['customer','Kính gửi'],['address','Địa chỉ'],['project','Dự án'],['phone','SĐT'],['email','Email'],['date','Ngày'],['number','Số'],['contract','Hợp đồng']].map(([key,label]) => labeledInput(key,meta[key],label)).join('') +
-    '</div>' + (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm trên máy chủ.</p>') + '</div>' +
+  const columns = visibleColumns();
+  box().innerHTML = '<div class="material-toolbar"><details class="material-export"><summary>File ▾</summary><div>' +
+    '<button data-action="back">Danh sách bảng</button><span id="release-actions"></span></div></details>' +
+    '<span id="image-actions"></span><span id="ai-actions"></span><button data-action="undo" title="Ctrl+Z">↶ Hoàn tác</button>' +
+    '<button data-action="redo" title="Ctrl+Y">↷ Làm lại</button><span id="save-label">' +
+    (conflict?'Xung đột':dirty?'Chờ lưu':saving?'Đang lưu':'Đã lưu') + '</span></div>' +
+    '<div class="material-workspace"><aside class="material-sidebar">' + projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' +
+    '<section class="material-sheet"><div class="material-title"><h1>BẢNG CHỐT MÃ VẬT LIỆU – ' +
+    html(sheet.meta?.project || materials.projects.find(p => p.id === sheet.projectId)?.name || sheet.title) +
+    '</h1><div id="material-count">' + materialKpis() + '</div></div>' +
+    (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm.</p>') +
     '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid"><thead><tr>' +
-    ['Hạng mục','Vị trí','Phối cảnh 3D','Chất liệu / Quy cách','Phương án 1','Phương án 2','Phương án 3','Khối lượng','Đơn vị','NCC / Nhà thầu','Ghi chú','Trạng thái',''].map(t => '<th>' + t + '</th>').join('') +
-    '</tr></thead>' + sheet.groups.map(renderGroup).join('') + '</table></div><button data-action="add-group">＋ Thêm nhóm</button><dialog id="material-dialog"></dialog>';
+    columns.map(([key,label]) => '<th data-column="' + key + '">' + label + '</th>').join('') +
+    '</tr></thead>' + sheet.groups.filter(g => !hiddenGroups.has(g.id)).map(g => renderGroup(g,columns)).join('') +
+    '</table></div></section></div><dialog id="material-dialog"></dialog>';
   const updatedScroll = box().querySelector('.sheet-scroll');
   if (scroll) { updatedScroll.scrollTop = scroll.scrollTop; updatedScroll.scrollLeft = scroll.scrollLeft; }
   showImages();
-  byId('room-filter').onchange = event => { sheetRoom = event.target.value; renderEditor(); };
+  installEditorSidebar();
   if (typeof installRelease === 'function') installRelease();
 }
 
-let sheetRoom = '';
-const collapsed = new Set();
-function renderGroup(group) {
-  return '<tbody data-group="' + html(group.id) + '"><tr class="group"><th colspan="13"><button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
+function installEditorSidebar() {
+  box().querySelectorAll('[data-sidebar]').forEach(section => {
+    section.ontoggle = () => sidebarOpen.set(section.dataset.sidebar,section.open);
+  });
+  for (const [id,setValue] of [
+    ['room-filter',value => { sheetRoom = value; }],['status-filter',value => { sheetStatus = value; }],
+    ['density-filter',value => { density = value; }]
+  ]) byId(id).onchange = event => { setValue(event.target.value); renderEditor(); };
+  byId('editor-project').onchange = event => leaveSheet(event.target.value);
+  byId('editor-sheet').onchange = async event => {
+    const id = event.target.value;
+    await flushSave();
+    if (!dirty && !saving) openSheet(materials.sheets.find(s => s.id === id));
+    else renderEditor();
+  };
+  const sidebar = box().querySelector('.material-sidebar');
+  sidebar.onchange = event => {
+    const {groupToggle,columnToggle} = event.target.dataset;
+    if (groupToggle) setMembership(hiddenGroups,groupToggle,!event.target.checked);
+    if (columnToggle) {
+      if (optionalColumns.has(columnToggle)) setMembership(hiddenColumns,columnToggle,!event.target.checked);
+      else setMembership(forcedPA,columnToggle,event.target.checked);
+    }
+    if (groupToggle || columnToggle) renderEditor();
+  };
+  sidebar.ondragstart = event => {
+    const item = event.target.closest('[data-catalog]');
+    if (item) event.dataTransfer.setData('application/gdhome-group',item.dataset.catalog);
+  };
+  sidebar.ondragover = event => {
+    if (event.target.closest('[data-catalog]') && event.dataTransfer.types.includes('application/gdhome-group')) event.preventDefault();
+  };
+  sidebar.ondrop = event => {
+    const target = event.target.closest('[data-catalog]');
+    const source = event.dataTransfer.getData('application/gdhome-group');
+    if (!source || !target || source === target.dataset.catalog) return;
+    const from = sheet.groups.findIndex(g => g.id === source);
+    const to = sheet.groups.findIndex(g => g.id === target.dataset.catalog);
+    if (from < 0 || to < 0) return;
+    event.preventDefault();
+    modify(() => sheet.groups.splice(to,0,sheet.groups.splice(from,1)[0]));
+  };
+}
+function setMembership(set,key,enabled) { if (enabled) set.add(key); else set.delete(key); }
+async function leaveSheet(projectId = sheet.projectId) {
+  await flushSave();
+  if (dirty || saving) return renderEditor();
+  sheet = null;
+  renderMaterialApp(projectId);
+}
+function renderGroup(group,columns) {
+  return '<tbody data-group="' + html(group.id) + '"><tr class="group"><th colspan="' + columns.length + '">' +
+    '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
     input('groupName',group.name,'Nhóm') + ' <label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
     (typeof scheduleControls === 'function' ? scheduleControls(group) : '') + ' <button data-action="del-group">Bỏ nhóm</button></th></tr>' +
-    (collapsed.has(group.id) ? '' : group.rows.filter(r => !sheetRoom || r.room === sheetRoom).map(renderRow).join('') + '<tr><td colspan="13"><button data-action="add-row">＋ Dòng</button></td></tr>') + '</tbody>';
+    (collapsed.has(group.id) ? '' : group.rows.filter(r => (!sheetRoom || r.room === sheetRoom) && (!sheetStatus || rowState(r) === sheetStatus))
+      .map(row => renderRow(row,columns)).join('') + '<tr><td colspan="' + columns.length + '"><button data-action="add-row">＋ Dòng</button></td></tr>') + '</tbody>';
 }
 
-function imageCell(list, slot, content = '', state = '') {
+function imageCell(list, slot, content = '', state = '', removable = false) {
   const hasImage = list.length > 0;
   const photo = hasImage ? images(list.slice(0,1)) : '<span class="image-plus" aria-hidden="true">＋</span>';
   const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (slot+1);
@@ -100,25 +219,38 @@ function imageCell(list, slot, content = '', state = '') {
     '" title="Bấm ảnh để chốt phương án. Dán ảnh bằng Ctrl+V hoặc kéo thả."><div class="image-preview">' + photo +
     (list.length > 1 ? '<small class="image-count">+' + (list.length-1) + '</small>' : '') +
     (state ? '<span class="image-state" aria-label="' + (state === 'chosen' ? 'Đã chọn' : 'Dự phòng') + '">' + (state === 'chosen' ? '✓' : 'Dự phòng') + '</span>' : '') +
-    '</div><button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' + content + '</div>';
+    '</div><button class="image-detail" data-action="detail" aria-label="' + label + '">⋯</button>' + (removable ? '<button class="remove-pa" data-action="remove-pa" aria-label="Xoá PA trống">×</button>' : '') + content + '</div>';
 }
 
-function renderRow(row) {
+function renderRow(row,columns) {
   const chosen = row.options[row.chosen];
-  return '<tr data-row="' + html(row.id) + '"><td>' + input('name',row.name,'Hạng mục') + '</td><td>' + input('room',row.room,'Vị trí') +
-    '</td><td>' + imageCell(row.render,'render') + '</td><td>' + input('spec',chosen?.finish || row.spec,'Quy cách') + '</td>' +
-    row.options.map((pa,i) => {
-      const detail = [pa.color,pa.size].filter(Boolean).join(' · ');
-      const code = '<div class="pa-caption">' + input('code',pa.code,'Mã PA' + (i+1)) +
-        (detail ? '<small title="' + html(detail) + '"> · ' + html(detail) + '</small>' : '') + '</div>';
-      return '<td>' + imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '') + '</td>';
-    }).join('') +
-    '<td>' + input('qty',row.qty,'Khối lượng') + '</td><td>' + input('unit',row.unit,'Đơn vị') + '</td><td>' + input('supplier',row.supplier,'NCC / Nhà thầu') +
-    '</td><td>' + input('note',row.note,'Ghi chú') + '</td><td><select data-field="decision" aria-label="Trạng thái">' +
-    Object.entries(statusLabels).map(([key,label]) => option(key,label,row.ordered?'ordered':row.decision)).join('') +
-    option('ordered','Đã đặt hàng',row.ordered?'ordered':row.decision) + '</select></td><td><div class="row-actions">' +
-    [['move-up','Đưa dòng lên','↑'],['move-down','Đưa dòng xuống','↓'],['duplicate','Nhân bản dòng','⧉'],['del-row','Bỏ dòng','×']].map(([action,label,icon]) =>
-      '<button data-action="' + action + '" title="' + label + '" aria-label="' + label + '">' + icon + '</button>').join('') + '</div></td></tr>';
+  const count = rowPaCount(row);
+  const cells = {
+    name:input('name',row.name,'Hạng mục'),
+    room:input('room',row.room,'Vị trí'),
+    render:imageCell(row.render,'render'),
+    spec:input('spec',chosen?.finish || row.spec,'Quy cách'),
+    qty:input('qty',row.qty,'Khối lượng'),
+    unit:input('unit',row.unit,'Đơn vị'),
+    supplier:input('supplier',row.supplier,'NCC / Nhà thầu'),
+    note:input('note',row.note,'Ghi chú'),
+    decision:'<select data-field="decision" aria-label="Trạng thái">' + Object.entries({...statusLabels,ordered:'Đã đặt hàng'})
+      .map(([key,label]) => option(key,label,rowState(row))).join('') + '</select>',
+    actions:'<div class="row-actions">' +
+      (count < 3 ? '<button class="add-pa" data-action="add-pa">＋ PA</button>' : '') +
+      [['move-up','Đưa dòng lên','↑'],['move-down','Đưa dòng xuống','↓'],['duplicate','Nhân bản dòng','⧉'],['del-row','Bỏ dòng','×']]
+        .map(([action,label,icon]) => '<button data-action="' + action + '" title="' + label + '" aria-label="' + label + '">' + icon + '</button>').join('') + '</div>'
+  };
+  for (const [i,pa] of row.options.entries()) {
+    const key = 'pa' + i;
+    if (i >= count && !forcedPA.has(key)) { cells[key] = ''; continue; }
+    const detail = [pa.color,pa.size].filter(Boolean).join(' · ');
+    const code = '<div class="pa-caption">' + input('code',pa.code,'Mã PA' + (i+1)) +
+      (detail ? '<small title="' + html(detail) + '"> · ' + html(detail) + '</small>' : '') + '</div>';
+    const canRemove = i > 0 && i === count-1 && !paHasData(pa) && row.chosen !== i;
+    cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove);
+  }
+  return '<tr data-row="' + html(row.id) + '">' + columns.map(([key]) => '<td data-column="' + key + '">' + cells[key] + '</td>').join('') + '</tr>';
 }
 
 function context(target) {
@@ -141,7 +273,7 @@ function queueSave() {
   dirty = true;
   clearTimeout(saveTimer);
   if (byId('save-label')) byId('save-label').textContent = conflict ? 'Xung đột' : 'Chờ lưu';
-  if (byId('material-count')) byId('material-count').textContent = counts(sheet);
+  if (byId('material-count')) byId('material-count').innerHTML = materialKpis();
   saveTimer = setTimeout(flushSave, 550);
 }
 
@@ -351,11 +483,17 @@ document.addEventListener('click', async event => {
         })));
         break;
       }
-      case 'back':
-        await flushSave();
-        if (!dirty && !saving) { sheet = null; renderMaterialApp(); }
+      case 'back': await leaveSheet(); break;
+      case 'add-pa': modify(() => { row.paCount = Math.min(3,rowPaCount(row)+1); }); break;
+      case 'remove-pa': modify(() => { row.paCount = Number(slot); }); break;
+      case 'jump-group': {
+        hiddenGroups.delete(button.dataset.id);
+        collapsed.delete(button.dataset.id);
+        renderEditor();
+        box().querySelector('[data-group="' + button.dataset.id + '"]')?.scrollIntoView({block:'start'});
         break;
-      case 'density': density = ({ gon:'vua', vua:'lon', lon:'gon' })[density]; renderEditor(); break;
+      }
+
       case 'fold': if (collapsed.has(group.id)) collapsed.delete(group.id); else collapsed.add(group.id); renderEditor(); break;
       case 'add-group': modify(() => sheet.groups.push(newGroup('Nhóm mới'))); break;
       case 'del-group': if (confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1)); break;

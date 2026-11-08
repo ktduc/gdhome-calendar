@@ -91,3 +91,27 @@ dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px)}dial
 .crop-handle[data-corner=lb]{left:-9px;bottom:-9px;cursor:nesw-resize}
 .crop-handle[data-corner=rb]{right:-9px;bottom:-9px;cursor:nwse-resize}
 .history-signatures{margin:8px 0 12px}
+body>header.material-header{height:56px;box-sizing:border-box;justify-content:flex-start;gap:12px;padding:0 16px}
+.material-header #identity{margin-left:auto;font-size:13px}.material-brand{display:flex;align-items:center;gap:8px;color:#273245;font-weight:700;text-decoration:none}.material-brand img{width:29px;height:29px}
+body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:empty{display:none}
+.material-toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0}.material-toolbar #save-label{font-size:12px;margin-left:auto}
+.material-toolbar #release-actions{display:grid}.material-toolbar .material-export>div{left:0;right:auto;min-width:195px}
+.material-workspace{display:grid;grid-template-columns:248px minmax(0,1fr);align-items:start;gap:8px}
+.material-sidebar{background:#eef1f5;max-height:calc(100dvh - 110px);overflow:auto;padding:5px}
+.material-sidebar .sb-collapsible{background:white;border:1px solid #d5dce5;border-radius:7px;margin-bottom:6px}
+.material-sidebar summary{padding:7px 9px;font-size:13px;font-weight:700;cursor:pointer}.material-sidebar-body{padding:0 8px 8px}
+.side-field{display:grid;font-size:12px;margin:4px 0}.side-field select{width:100%}
+.material-sidebar .material-meta-fields{grid-template-columns:repeat(2,minmax(0,1fr))}
+.material-sidebar .material-meta-fields label:nth-child(-n+4){grid-column:span 2}
+.material-catalog{list-style:none;margin:0 0 6px;padding:0}
+.material-catalog li{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:3px;cursor:grab}
+.material-catalog button{border:0;text-align:left;padding:3px;font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.column-switches{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));font-size:11px}.column-switches label{display:flex;align-items:center}
+.material-title{background:#35455b;color:white;padding:10px 12px;border-radius:6px 6px 0 0}
+.material-title h1{font-size:17px;margin:0 0 4px}.material-title #material-count{display:flex;gap:6px;flex-wrap:wrap}
+.material-title #material-count span{background:#ffffff22;padding:2px 7px;border-radius:5px;font-size:11px}
+.material-sheet .sheet-scroll{max-height:calc(100dvh - 185px);min-height:220px}
+.material-sheet tbody{scroll-margin-top:32px}
+.row-actions .add-pa{width:auto;padding:0 3px;white-space:nowrap;font-size:11px}
+.remove-pa{position:absolute;left:1px;top:0;padding:0 3px;height:18px;line-height:1}
+@media(max-width:720px){.material-workspace{grid-template-columns:minmax(0,1fr)}.material-sidebar{max-height:40dvh}.material-sheet .sheet-scroll{max-height:62dvh}}
