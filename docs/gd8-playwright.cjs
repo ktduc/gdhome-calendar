@@ -423,12 +423,58 @@ cases['10.1'] = async page => {
   }
 };
 
+cases['10.2'] = async page => {
+  await openMaterials(page);
+  await page.locator('[data-action="density"][data-id="lon"]').click();
+  await page.locator('[data-column-toggle="supplier"]').uncheck();
+  await page.locator('[data-column-toggle="pa1"]').check();
+  await page.locator('[data-group-toggle="g2"]').uncheck();
+  await page.locator('[data-group="g3"] [data-action="fold"]').click();
+  await page.locator('[data-sidebar="project"] summary').click();
+  await page.locator('[data-resize="qty"]').press('ArrowRight');
+  await page.locator('[data-catalog="g4"]').dragTo(page.locator('[data-catalog="g1"]'));
+  await page.evaluate(() => modify(() => { sheet.groups.find(g => g.id === 'g1').rows[0].room = 'Phòng khách'; }));
+  await page.locator('#room-filter').selectOption('Phòng khách');
+  await page.locator('#status-filter').selectOption('draft');
+  await page.locator('#material-print-view').check();
+  const form = await openImageScope(page);
+  await form.locator('[name="groups"]').selectOption('all');
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  await page.waitForFunction(async () => {
+    const data = await fetch('/api/materials/preferences').then(res => res.json());
+    return data.viewSettings?.sheets?.['gd8-sheet']?.viewAsPrint && data.viewSettings.export?.groups === 'all';
+  });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.locator('#material-table-preview').waitFor();
+  assert.equal(await page.locator('#editor-sheet').inputValue(),'gd8-sheet');
+  assert.equal(await page.locator('#editor-project').inputValue(),'p1');
+  assert.equal(await page.locator('[data-sidebar="project"]').getAttribute('open'),null);
+  assert.equal(await page.locator('#room-filter').inputValue(),'Phòng khách');
+  assert.equal(await page.locator('#status-filter').inputValue(),'draft');
+  assert.equal(await page.locator('[data-group-toggle="g2"]').isChecked(),false);
+  assert.equal(await page.locator('[data-catalog]').first().getAttribute('data-catalog'),'g4');
+  assert.equal(await page.locator('[data-action="density"][data-id="lon"]').getAttribute('aria-pressed'),'true');
+  await page.locator('#material-print-view').uncheck();
+  await page.locator('#room-filter').selectOption('');
+  assert.equal(await page.locator('[data-group="g3"] tr[data-row]').count(),0);
+  assert.equal(await page.locator('col[data-column="supplier"]').count(),0);
+  assert.equal(await page.locator('col[data-column="pa1"]').count(),1);
+  assert.ok(await page.locator('col[data-column="qty"]').evaluate(col => parseInt(col.style.width,10)) > 104);
+  await openImageScope(page);
+  assert.equal(await form.locator('[name="groups"]').inputValue(),'all');
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
 async function openMaterials(page) {
   await page.goto('/chot-ma');
-  await page.getByRole('button',{name:'Bảng mẫu GĐ8',exact:true}).click();
+  const listButton = page.getByRole('button',{name:'Bảng mẫu GĐ8',exact:true});
+  const firstRow = page.locator('[data-row="g1-r1"]');
+  await listButton.or(firstRow).first().waitFor();
+  if (await listButton.isVisible()) await listButton.click();
   await page.locator('[data-row="g1-r1"]').waitFor();
 }
 
@@ -456,7 +502,7 @@ async function main() {
     })) };
     browser = await chromium.launch({ channel:'msedge',headless:true });
     for (const key of process.argv.length > 2 ? process.argv.slice(2) : Object.keys(cases)) {
-      await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; return {}; });
+      await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; data.viewSettings = {}; return {}; });
       const page = await browser.newPage({ baseURL:'http://127.0.0.1:'+server.address().port,viewport:{width:1050,height:720},acceptDownloads:false });
       page.setDefaultTimeout(4000);
       const pageErrors = [];

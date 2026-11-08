@@ -115,6 +115,7 @@ function materialExportKey() {
   return 'gdhome-material-export:' + (session()?.user?.email?.toLowerCase() || 'local');
 }
 function savedMaterialExportScope() {
+  if (materialView.export) return materialView.export;
   try { return JSON.parse(localStorage.getItem(materialExportKey())) || {}; }
   catch { return {}; }
 }
@@ -133,7 +134,7 @@ function statistics(mode) {
   byId('material-image-scope').onsubmit = async event => {
     event.preventDefault();
     const scope = new FormData(event.target);
-    try { localStorage.setItem(materialExportKey(),JSON.stringify(Object.fromEntries(scope))); } catch { /* storage unavailable */ }
+    setMaterialView({export:Object.fromEntries(scope)});
     const filtered = { ...sheet,groups:sheet.groups
       .filter(group => scope.get('groups') !== 'visible' || !hiddenGroups.has(group.id))
       .map(group => ({ ...group,rows:group.rows.filter(row =>

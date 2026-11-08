@@ -137,7 +137,7 @@ async function showPrint(view,base,headers,stats = false) {
   const overlay = document.createElement('div');
   overlay.id = 'print-preview';
   overlay.innerHTML = '<div class="print-actions"><button id="do-print" disabled>In / Lưu PDF A4</button> <button id="close-print">Đóng</button><span id="print-extras"></span></div>' +
-    '<article id="print-sheet" class="' + (stats?'watermark':'') + '">' + printable(view,base,stats) + '</article>';
+    '<article id="print-sheet" class="print-sheet ' + (stats?'watermark':'') + '">' + printable(view,base,stats) + '</article>';
   document.body.append(overlay);
   document.body.classList.add('printing-material');
   byId('close-print').onclick = () => {

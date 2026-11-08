@@ -69,6 +69,12 @@ async function start() {
       return '<article><strong>' + html(project.name) + '</strong> <a class="button" href="/">Tiến độ</a> <a class="button" href="/chot-ma?project=' + encodeURIComponent(project.id) + '">Chốt mã · ' + count + '</a></article>';
     }).join('') || '<p>Tạo dự án trong Tiến độ trước.</p>';
   }
-  if (byId('materials') && typeof renderMaterialApp === 'function') renderMaterialApp();
+  if (byId('materials') && typeof renderMaterialApp === 'function') {
+    initMaterialView();
+    const project = new URLSearchParams(location.search).get('project');
+    const previous = materials.sheets.find(sheet => sheet.id === materialView.sheetId && (!project || sheet.projectId === project));
+    if (previous) openSheet(previous);
+    else renderMaterialApp(project);
+  }
 }
 document.addEventListener('DOMContentLoaded', () => { if (byId('login')) start().catch(showError); });

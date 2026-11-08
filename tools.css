@@ -62,8 +62,8 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 .signature-mark{display:block;margin:auto;width:min(100%,300px);height:auto;aspect-ratio:600/190}.stack label,.stack input,.stack textarea{display:block;width:100%}
 #print-preview{position:fixed;inset:0;overflow:auto;background:#e5eaf0;z-index:9999}
 .print-actions{position:sticky;top:0;z-index:1;padding:8px;background:#fff;text-align:center}
-#print-sheet{--material-square:min(92px,calc(16vw - 22px));width:210mm;max-width:100%;margin:14px auto;padding:6mm;background:#fff;font:14px/1.35 var(--gd-font);color:#111;box-sizing:border-box}
-#print-sheet h1,.print-center{text-align:center}#print-sheet h1{font-size:23px}
+.print-sheet{--material-square:min(92px,calc(16vw - 22px));width:210mm;max-width:100%;margin:14px auto;padding:6mm;background:#fff;font:14px/1.35 var(--gd-font);color:#111;box-sizing:border-box}
+.print-sheet h1,.print-center{text-align:center}.print-sheet h1{font-size:23px}
 .print-heading{display:flex;align-items:center;justify-content:space-between;gap:10px}.print-heading img{width:min(224px,45%);height:auto}
 .print-table{border-collapse:collapse;width:100%;font-size:13px}.print-table th,.print-table td{padding:6px;border:1px solid #a7b5c5;vertical-align:top;overflow-wrap:anywhere}
 .print-table thead th{background:var(--material-column-fill)}.print-group th{text-align:left;background:var(--material-group-fill)}
@@ -72,7 +72,7 @@ input,select,textarea{border:1px solid #c7ced9;border-radius:4px;padding:5px;max
 @page{size:A4;margin:9mm}
 @media print{
   body.printing-material > :not(#print-preview),.print-actions{display:none!important}
-  #print-preview{position:static;overflow:visible;background:white}#print-sheet{width:auto;margin:0;padding:0;border:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+  #print-preview{position:static;overflow:visible;background:white}.print-sheet{width:auto;margin:0;padding:0;border:0;print-color-adjust:exact;-webkit-print-color-adjust:exact}
   .print-table thead{display:table-header-group}.print-table tr,.print-signatures{break-inside:avoid}.print-terms{break-before:page}
 }.deadline{display:inline-block;background:#fff;color:#273245;border-radius:4px;padding:4px;margin:2px}.deadline.late,.deadline.missing{background:#ffe0e0;color:#921d28}.deadline.soon{background:#fff0c4;color:#694600}
 .sheet-grid .group input[data-field=leadDays]{width:68px}
@@ -111,6 +111,7 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-title #material-count span{background:#ffffff22;padding:2px 7px;border-radius:5px;font-size:11px}
 .material-sheet .sheet-scroll{max-height:calc(100dvh - 185px);min-height:220px}
 .material-sheet tbody{scroll-margin-top:32px}
+.material-preview-scroll{background:#e5eaf0}.material-preview-toggle input{vertical-align:middle}
 .row-actions .add-pa{width:auto;padding:0 3px;white-space:nowrap;font-size:11px}
 .remove-pa{position:absolute;right:24px;top:0;padding:0 3px;height:18px;line-height:1}
 @media(max-width:720px){.material-workspace{grid-template-columns:minmax(0,1fr)}.material-sidebar{max-height:40dvh}.material-sheet .sheet-scroll{max-height:62dvh}}
@@ -178,8 +179,8 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 
 .print-option + .print-option{margin-top:8px}
 .print-option-caption{margin-top:3px}
-@media(max-width:640px){#print-sheet{--material-square:clamp(1px,calc(16vw - 16px),52px)}.material-print-grid{font-size:11px}.material-print-grid th,.material-print-grid td{padding:3px}}
-@media print{#print-sheet{--material-square:92px}.material-print-grid{font-size:13px}.material-print-grid th,.material-print-grid td{padding:6px}}
+@media(max-width:640px){.print-sheet{--material-square:clamp(1px,calc(16vw - 16px),52px)}.material-print-grid{font-size:11px}.material-print-grid th,.material-print-grid td{padding:3px}}
+@media print{.print-sheet{--material-square:92px}.material-print-grid{font-size:13px}.material-print-grid th,.material-print-grid td{padding:6px}}
 .material-row-number{display:flex;align-items:center;justify-content:center;gap:3px;font-size:10px;font-variant-numeric:tabular-nums}
 .material-row-number input{flex:none;margin:0}
 .material-sheet [data-column=qty] input{text-align:right;font-variant-numeric:tabular-nums}

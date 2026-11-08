@@ -16,6 +16,42 @@ function cleanColumnWidths(widths) {
     .map(([key,value]) => [key,Math.min(720,Math.max(48,Math.round(value)))]));
 }
 
+function cleanMaterialView(patch,previous = {},sheets = []) {
+  const result = { ...previous };
+  const flags = (value,allowed) => Array.isArray(value) ? [...new Set(value.filter(key => allowed.includes(key)))] : [];
+  const validIds = value => Array.isArray(value) ? [...new Set(value.filter(key => typeof key === 'string' && /^[\w-]{1,80}$/.test(key)))].slice(0,100) : [];
+  if (['gon','vua','lon','xs','s','m','l'].includes(patch.density)) result.density = patch.density;
+  if (['light','normal','bold','heavy'].includes(patch.fontWeight)) result.fontWeight = patch.fontWeight;
+  if (Object.hasOwn(patch,'hiddenColumns')) result.hiddenColumns = flags(patch.hiddenColumns,['render','spec','qty','unit','supplier','note','decision']);
+  if (Object.hasOwn(patch,'forcedPA')) result.forcedPA = flags(patch.forcedPA,['pa1','pa2']);
+  if (patch.columnWidths && typeof patch.columnWidths === 'object') result.columnWidths = cleanColumnWidths(patch.columnWidths);
+  if (patch.sidebarOpen && typeof patch.sidebarOpen === 'object') {
+    result.sidebarOpen = { ...previous.sidebarOpen,...Object.fromEntries(['project','catalog','display']
+      .filter(key => typeof patch.sidebarOpen[key] === 'boolean').map(key => [key,patch.sidebarOpen[key]])) };
+  }
+  if (patch.projectId === null || typeof patch.projectId === 'string') result.projectId = patch.projectId?.slice(0,120) ?? null;
+  if (patch.sheetId === null || sheets.some(sheet => sheet.id === patch.sheetId)) result.sheetId = patch.sheetId;
+  if (patch.export && typeof patch.export === 'object') {
+    result.export = {groups:patch.export.groups === 'all' ? 'all' : 'visible',rows:patch.export.rows === 'chosen' ? 'chosen' : 'all',
+      room:typeof patch.export.room === 'string' ? patch.export.room.slice(0,500) : '',
+      watermark:patch.export.watermark !== false};
+  }
+  if (patch.sheets && typeof patch.sheets === 'object') {
+    result.sheets = Object.fromEntries(sheets.flatMap(sheet => {
+      const values = patch.sheets[sheet.id];
+      const view = { ...previous.sheets?.[sheet.id] };
+      if (values && typeof values === 'object') {
+        for (const key of ['hiddenGroups','collapsed']) if (Object.hasOwn(values,key)) view[key] = validIds(values[key]);
+        if (typeof values.room === 'string') view.room = values.room.slice(0,500);
+        if (['','draft','sent','chosen','changed','ordered'].includes(values.status)) view.status = values.status;
+        if (typeof values.viewAsPrint === 'boolean') view.viewAsPrint = values.viewAsPrint;
+      }
+      return Object.keys(view).length ? [[sheet.id,view]] : [];
+    }));
+  }
+  return result;
+}
+
 class MaterialStore {
   constructor(store, account, explicitKey) {
     this.store = store;
@@ -33,14 +69,15 @@ class MaterialStore {
     return data;
   }
 
-  async update(version, edit) {
+  async update(version, edit, revisionKey = '_version') {
     const previous = queues.get(this.key) || Promise.resolve();
     const pending = previous.catch(() => {}).then(async () => {
       const data = await this.get();
-      if (version !== undefined && version !== data._version) fail(409, 'Có thay đổi trên máy khác. Hãy giữ bản nháp và tải lại để đối chiếu.');
+      const currentVersion = data[revisionKey] || 0;
+      if (version !== undefined && version !== currentVersion) fail(409, 'Có thay đổi trên máy khác. Hãy giữ bản nháp và tải lại để đối chiếu.');
       const revisionCount = data.revisions.length;
       const result = await edit(data);
-      data._version++;
+      data[revisionKey] = currentVersion+1;
       const writes = [];
       const compact = data.archiveCount || Buffer.byteLength(JSON.stringify(data, null, 2)) > 800000;
       if (compact) {
@@ -53,7 +90,7 @@ class MaterialStore {
       writes.push([this.key,data]);
       if (this.store.putMaterials) await this.store.putMaterials(writes);
       else for (const [key,value] of writes) await this.store.put(key,value);
-      return { _version: data._version, ...result };
+      return { _version:data[revisionKey], ...result };
     });
     queues.set(this.key, pending);
     try { return await pending; }
@@ -128,10 +165,27 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
     const data = await materials.get();
     return sendJson(res,200,{ badges:scheduleInfo(data,schedule).badges });
   }
+  if (url === '/api/materials/preferences') {
+    if (req.method === 'GET') {
+      const data = await materials.get();
+      return sendJson(res,200,{ _version:data.viewVersion || 0,viewSettings:data.viewSettings || {} });
+    }
+    if (req.method === 'POST') {
+      const body = await readJsonBody(req);
+      if (!Number.isSafeInteger(body?._version) || !body.patch || typeof body.patch !== 'object' || Array.isArray(body.patch)) {
+        fail(400,'Thiếu phiên bản hoặc cài đặt hiển thị.');
+      }
+      const result = await materials.update(body._version,data => {
+        data.viewSettings = cleanMaterialView(body.patch,data.viewSettings,data.sheets);
+        return { viewSettings:data.viewSettings };
+      },'viewVersion');
+      return sendJson(res,200,result);
+    }
+  }
   if (url === '/api/materials' && req.method === 'GET') {
     const data = await materials.get();
     const { _version, sheets, presets, library, settings } = data;
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, columnWidths:data.columnWidths || {}, profiles:data.profiles || {}, signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, viewVersion:data.viewVersion || 0, viewSettings:data.viewSettings || {}, columnWidths:data.columnWidths || {}, profiles:data.profiles || {}, signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);

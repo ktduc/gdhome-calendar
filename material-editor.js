@@ -48,14 +48,17 @@ function renderMaterialApp(selectedProject) {
   if (sheet) return renderEditor();
   byId('material-header-actions').replaceChildren();
   const query = new URLSearchParams(location.search);
-  const requested = selectedProject || byId('project-filter')?.value || query.get('project');
+  const requested = selectedProject || byId('project-filter')?.value || query.get('project') || materialView.projectId;
   const projectId = materials.projects.some(p => p.id === requested) ? requested : materials.projects[0]?.id;
   box().innerHTML = '<div class="panel"><label>Dự án <select id="project-filter">' + materials.projects.map(p => option(p.id,p.name,projectId)).join('') +
     '</select></label> <button class="primary" data-action="new">Tạo từ mẫu</button> <button data-action="copy">Sao chép bảng</button> <span id="import-action"></span> <button data-action="notion">Lấy từ Notion</button> <span id="ai-actions"></span></div>' +
     materials.sheets.filter(s => s.projectId === projectId || !materials.projects.some(p => p.id === s.projectId)).map(s => '<article><button data-action="open" data-id="' + html(s.id) + '">' + html(s.title) + '</button> · ' + counts(s) + '</article>').join('') +
     (!materials.projects.length ? '<p>Tạo và lưu dự án trong Tiến độ trước.</p>' : '');
   box().insertAdjacentHTML('beforeend','<dialog id="material-dialog"></dialog>');
-  byId('project-filter').onchange = event => renderMaterialApp(event.target.value);
+  byId('project-filter').onchange = event => {
+    setMaterialView({projectId:event.target.value,sheetId:null});
+    renderMaterialApp(event.target.value);
+  };
   if (typeof installImport === 'function') installImport();
   installMaterialsAi();
 }
@@ -70,6 +73,7 @@ async function leaveSheet(projectId = sheet.projectId) {
   await flushSave();
   if (dirty || saving) return renderEditor();
   sheet = null;
+  setMaterialView({projectId,sheetId:null});
   renderMaterialApp(projectId);
 }
 function context(target) {
@@ -115,7 +119,7 @@ async function flushSave() {
     const baseline = { ...savedMeta,...materials.profiles?.[sheet.projectId] };
     const profilePatch = Object.fromEntries(projectFields.filter(key => sheet.meta?.[key] !== undefined && sheet.meta[key] !== baseline[key])
       .map(key => [key,sheet.meta[key]]));
-    const result = await post('/api/materials', { _version:materials._version, sheet, columnWidths:materials.columnWidths,
+    const result = await post('/api/materials', { _version:materials._version, sheet,
       ...(Object.keys(profilePatch).length ? {profilePatch} : {}) });
     materials._version = result._version;
     materials.library = result.library || materials.library;
@@ -123,6 +127,9 @@ async function flushSave() {
     materials.profiles = result.profiles || materials.profiles;
     if (!sheet.id) {
       sheet.id = result.sheet.id;
+      setMaterialView({projectId:sheet.projectId,sheetId:sheet.id});
+      saveMaterialGroupsView();
+      setMaterialSheetView({room:sheetRoom,status:sheetStatus,viewAsPrint});
       const selector = byId('editor-sheet');
       if (selector?.options[0]) { selector.options[0].value = sheet.id; selector.options[0].textContent = sheet.title; }
     }
@@ -162,10 +169,11 @@ function openSheet(value) {
   materialRangeAnchor = null;
   const project = materials.projects.find(p => p.id === sheet.projectId);
   sheet.meta = { project:project?.name || '',...sheet.meta,...materials.profiles?.[sheet.projectId] };
-  sheetStatus = '';
+  restoreMaterialSheetView(sheet);
+  if (sheet.id) setMaterialView({projectId:sheet.projectId,sheetId:sheet.id});
   before = [];
   after = [];
-  sheetRoom = '';
+
   renderEditor();
 }
 
@@ -332,14 +340,19 @@ document.addEventListener('click', async event => {
       case 'jump-group': {
         hiddenGroups.delete(button.dataset.id);
         collapsed.delete(button.dataset.id);
+        saveMaterialGroupsView();
         renderEditor();
         cancelAnimationFrame(restoreViewFrame);
         box().querySelector('[data-group="' + button.dataset.id + '"]')?.scrollIntoView({block:'start'});
         break;
       }
 
-      case 'fold': if (collapsed.has(group.id)) collapsed.delete(group.id); else collapsed.add(group.id); renderEditor(); break;
-      case 'density': density = button.dataset.id; renderEditor(); break;
+      case 'fold':
+        setMembership(collapsed,group.id,!collapsed.has(group.id));
+        saveMaterialGroupsView();
+        renderEditor();
+        break;
+      case 'density': density = button.dataset.id; setMaterialView({density}); renderEditor(); break;
       case 'header-add-row': {
         const targetGroup = sheet.groups.find(entry => entry.id === byId('header-add-group').value);
         if (targetGroup) modify(() => targetGroup.rows.push(newRow()));
@@ -451,8 +464,9 @@ document.addEventListener('keydown', event => {
     const close = byId('close-print');
     if (close) { close.click(); event.preventDefault(); return; }
     if (GDHomeShell.closeMenus()) { event.preventDefault(); return; }
+    if (viewAsPrint) { byId('material-print-view').click(); event.preventDefault(); return; }
   }
-  if (handleRowSelectionKey(event)) return;
+  if (!viewAsPrint && handleRowSelectionKey(event)) return;
   const {group,row,slot} = context(target);
   if (event.ctrlKey && ['z','y','d'].includes(event.key.toLowerCase())) {
     event.preventDefault();

@@ -62,6 +62,8 @@ function displaySidebar() {
       [...new Set(sheet.groups.flatMap(g => g.rows.map(r => r.room)).filter(Boolean))].map(r => option(r,r,sheetRoom)).join('') + '</select></label>' +
     '<label class="side-field">Trạng thái<select id="status-filter"><option value="">Tất cả</option>' +
       Object.entries({...statusLabels,ordered:'Đã đặt hàng'}).map(([key,label]) => option(key,label,sheetStatus)).join('') + '</select></label>' +
+    '<label class="side-field material-preview-toggle"><span><input type="checkbox" id="material-print-view"' +
+    (viewAsPrint ? ' checked' : '') + '> Xem như bản in</span></label>' +
     '<div class="sb-chip-grid">' + materialColumns.filter(([key]) => optionalColumns.has(key) || /^pa[12]$/.test(key))
       .map(([key,label]) => '<label class="sb-chip" title="' + label + '"><input type="checkbox" data-column-toggle="' + key + '"' +
         ((optionalColumns.has(key) ? !hiddenColumns.has(key) : forcedPA.has(key)) ? ' checked' : '') + '> ' +
@@ -99,7 +101,7 @@ function installColumnResize(table) {
     materials.columnWidths ||= {};
     if (width == null) delete materials.columnWidths[key];
     else materials.columnWidths[key] = width;
-    queueSave();
+    setMaterialView({columnWidths:{...materials.columnWidths}});
   };
   table.querySelectorAll('[data-resize]').forEach(handle => {
     const key = handle.dataset.resize;
@@ -203,19 +205,28 @@ function renderEditor() {
   const widths = columns.map(([key]) => columnWidth(key));
   renderMaterialHeader();
   box().innerHTML = '<div class="material-workspace"><aside class="material-sidebar shell-sidebar sidebar-compact">' +
-    projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' + renderMaterialTable(columns,widths) +
+    projectSidebar() + catalogSidebar() + displaySidebar() + '</aside>' + (viewAsPrint ? renderMaterialPreview() : renderMaterialTable(columns,widths)) +
     '</div><div id="material-multiselect" class="msp-multisel-bar" hidden></div><dialog id="material-dialog"></dialog>';
 
   const updatedScroll = box().querySelector('.sheet-scroll');
 
   showImages();
   installEditorSidebar();
-  refreshRowSelection();
+  if (!viewAsPrint) refreshRowSelection();
   installMaterialsAi();
-  installColumnResize(updatedScroll.querySelector('table'));
+  if (!viewAsPrint) installColumnResize(updatedScroll.querySelector('table'));
   if (typeof installRelease === 'function') installRelease();
   window.lucide?.createIcons({root:byId('material-header-actions')});
   restoreEditorView(view);
+}
+
+function renderMaterialPreview() {
+  const groups = sheet.groups.filter(group => !hiddenGroups.has(group.id))
+    .map(group => ({...group,rows:visibleGroupRows(group)})).filter(group => group.rows.length);
+  const markup = printable({sheet:{...sheet,groups}},'/api/materials/assets/',true)
+    .replaceAll('data-print-img="/api/materials/assets/','data-asset="');
+  return '<section class="material-sheet"><div class="sheet-scroll material-preview-scroll">' +
+    '<article class="print-sheet" id="material-table-preview">' + markup + '</article></div></section>';
 }
 
 function renderMaterialTable(columns,widths) {
@@ -251,12 +262,27 @@ function renderMaterialHeader() {
 }
 function installEditorSidebar() {
   box().querySelectorAll('[data-sidebar]').forEach(section => {
-    section.ontoggle = () => sidebarOpen.set(section.dataset.sidebar,section.open);
+    section.ontoggle = () => {
+      if (!section.isConnected || (sidebarOpen.get(section.dataset.sidebar) !== false) === section.open) return;
+      sidebarOpen.set(section.dataset.sidebar,section.open);
+      setMaterialView({sidebarOpen:Object.fromEntries(sidebarOpen)});
+    };
   });
-  for (const [id,setValue] of [
-    ['room-filter',value => { sheetRoom = value; }],['status-filter',value => { sheetStatus = value; }],
-
-  ]) byId(id).onchange = event => { setValue(event.target.value); renderEditor(); };
+  byId('room-filter').onchange = event => {
+    sheetRoom = event.target.value;
+    setMaterialSheetView({room:sheetRoom});
+    renderEditor();
+  };
+  byId('status-filter').onchange = event => {
+    sheetStatus = event.target.value;
+    setMaterialSheetView({status:sheetStatus});
+    renderEditor();
+  };
+  byId('material-print-view').onchange = event => {
+    viewAsPrint = event.target.checked;
+    setMaterialSheetView({viewAsPrint});
+    renderEditor();
+  };
   byId('editor-project').onchange = event => leaveSheet(event.target.value);
   byId('editor-sheet').onchange = async event => {
     const id = event.target.value;
@@ -272,6 +298,8 @@ function installEditorSidebar() {
       if (optionalColumns.has(columnToggle)) setMembership(hiddenColumns,columnToggle,!event.target.checked);
       else setMembership(forcedPA,columnToggle,event.target.checked);
     }
+    if (groupToggle) saveMaterialGroupsView();
+    if (columnToggle) setMaterialView({hiddenColumns:[...hiddenColumns],forcedPA:[...forcedPA]});
     if (groupToggle || columnToggle) renderEditor();
   };
   sidebar.ondragstart = event => {
