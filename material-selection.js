@@ -91,7 +91,7 @@ function removeMaterialRows(rows) {
     for (const group of sheet.groups) group.rows = group.rows.filter(row => !ids.has(row.id));
     for (const id of ids) selectedMaterialRows.delete(id);
     materialRangeAnchor = null;
-  });
+  },true,true);
 }
 
 function duplicateMaterialRows() {

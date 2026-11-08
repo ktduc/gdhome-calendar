@@ -1587,7 +1587,11 @@ cases['18.1'] = async page => {
   const asset = 'a'.repeat(64) + '.webp';
   await page.route('**/api/materials/assets/' + asset,route => route.fulfill({status:404}));
   let documents = [{id:'render-test',name:'3D mẫu',type:'render',assetKey:'render-' + asset}];
-  await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents}}}}));
+  await page.route('**/api/project-hub/project?id=p1',async route => {
+    const response = {project:{hub:{documents}}};
+    await new Promise(resolve => setTimeout(resolve,1500));
+    return route.fulfill({json:response});
+  });
   await page.route('**/api/project-hub/documents/delete',async route => {
     await new Promise(resolve => setTimeout(resolve,1500));
     documents = [];
@@ -1626,12 +1630,18 @@ cases['18.1'] = async page => {
   await page.locator('.image-cell-dropdown-menu').getByRole('button',{name:/Xoá ảnh/}).click();
   await cell.locator('.image-open').waitFor({state:'detached',timeout:100});
   const removePa = row.locator('[data-action=remove-pa]').last();
-  if (await removePa.count()) {
-    await removePa.click();
-    await row.locator('.image-cell[data-slot="2"]').waitFor({state:'detached',timeout:100});
-  }
+  await removePa.click();
+  await row.locator('.image-cell[data-slot="2"]').waitFor({state:'detached',timeout:100});
+  await page.waitForFunction(() => !saving && !dirty);
+  await page.route('**/api/materials',async route => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    await new Promise(resolve => setTimeout(resolve,1500));
+    return route.fulfill({status:503,json:{message:'Máy chủ đang bận'}});
+  });
   await row.locator('[data-action=del-row]').dispatchEvent('click');
   await row.waitFor({state:'detached',timeout:100});
+  await page.locator('#notice').getByText(/Đã khôi phục mục vừa xoá/).waitFor();
+  await row.waitFor();
 };
 
 cases['17.1'] = async page => {
@@ -1833,6 +1843,7 @@ cases['18.4'] = async page => {
 cases['18.3'] = async page => {
   await openMaterials(page);
   const asset = 'a'.repeat(64) + '.webp';
+  await page.route('**/api/materials/assets/' + asset,route => route.fulfill({status:404}));
   const brands = await page.evaluate(async asset => {
     await GDHomeAssets.addItems('ancuong-wood',[
       {code:'MS 7241',brand:'Minh Long',name:'Gỗ óc chó',collection:'Vân gỗ',full:asset,thumb:asset},
@@ -1980,6 +1991,7 @@ async function main() {
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });
   const { server,initStore,getStore } = require('../server');
   const { MaterialStore } = require('../materials');
+  const {libraryKey,defaultLibrary} = require('../shared-library');
   let browser;
   try {
     await initStore();
@@ -2006,6 +2018,7 @@ async function main() {
         caseSchedule.tasks.push({id:'gd17-task',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-03'});
       }
       await getStore().put('shared',caseSchedule);
+      await getStore().put(libraryKey('shared'),defaultLibrary());
       await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; data.viewSettings = {}; return {}; });
       const page = await browser.newPage({ baseURL:'http://127.0.0.1:'+server.address().port,viewport:{width:1050,height:720},acceptDownloads:false });
       page.setDefaultTimeout(4000);

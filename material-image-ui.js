@@ -50,7 +50,7 @@ function openMaterialLightbox(row,slot,initialIndex = 0) {
     },
     remove(index) {
       if (!confirm('Xoá ảnh này khỏi ô?')) return false;
-      modify(() => removeMaterialImage(list,index,slot === 'render' ? null : row.options[Number(slot)]));
+      modify(() => removeMaterialImage(list,index,slot === 'render' ? null : row.options[Number(slot)]),true,true);
       return true;
     },
     onClose() {

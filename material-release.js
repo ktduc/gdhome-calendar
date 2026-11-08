@@ -143,7 +143,8 @@ async function runDirectExport(mode) {
       (!saved.room || row.room === saved.room)) }))
     .filter(group => group.rows.length) };
   if (!filtered.groups.length) {
-    if (window.GDHomeShell?.toast) GDHomeShell.toast('Phạm vi xuất không có dòng vật liệu nào. Hãy kiểm tra Cài đặt xuất.');
+    if (mode === 'copy') showCopyResult(null,new Error('Phạm vi xuất không có dòng vật liệu nào. Hãy kiểm tra Cài đặt xuất.'));
+    else if (window.GDHomeShell?.toast) GDHomeShell.toast('Phạm vi xuất không có dòng vật liệu nào. Hãy kiểm tra Cài đặt xuất.');
     else alert('Phạm vi xuất không có dòng vật liệu nào.');
     return;
   }

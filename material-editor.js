@@ -179,12 +179,17 @@ function context(target) {
   return { group,row,slot };
 }
 
-function modify(change, render = true) {
-  before.push(structuredClone(sheet));
+let materialEditRevision = 0, pendingMaterialDeletion;
+function modify(change, render = true, recoverDeletion = false) {
+  const snapshot = structuredClone(sheet);
+  const earlierDeletion = recoverDeletion && pendingMaterialDeletion?.sheet === sheet ? pendingMaterialDeletion : null;
+  before.push(snapshot);
   if (before.length > 50) before.shift();
   after = [];
   change();
   queueSave();
+  if (recoverDeletion) pendingMaterialDeletion = {sheet,snapshot:earlierDeletion?.snapshot || snapshot,
+    revision:materialEditRevision,undoEntries:Math.min((earlierDeletion?.undoEntries || 0)+1,before.length)};
   if (render) renderEditor();
 }
 
@@ -210,6 +215,8 @@ function setMaterialSaveStatus(state,detail) {
 
 function queueSave() {
   if (!materialServerReady && !materialGuest) return;
+  materialEditRevision++;
+  pendingMaterialDeletion = null;
   dirty = true;
   clearTimeout(saveTimer);
   setMaterialSaveStatus(conflict ? 'conflict' : 'pending');
@@ -219,6 +226,8 @@ function queueSave() {
 
 async function flushSave() {
   if ((!materialServerReady && !materialGuest) || saving || !dirty || conflict || !sheet) return;
+  const deletion = pendingMaterialDeletion;
+  pendingMaterialDeletion = null;
   saving = true;
   setMaterialSaveStatus('saving');
   dirty = false;
@@ -245,15 +254,26 @@ async function flushSave() {
   } catch (error) {
     dirty = true;
     conflict = error.status === 409;
+    // A rejected deletion can be reverted if no newer edit depends on its state.
+    const restore = deletion && deletion.sheet === sheet && deletion.revision === materialEditRevision;
+    if (restore) {
+      deletion.snapshot.id ||= sheet.id;
+      sheet = deletion.snapshot;
+      before.splice(-deletion.undoEntries);
+      renderEditor();
+    }
     setMaterialSaveStatus(conflict ? 'conflict' : 'error',error.message);
-    say(error.message + (conflict ? ' Có thể sao lưu bản nháp bằng nút bên dưới.' : ' Bấm “Lưu lại” để thử lại.'));
+    say((restore ? 'Đã khôi phục mục vừa xoá. ' : '') + error.message + (conflict ? ' Có thể sao lưu bản nháp bằng nút bên dưới.' : ' Bấm “Lưu lại” để thử lại.'));
     const button = document.createElement('button');
     button.textContent = conflict ? 'Tải bản nháp JSON' : 'Lưu lại';
     button.onclick = () => conflict ? saveDraft() : flushSave();
     byId('notice').append(' ',button);
     return;
   } finally { saving = false; }
-  if (dirty) queueSave();
+  if (dirty) {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(flushSave,550);
+  }
 }
 
 function saveDraft() {
@@ -369,7 +389,7 @@ function editDetail(row, slot) {
     const i = Number(button.dataset.index);
     try {
       if (button.dataset.detail === 'pick') { element.close(); return pick(row,slot); }
-      if (button.dataset.detail === 'remove') modify(() => removeMaterialImage(list,i,pa));
+      if (button.dataset.detail === 'remove') modify(() => removeMaterialImage(list,i,pa),true,true);
       if (button.dataset.detail === 'left' && i > 0) modify(() => { [list[i-1],list[i]] = [list[i],list[i-1]]; },false);
       if (button.dataset.detail === 'crop') {
         const view = await GDHomeAssets.editView(list[i]);
@@ -529,7 +549,7 @@ document.addEventListener('click', async event => {
         break;
       case 'back': await leaveSheet(); break;
       case 'add-pa': modify(() => { row.paCount = Math.min(3,rowPaCount(row)+1); }); break;
-      case 'remove-pa': modify(() => { row.paCount = Number(slot); }); break;
+      case 'remove-pa': modify(() => { row.paCount = Number(slot); },true,true); break;
       case 'jump-group': {
         const destination = sheet.groups.find(group => group.id === button.dataset.id);
         if (onlyUnlinkedGroups && destination && linkedMaterialTask(destination)) {
@@ -802,14 +822,18 @@ function removeMaterialImage(list,index,pa) {
   const [image] = list.splice(index,1);
   if (!image || !pa?.code || pa.autoName === false) return;
   const full = typeof image === 'string' ? image : image.full;
-  if (pa.autoName === true || GDHomeAssets.libraryItemMatches(full,pa.code)) {
-    pa.code = '';
-    delete pa.autoName;
-  }
+  const autoFilled = pa.autoNameAsset ? pa.autoNameAsset === full :
+    (pa.autoName === true && !list.length) || GDHomeAssets.libraryItemMatches(full,pa.code);
+  if (!autoFilled) return;
+  pa.code = '';
+  delete pa.autoName;
+  delete pa.autoNameAsset;
+  if (pa.autoColor === pa.color) pa.color = '';
+  delete pa.autoColor;
 }
 function libraryPicked(row,slot,item) {
   const pa = row.options[Number(slot)];
-  addPickedImage(row,slot,item,() => { if (pa && !pa.code && (item.code || item.name)) { pa.code = item.code || item.name; pa.autoName = true; } });
+  addPickedImage(row,slot,item,() => { if (pa && !pa.code && (item.code || item.name)) { pa.code = item.code || item.name; pa.autoName = true; pa.autoNameAsset = item.full; } });
 }
 let openCellMenuElement = null;
 function closeCellMenu() {
@@ -871,7 +895,7 @@ function openImageCellMenu(anchor, row, group, slot) {
       if (view) modify(() => { setImageView(list, 0, view); }, false);
     });
     addItem('🗑', 'Xoá ảnh', () => {
-      modify(() => removeMaterialImage(list,0,pa));
+      modify(() => removeMaterialImage(list,0,pa),true,true);
     }, true);
   } else if (pa?.paint) {
     addItem('🗑', 'Xoá màu sơn', () => {
@@ -993,11 +1017,12 @@ function woodPicked(row,slot,wood) {
     pa.brand = wood.brand;
     pa.code = wood.code;
     pa.autoName = !!wood.full;
+    pa.autoNameAsset = wood.full;
     if (wood.finish) pa.finish = wood.finish;
     if (wood.full && pa.images.length < 8 && !pa.images.some(img => (typeof img === 'string' ? img : img.full) === wood.full)) {
       pa.images.push({full:wood.full,thumb:wood.thumb});
     }
-    if (!pa.color) pa.color = wood.name;
+    if (!pa.color) { pa.color = wood.name; pa.autoColor = wood.full ? wood.name : undefined; }
     if (!row.spec) row.spec = wood.collection;
   });
 }

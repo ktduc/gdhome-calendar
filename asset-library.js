@@ -173,6 +173,8 @@ window.GDHomeAssets = (() => {
     try {
       const stored = JSON.parse(localStorage.getItem(guestLibraryKey) || 'null');
       if (stored?.categories) {
+        const genericWood = stored.categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
+        if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
         const wood = stored.categories.find(c => c.id === 'ancuong-wood');
         if (wood) wood.name = 'Mã gỗ';
         else stored.categories.push({id:'ancuong-wood',name:'Mã gỗ'});
@@ -180,7 +182,7 @@ window.GDHomeAssets = (() => {
       }
     } catch { /* Dữ liệu khách hỏng thì tạo lại. */ }
     const template = window.materialTemplate || [];
-    return {_version:0,categories:[...template.map(([name],index) => ({id:'cat-' + (index+1),name:name.replace(/\s*\(.*\)\s*$/,''),source:name})),{id:'ancuong-wood',name:'Mã gỗ'}],items:[]};
+    return {_version:0,categories:[...template.map(([name],index) => ({id:'cat-' + (index+1),name:index === 0 ? 'Mẫu ảnh gỗ' : name.replace(/\s*\(.*\)\s*$/,''),source:name})),{id:'ancuong-wood',name:'Mã gỗ'}],items:[]};
   }
   function saveGuest(data) {
     data._version = (data._version || 0) + 1;
@@ -382,6 +384,7 @@ window.GDHomeAssets = (() => {
   function popover(anchor,build) {
     closePicker();
     const panel = document.createElement('div');
+    const lifetime = new AbortController();
     panel.className = 'asset-popover';
     panel.setAttribute('role','dialog');
     document.body.append(panel);
@@ -407,23 +410,24 @@ window.GDHomeAssets = (() => {
     const key = event => { if (event.key === 'Escape' && !event.target.closest?.('dialog[open]')) { event.preventDefault(); event.stopPropagation(); close(); } };
     function close() {
       if (!panel.isConnected) return;
+      lifetime.abort();
       panel.remove();
       document.removeEventListener('pointerdown',outside,true);
       document.removeEventListener('keydown',key,true);
       removeEventListener('resize',place);
       if (openPopover?.panel === panel) openPopover = null;
     }
-    setTimeout(() => document.addEventListener('pointerdown',outside,true));
+    setTimeout(() => { if (panel.isConnected) document.addEventListener('pointerdown',outside,true); });
     document.addEventListener('keydown',key,true);
     addEventListener('resize',place);
     openPopover = {panel,close};
     place();
-    build(panel,close,place);
+    build(panel,close,place,lifetime.signal);
     return openPopover;
   }
 
   function pickRender(anchor,{projectId,groupName,onPick,title = 'Phối cảnh 3D của dự án'}) {
-    return popover(anchor,async (panel,close,place) => {
+    return popover(anchor,async (panel,close,place,signal) => {
       let query = '';
       async function paint(force = false) {
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
@@ -461,15 +465,17 @@ window.GDHomeAssets = (() => {
         }
         place();
       }
+      document.addEventListener('gdhome:renders-changed',event => { if (event.detail === projectId) paint(); },{signal});
       paint();
     });
   }
 
   function pickLibrary(anchor,{groupName,onPick,title = 'Mẫu vật liệu · Dữ liệu dùng chung'}) {
-    return popover(anchor,async (panel,close,place) => {
+    return popover(anchor,async (panel,close,place,signal) => {
       let data, categoryId, query = '';
       async function paint() {
         try { data = await loadLibrary(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
+        if (!panel.isConnected) return;
         categoryId ||= categoryFor(data,groupName)?.id || 'all';
         const items = data.items.filter(item => item.full && (categoryId === 'all' || item.categoryId === categoryId) &&
           (!query || fold(item.name).includes(fold(query)))).sort((a,b) => (b.used || 0)-(a.used || 0));
@@ -510,6 +516,7 @@ window.GDHomeAssets = (() => {
         place();
       }
       panel.innerHTML = '<p class="asset-empty">Đang tải…</p>';
+      document.addEventListener('gdhome:library-changed',paint,{signal});
       paint();
     });
   }

@@ -41,6 +41,8 @@ function normalize(data) {
   const categories = (Array.isArray(base.categories) ? base.categories : [])
     .filter(c => c && typeof c.id === 'string' && text(c.name))
     .slice(0, 200).map(c => ({ id: c.id.slice(0, 60), name: text(c.name, 80), ...(c.source ? { source: text(c.source, 160) } : {}) }));
+  const genericWood = categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
+  if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
   const wood = categories.find(c => c.id === woodCategory.id);
   if (wood) wood.name = woodCategory.name;
   else categories.push({...woodCategory});

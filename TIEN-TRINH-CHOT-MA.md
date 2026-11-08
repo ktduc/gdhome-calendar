@@ -289,3 +289,23 @@ XONG GĐ16
 Kiểm tra: `node --test` 51/51. Playwright: 17.3, 17.2, 17.0, 17.1, 17.4, 17.5, 17.6 và hồi quy 16.3, 16.4, 16.6, 16.7. PDF mẫu do pdf-lib tạo có 2 trang và 18 mã; ca 17.6 kiểm tra vị trí cắt theo màu, kéo khung, bỏ chọn, bỏ trùng và đưa swatch vào PA.
 
 XONG GĐ17
+
+
+## GĐ18 (GPT) · 09/11/2026
+
+| Bước | Kết quả |
+|---|---|
+| 18.1 | Xoá dòng, PA và ảnh cập nhật bảng ngay. Thư viện và kho 3D ẩn ảnh trong lúc gửi yêu cầu, khôi phục nếu yêu cầu thất bại. Cache thư viện bỏ qua phản hồi phiên bản cũ. Nếu máy chủ từ chối lưu thao tác xoá trong bảng, bản nháp khôi phục mục xoá khi chưa có chỉnh sửa mới. Nếu đã sửa tiếp, giữ bản nháp và cho phép hoàn tác hoặc thử lưu lại. |
+| 18.2 | Popover mở xuống khi đủ chỗ, mở lên khi gần đáy, hoặc đặt giữa khi hai phía đều thiếu chỗ. Nội dung cuộn trong khung. |
+| 18.5 | Vị trí mã trong bản xuất có ba lựa chọn. Mặc định hiện trên ảnh và bỏ dòng mã lặp bên dưới. Xoá ảnh dọn mã tự điền gắn với ảnh và giữ mã gõ tay. |
+| 18.6 | Copy ảnh mở hộp kết quả nhỏ với ảnh, trạng thái clipboard, Tải PNG và Mở xem lớn. Đóng bằng Esc, nút Đóng hoặc bấm nền. |
+| 18.7 | Sidebar mặc định ẩn ảnh xem trước. Khi bật, ảnh tối đa 40×40 px, hai hàng và nút +n. |
+| 18.4 | Tên và mã dài xuống dòng trong ô PA và trong chú thích bản xuất. |
+| 18.3 | Mã gỗ có hãng, catalogue và tìm không dấu. Nhập PDF hỗ trợ hãng tự nhập. Dữ liệu gỗ cũ được gán An Cường. |
+| 18.10 | Kéo ảnh giữa các ô cùng loại dùng lại full/thumb. Giữ Shift để chuyển ảnh. Có dấu vị trí thả và hoàn tác. |
+| 18.9 | Bảng mới, bản sao và bảng do AI tạo có hậu tố phiên bản theo tên gốc trong từng dự án. Ngày được thêm nếu phiên bản đề xuất trùng. |
+| 18.8 | Hộp thư viện và các bộ chọn hiện Tìm trên mạng khi còn dưới bốn kết quả phù hợp. Ảnh tải qua proxy, có thể đưa vào ô và bỏ tích nếu không muốn lưu thêm vào hạng mục thư viện. |
+
+`node --test` đạt 51/51. Playwright đạt cả 10 ca GĐ18-GPT và 8 ca hồi quy GĐ16–17. Ca 18.1 giả lập mạng trễ 1,5 giây và lỗi 503. Ca 18.10 kiểm tra không có request tải ảnh lên khi kéo thả. Phần GPT dùng các điểm nối sẵn có của Chốt mã, không cần thay đổi các file dùng chung do Antigravity phụ trách.
+
+XONG GĐ18-GPT
