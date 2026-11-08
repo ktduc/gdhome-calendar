@@ -966,6 +966,10 @@ function woodPicked(row,slot,wood) {
   modify(() => {
     pa.brand = 'An Cường';
     pa.code = wood.code;
+    if (wood.finish) pa.finish = wood.finish;
+    if (wood.full && pa.images.length < 8 && !pa.images.some(img => (typeof img === 'string' ? img : img.full) === wood.full)) {
+      pa.images.push({full:wood.full,thumb:wood.thumb});
+    }
     if (!pa.color) pa.color = wood.name;
     if (!row.spec) row.spec = wood.collection;
   });
@@ -1001,13 +1005,14 @@ async function fillMaterialAssetSidebar(force = false) {
     try {
       const data = await GDHomeAssets.loadLibrary();
       if (!summary.isConnected || revision !== assetSidebarRevision) return;
-      summary.textContent = data.items.length + ' ảnh mẫu · ' + data.categories.length + ' hạng mục';
+      const images = data.items.filter(item => item.thumb);
+      summary.textContent = images.length + ' ảnh mẫu · ' + data.categories.length + ' hạng mục';
       const preview = box().querySelector('[data-library-strip]');
       if (!preview) return;
-      preview.innerHTML = materialView.hideAssetPreviews ? '' : data.items.slice(0,5).map(item =>
+      preview.innerHTML = materialView.hideAssetPreviews ? '' : images.slice(0,5).map(item =>
         '<button type="button" data-action="open-library" data-category="' + html(item.categoryId) + '" title="' + html(item.name) +
         '"><img data-lib-asset="' + html(item.thumb) + '" alt="' + html(item.name || 'Ảnh mẫu') + '"></button>').join('') +
-        (data.items.length > 5 ? '<button type="button" class="more" data-action="open-library">+' + (data.items.length-5) + '</button>' : '');
+        (images.length > 5 ? '<button type="button" class="more" data-action="open-library">+' + (images.length-5) + '</button>' : '');
       GDHomeAssets.hydrate(preview);
     } catch (error) { summary.textContent = error.message; }
   }

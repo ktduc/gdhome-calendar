@@ -8,6 +8,12 @@ const libraryKey = dataKey => 'lib-v1-' + crypto.createHash('sha256').update(dat
 const text = (value, max = 160) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
 const shortName = name => text(name.replace(/\s*\(.*\)\s*$/, ''), 80) || text(name, 80);
 const queues = new Map();
+const woodCategory = {id:'ancuong-wood',name:'Mã gỗ An Cường'};
+const woodSeed = require('./data/wood-ancuong.json').woods.map((wood,i) => ({
+  ...wood,id:'ancuong-seed-' + i,categoryId:woodCategory.id,finish:'',createdAt:1
+}));
+const woodKey = code => text(code,80).toUpperCase().replace(/\s+/g,'');
+const woodMeta = item => ({code:text(item.code,80),collection:text(item.collection,120),finish:text(item.finish,120)});
 
 function fail(status, message) {
   throw Object.assign(new Error(message), { status });
@@ -17,7 +23,8 @@ function defaultLibrary() {
   return {
     _version: 0,
     categories: materialTemplate.map(([name], index) => ({ id: 'cat-' + (index + 1), name: shortName(name), source: name })),
-    items: []
+    items: [],
+    woodSeeded:false
   };
 }
 
@@ -33,20 +40,25 @@ function normalize(data) {
   const categories = (Array.isArray(base.categories) ? base.categories : [])
     .filter(c => c && typeof c.id === 'string' && text(c.name))
     .slice(0, 200).map(c => ({ id: c.id.slice(0, 60), name: text(c.name, 80), ...(c.source ? { source: text(c.source, 160) } : {}) }));
+  if (!categories.some(c => c.id === woodCategory.id)) categories.push({...woodCategory});
   const ids = new Set(categories.map(c => c.id));
   const items = (Array.isArray(base.items) ? base.items : [])
-    .filter(item => item && imageName(item.full) && imageName(item.thumb))
+    .filter(item => item && ((imageName(item.full) && imageName(item.thumb)) || (item.categoryId === woodCategory.id && woodKey(item.code))))
     .slice(0, 5000).map(item => ({
       id: String(item.id || crypto.randomUUID()).slice(0, 60),
       categoryId: ids.has(item.categoryId) ? item.categoryId : (categories[0]?.id || ''),
       name: text(item.name, 160),
       note: text(item.note, 500),
-      full: item.full,
-      thumb: item.thumb,
+      ...(imageName(item.full) && imageName(item.thumb) ? {full:item.full,thumb:item.thumb} : {}),
+      ...(woodKey(item.code) ? woodMeta(item) : {}),
       createdAt: Number(item.createdAt) || Date.now(),
       ...(Number(item.used) > 0 ? { used: Math.min(1e6, Math.floor(Number(item.used))) } : {})
     }));
-  return { _version: Number(base._version) || 0, categories, items };
+  if (!base.woodSeeded) {
+    const keys = new Set(items.filter(item => item.categoryId === woodCategory.id).map(item => woodKey(item.code)));
+    items.push(...woodSeed.filter(item => !keys.has(woodKey(item.code))));
+  }
+  return { _version: Number(base._version) || 0, categories, items,woodSeeded:true };
 }
 
 // Ghép tên nhóm vật liệu (vd "GẠCH ỐP LÁT (sảnh, WC, logia)") với một hạng mục thư viện.
@@ -102,19 +114,30 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const categoryId = data.categories.some(c => c.id === body.categoryId) ? body.categoryId : null;
       if (!categoryId) fail(400, 'Chọn hạng mục cho ảnh.');
       const added = [];
+      let skipped = 0;
       for (const item of list) {
         if (!imageName(item.full) || !imageName(item.thumb)) fail(400, 'Ảnh không hợp lệ.');
-        const existing = data.items.find(entry => entry.full === item.full && entry.categoryId === categoryId);
+        const metadata = categoryId === woodCategory.id ? woodMeta(item) : {};
+        const key = woodKey(metadata.code);
+        const existing = data.items.find(entry => entry.categoryId === categoryId &&
+          (key ? woodKey(entry.code) === key : !entry.code && entry.full === item.full));
+        if (key && existing) {
+          if (!existing.full) {
+            Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb});
+            added.push(existing);
+          } else skipped++;
+          continue;
+        }
         if (existing) { added.push(existing); continue; }
         const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
-          full: item.full, thumb: item.thumb, createdAt: Date.now() };
+          full: item.full, thumb: item.thumb, createdAt: Date.now(),...metadata };
         data.items.unshift(entry);
         added.push(entry);
       }
       if (data.items.length > 5000) fail(400, 'Thư viện đã đủ 5.000 ảnh.');
-      return added;
+      return {added,skipped};
     });
-    return sendJson(res, 200, { ...data, added: result });
+    return sendJson(res, 200, { ...data, ...result });
   }
   if (urlPath === '/api/library/items/update') {
     const { data } = await mutate(store, key, data => {
@@ -152,6 +175,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     return sendJson(res, 200, { ...data, category: result });
   }
   if (urlPath === '/api/library/categories/delete') {
+    if (body.id === woodCategory.id) fail(400,'Không thể xoá hạng mục Mã gỗ An Cường.');
     const { data } = await mutate(store, key, data => {
       if (data.items.some(item => item.categoryId === body.id)) fail(409, 'Hạng mục còn ảnh. Chuyển hoặc xoá ảnh trước.');
       data.categories = data.categories.filter(c => c.id !== body.id);

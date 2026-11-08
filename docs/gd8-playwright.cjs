@@ -1518,6 +1518,18 @@ cases['17.3'] = async page => {
   await page.getByText(/Đã copy ảnh bảng \(/).waitFor();
   assert.equal(await page.evaluate(() => window.printPreviewOpened),false);
   assert.equal(await page.locator('#print-preview[open]').count(),0);
+  await page.evaluate(() => { window.html2canvas = async () => { throw new Error('Test clipboard'); }; });
+  await page.locator('#material-copy').click();
+  const errorToast = page.locator('.toast-notification').filter({hasText:'Test clipboard'});
+  await errorToast.waitFor();
+  assert.equal(await page.evaluate(() => window.printPreviewOpened),false);
+  await errorToast.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#print-preview[open]').waitFor();
+  await page.locator('#close-print').click();
+  await page.locator('.hdr-split-caret').click();
+  await page.locator('[data-image-mode=preview]').click();
+  await page.locator('#print-preview[open]').waitFor();
+  await page.locator('#close-print').click();
 };
 
 cases['17.2'] = async page => {
@@ -1531,7 +1543,7 @@ cases['17.2'] = async page => {
   await dialog.locator('#delete-project-target').selectOption('gd13-other');
   await dialog.locator('#move-project-stages').click();
   assert.equal(await page.evaluate(() => AppState.calendars.find(c => c.id === 'c1').ownerId),'gd13-other');
-  await page.locator('.toast-notification button').dispatchEvent('click');
+  await page.locator('.toast-notification.show').getByRole('button',{name:'Hoàn tác'}).click();
   await deleteButton.dispatchEvent('click');
   await dialog.locator('#delete-project-confirm').fill('Căn hộ mẫu GĐ8');
   await dialog.locator('#delete-project-all').click();
@@ -1632,6 +1644,77 @@ cases['17.5'] = async page => {
   await page.getByText('Đã gỡ kết nối.').waitFor();
   const fallback = await page.request.get('/api/google/search?q=oak').then(response => response.json());
   assert.equal(fallback.configured,false);
+};
+
+cases['17.6'] = async page => {
+  const {PDFDocument,rgb,StandardFonts} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const colors = [];
+  for (let n=0;n<2;n++) {
+    const sheet = pdf.addPage([600,600]);
+    for (let i=0;i<9;i++) {
+      const id = n*9+i;
+      const color = [((id*71+70)%200+20)/255,((id*37+80)%200+20)/255,((id*131+90)%200+20)/255];
+      colors.push(color.map(value => Math.round(value*255)));
+      const x = 30+(i%3)*190, y = 430-Math.floor(i/3)*190;
+      sheet.drawRectangle({x,y,width:150,height:130,color:rgb(...color)});
+      sheet.drawText('MS ' + (3000+id) + ' - Oak ' + (id+1),{x:x+12,y:y-10,size:10,font});
+    }
+  }
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route => {
+    const name = new URL(route.request().url()).pathname.split('/').at(-1);
+    return route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,name),contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}});
+  });
+  await openMaterials(page);
+  await page.locator('[data-sidebar=library] .material-sidebar-actions [data-action=open-library]').click();
+  await page.locator('.asset-library-dialog [data-cat=ancuong-wood]').click();
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=pdf]').setInputFiles({name:'fixture-ancuong.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.locator('[name=collection]').fill('Vân gỗ thử');
+  await modal.locator('[name=finish]').fill('Mờ');
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  const save = modal.locator('[data-save-wood]');
+  await page.waitForFunction(() => !document.querySelector('.wood-catalogue-controls [type=submit]')?.disabled,null,{timeout:25000});
+  assert.ok(await save.isEnabled(),await modal.getByRole('status').textContent());
+  const cards = modal.locator('.wood-catalogue-card');
+  assert.equal(await cards.count(),18);
+  const pixels = await cards.evaluateAll(cards => cards.map(card => {
+    const canvas = card.querySelector('canvas'), ctx = canvas.getContext('2d');
+    return {code:card.querySelector('[data-wood-code-input]').value,
+      rgb:[...ctx.getImageData(Math.floor(canvas.width/2),Math.floor(canvas.height/2),1,1).data.slice(0,3)]};
+  }));
+  for (const [i,entry] of pixels.entries()) {
+    assert.equal(entry.code,'MS ' + (3000+i));
+    assert.ok(entry.rgb.every((value,ch) => Math.abs(value-colors[i][ch]) < 12),JSON.stringify(entry));
+  }
+  await cards.first().locator('[data-edit-wood-crop]').click();
+  const crop = page.locator('.wood-crop-dialog');
+  const frame = crop.locator('.wood-crop-frame');
+  const before = await frame.boundingBox();
+  await page.mouse.move(before.x+before.width/2,before.y+before.height/2);
+  await page.mouse.down();
+  await page.mouse.move(before.x+before.width/2+8,before.y+before.height/2+3);
+  await page.mouse.up();
+  assert.ok((await frame.boundingBox()).x > before.x);
+  await crop.getByRole('button',{name:'Áp dụng khung cắt'}).click();
+  await cards.last().locator('[data-wood-include]').uncheck();
+  await save.click();
+  await modal.getByText('Đã lưu 17 mã · bỏ qua 0 mã trùng.').waitFor({timeout:25000});
+  await save.click();
+  await modal.getByText('Đã lưu 0 mã · bỏ qua 17 mã trùng.').waitFor();
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.evaluate(() => modify(() => { sheet.groups[0].name = 'MÃ GỖ'; }));
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  await cell.click();
+  const picker = page.locator('.asset-popover');
+  await picker.locator('select').selectOption('Vân gỗ thử');
+  await picker.locator('input[type=search]').fill('van go thu');
+  await picker.locator('[data-wood-code="MS 3000"]').click();
+  assert.equal(await page.locator('[data-row="g1-r1"] input[data-field=code]').first().inputValue(),'MS 3000');
+  await cell.locator('.image-open img').waitFor();
 };
 
 async function main() {

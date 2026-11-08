@@ -92,7 +92,7 @@ window.GDHomeAssets = (() => {
   async function* pdfPages(file) {
     const pdfjs = await loadPdfJs();
     if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
-    const pdf = await pdfjs.getDocument({data:await file.arrayBuffer()}).promise;
+    const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
     for (let number = 1; number <= pdf.numPages; number++) {
       const page = await pdf.getPage(number);
       const base = page.getViewport({scale:1});
@@ -167,10 +167,13 @@ window.GDHomeAssets = (() => {
   function guestLibrary() {
     try {
       const stored = JSON.parse(localStorage.getItem(guestLibraryKey) || 'null');
-      if (stored?.categories) return stored;
+      if (stored?.categories) {
+        if (!stored.categories.some(c => c.id === 'ancuong-wood')) stored.categories.push({id:'ancuong-wood',name:'Mã gỗ An Cường'});
+        return stored;
+      }
     } catch { /* Dữ liệu khách hỏng thì tạo lại. */ }
     const template = window.materialTemplate || [];
-    return {_version:0,categories:template.map(([name],index) => ({id:'cat-' + (index+1),name:name.replace(/\s*\(.*\)\s*$/,''),source:name})),items:[]};
+    return {_version:0,categories:[...template.map(([name],index) => ({id:'cat-' + (index+1),name:name.replace(/\s*\(.*\)\s*$/,''),source:name})),{id:'ancuong-wood',name:'Mã gỗ An Cường'}],items:[]};
   }
   function saveGuest(data) {
     data._version = (data._version || 0) + 1;
@@ -202,9 +205,15 @@ window.GDHomeAssets = (() => {
   }
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
   const addItems = (categoryId,items) => libraryCall('items',{categoryId,items},data => {
-    const added = items.map(item => ({id:uid(),categoryId,name:item.name || '',note:'',full:item.full,thumb:item.thumb,createdAt:Date.now()}));
+    const added = [];
+    let skipped = 0;
+    for (const item of items) {
+      if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code?.replace(/\s+/g,'').toUpperCase() === item.code.replace(/\s+/g,'').toUpperCase())) { skipped++; continue; }
+      added.push({id:uid(),categoryId,name:item.name || '',note:'',full:item.full,thumb:item.thumb,createdAt:Date.now(),
+        ...(item.code ? {code:item.code,collection:item.collection,finish:item.finish} : {})});
+    }
     data.items.unshift(...added);
-    return {added};
+    return {added,skipped};
   });
   const updateItem = patch => libraryCall('items/update',patch,data => {
     const item = data.items.find(entry => entry.id === patch.id);
@@ -327,8 +336,8 @@ window.GDHomeAssets = (() => {
     if (!items.length) return '<p class="asset-empty">' + esc(empty) + '</p>';
     return '<div class="asset-grid">' + items.map(item => '<figure class="asset-card" data-asset-id="' + esc(item.id) + '">' +
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
-      '<img data-lib-asset="' + esc(item.thumb) + '" alt="' + esc(item.name || 'Ảnh') + '"></button>' +
-      '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : (item.name || item.room || '')) + '</figcaption>' +
+      (item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '" alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
+      '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish].filter(Boolean).join(' · '))) + '</figcaption>' +
       (removable ? '<button type="button" class="asset-remove" data-asset-remove aria-label="Xoá ảnh">×</button>' : '') + '</figure>').join('') + '</div>';
   }
   function filePicker(accept,multiple = true) {
@@ -482,7 +491,7 @@ window.GDHomeAssets = (() => {
       const res = await fetch('/api/google/search?q=' + encodeURIComponent(query.trim()), { headers: hooks.headers() });
       const data = await res.json().catch(() => ({}));
       if (data.configured && data.items && data.items.length) {
-        container.innerHTML = '<div class="asset-google-fallback"><p><strong>Tìm thấy ' + data.items.length + ' ảnh trên Google cho "' + esc(query) + '":</strong></p>' +
+        container.innerHTML = '<div class="asset-google-fallback"><p><strong>Tìm thấy ' + data.items.length + ' ảnh trực tuyến cho "' + esc(query) + '":</strong></p>' +
           '<div class="asset-google-grid">' +
           data.items.slice(0, 12).map((item, idx) => '<button type="button" class="asset-google-item" data-google-idx="' + idx + '" title="' + esc(item.title) + '"><img src="' + esc(item.thumbnail || item.link) + '" alt="' + esc(item.title) + '"></button>').join('') +
           '</div><p class="asset-hint">Bấm vào ảnh để tải về và lưu vào ô</p></div>';
@@ -611,32 +620,34 @@ window.GDHomeAssets = (() => {
     });
   }
 
-  let woodCache = null;
   async function loadWoodData() {
-    if (!woodCache) {
-      const res = await fetch('/data/wood-ancuong.json');
-      if (!res.ok) throw new Error('Không tải được danh mục mã gỗ An Cường');
-      woodCache = await res.json();
+    const library = await loadLibrary();
+    if (isGuest()) {
+      const response = await fetch('/data/wood-ancuong.json');
+      const seed = response.ok ? (await response.json()).woods : [];
+      const imported = library.items.filter(item => item.categoryId === 'ancuong-wood' && item.code);
+      const key = code => String(code).replace(/\s+/g,'').toUpperCase();
+      return {woods:[...imported,...seed.filter(item => !imported.some(entry => key(entry.code) === key(item.code)))],source:'Dữ liệu dùng chung'};
     }
-    return woodCache;
+    return {woods:library.items.filter(item => item.categoryId === 'ancuong-wood' && item.code),source:'Dữ liệu dùng chung'};
   }
 
-  function pickWood(anchor, { groupName, onPick, title = 'Mã gỗ An Cường' } = {}) {
+  function pickWood(anchor, { onPick, title = 'Mã gỗ An Cường' } = {}) {
     return popover(anchor, async (panel, close, place) => {
       let collection = 'all', query = '', woodData = null;
       async function paint() {
         try { woodData = await loadWoodData(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
         const collections = Array.from(new Set((woodData.woods || []).map(w => w.collection).filter(Boolean)));
         const woods = (woodData.woods || []).filter(w => (collection === 'all' || w.collection === collection) &&
-          (!query || fold(w.code).includes(fold(query)) || fold(w.name).includes(fold(query))));
+          (!query || fold(w.code).includes(fold(query)) || fold(w.name).includes(fold(query)) || fold(w.collection).includes(fold(query))));
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
           '<select aria-label="Dòng sản phẩm"><option value="all">Tất cả dòng sản phẩm</option>' +
           collections.map(col => '<option value="' + esc(col) + '"' + (col === collection ? ' selected' : '') + '>' + esc(col) + '</option>').join('') + '</select>' +
-          '<input type="search" placeholder="Tìm theo mã hoặc tên (vd: 7241, Óc chó, Sồi...)" value="' + esc(query) + '"></div>' +
+          '<input type="search" placeholder="Tìm theo mã, tên hoặc catalogue" value="' + esc(query) + '"></div>' +
           '<div class="asset-body">' +
           (woods.length ? '<div class="asset-wood-grid">' + woods.map(w => '<button type="button" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
-            '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span>' +
+            (w.thumb ? '<img data-lib-asset="' + esc(w.thumb) + '" alt="">' : '') + '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span>' +
             '<span class="wood-badge">' + esc(w.collection) + '</span></button>').join('') + '</div>' :
             '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p><div class="asset-google-fallback-slot"></div>') +
           '</div>' +
@@ -660,9 +671,10 @@ window.GDHomeAssets = (() => {
           button.onclick = () => {
             const w = woods.find(entry => entry.code === button.dataset.woodCode);
             close();
-            if (w) onPick?.({ kind: 'wood', brand: 'An Cường', code: w.code, name: w.name, collection: w.collection });
+            if (w) onPick?.({...w,kind:'wood',brand:'An Cường'});
           };
         });
+        hydrate(panel);
         if (!woods.length && query.trim()) {
           renderGoogleFallback(panel.querySelector('.asset-google-fallback-slot'), query, {
             onPickImage: entry => {
@@ -708,6 +720,216 @@ window.GDHomeAssets = (() => {
     return {dialog,body:dialog.querySelector('.asset-dialog-body')};
   }
 
+  const woodPatterns = [
+    '\\b\\d{3,4}\\s?[A-Z]{1,3}\\b', '\\bMS\\s?\\d{3,4}\\b',
+    '\\b[A-Z]{1,3}\\s?\\d{3,4}(\\s?[A-Z]{1,3})?\\b', '\\b\\d{9}\\b'
+  ];
+  const catalogueKey = code => code.toUpperCase().replace(/\s+/g,'');
+  const bounded = (value,min,max) => Math.max(min,Math.min(max,value));
+  async function scanWoodCatalogue(file,patterns,direction,onPage) {
+    const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
+    if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
+    const pdfjs = await loadPdfJs();
+    if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
+    const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
+    const results = [];
+    try {
+      for (let number = 1; number <= pdf.numPages; number++) {
+        onPage(number,pdf.numPages);
+        const page = await pdf.getPage(number);
+        const base = page.getViewport({scale:1});
+        const scale = Math.min(3,1600/Math.max(base.width,base.height));
+        const viewport = page.getViewport({scale});
+        const {items} = await page.getTextContent();
+        const labels = items.filter(item => item.str?.trim()).map(item => {
+          const [x,y] = viewport.convertToViewportPoint(item.transform[4],item.transform[5]);
+          return {text:item.str.trim(),x,y,width:item.width*scale,height:Math.max(1,item.height*scale)};
+        });
+        const matches = labels.flatMap(label => {
+          const match = regexes.map(regex => label.text.match(regex)).filter(Boolean)
+            .sort((a,b) => a.index-b.index || b[0].length-a[0].length)[0];
+          if (!match?.[0] || match[0].length > 80) return [];
+          const name = label.text.replace(match[0],'').replace(/^[\s:–—-]+/,'').trim() ||
+            labels.find(other => other !== label && Math.abs(other.y-label.y) <= label.height*.5 &&
+              other.x >= label.x+label.width-2 && other.x-label.x-label.width < label.height*4 &&
+              !regexes.some(regex => regex.test(other.text)))?.text || '';
+          return [{...label,code:match[0].trim().toUpperCase(),name}];
+        });
+        if (!matches.length) { page.cleanup(); continue; }
+        if (results.length + matches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        const context = canvas.getContext('2d');
+        await page.render({canvasContext:context,viewport}).promise;
+        // Save page as a compressed image and keep only the swatch canvases live.
+        const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
+        const nearest = (values,fallback) => values.length ? Math.min(...values) : fallback;
+        for (const label of matches) {
+          const dx = nearest(matches.filter(o => Math.abs(o.y-label.y) < label.height && Math.abs(o.x-label.x) > label.height*2)
+            .map(o => Math.abs(o.x-label.x)),canvas.width/Math.max(1,new Set(matches.map(m => Math.round(m.x/label.height))).size));
+          const dy = nearest(matches.filter(o => Math.abs(o.y-label.y) > label.height*2)
+            .map(o => Math.abs(o.y-label.y)),canvas.height*.35);
+          const w = Math.min(canvas.width, direction === 'left' ? dx*.58 : dx*.72);
+          const h = Math.min(canvas.height,dy*.66);
+          const x = bounded(direction === 'left' ? label.x-w-label.height*.4 : label.x-dx*.06,0,canvas.width-w);
+          const y = bounded(direction === 'left' ? label.y-h*.55 : label.y-h-label.height*1.2,0,canvas.height-h);
+          results.push({code:label.code,name:label.name,page:number,source,width:canvas.width,height:canvas.height,
+            crop:{x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height}});
+        }
+        canvas.width = canvas.height = 0;
+        page.cleanup();
+      }
+    } catch (error) {
+      for (const source of new Set(results.map(item => item.source))) URL.revokeObjectURL(source);
+      throw error;
+    } finally { await pdf.destroy(); }
+    return results;
+  }
+  function drawSwatch(canvas,image,crop,max = 480) {
+    const w = image.naturalWidth*crop.w, h = image.naturalHeight*crop.h;
+    const scale = Math.min(1,max/Math.max(w,h));
+    canvas.width = Math.max(1,Math.round(w*scale));
+    canvas.height = Math.max(1,Math.round(h*scale));
+    canvas.getContext('2d').drawImage(image,image.naturalWidth*crop.x,image.naturalHeight*crop.y,w,h,0,0,canvas.width,canvas.height);
+  }
+  async function openWoodCatalogue(categoryId,onSaved) {
+    const {dialog,body} = modal('wood-catalogue-dialog','Nhập catalogue PDF An Cường');
+    const sources = new Set();
+    dialog.addEventListener('close',() => { for (const source of sources) URL.revokeObjectURL(source); },{once:true});
+    body.innerHTML = '<form class="wood-catalogue-controls">' +
+      '<label>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
+      '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
+      '<label>Catalogue <input name="collection" list="wood-catalogues" maxlength="120" placeholder="VD: Melamine/MFC"></label>' +
+      '<datalist id="wood-catalogues"><option>Melamine/MFC</option><option>Laminate</option><option>Acrylic</option><option>Veneer</option></datalist>' +
+      '<label>Bề mặt <input name="finish" maxlength="120" placeholder="VD: Mờ"></label>' +
+      '<details><summary>Mẫu mã (regex)</summary><label>Mỗi dòng một mẫu<textarea name="patterns" rows="4" maxlength="1000">' +
+      esc(woodPatterns.join('\n')) + '</textarea></label></details>' +
+      '<button type="submit">Đọc PDF</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></form>' +
+      '<p role="status"></p><div class="wood-catalogue-results"></div>';
+    const form = body.querySelector('form'), status = body.querySelector('[role=status]');
+    const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
+    const read = form.querySelector('[type=submit]');
+    let items = [], busy = false;
+    const loadPageImage = async source => {
+      const image = new Image();
+      image.src = source;
+      await image.decode();
+      return image;
+    };
+    form.onsubmit = async event => {
+      event.preventDefault();
+      if (busy) return;
+      busy = read.disabled = save.disabled = true;
+      list.replaceChildren();
+      for (const source of sources) URL.revokeObjectURL(source);
+      sources.clear();
+      try {
+        items = await scanWoodCatalogue(form.elements.pdf.files[0],form.elements.patterns.value,form.elements.direction.value,
+          (page,total) => { status.textContent = 'Đang đọc trang ' + page + '/' + total + '…'; });
+        if (!dialog.open) { for (const item of items) URL.revokeObjectURL(item.source); return; }
+        for (const item of items) sources.add(item.source);
+        status.textContent = items.length ? 'Nhận diện ' + items.length + ' mã. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mã. Thử đổi mẫu nhận diện.';
+        list.innerHTML = items.map(item => '<article class="wood-catalogue-card">' +
+          '<canvas aria-label="Ảnh swatch"></canvas><small>Trang ' + item.page + '</small>' +
+          '<label><input type="checkbox" data-wood-include checked> Lưu mã này</label>' +
+          '<label>Mã <input data-wood-code-input maxlength="80" value="' + esc(item.code) + '"></label>' +
+          '<label>Tên <input data-wood-name-input maxlength="160" value="' + esc(item.name) + '"></label>' +
+          '<button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></article>').join('');
+        const cards = [...list.children];
+        let lastSource, image;
+        for (const [i,item] of items.entries()) {
+          if (!dialog.open) return;
+          if (lastSource !== item.source) { image = await loadPageImage(item.source); lastSource = item.source; }
+          const canvas = cards[i].querySelector('canvas');
+          drawSwatch(canvas,image,item.crop);
+          cards[i].querySelector('[data-edit-wood-crop]').onclick = async () => {
+            const image = await loadPageImage(item.source);
+            editWoodCrop(image,item.crop,crop => { item.crop = crop; drawSwatch(canvas,image,crop); });
+          };
+        }
+        save.disabled = !items.length;
+      } catch (error) { status.textContent = error.message; }
+      finally { busy = read.disabled = false; }
+    };
+    save.onclick = async () => {
+      if (busy || !form.reportValidity()) return;
+      const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
+      if (!collection) { status.textContent = 'Nhập tên catalogue.'; return; }
+      const selected = [...list.children].flatMap(card => {
+        const code = card.querySelector('[data-wood-code-input]').value.trim();
+        return card.querySelector('[data-wood-include]').checked && code ?
+          [{card,code,name:card.querySelector('[data-wood-name-input]').value.trim()}] : [];
+      });
+      if (!selected.length) { status.textContent = 'Chọn ít nhất một thẻ có mã.'; return; }
+      busy = read.disabled = save.disabled = true;
+      let added = 0, skipped = 0, batch = [];
+      try {
+        const data = await loadLibrary();
+        const existing = new Set(data.items.filter(item => item.categoryId === categoryId && item.code && item.full).map(item => catalogueKey(item.code)));
+        const flush = async () => {
+          if (!batch.length) return;
+          const result = await addItems(categoryId,batch);
+          added += result.added.length;
+          skipped += result.skipped || 0;
+          batch = [];
+        };
+        for (const {card,code,name} of selected) {
+          if (!dialog.open) break;
+          const key = catalogueKey(code);
+          if (existing.has(key)) { skipped++; continue; }
+          existing.add(key);
+          status.textContent = 'Đang lưu ' + code + '…';
+          const blob = await new Promise(resolve => card.querySelector('canvas').toBlob(resolve,'image/webp',.9));
+          if (!blob || blob.type !== 'image/webp') throw new Error('Không tạo được ảnh WebP.');
+          const full = await storeAsset(blob);
+          batch.push({full,thumb:full,code,name,collection,finish});
+          if (batch.length === 50) await flush();
+        }
+        await flush();
+        status.textContent = 'Đã lưu ' + added + ' mã · bỏ qua ' + skipped + ' mã trùng.';
+        onSaved?.();
+      } catch (error) { status.textContent = (added ? 'Đã lưu ' + added + ' mã. ' : '') + error.message; }
+      finally { busy = read.disabled = save.disabled = false; }
+    };
+  }
+
+  function editWoodCrop(image,current,onSave) {
+    const {dialog,body} = modal('wood-crop-dialog','Chỉnh khung cắt swatch');
+    const crop = {...current};
+    const stage = document.createElement('div');
+    stage.className = 'wood-crop-stage';
+    const frame = document.createElement('div');
+    frame.className = 'wood-crop-frame';
+    frame.innerHTML = '<span title="Kéo để đổi kích thước"></span>';
+    stage.append(image,frame);
+    body.append(stage);
+    const save = document.createElement('button');
+    save.type = 'button';
+    save.textContent = 'Áp dụng khung cắt';
+    body.append(save);
+    const paint = () => Object.assign(frame.style,{left:crop.x*100+'%',top:crop.y*100+'%',width:crop.w*100+'%',height:crop.h*100+'%'});
+    frame.onpointerdown = event => {
+      const start = {...crop}, x = event.clientX, y = event.clientY, rect = stage.getBoundingClientRect();
+      const resize = event.target === frame.firstElementChild;
+      frame.setPointerCapture(event.pointerId);
+      frame.onpointermove = event => {
+        const dx = (event.clientX-x)/rect.width, dy = (event.clientY-y)/rect.height;
+        if (resize) {
+          crop.w = bounded(start.w+dx,.02,1-crop.x);
+          crop.h = bounded(start.h+dy,.02,1-crop.y);
+        } else {
+          crop.x = bounded(start.x+dx,0,1-crop.w);
+          crop.y = bounded(start.y+dy,0,1-crop.h);
+        }
+        paint();
+      };
+      frame.onlostpointercapture = () => { frame.onpointermove = null; };
+    };
+    save.onclick = () => { onSave(crop); dialog.close(); };
+    paint();
+  }
+
   function openLibrary({groupName,categoryId,onPick} = {}) {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
     let current = categoryId || null, query = '', status = '';
@@ -716,12 +938,13 @@ window.GDHomeAssets = (() => {
       try { data = await loadLibrary(); } catch (error) { body.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
       current ||= categoryFor(data,groupName)?.id || data.categories[0]?.id || null;
       const category = data.categories.find(c => c.id === current);
-      const items = data.items.filter(item => item.categoryId === current && (!query || fold(item.name).includes(fold(query))));
+      const items = data.items.filter(item => item.categoryId === current && (!query || fold([item.code,item.name,item.collection].join(' ')).includes(fold(query))));
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
         '<section class="asset-library-main">' + (category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
-          '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>' +
+          (category.id === 'ancuong-wood' ? '<button type="button" data-import-wood>Nhập catalogue PDF</button>' : '') +
+          (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' +
@@ -733,6 +956,7 @@ window.GDHomeAssets = (() => {
         if (!name?.trim()) return;
         try { const result = await saveCategory(name.trim()); current = result.category?.id || current; paint(); } catch (error) { toast(error.message); }
       };
+      body.querySelector('[data-import-wood]')?.addEventListener('click',() => openWoodCatalogue(category.id,paint));
       body.querySelector('[data-cat-rename]')?.addEventListener('click',async () => {
         const name = prompt('Đổi tên hạng mục:',category.name);
         if (!name?.trim()) return;
@@ -769,7 +993,7 @@ window.GDHomeAssets = (() => {
         const item = data.items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
         dialog.close();
         updateItem({id:item.id,used:true}).catch(() => {});
-        onPick(item);
+        if (item.full) onPick(item);
       });
       body.querySelectorAll('.asset-card figcaption').forEach(caption => {
         caption.title = 'Nháy đúp để đổi tên';
@@ -817,7 +1041,7 @@ window.GDHomeAssets = (() => {
         });
         list.querySelectorAll('[data-asset-open]').forEach(button => button.onclick = async () => {
           const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
-          window.open(await assetUrl(item.full),'_blank');
+          if (item.full) window.open(await assetUrl(item.full),'_blank');
         });
         list.querySelectorAll('[data-asset-remove]').forEach(button => button.onclick = async () => {
           if (!confirm('Xoá ảnh 3D khỏi dự án?')) return;

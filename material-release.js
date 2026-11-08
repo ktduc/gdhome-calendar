@@ -6,6 +6,7 @@ function installRelease() {
     headerIcon('copy') + '<span class="btn-label">Copy ảnh</span></button><details class="hdr-dropdown">' +
     '<summary class="btn btn-success hdr-split-caret" aria-label="Tuỳ chọn xuất ảnh"><span class="hdr-caret">▾</span></summary>' +
     '<div class="hdr-dropdown-menu"><button class="hdr-menu-item" data-image-mode="copy">Copy ảnh bảng</button>' +
+    '<button class="hdr-menu-item" data-image-mode="preview">Xem trước</button>' +
     '<button class="hdr-menu-item" data-image-mode="png">Tải PNG</button><button class="hdr-menu-item" data-image-mode="pdf">Tải PDF A4</button>' +
     '<hr style="margin:4px 0;border:0;border-top:1px solid #cbd5e1">' +
     '<button class="hdr-menu-item" id="material-export-settings" data-action="export-settings">⚙ Cài đặt xuất…</button></div></details></div>';
@@ -234,8 +235,8 @@ async function showStatistics(filtered,mode,watermark) {
     const copy = byId('stats-copy');
     const print = byId('do-print');
     const selected = { copy,png:download,pdf:print }[mode];
-    selected.classList.add('primary');
-    selected.focus();
+    selected?.classList.add('primary');
+    selected?.focus();
     download.onclick = () => exportStatsImage(false,watermark).catch(showExportError);
     copy.onclick = () => exportStatsImage(true,watermark).catch(showExportError);
   } catch (error) { showError(error); }

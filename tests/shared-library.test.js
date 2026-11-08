@@ -25,16 +25,16 @@ test('Dữ liệu dùng chung: hạng mục mặc định, thêm/xoá ảnh, tá
   const { call } = harness();
   const first = await call('/api/library');
   assert.equal(first.status,200);
-  assert.equal(first.data.categories.length,17);
+  assert.equal(first.data.categories.length,18);
   assert.equal(first.data.categories[5].name,'GẠCH ỐP LÁT');
 
   const category = first.data.categories[5].id;
   const added = await call('/api/library/items',{ categoryId:category,items:[{ full:a,thumb:b,name:'Viglacera 60x60' }] });
   assert.equal(added.status,200);
-  assert.equal(added.data.items.length,1);
+  assert.equal(added.data.items.filter(item => item.full).length,1);
   assert.equal(added.data.added[0].name,'Viglacera 60x60');
   // Thêm lại cùng ảnh vào cùng hạng mục không tạo bản trùng.
-  assert.equal((await call('/api/library/items',{ categoryId:category,items:[{ full:a,thumb:b }] })).data.items.length,1);
+  assert.equal((await call('/api/library/items',{ categoryId:category,items:[{ full:a,thumb:b }] })).data.items.filter(item => item.full).length,1);
   assert.equal((await call('/api/library/items',{ categoryId:'khong-co',items:[{ full:a,thumb:b }] })).status,400);
   assert.equal((await call('/api/library/items',{ categoryId:category,items:[{ full:'../x',thumb:b }] })).status,400);
 
@@ -47,9 +47,9 @@ test('Dữ liệu dùng chung: hạng mục mặc định, thêm/xoá ảnh, tá
   assert.equal((await call('/api/library/categories',{ name:'đá ốp mặt tiền' })).data.category.id,created.data.category.id);
 
   // Tài khoản khác không thấy ảnh.
-  assert.equal((await call('/api/library',null,'v@example.com')).data.items.length,0);
+  assert.equal((await call('/api/library',null,'v@example.com')).data.items.filter(item => item.full).length,0);
 
-  assert.equal((await call('/api/library/items/delete',{ ids:[id] })).data.items.length,0);
+  assert.equal((await call('/api/library/items/delete',{ ids:[id] })).data.items.filter(item => item.full).length,0);
   assert.equal((await call('/api/library/categories/delete',{ id:category })).status,200);
 });
 

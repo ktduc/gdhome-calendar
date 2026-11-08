@@ -272,3 +272,20 @@ XONG GĐ15
 Kiểm tra: `node --test` 45/45. Playwright: 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7 đạt 100%.
 
 XONG GĐ16
+
+
+## Giai đoạn 17 (09/11/2026)
+
+| Bước | Kết quả |
+|---|---|
+| 17.3 | Copy ảnh dựng bảng ngoài màn hình, hiện thông báo sau khi ghi clipboard. Khi lỗi, có nút Xem trước. Menu xuất vẫn mở bản xem trước theo yêu cầu. |
+| 17.2 | Xoá dự án ở Lịch có hai cách: chuyển giai đoạn đến dự án được chọn, hoặc gõ tên để xoá cả giai đoạn và công việc. Có Ctrl+Z và nút Hoàn tác trong 10 giây. Giữ bảng Chốt mã và hồ sơ dự án. |
+| 17.0 | Xoá ảnh thư viện và ảnh 3D cập nhật danh sách, bộ đếm và ảnh thu nhỏ ngay. Thay đổi ảnh 3D từ Hồ sơ dự án làm mới kho ảnh ở tab Chốt mã. |
+| 17.1 | AI dùng tài liệu đã tải lên dự án, vẫn nhận thêm tệp và ghi chú. Server đọc tài liệu theo tài khoản và báo rõ tệp bị bỏ qua. |
+| 17.4 | Hai dải xem trước có tối đa 5 ảnh một hàng, không quá 44×44 px, và nút +n. Lựa chọn ẩn ảnh được lưu theo tài khoản. |
+| 17.5 | Kết nối hỗ trợ Serper.dev, Brave Search và Google CSE. Tài khoản mới mặc định Serper; giữ kết nối Google cũ. Khoá chỉ lưu trên máy chủ; giữ đường mở Google Ảnh khi chưa có khoá. |
+| 17.6 | Chuyển mã gỗ An Cường sang Dữ liệu dùng chung; nhập PDF, duyệt và chỉnh khung swatch, bỏ trùng khi lưu. Chọn mã theo mã, tên hoặc catalogue và đưa swatch vào PA. Danh mục đầy đủ được bổ sung từ PDF do người dùng tải lên. |
+
+Kiểm tra: `node --test` 51/51. Playwright: 17.3, 17.2, 17.0, 17.1, 17.4, 17.5, 17.6 và hồi quy 16.3, 16.4, 16.6, 16.7. PDF mẫu do pdf-lib tạo có 2 trang và 18 mã; ca 17.6 kiểm tra vị trí cắt theo màu, kéo khung, bỏ chọn, bỏ trùng và đưa swatch vào PA.
+
+XONG GĐ17

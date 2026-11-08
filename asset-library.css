@@ -102,3 +102,17 @@
 .asset-paint-custom strong{grid-column:1/-1}.asset-paint-custom label{display:flex;flex-direction:column;font-size:12px;gap:2px}
 .asset-paint-custom input[type=color]{width:100%;height:30px;padding:0;border:1px solid #cbd5e1}
 .asset-paint-custom button{grid-column:1/-1}.asset-paint-custom small{grid-column:1/-1}
+
+.asset-wood-card img{width:100%;height:72px;object-fit:cover;margin-bottom:4px}
+.wood-catalogue-dialog{width:min(900px,94vw);max-height:90vh;overflow:auto}
+.wood-catalogue-controls{display:flex;flex-wrap:wrap;align-items:end;gap:8px}
+.wood-catalogue-controls label,.wood-catalogue-card label{display:grid;gap:3px}
+.wood-catalogue-controls input,.wood-catalogue-card input{min-width:0;max-width:100%}
+.wood-catalogue-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px}
+.wood-catalogue-card{min-width:0;display:grid;gap:4px;padding:8px;border:1px solid #d8d2c8;border-radius:6px}
+.wood-catalogue-card canvas{width:100%;height:80px;object-fit:contain}
+.wood-catalogue-card label:has([type=checkbox]){display:flex;align-items:center}
+.wood-crop-stage{position:relative;width:fit-content;margin:0 auto 8px}
+.wood-crop-stage img{display:block;max-width:min(80vw,760px);max-height:65vh;object-fit:contain}
+.wood-crop-frame{position:absolute;box-sizing:border-box;border:2px solid #dc2626;box-shadow:0 0 0 1px #fff;cursor:move;touch-action:none}
+.wood-crop-frame span{position:absolute;bottom:-5px;right:-5px;width:12px;height:12px;background:#dc2626;cursor:nwse-resize}
