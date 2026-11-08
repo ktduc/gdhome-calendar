@@ -1892,6 +1892,34 @@ cases['18.10'] = async page => {
   assert.equal(await to('0').locator('.image-open').count(),0);
 };
 
+cases['18.9'] = async page => {
+  await openMaterials(page);
+  const candidates = await page.evaluate(() => {
+    const original = materials.sheets;
+    try {
+      materials.sheets = [
+        {projectId:'p1',title:'Tủ bếp - V2'},
+        {projectId:'p2',title:'Tủ bếp - V1'}
+      ];
+      return [
+        versionedMaterialTitle('p1','Tủ bếp - V2 (bản sao)','2026-11-09'),
+        versionedMaterialTitle('p2','Tủ bếp','2026-11-09'),
+        versionedMaterialTitle('p3','Tủ bếp','2026-11-09')
+      ];
+    } finally { materials.sheets = original; }
+  });
+  assert.deepEqual(candidates,['Tủ bếp - V2 (09/11)','Tủ bếp - V2','Tủ bếp - V1']);
+  await page.evaluate(() => {
+    createSheet('p1','Bảng chốt mã mới',[newGroup('Nhóm',['Dòng'])]);
+  });
+  await page.waitForFunction(() => sheet.id && sheet.title === 'Bảng chốt mã mới - V1');
+  await page.evaluate(() => createSheet('p1',sheet.title,[newGroup('Nhóm',['Dòng'])]));
+  await page.waitForFunction(() => sheet.id && sheet.title === 'Bảng chốt mã mới - V2');
+  const list = await page.request.get('/api/materials').then(r => r.json());
+  assert.deepEqual(list.sheets.filter(item => item.title.startsWith('Bảng chốt mã mới')).map(item => item.title).sort(),
+    ['Bảng chốt mã mới - V1','Bảng chốt mã mới - V2']);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

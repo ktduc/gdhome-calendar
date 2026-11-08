@@ -282,10 +282,27 @@ function openSheet(value) {
   else renderEditor();
 }
 
+function versionedMaterialTitle(projectId,title,date) {
+  const suffix = /(?:\s+\(bản sao\)|\s+-\s+V\d+(?:\s+\(\d{2}\/\d{2}\))?)+$/i;
+  const baseTitle = value => value.trim().replace(suffix,'').trim().slice(0,178);
+  const base = baseTitle(title) || 'Bảng chốt mã mới';
+  const nameKey = value => value.normalize('NFC').toLocaleLowerCase('vi').replace(/\s+/g,' ');
+  const related = [...materials.sheets,...(materials.archivedSheets || [])]
+    .filter(item => item.projectId === projectId && nameKey(baseTitle(item.title)) === nameKey(base));
+  const names = new Set(related.map(item => nameKey(item.title)));
+  const [,month,day] = date.split('-');
+  for (let version = related.length + 1;;version++) {
+    const proposed = base + ' - V' + version;
+    if (!names.has(nameKey(proposed))) return proposed;
+    const dated = proposed + ' (' + day + '/' + month + ')';
+    if (!names.has(nameKey(dated))) return dated;
+  }
+}
+
 function createSheet(projectId, title, groups, meta = {}) {
   if (!projectId) return say('Chọn dự án Tiến độ trước.');
   const date = new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Ho_Chi_Minh'}).format(new Date());
-  openSheet({ projectId,title,meta:{ project:materials.projects.find(p => p.id === projectId)?.name,date,...meta },groups });
+  openSheet({ projectId,title:versionedMaterialTitle(projectId,title,date),meta:{ project:materials.projects.find(p => p.id === projectId)?.name,date,...meta },groups });
   queueSave();
 }
 
@@ -501,7 +518,7 @@ document.addEventListener('click', async event => {
         const options = materials.sheets.map((s,i) => (i+1) + '. ' + s.title).join('\n');
         const index = Number(prompt('Chọn số bảng nguồn:\n' + options)) - 1;
         const source = materials.sheets[index];
-        if (source) createSheet(byId('project-filter').value,source.title + ' (bản sao)',source.groups.map(g => ({
+        if (source) createSheet(byId('project-filter').value,source.title,source.groups.map(g => ({
           ...newGroup(g.name), rows:g.rows.map(duplicate)
         })));
         break;
