@@ -66,7 +66,7 @@ function labeledInput(key, value, label) {
 }
 
 const materialColumns = [
-  ['name','Hạng mục'],['room','Vị trí'],['render','Phối cảnh 3D'],['spec','Chất liệu / Quy cách'],
+  ['select','Chọn dòng'],['name','Hạng mục'],['room','Vị trí'],['render','Phối cảnh 3D'],['spec','Chất liệu / Quy cách'],
   ['pa0','PA1'],['pa1','PA2'],['pa2','PA3'],['qty','KL'],['unit','Đơn vị'],
   ['supplier','NCC / Nhà thầu'],['note','Ghi chú'],['decision','Trạng thái'],['actions','Thao tác']
 ];
@@ -133,10 +133,11 @@ function materialKpis() {
     counts(sheet),nearest ? 'Hạn gần nhất ' + nearest : 'Chưa có hạn'].map(value => '<span>' + html(value) + '</span>').join('');
 }
 
-const defaultColumnWidths = {room:112,render:110,spec:152,pa0:118,pa1:118,pa2:118,qty:68,unit:75,supplier:136,note:156,decision:130,actions:134};
+const defaultColumnWidths = {select:36,room:112,render:110,spec:152,pa0:118,pa1:118,pa2:118,qty:68,unit:75,supplier:136,note:156,decision:130,actions:134};
 const clampColumnWidth = width => Math.round(Math.min(720,Math.max(48,width)));
 
 function columnWidth(key) {
+  if (key === 'select') return defaultColumnWidths.select;
   const manual = materials.columnWidths?.[key];
   if (manual) return manual;
   if (key === 'name') {
@@ -269,15 +270,18 @@ function renderEditor() {
     (materials.r2 ? '' : '<p class="asset-warning">Chưa bật kho ảnh · Đang dùng thư mục ảnh tạm.</p>') +
     '<div class="sheet-scroll density-' + density + '"><table class="sheet-grid" style="width:' + widths.reduce((sum,w) => sum+w,0) +
     'px"><colgroup>' + columns.map(([key],i) => '<col data-column="' + key + '" style="width:' + widths[i] + 'px">').join('') + '</colgroup><thead><tr>' +
-    columns.map(([key,label]) => '<th data-column="' + key + '">' + label +
-      '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
-      label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span></th>').join('') +
+    columns.map(([key,label]) => '<th data-column="' + key + '">' + (key === 'select' ?
+      '<input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện">' :
+      label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
+      label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + '</th>').join('') +
+
     '</tr></thead>' + sheet.groups.filter(g => !hiddenGroups.has(g.id)).map(g => renderGroup(g,columns)).join('') +
-    '</table></div></section></div><dialog id="material-dialog"></dialog>';
+    '</table></div></section></div><div id="material-multiselect" hidden></div><dialog id="material-dialog"></dialog>';
   const updatedScroll = box().querySelector('.sheet-scroll');
 
   showImages();
   installEditorSidebar();
+  refreshRowSelection();
   installMaterialsAi();
   installColumnResize(updatedScroll.querySelector('table'));
   if (typeof installRelease === 'function') installRelease();
@@ -357,6 +361,7 @@ async function leaveSheet(projectId = sheet.projectId) {
 }
 function renderGroup(group,columns) {
   return '<tbody data-group="' + html(group.id) + '"><tr class="group"><th colspan="' + columns.length + '">' +
+    '<input type="checkbox" data-select-group="' + html(group.id) + '" aria-label="Chọn cả nhóm ' + html(group.name) + '"> ' +
     '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
     input('groupName',group.name,'Nhóm') + ' <label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
     (typeof scheduleControls === 'function' ? scheduleControls(group) : '') + ' <button data-action="del-group">Bỏ nhóm</button></th></tr>' +
@@ -379,6 +384,7 @@ function renderRow(row,columns) {
   const chosen = row.options[row.chosen];
   const count = rowPaCount(row);
   const cells = {
+    select:'<input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '">',
     name:input('name',row.name,'Hạng mục'),
     room:input('room',row.room,'Vị trí'),
     render:imageCell(row.render,'render'),
@@ -482,6 +488,8 @@ const projectFields = ['project','address','customer','phone','email','contract'
 function openSheet(value) {
   if (!value) return;
   sheet = structuredClone(value);
+  selectedMaterialRows.clear();
+  materialRangeAnchor = null;
   const project = materials.projects.find(p => p.id === sheet.projectId);
   sheet.meta = { project:project?.name || '',...sheet.meta,...materials.profiles?.[sheet.projectId] };
   sheetStatus = '';
@@ -627,6 +635,7 @@ function suggestions(field, pa) {
 
 document.addEventListener('click', async event => {
   if (!event.target.closest('#materials,#material-header-actions')) return;
+  if (sheet && handleRowSelectionClick(event)) return;
   const button = event.target.closest('[data-action]');
   const {group,row,slot} = context(event.target);
   if (!button) {
@@ -672,9 +681,14 @@ document.addEventListener('click', async event => {
         break;
       }
       case 'add-group': modify(() => sheet.groups.push(newGroup('Nhóm mới'))); break;
-      case 'del-group': if (confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1)); break;
+      case 'del-group':
+        if (canRemoveRows(group.rows) && confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1));
+        break;
       case 'add-row': modify(() => group.rows.push(newRow())); break;
-      case 'del-row': if (confirm('Bỏ dòng khỏi bản nháp?')) modify(() => group.rows.splice(group.rows.indexOf(row),1)); break;
+      case 'del-row': removeMaterialRows([row]); break;
+      case 'bulk-delete': removeMaterialRows(selectedRows()); break;
+      case 'bulk-duplicate': duplicateMaterialRows(); break;
+      case 'bulk-clear': clearRowSelection(); break;
       case 'move-up':
       case 'move-down': {
         const current = group.rows.indexOf(row);
@@ -707,7 +721,9 @@ function undo(redo) {
 document.addEventListener('change', event => {
   const field = event.target;
   const key = field.dataset.field;
-  if (!sheet || !key || !field.closest('#materials') || field.closest('dialog')) return;
+  if (!sheet || !field.closest('#materials') || field.closest('dialog')) return;
+  if (field.dataset.bulk) { applyBulkChange(field); return; }
+  if (!key) return;
   const {group,row,slot} = context(field);
   const value = field.value;
   if (key === 'code' && row?.options[Number(slot)]) {
@@ -722,14 +738,11 @@ document.addEventListener('change', event => {
   }
   modify(() => {
     if (row && key === 'decision') {
-      if (['ordered','chosen'].includes(value) && row.chosen == null) {
-        field.value = row.decision;
+      if (!setRowDecision(row,value)) {
+        field.value = rowState(row);
         say('Chọn PA trước khi chốt hoặc đặt hàng.');
-        return;
       }
-      row.ordered = value === 'ordered';
-      row.decision = row.ordered ? 'chosen' : value;
-      if (['draft','sent'].includes(value)) row.chosen = null;
+
     } else if (row && key === 'spec' && row.chosen != null) row.options[row.chosen].finish = value;
     else if (row) { row[key] = value; learnPreset(key,value); }
     else if (group) group[key === 'groupName' ? 'name' : key] = value;
@@ -766,7 +779,8 @@ document.addEventListener('input', event => {
 
 document.addEventListener('keydown', event => {
   const target = event.target;
-  if (!sheet || !target.closest('#materials,#material-header-actions') || target.closest('dialog')) return;
+  if (!sheet || (!target.closest('#materials,#material-header-actions') && target !== document.body) || target.closest('dialog')) return;
+  if (handleRowSelectionKey(event)) return;
   const {group,row,slot} = context(target);
   if (event.ctrlKey && ['z','y','d'].includes(event.key.toLowerCase())) {
     event.preventDefault();
@@ -776,6 +790,7 @@ document.addEventListener('keydown', event => {
     return;
   }
   if (!row) return;
+  if (event.key === 'Enter' && target.matches('button,select,input[type=checkbox]')) return;
   if (target.matches('.image-cell') && event.key === ' ' && slot !== 'render') { event.preventDefault(); pick(row,slot); return; }
   const cell = target.closest('td');
   if (!cell) return;
@@ -794,7 +809,7 @@ document.addEventListener('keydown', event => {
     next = cell.parentElement.cells[col+direction] || rows[index+direction]?.cells[direction > 0 ? 0 : rows[index+direction].cells.length-1];
   }
   const control = next?.querySelector('.pa-caption input') || next?.querySelector('input,select,[tabindex],button');
-  if (control) { event.preventDefault(); control.focus(); control.select?.(); }
+  if (control) { event.preventDefault(); control.focus(); if (control.matches('input:not([type=checkbox])')) control.select?.(); }
 });
 
 window.addEventListener('beforeunload', event => { if (dirty || saving) { event.preventDefault(); event.returnValue = ''; } });

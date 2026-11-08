@@ -69,6 +69,24 @@ cases['8.3'] = async page => {
   await page.locator('[data-field="groupName"][value="Nhóm mới"]').waitFor();
 };
 
+cases['8.4'] = async page => {
+  await openMaterials(page);
+  const select = id => page.locator('[data-select-row="' + id + '"]');
+  await select('g1-r1').click();
+  await select('g1-r4').click({modifiers:['Shift']});
+  await select('g1-r6').click({modifiers:['Control']});
+  await page.getByText('Đã chọn 5 dòng',{exact:true}).waitFor();
+  page.once('dialog',dialog => dialog.accept());
+  await page.keyboard.press('Delete');
+  assert.equal(await page.locator('tr[data-row]').count(),145);
+  await page.keyboard.press('Control+z');
+  assert.equal(await page.locator('tr[data-row]').count(),150);
+  await page.locator('input[data-select-group="g1"]').click();
+  await page.getByText('Đã chọn 15 dòng',{exact:true}).waitFor();
+  await page.keyboard.press('Escape');
+  await page.getByText('Đã chọn 15 dòng',{exact:true}).waitFor({state:'hidden'});
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

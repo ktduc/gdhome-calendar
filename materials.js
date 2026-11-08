@@ -61,6 +61,19 @@ class MaterialStore {
   }
 }
 
+function signedRowsBySheet(data) {
+  const signed = new Set(data.approvals.filter(record => record.kind === 'customer' || record.kind === 'company')
+    .map(record => record.revisionId));
+  const rows = new Map();
+  for (const revision of data.revisions) {
+    if (!signed.has(revision.id)) continue;
+    if (!rows.has(revision.sheet.id)) rows.set(revision.sheet.id,new Set());
+    const ids = rows.get(revision.sheet.id);
+    for (const group of revision.sheet.groups) for (const row of group.rows) ids.add(row.id);
+  }
+  return rows;
+}
+
 const profileKeys = ['project','address','customer','phone','email','contract'];
 function cleanProfile(profile) {
   return Object.fromEntries(profileKeys.filter(key => typeof profile?.[key] === 'string')
@@ -118,7 +131,7 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
   if (url === '/api/materials' && req.method === 'GET') {
     const data = await materials.get();
     const { _version, sheets, presets, library, settings } = data;
-    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, columnWidths:data.columnWidths || {}, profiles:data.profiles || {}, schedule:scheduleInfo(data,schedule) });
+    return sendJson(res, 200, { _version, sheets, presets, library, settings, projects, r2, columnWidths:data.columnWidths || {}, profiles:data.profiles || {}, signedRows:Object.fromEntries([...signedRowsBySheet(data)].map(([id,rows]) => [id,[...rows]])), schedule:scheduleInfo(data,schedule) });
   }
   if (url === '/api/materials' && req.method === 'POST') {
     const body = await readJsonBody(req);
@@ -147,6 +160,11 @@ async function handleMaterials(req, url, { store, dataKey, readJsonBody, sendJso
       }
       if (index >= 0) {
         const older = new Map(data.sheets[index].groups.flatMap(group => group.rows).map(row => [row.id,row]));
+        const retained = new Set(updated.groups.flatMap(group => group.rows.map(row => row.id)));
+        const signedRows = signedRowsBySheet(data).get(updated.id);
+        if (signedRows && [...signedRows].some(rowId => older.has(rowId) && !retained.has(rowId))) {
+          fail(409,'Không thể xoá dòng thuộc bản đã ký.');
+        }
         for (const row of updated.groups.flatMap(group => group.rows)) {
           const old = older.get(row.id);
           const choice = row => row?.chosen != null ? row.options[row.chosen] : null;

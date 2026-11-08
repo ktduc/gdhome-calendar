@@ -71,6 +71,12 @@ test('Chốt mã: phiên bản, quyền Gmail, ảnh riêng và hồ sơ ký b�
   assert.equal(change.data.customer.choices.r1,1);
   const drafts = await call('/api/materials');
   assert.equal(drafts.data.sheets[0].groups[0].rows[0].decision,'changed');
+  const removingSignedRow = structuredClone(drafts.data.sheets[0]);
+  removingSignedRow.groups[0].rows = [];
+  const removed = await call('/api/materials',{ _version:drafts.data._version,sheet:removingSignedRow });
+  assert.equal(removed.status,409);
+  assert.match(removed.data.message,/đã ký/);
+  assert.equal((await call('/api/materials')).data.sheets[0].groups[0].rows[0].id,'r1');
   assert.deepEqual(await getStore().get(email),schedule);
   assert.equal((await call(endpoint,{ _version:change.data._version,revisionId:view.data.id,action:'revoke' })).status,200);
   assert.equal((await call(publicApi,null,null)).status,410);
