@@ -173,12 +173,14 @@ window.GDHomeAssets = (() => {
     try {
       const stored = JSON.parse(localStorage.getItem(guestLibraryKey) || 'null');
       if (stored?.categories) {
-        if (!stored.categories.some(c => c.id === 'ancuong-wood')) stored.categories.push({id:'ancuong-wood',name:'Mã gỗ An Cường'});
+        const wood = stored.categories.find(c => c.id === 'ancuong-wood');
+        if (wood) wood.name = 'Mã gỗ';
+        else stored.categories.push({id:'ancuong-wood',name:'Mã gỗ'});
         return stored;
       }
     } catch { /* Dữ liệu khách hỏng thì tạo lại. */ }
     const template = window.materialTemplate || [];
-    return {_version:0,categories:[...template.map(([name],index) => ({id:'cat-' + (index+1),name:name.replace(/\s*\(.*\)\s*$/,''),source:name})),{id:'ancuong-wood',name:'Mã gỗ An Cường'}],items:[]};
+    return {_version:0,categories:[...template.map(([name],index) => ({id:'cat-' + (index+1),name:name.replace(/\s*\(.*\)\s*$/,''),source:name})),{id:'ancuong-wood',name:'Mã gỗ'}],items:[]};
   }
   function saveGuest(data) {
     data._version = (data._version || 0) + 1;
@@ -213,9 +215,9 @@ window.GDHomeAssets = (() => {
     const added = [];
     let skipped = 0;
     for (const item of items) {
-      if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code?.replace(/\s+/g,'').toUpperCase() === item.code.replace(/\s+/g,'').toUpperCase())) { skipped++; continue; }
+      if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
       added.push({id:uid(),categoryId,name:item.name || '',note:'',full:item.full,thumb:item.thumb,createdAt:Date.now(),
-        ...(item.code ? {code:item.code,collection:item.collection,finish:item.finish} : {})});
+        ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
     data.items.unshift(...added);
     return {added,skipped};
@@ -647,35 +649,40 @@ window.GDHomeAssets = (() => {
       const response = await fetch('/data/wood-ancuong.json');
       const seed = response.ok ? (await response.json()).woods : [];
       const imported = library.items.filter(item => item.categoryId === 'ancuong-wood' && item.code);
-      const key = code => String(code).replace(/\s+/g,'').toUpperCase();
-      return {woods:[...imported,...seed.filter(item => !imported.some(entry => key(entry.code) === key(item.code)))],source:'Dữ liệu dùng chung'};
+      return {woods:[...imported,...seed.filter(item => !imported.some(entry => catalogueKey(entry) === catalogueKey(item)))].map(withWoodBrand),source:'Dữ liệu dùng chung'};
     }
-    return {woods:library.items.filter(item => item.categoryId === 'ancuong-wood' && item.code),source:'Dữ liệu dùng chung'};
+    return {woods:library.items.filter(item => item.categoryId === 'ancuong-wood' && item.code).map(withWoodBrand),source:'Dữ liệu dùng chung'};
   }
 
-  function pickWood(anchor, { onPick, title = 'Mã gỗ An Cường' } = {}) {
+  const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường'});
+  function pickWood(anchor, { onPick, title = 'Mã gỗ' } = {}) {
     return popover(anchor, async (panel, close, place) => {
-      let collection = 'all', query = '', woodData = null;
+      let brand = '', collection = 'all', query = '', woodData = null;
       async function paint() {
         try { woodData = await loadWoodData(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
-        const collections = Array.from(new Set((woodData.woods || []).map(w => w.collection).filter(Boolean)));
-        const woods = (woodData.woods || []).filter(w => (collection === 'all' || w.collection === collection) &&
+        const brands = [...new Set(woodData.woods.map(wood => wood.brand))];
+        const byBrand = woodData.woods.filter(wood => !brand || brand === wood.brand);
+        const collections = [...new Set(byBrand.map(wood => wood.collection).filter(Boolean))];
+        const woods = byBrand.filter(w => (collection === 'all' || w.collection === collection) &&
           (!query || fold(w.code).includes(fold(query)) || fold(w.name).includes(fold(query)) || fold(w.collection).includes(fold(query))));
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
+          '<select aria-label="Hãng"><option value="">Tất cả hãng</option>' +
+          brands.map(name => '<option value="' + esc(name) + '"' + (name === brand ? ' selected' : '') + '>' + esc(name) + '</option>').join('') + '</select>' +
           '<select aria-label="Dòng sản phẩm"><option value="all">Tất cả dòng sản phẩm</option>' +
           collections.map(col => '<option value="' + esc(col) + '"' + (col === collection ? ' selected' : '') + '>' + esc(col) + '</option>').join('') + '</select>' +
           '<input type="search" placeholder="Tìm theo mã, tên hoặc catalogue" value="' + esc(query) + '"></div>' +
           '<div class="asset-body">' +
-          (woods.length ? '<div class="asset-wood-grid">' + woods.map(w => '<button type="button" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
+          (woods.length ? '<div class="asset-wood-grid">' + woods.map((w,index) => '<button type="button" data-wood-index="' + index + '" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
             (w.thumb ? '<img data-lib-asset="' + esc(w.thumb) + '" alt="">' : '') + '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span>' +
-            '<span class="wood-badge">' + esc(w.collection) + '</span></button>').join('') + '</div>' :
+            '<span class="wood-badge">' + esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>').join('') + '</div>' :
             '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p><div class="asset-google-fallback-slot"></div>') +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(woodData.source || '') + ' (' + woods.length + ' mã)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         panel.querySelector('[data-close]').onclick = close;
-        panel.querySelector('select').onchange = event => { collection = event.target.value; paint(); };
+        panel.querySelector('[aria-label=Hãng]').onchange = event => { brand = event.target.value; collection = 'all'; paint(); };
+        panel.querySelector('[aria-label="Dòng sản phẩm"]').onchange = event => { collection = event.target.value; paint(); };
         const search = panel.querySelector('input[type=search]');
         search.oninput = () => {
           query = search.value;
@@ -690,9 +697,9 @@ window.GDHomeAssets = (() => {
         };
         panel.querySelectorAll('[data-wood-code]').forEach(button => {
           button.onclick = () => {
-            const w = woods.find(entry => entry.code === button.dataset.woodCode);
+            const w = woods[Number(button.dataset.woodIndex)];
             close();
-            if (w) onPick?.({...w,kind:'wood',brand:'An Cường'});
+            if (w) onPick?.({...w,kind:'wood'});
           };
         });
         hydrate(panel);
@@ -745,7 +752,7 @@ window.GDHomeAssets = (() => {
     '\\b\\d{3,4}\\s?[A-Z]{1,3}\\b', '\\bMS\\s?\\d{3,4}\\b',
     '\\b[A-Z]{1,3}\\s?\\d{3,4}(\\s?[A-Z]{1,3})?\\b', '\\b\\d{9}\\b'
   ];
-  const catalogueKey = code => code.toUpperCase().replace(/\s+/g,'');
+  const catalogueKey = item => (item.brand || 'An Cường').trim().toLowerCase() + ':' + item.code.toUpperCase().replace(/\s+/g,'');
   const bounded = (value,min,max) => Math.max(min,Math.min(max,value));
   async function scanWoodCatalogue(file,patterns,direction,onPage) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
@@ -815,12 +822,14 @@ window.GDHomeAssets = (() => {
     canvas.getContext('2d').drawImage(image,image.naturalWidth*crop.x,image.naturalHeight*crop.y,w,h,0,0,canvas.width,canvas.height);
   }
   async function openWoodCatalogue(categoryId,onSaved) {
-    const {dialog,body} = modal('wood-catalogue-dialog','Nhập catalogue PDF An Cường');
+    const {dialog,body} = modal('wood-catalogue-dialog','Nhập catalogue PDF mã gỗ');
     const sources = new Set();
     dialog.addEventListener('close',() => { for (const source of sources) URL.revokeObjectURL(source); },{once:true});
     body.innerHTML = '<form class="wood-catalogue-controls">' +
       '<label>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
       '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
+      '<label>Hãng <input name="brand" list="wood-brands" required value="An Cường" maxlength="80"></label>' +
+      '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
       '<label>Catalogue <input name="collection" list="wood-catalogues" maxlength="120" placeholder="VD: Melamine/MFC"></label>' +
       '<datalist id="wood-catalogues"><option>Melamine/MFC</option><option>Laminate</option><option>Acrylic</option><option>Veneer</option></datalist>' +
       '<label>Bề mặt <input name="finish" maxlength="120" placeholder="VD: Mờ"></label>' +
@@ -875,8 +884,9 @@ window.GDHomeAssets = (() => {
     };
     save.onclick = async () => {
       if (busy || !form.reportValidity()) return;
+      const brand = form.elements.brand.value.trim();
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
-      if (!collection) { status.textContent = 'Nhập tên catalogue.'; return; }
+      if (!brand || !collection) { status.textContent = 'Nhập hãng và tên catalogue.'; return; }
       const selected = [...list.children].flatMap(card => {
         const code = card.querySelector('[data-wood-code-input]').value.trim();
         return card.querySelector('[data-wood-include]').checked && code ?
@@ -887,7 +897,7 @@ window.GDHomeAssets = (() => {
       let added = 0, skipped = 0, batch = [];
       try {
         const data = await loadLibrary();
-        const existing = new Set(data.items.filter(item => item.categoryId === categoryId && item.code && item.full).map(item => catalogueKey(item.code)));
+        const existing = new Set(data.items.filter(item => item.categoryId === categoryId && item.code && item.full).map(catalogueKey));
         const flush = async () => {
           if (!batch.length) return;
           const result = await addItems(categoryId,batch);
@@ -897,14 +907,14 @@ window.GDHomeAssets = (() => {
         };
         for (const {card,code,name} of selected) {
           if (!dialog.open) break;
-          const key = catalogueKey(code);
+          const key = catalogueKey({brand,code});
           if (existing.has(key)) { skipped++; continue; }
           existing.add(key);
           status.textContent = 'Đang lưu ' + code + '…';
           const blob = await new Promise(resolve => card.querySelector('canvas').toBlob(resolve,'image/webp',.9));
           if (!blob || blob.type !== 'image/webp') throw new Error('Không tạo được ảnh WebP.');
           const full = await storeAsset(blob);
-          batch.push({full,thumb:full,code,name,collection,finish});
+          batch.push({full,thumb:full,code,name,brand,collection,finish});
           if (batch.length === 50) await flush();
         }
         await flush();
@@ -959,7 +969,7 @@ window.GDHomeAssets = (() => {
       try { data = await loadLibrary(); } catch (error) { body.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
       current ||= categoryFor(data,groupName)?.id || data.categories[0]?.id || null;
       const category = data.categories.find(c => c.id === current);
-      const items = data.items.filter(item => item.categoryId === current && (!query || fold([item.code,item.name,item.collection].join(' ')).includes(fold(query))));
+      const items = data.items.filter(item => item.categoryId === current && (!query || fold([item.code,item.name,item.brand,item.collection].join(' ')).includes(fold(query))));
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +

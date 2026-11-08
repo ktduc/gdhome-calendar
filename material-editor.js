@@ -835,7 +835,7 @@ function openImageCellMenu(anchor, row, group, slot) {
   } else {
     let pickLabel = 'Chọn từ thư viện';
     if (isPaintGroup(group?.name)) pickLabel = 'Chọn màu sơn (Dulux, Jotun)';
-    else if (isWoodGroup(group?.name)) pickLabel = 'Chọn mã gỗ (An Cường)';
+    else if (isWoodGroup(group?.name)) pickLabel = 'Chọn mã gỗ';
     addItem('🖼', pickLabel, () => {
       const cell = anchor.closest('.image-cell');
       focusMaterialImageCell(cell);
@@ -973,8 +973,9 @@ function woodPicked(row,slot,wood) {
   const pa = row.options[Number(slot)];
   if (!pa) return;
   modify(() => {
-    pa.brand = 'An Cường';
+    pa.brand = wood.brand;
     pa.code = wood.code;
+    pa.autoName = !!wood.full;
     if (wood.finish) pa.finish = wood.finish;
     if (wood.full && pa.images.length < 8 && !pa.images.some(img => (typeof img === 'string' ? img : img.full) === wood.full)) {
       pa.images.push({full:wood.full,thumb:wood.thumb});

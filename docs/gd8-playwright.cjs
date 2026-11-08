@@ -1462,7 +1462,7 @@ cases['16.6'] = async page => {
   await cell.click();
   const popover = page.locator('.asset-popover');
   await popover.waitFor();
-  assert.ok(await popover.getByText('Mã gỗ An Cường').isVisible(), 'Mở bảng chọn mã gỗ An Cường');
+  assert.ok(await popover.getByText('Mã gỗ',{exact:true}).isVisible(), 'Mở bảng chọn mã gỗ An Cường');
 
   const searchInput = popover.locator('input[type="search"]');
   await searchInput.fill('7241');
@@ -1766,7 +1766,7 @@ cases['17.6'] = async page => {
   const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
   await cell.click();
   const picker = page.locator('.asset-popover');
-  await picker.locator('select').selectOption('Vân gỗ thử');
+  await picker.getByLabel('Dòng sản phẩm').selectOption('Vân gỗ thử');
   await picker.locator('input[type=search]').fill('van go thu');
   await picker.locator('[data-wood-code="MS 3000"]').click();
   assert.equal(await page.locator('[data-row="g1-r1"] [data-field=code]').first().inputValue(),'MS 3000');
@@ -1828,6 +1828,34 @@ cases['18.4'] = async page => {
   const printed = page.locator('#print-sheet [data-row="g1-r1"] .pa-caption .sheet-value').first();
   assert.equal(await printed.textContent(),label);
   assert.ok(await printed.evaluate(field => field.offsetHeight > 2*parseFloat(getComputedStyle(field).lineHeight)));
+};
+
+cases['18.3'] = async page => {
+  await openMaterials(page);
+  const asset = 'a'.repeat(64) + '.webp';
+  const brands = await page.evaluate(async asset => {
+    await GDHomeAssets.addItems('ancuong-wood',[
+      {code:'MS 7241',brand:'Minh Long',name:'Gỗ óc chó',collection:'Vân gỗ',full:asset,thumb:asset},
+      {code:'MS 7241',brand:'Hãng thử',name:'Sồi trắng',collection:'Laminate',full:asset,thumb:asset}
+    ]);
+    const {woods} = await GDHomeAssets.loadWoodData();
+    return woods.filter(item => item.code === 'MS 7241' || item.code === 'MFC 7241 T').map(item => item.brand).sort();
+  },asset);
+  assert.deepEqual(brands,['An Cường','Hãng thử','Minh Long']);
+  await page.evaluate(() => modify(() => { sheet.groups[0].name = 'MÃ GỖ'; }));
+  const cell = page.locator('[data-row="g1-r1"] .image-cell[data-slot="0"]');
+  await cell.click();
+  const picker = page.locator('.asset-popover');
+  await picker.getByLabel('Hãng',{exact:true}).selectOption('Minh Long');
+  await picker.getByLabel('Dòng sản phẩm').selectOption('Vân gỗ');
+  await picker.locator('input[type=search]').fill('go oc cho');
+  await picker.locator('[data-wood-code="MS 7241"]').click();
+  assert.equal(await page.evaluate(() => sheet.groups[0].rows[0].options[0].brand),'Minh Long');
+  await page.locator('[data-sidebar=library] .material-sidebar-actions [data-action=open-library]').click();
+  await page.locator('.asset-library-dialog [data-cat=ancuong-wood]').click();
+  await page.locator('[data-import-wood]').click();
+  await page.locator('.wood-catalogue-dialog [name=brand]').fill('Hãng tự nhập');
+  assert.equal(await page.locator('.wood-catalogue-dialog [name=brand]').inputValue(),'Hãng tự nhập');
 };
 
 async function main() {
