@@ -3664,7 +3664,7 @@ body {
 /* =====================================================================
    THANH BÊN TRÁI GỌN GÀNG (sidebar-compact)
    ===================================================================== */
-.app-sidebar.sidebar-compact { width: 262px; min-width: 262px; padding: 12px 10px 60px; gap: 10px; }
+.app-sidebar.sidebar-compact { width: 262px; min-width: 262px; padding: 12px 10px 60px; gap: 10px; scrollbar-gutter: stable; }
 .sidebar-compact .sb-top { display: flex; flex-direction: column; gap: 8px; }
 .sidebar-compact .btn-google-create { padding: 8px 16px; font-size: 13.5px; gap: 8px; border-radius: 22px; align-self: flex-start; }
 .sidebar-compact .btn-google-create svg { width: 18px; height: 18px; }
@@ -3698,15 +3698,19 @@ body {
 .sidebar-compact .project-owner-group { margin-bottom: 4px; }
 .sidebar-compact .project-owner-header { padding: 5px 6px; }
 .sidebar-compact .project-owner-title { font-size: 11.5px; }
-.sidebar-compact .project-owner-actions { display: none; gap: 0; }
-.sidebar-compact .project-owner-header:hover .project-owner-actions { display: flex; }
+.sidebar-compact .project-owner-actions { display: flex; gap: 0; visibility: hidden; }
+.sidebar-compact .project-owner-header:hover .project-owner-actions,
+.sidebar-compact .project-owner-header:focus-within .project-owner-actions { visibility: visible; }
+
 .sidebar-compact .owner-mini-btn { width: 18px; height: 18px; }
 .sidebar-compact .calendar-list-item { padding: 3px 6px; min-height: 0; margin: 1px 0; position: relative; }
 .sidebar-compact .calendar-list-item .cal-item-name { font-size: 12px; }
 .sidebar-compact .cal-item-left { min-width: 0; flex: 1; }
-.sidebar-compact .cal-item-actions { display: none; }
+.sidebar-compact .cal-item-actions { display: flex; visibility: hidden; }
 .sidebar-compact .calendar-list-item:hover .cal-item-actions,
-.sidebar-compact .calendar-list-item.active-selected .cal-item-actions { display: flex; }
+.sidebar-compact .calendar-list-item:focus-within .cal-item-actions,
+.sidebar-compact .calendar-list-item.active-selected .cal-item-actions { visibility: visible; }
+
 .sidebar-compact .cal-action-btn { width: 20px; height: 20px; }
 
 .sidebar-compact .sb-danger-link { display: inline-flex; align-items: center; gap: 5px; align-self: flex-start; border: none; background: none; color: #b91c1c; font-size: 11px; font-weight: 600; cursor: pointer; padding: 2px 2px; opacity: 0.8; }

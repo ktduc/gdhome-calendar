@@ -25,6 +25,26 @@ cases['8.1'] = async page => {
   assert.equal(after.page,before.page);
 };
 
+cases['8.2'] = async page => {
+  await page.goto('/');
+  const owner = page.locator('.sidebar-compact .project-owner-header').first();
+  const stage = page.locator('.sidebar-compact .calendar-list-item:not(.active-selected)').first();
+  await owner.waitFor();
+  for (const [item,title] of [[owner,'.project-owner-title'],[stage,'.cal-item-left']]) {
+    await page.locator('.app-logo').hover();
+    const bounds = () => item.evaluate((el,label) => {
+      const box = node => {
+        const rect = node.getBoundingClientRect();
+        return [rect.x,rect.y,rect.width,rect.height];
+      };
+      return [box(el),box(el.querySelector(label)),box(el.closest('.app-sidebar'))];
+    },title);
+    const before = await bounds();
+    await item.hover();
+    assert.deepEqual(await bounds(),before,'Hover phải giữ vị trí và độ rộng');
+  }
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
