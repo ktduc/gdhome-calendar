@@ -22,13 +22,15 @@
   <!-- Header chuẩn GĐ10 (shell.css/shell.js) -->
   <header class="app-header hub-header">
     <div class="header-left">
+      <button type="button" class="icon-btn shell-sidebar-toggle" id="btn-toggle-sidebar" title="Ẩn/Hiện thanh bên trái"><i data-lucide="menu">☰</i></button>
       <details class="gd-tools-menu" data-shell-menu></details>
       <a class="app-logo" href="/du-an">
         <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
         <span>Quản lý dự án</span>
       </a>
     </div>
-    <div class="header-right shell-toolbar" id="project-actions">
+    <div class="header-right">
+      <div class="shell-toolbar" id="project-actions">
       <!-- Thứ tự các slot theo GĐ10: file, ai, copy, undo, primary, account -->
       <details class="hdr-split-group hdr-dropdown" data-shell-slot="file" id="menu-file">
         <summary class="btn btn-outline">File ▾</summary>
@@ -68,6 +70,7 @@
       </button>
 
       <span id="save-status" class="save-status is-inline" role="status"></span>
+      </div>
       <div class="shell-account">
         <strong id="identity"></strong>
       </div>

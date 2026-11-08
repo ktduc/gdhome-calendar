@@ -5,11 +5,23 @@
   --gd-section-border: #e2e8f0;
   --gd-header-height: 56px;
   --gd-primary: #1a73e8;
+  --gd-primary-hover: #1557b0;
   --gd-success: #188038;
+  --gd-success-hover: #137333;
+  --gd-danger: #d93025;
+  --gd-danger-hover: #b31412;
   --gd-ink: #1e293b;
   --gd-radius: 6px;
   --gd-control-radius: 8px;
   --gd-icon-size: 18px;
+  /* GĐ18B.1: Đồng bộ nút 32px, biến màu #f4f1ec, viền #d8d2c8, bo góc 10px */
+  --gd-btn-height: 32px;
+  --gd-overlay-bg: #f4f1ec;
+  --gd-dialog-bg: #f4f1ec;
+  --gd-overlay-border: #d8d2c8;
+  --gd-dialog-border: #d8d2c8;
+  --gd-overlay-radius: 10px;
+  --gd-overlay-shadow: 0 10px 28px rgba(15, 23, 42, 0.16);
 }
 .gd-tools-menu{position:relative;flex:none;color:#941b21;font:600 13px system-ui,sans-serif}
 .gd-tools-menu summary{cursor:pointer;padding:7px;border:1px solid #d5dce5;border-radius:6px;background:#fff}
@@ -29,7 +41,23 @@
 .project-profile-form{display:grid;gap:8px}
 .project-profile-form label{display:grid;gap:3px;font-size:13px}
 .project-profile-form input{box-sizing:border-box;width:100%;padding:7px;border:1px solid var(--gd-section-border);border-radius:var(--gd-radius);font:inherit}
-.project-profile-form .btn{justify-self:start}
+.project-profile-form .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: var(--gd-btn-height, 32px);
+  padding: 0 14px;
+  box-sizing: border-box;
+  border-radius: var(--gd-radius);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  line-height: 1;
+}
 .msp-material-badge{flex:none;font:700 13px/1 system-ui,sans-serif;text-decoration:none;background:#fff0c4;color:#694600;padding:3px;border-radius:4px}
 .msp-material-badge.done{background:#dff2e5;color:#175938}
 .app-header {
@@ -156,7 +184,7 @@
 }
 
 .app-header .btn {
-  height: 34px;
+  height: var(--gd-btn-height, 32px);
   padding: 0 11px;
   border-radius: var(--gd-control-radius);
   gap: 6px;
@@ -256,9 +284,9 @@
   gap: 4px;
 }
 .app-header .hdr-icon-sq {
-  width: 34px;
-  min-width: 34px;
-  height: 34px;
+  width: var(--gd-btn-height, 32px);
+  min-width: var(--gd-btn-height, 32px);
+  height: var(--gd-btn-height, 32px);
   padding: 0;
   justify-content: center;
 }
@@ -566,4 +594,183 @@
   .app-header .btn:has(svg) .btn-label,.app-header .hdr-caret{display:none}
   .app-header .app-logo{font-size:15px;min-width:0;overflow:hidden;text-overflow:ellipsis}
   .app-header .hdr-dropdown-menu{max-width:calc(100vw - 20px)}
+}
+
+
+/* ==========================================================================
+   GĐ18B.1: ĐỒNG BỘ KHUNG GIAO DIỆN (LỊCH, CHỐT MÃ, QUẢN LÝ DỰ ÁN, TOOLS)
+   ========================================================================== */
+
+/* Nút bấm đồng bộ màu sắc và chiều cao 32px trên mọi trang */
+body .btn,
+body button.button,
+body a.button {
+  height: var(--gd-btn-height, 32px);
+  box-sizing: border-box;
+}
+
+body .btn-primary,
+body.hub-body .btn-primary,
+body button.primary,
+body a.primary {
+  background-color: var(--gd-primary) !important;
+  border-color: var(--gd-primary) !important;
+  color: #ffffff !important;
+}
+body .btn-primary:hover,
+body.hub-body .btn-primary:hover,
+body button.primary:hover,
+body a.primary:hover {
+  background-color: var(--gd-primary-hover, #1557b0) !important;
+  border-color: var(--gd-primary-hover, #1557b0) !important;
+}
+
+body .btn-outline,
+body.hub-body .btn-outline {
+  background-color: #ffffff;
+  color: #3c4043;
+  border: 1px solid #dadce0;
+}
+body .btn-outline:hover,
+body.hub-body .btn-outline:hover {
+  background-color: #f1f3f4;
+}
+
+body .btn-danger,
+body.hub-body .btn-danger {
+  background-color: var(--gd-danger, #d93025) !important;
+  border-color: var(--gd-danger, #d93025) !important;
+  color: #ffffff !important;
+}
+body .btn-danger:hover,
+body.hub-body .btn-danger:hover {
+  background-color: var(--gd-danger-hover, #b31412) !important;
+  border-color: var(--gd-danger-hover, #b31412) !important;
+}
+
+body .btn-success,
+body.hub-body .btn-success {
+  background-color: var(--gd-success, #188038) !important;
+  border-color: var(--gd-success, #188038) !important;
+  color: #ffffff !important;
+}
+body .btn-success:hover,
+body.hub-body .btn-success:hover {
+  background-color: var(--gd-success-hover, #137333) !important;
+  border-color: var(--gd-success-hover, #137333) !important;
+}
+
+/* Nút ẩn/hiện thanh bên trái dùng chung */
+.shell-sidebar-toggle {
+  background: none;
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: #5f6368;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.shell-sidebar-toggle:hover {
+  background-color: #f1f3f4;
+  color: #202124;
+}
+.shell-sidebar-toggle svg,
+.shell-sidebar-toggle i[data-lucide] {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* Ẩn/hiện thanh bên trái có lưu trạng thái per-page */
+body.is-sidebar-collapsed .material-workspace {
+  grid-template-columns: minmax(0, 1fr) !important;
+}
+body.is-sidebar-collapsed .material-sidebar,
+.material-sidebar.collapsed {
+  display: none !important;
+}
+body.is-sidebar-collapsed .hub-app-layout .shell-sidebar,
+.hub-app-layout .shell-sidebar.collapsed {
+  display: none !important;
+}
+body.is-sidebar-collapsed .app-sidebar,
+.app-sidebar.collapsed {
+  margin-left: -270px !important;
+}
+
+/* Hộp thoại dialog / modal dùng chung: nền be ghi nhạt #f4f1ec, viền #d8d2c8, bo góc 10px, đổ bóng */
+:is(dialog:not(.shell-lightbox), .shell-dialog:not(.shell-lightbox), .hub-dialog, .modal-card, .connection-dialog, .project-profile-dialog, .crop-dialog) {
+  background-color: var(--gd-overlay-bg, #f4f1ec) !important;
+  border: 1px solid var(--gd-overlay-border, #d8d2c8) !important;
+  border-radius: var(--gd-overlay-radius, 10px) !important;
+  box-shadow: var(--gd-overlay-shadow, 0 10px 28px rgba(15, 23, 42, 0.16)) !important;
+  color: var(--gd-ink, #1e293b);
+}
+
+/* Tiêu đề hộp thoại đồng bộ */
+:is(dialog:not(.shell-lightbox), .shell-dialog:not(.shell-lightbox), .hub-dialog, .modal-card, .connection-dialog, .project-profile-dialog) :is(h2, h3, .modal-header h3) {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--gd-ink, #1e293b);
+  margin: 0 0 10px;
+}
+
+/* Nút đóng × đồng bộ kiểu dáng */
+:is(.close-dialog, .close-modal, .btn-close, .ai-bg-close, .lightbox-close) {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background-color 0.15s, color 0.15s;
+}
+:is(.close-dialog, .close-modal, .btn-close, .ai-bg-close, .lightbox-close):hover {
+  background-color: #e2ddd5;
+  color: #0f172a;
+}
+
+/* Popover, Menu thả xuống, gợi ý dùng chung màu nền & viền */
+.hdr-dropdown-menu,
+.gd-tools-menu nav,
+.range-selector-popover,
+.suggestions {
+  background-color: var(--gd-overlay-bg, #f4f1ec) !important;
+  border: 1px solid var(--gd-overlay-border, #d8d2c8) !important;
+  border-radius: var(--gd-overlay-radius, 10px) !important;
+  box-shadow: var(--gd-overlay-shadow, 0 10px 28px rgba(15, 23, 42, 0.16)) !important;
+  color: var(--gd-ink, #1e293b);
+}
+
+/* Toast thông báo đồng bộ màu nền #f4f1ec, viền #d8d2c8, bo góc 10px, đổ bóng */
+.toast-notification {
+  background-color: var(--gd-overlay-bg, #f4f1ec) !important;
+  border: 1px solid var(--gd-overlay-border, #d8d2c8) !important;
+  color: var(--gd-ink, #1e293b) !important;
+  border-radius: var(--gd-overlay-radius, 10px) !important;
+  box-shadow: var(--gd-overlay-shadow, 0 10px 28px rgba(15, 23, 42, 0.16)) !important;
+}
+
+/* AI Background Panel đồng bộ bo góc 10px, nền #f4f1ec và viền #d8d2c8 */
+.ai-bg-panel {
+  background-color: var(--gd-overlay-bg, #f4f1ec) !important;
+  border: 1px solid var(--gd-overlay-border, #d8d2c8) !important;
+  border-left: 4px solid #7c3aed !important;
+  border-radius: var(--gd-overlay-radius, 10px) !important;
+  box-shadow: var(--gd-overlay-shadow, 0 10px 28px rgba(15, 23, 42, 0.16)) !important;
 }

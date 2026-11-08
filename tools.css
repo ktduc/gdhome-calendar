@@ -5,8 +5,8 @@ body>main{max-width:1500px;margin:auto;padding:18px}
 .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(250px,100%),1fr));gap:14px}
 article,.panel{background:#fff;border:1px solid #d5dce5;border-radius:8px;padding:14px;margin:8px 0}
 button,.button,input,select,textarea{font:inherit}
-button,.button{display:inline-block;padding:6px 10px;color:#273245;border:1px solid #c7ced9;background:#fff;border-radius:5px;text-decoration:none;cursor:pointer}
-button.primary,.button.primary{background:#a41d24;border-color:#a41d24;color:#fff}
+button,.button{display:inline-flex;align-items:center;justify-content:center;height:var(--gd-btn-height, 32px);padding:0 14px;box-sizing:border-box;color:#273245;border:1px solid #c7ced9;background:#fff;border-radius:var(--gd-radius, 6px);text-decoration:none;cursor:pointer;font-size:13.5px;font-weight:500;line-height:1}
+button.primary,.button.primary{background:var(--gd-primary, #1a73e8);border-color:var(--gd-primary, #1a73e8);color:#fff}
 [role=status]{white-space:pre-wrap;color:#7d2025}
 label{cursor:pointer}
 [hidden]{display:none!important}

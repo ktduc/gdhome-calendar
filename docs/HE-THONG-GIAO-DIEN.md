@@ -60,3 +60,66 @@ Nạp `integrations-client.js` sau `shell.js` để dùng nút **⚙ Kết nối
 Nạp `ai-client.js` để dùng `GDHomeAI.attachments({state,input,drop,list,root,onChange})`, `GDHomeAI.prepare(files,notes)` và `GDHomeAI.run(state,{request,onStart,onDone,onError,onFinish})`. Hai tool dùng chung trình chọn/dán/xem ảnh, nén tài liệu, chạy nền và thanh báo để mở duyệt. Bảng duyệt giữ các trường nghiệp vụ của mỗi tool.
 
 Hồ sơ dự án đặt tại `projectOwners[].profile`, theo ID dự án; tên lấy từ `projectOwners[].name`. Quản lý dự án có thể dùng `GDHomeProjects.list()` và `GDHomeProjects.save({projectId,profile})` trong `projects-client.js`. API `GET /api/projects` trả `{projects:[{id,name,profile}],version}`; `POST /api/projects` nhận các trường sửa và trả `{project,profile,version}`. Dùng `create:true` với `profile.project` để tạo dự án và giai đoạn đầu. Trang hiển thị lại hồ sơ khi quay lại tab. Tên Lịch là tên chuẩn khi đọc hồ sơ cũ; các trường liên hệ cũ được lấy từ Chốt mã khi chưa có hồ sơ mới. Bản đã phát hành lưu ảnh chụp hồ sơ tại thời điểm phát hành.
+
+
+## GĐ18B.1: Đồng bộ khung giao diện 4 trang (Lịch, Chốt mã, Quản lý dự án, Tools)
+
+### 1. Bộ biến màu & kích thước chung (:root)
+- Chiều cao nút: `--gd-btn-height: 32px` (áp dụng cho mọi `.btn`, `button.button`, `a.button`, icon buttons).
+- Nền hộp thoại / popover / toast: `--gd-overlay-bg: #f4f1ec` (be ghi nhạt).
+- Viền hộp thoại / popover / toast: `--gd-overlay-border: #d8d2c8`.
+- Bo góc: `--gd-overlay-radius: 10px`.
+- Đổ bóng: `--gd-overlay-shadow: 0 10px 28px rgba(15, 23, 42, 0.16)`.
+
+### 2. Cấu trúc Header chuẩn ở mọi trang
+Mọi trang (`/`, `/chot-ma`, `/du-an`, `/tools`) dùng chung cấu trúc:
+```html
+<header class="app-header">
+  <div class="header-left">
+    <!-- Nút toggle sidebar nếu trang có thanh bên trái -->
+    <button type="button" class="icon-btn shell-sidebar-toggle" id="btn-toggle-sidebar" title="Ẩn/Hiện thanh bên trái">
+      <i data-lucide="menu">☰</i>
+    </button>
+    <details class="gd-tools-menu" data-shell-menu></details>
+    <a class="app-logo" href="...">
+      <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
+      <span>Tên trang</span>
+    </a>
+  </div>
+  <div class="header-right">
+    <div class="shell-toolbar">
+      <!-- Các slot lệnh: file, ai, copy, undo, primary -->
+    </div>
+    <div class="shell-account">
+      <strong id="identity"></strong>
+    </div>
+  </div>
+</header>
+```
+
+### 3. Nút ẩn/hiện thanh bên trái (Sidebar Toggle)
+- Icon `menu` (hoặc fallback `☰`), kích thước 32px, nằm ở đầu `.header-left`.
+- Tự động khởi tạo bởi `GDHomeShell.initSidebarToggle()` cho bất kỳ trang nào có sidebar (`.app-sidebar`, `.material-sidebar`, `.shell-sidebar`).
+- Lưu trạng thái ẩn/hiện theo từng trang: `localStorage.getItem('gdhome_sidebar_hidden:' + location.pathname)`.
+- Khi thu gọn: gán `is-sidebar-collapsed` lên `body` và `collapsed` lên sidebar element.
+
+### 4. Bảng đối chiếu lớp Chốt mã cần chuyển đổi sang lớp dùng chung
+
+| Thành phần ở Chốt mã | Lớp / ID hiện tại ở Chốt mã | Lớp / ID chuẩn Shell cần chuyển đổi | Ghi chú |
+|---|---|---|---|
+| Header Chốt mã | `.material-header` | `.app-header` | Đã dùng biến chung; có thể bỏ tiền tố `material-` |
+| Vùng nút lệnh header | `#material-header-actions` | `.shell-toolbar` | Gắn slot `data-shell-slot="file/ai/copy/undo/primary"` |
+| Nút thêm dòng/nhóm | `#material-add` | `[data-shell-slot="primary"] .btn-primary` | Màu xanh dương `#1a73e8`, chiều cao 32px |
+| Nút sao chép ảnh | `#material-copy` | `[data-shell-slot="copy"] .btn-success` | Màu xanh lá `#188038`, chiều cao 32px |
+| Trạng thái lưu | `#save-label.save-status` | `.save-status.is-inline` | Nằm trong `.shell-toolbar` |
+| Thông báo toast | `#material-toast` | `.toast-notification` | Dùng chung hàm `GDHomeShell.toast()` |
+| Khung làm việc | `.material-workspace` | `.shell-workspace` | Layout grid 2 cột (sidebar + main) |
+| Thanh bên trái | `.material-sidebar` | `.shell-sidebar.sidebar-compact` | Rộng 262px, nền `#eef1f5` |
+| Tiêu đề khối thu gọn | `.material-sidebar summary` | `.sb-head` | Chữ hoa 11.5px, màu `#334155` |
+| Thân khối thu gọn | `.material-sidebar-body` | `.sb-body` | Padding chuẩn 0 8px 8px |
+| Nhóm nút phân đoạn | `.material-density`, `.material-font-buttons` | `.sb-seg-btns` | Nút nhỏ chọn XS/S/M/L, đậm/nhạt |
+| Trường thông tin dự án | `.material-meta-fields` | `.sidebar-meta-item` / `.sidebar-compact` | Hiển thị thông tin khách/dự án |
+| Hộp thoại cắt ảnh | `.crop-dialog` | `.shell-dialog.crop-dialog` | Nền `#f4f1ec`, viền `#d8d2c8`, bo góc 10px |
+| Menu gợi ý ghi chú | `.suggestions` | `.suggestions` / `.hdr-dropdown-menu` | Nền `#f4f1ec`, viền `#d8d2c8`, đổ bóng overlay |
+| Biểu mẫu ghi chú | `.material-notes-form` | `.shell-dialog-form` | Dùng layout grid chuẩn của shell |
+| Xem ảnh lớn | `[data-action="pick-pa"]` | `GDHomeShell.lightbox` | Dùng chung lightbox xem ảnh và cắt ảnh |

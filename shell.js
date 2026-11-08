@@ -368,13 +368,76 @@ window.GDHomeShell = (() => {
     }
   } catch {}
 
+  
+  // ---------------------------------------------------------------------------
+  // GĐ18B.1: Quản lý nút ẩn/hiện thanh bên trái đồng bộ và nhớ trạng thái per-page
+  // ---------------------------------------------------------------------------
+  function initSidebarToggle() {
+    const hasSidebar = document.querySelector('.app-sidebar, .material-sidebar, .shell-sidebar');
+    const headerLeft = document.querySelector('.app-header .header-left');
+    if (!hasSidebar || !headerLeft) return;
+
+    let toggleBtn = document.getElementById('btn-toggle-sidebar');
+    if (!toggleBtn) {
+      toggleBtn = document.createElement('button');
+      toggleBtn.type = 'button';
+      toggleBtn.className = 'icon-btn shell-sidebar-toggle';
+      toggleBtn.id = 'btn-toggle-sidebar';
+      toggleBtn.title = 'Ẩn/Hiện thanh bên trái';
+      toggleBtn.setAttribute('aria-label', 'Ẩn/Hiện thanh bên trái');
+      toggleBtn.innerHTML = '<i data-lucide="menu">☰</i>';
+      headerLeft.prepend(toggleBtn);
+      icons();
+    }
+
+    const key = 'gdhome_sidebar_hidden:' + location.pathname;
+    let isHidden = false;
+    try {
+      isHidden = localStorage.getItem(key) === '1';
+    } catch {}
+
+    function applyState(hidden) {
+      document.body.classList.toggle('is-sidebar-collapsed', hidden);
+      const sidebars = document.querySelectorAll('.app-sidebar, .material-sidebar, .shell-sidebar');
+      sidebars.forEach(sb => sb.classList.toggle('collapsed', hidden));
+      toggleBtn.setAttribute('aria-expanded', String(!hidden));
+    }
+
+    applyState(isHidden);
+
+    toggleBtn.onclick = event => {
+      event.preventDefault();
+      const currentHidden = document.body.classList.contains('is-sidebar-collapsed');
+      const nextHidden = !currentHidden;
+      applyState(nextHidden);
+      try {
+        localStorage.setItem(key, nextHidden ? '1' : '0');
+      } catch {}
+    };
+  }
+
+  function toggleSidebar(forcedState) {
+    const key = 'gdhome_sidebar_hidden:' + location.pathname;
+    const isCurrentlyCollapsed = document.body.classList.contains('is-sidebar-collapsed');
+    const nextHidden = typeof forcedState === 'boolean' ? forcedState : !isCurrentlyCollapsed;
+    document.body.classList.toggle('is-sidebar-collapsed', nextHidden);
+    const sidebars = document.querySelectorAll('.app-sidebar, .material-sidebar, .shell-sidebar');
+    sidebars.forEach(sb => sb.classList.toggle('collapsed', nextHidden));
+    const btn = document.getElementById('btn-toggle-sidebar');
+    if (btn) btn.setAttribute('aria-expanded', String(!nextHidden));
+    try {
+      localStorage.setItem(key, nextHidden ? '1' : '0');
+    } catch {}
+    return nextHidden;
+  }
+
   if (typeof window !== 'undefined') {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initHubJobTracker);
+      document.addEventListener('DOMContentLoaded', () => { initHubJobTracker(); initSidebarToggle(); });
     } else {
-      initHubJobTracker();
+      initHubJobTracker(); initSidebarToggle();
     }
   }
 
-  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders };
+  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders,initSidebarToggle,toggleSidebar };
 })();

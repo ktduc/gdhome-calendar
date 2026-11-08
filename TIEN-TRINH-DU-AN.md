@@ -227,3 +227,19 @@
   - Hiển thị bảng đối chiếu **Hiện tại → Đề xuất** từng trường có ô tích chọn và nút **Áp dụng**; các trường đang có giá trị không bị tự tích ghi đè (`checked: false`).
   - Tự động chạy ngầm (`runSilentProfileAutofill`) khi tạo dự án mới hoặc tải hợp đồng/báo giá lên và bật chấm báo đề xuất.
   - Thêm bộ kiểm thử `tests/gd18b-profile-autofill.test.js`.
+
+- [x] **18B.5. Lịch: AI soát tiến độ (GPT thực hiện phần AI Lịch song song)**
+  - Tích hợp soát tiến độ thông qua background job AI (`integrations.js`, `TIMELINE_REVIEW_SYSTEM`).
+  - Hộp thoại duyệt các nhóm phát hiện tiến độ trên trang Lịch (`ai-timeline-review-dialog`).
+  - Đã có test `tests/gd18b-timeline-review.test.js`.
+- [x] **18B.1. Đồng bộ khung giao diện giữa các trang (/, /chot-ma, /du-an, /tools)**
+  - **Header đồng bộ**: Logo GD HOME, menu GD HOME Tools (`.gd-tools-menu`), thanh nút lệnh (`.shell-toolbar`), nút tài khoản (`.shell-account`) chuẩn vị trí, kích thước và màu sắc.
+  - **Nút ẩn/hiện thanh bên trái**: Dùng chung biểu tượng `menu` (`☰`), kích thước 32px, ở đầu `.header-left`, tự động nhớ trạng thái theo từng trang qua `localStorage.getItem('gdhome_sidebar_hidden:' + location.pathname)`.
+  - **Màu sắc & Bo góc hộp thoại, Popover, Menu và Toast**: Dùng chung bộ biến màu nền be ghi nhạt `--gd-overlay-bg: #f4f1ec`, viền `--gd-overlay-border: #d8d2c8`, bo góc `--gd-overlay-radius: 10px`, đổ bóng `--gd-overlay-shadow: 0 10px 28px rgba(15, 23, 42, 0.16)`. Tiêu đề 16px và nút đóng `×` 28px đồng bộ.
+  - **Nút bấm đồng bộ chiều cao 32px**: `.btn`, `.btn-primary` (`#1a73e8`), `.btn-outline`, `.btn-danger` (`#d93025`), `.btn-success` (`#188038`).
+  - **Bảng đối chiếu lớp Chốt mã cần chuyển đổi**: Đã lập bảng ánh xạ chi tiết giữa các lớp đặc thù của Chốt mã (`.material-header`, `#material-add`, `.material-sidebar`, `.crop-dialog`, ...) sang lớp dùng chung của Shell trong `docs/HE-THONG-GIAO-DIEN.md`.
+  - **Ảnh chụp đối chiếu 1440px**: Đã chụp 4 trang (`lich-1440.png`, `chot-ma-1440.png`, `du-an-1440.png`, `tools-1440.png`) lưu vào `docs/gd18/`.
+  - **Kiểm thử tự động**: Thêm `tests/gd18b-shell-ui.test.js`, toàn bộ test suite 65/65 pass 100%, Playwright 10.1, 10.3, 10.6 đạt 100%.
+
+---
+**XONG GĐ18B**
