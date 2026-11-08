@@ -729,6 +729,36 @@ cases['12.1'] = async page => {
   assert.ok((await page.pdf({preferCSSPageSize:true})).length > 1000);
 };
 
+cases['12.2'] = async page => {
+  await openMaterials(page);
+  const printNote = page.locator('#materials th[data-column=note] button[data-action=print-column]');
+  const note = page.locator('[data-row="g1-r1"] td[data-column=note]');
+  await printNote.click();
+  assert.equal(await printNote.getAttribute('aria-pressed'),'false');
+  assert.match(await note.getAttribute('class'),/is-no-print/);
+  assert.equal(await note.locator('input').isEditable(),true);
+  assert.equal(await page.locator('[data-print-column-toggle][value=note]').isChecked(),false);
+  const form = await openImageScope(page);
+  await form.locator('.export-print-columns summary').click();
+  assert.equal(await form.locator('[name=printColumn][value=note]').isChecked(),false);
+  await form.locator('[name=printColumn][value=spec]').uncheck();
+  await form.getByRole('button',{name:'Xem trước'}).click();
+  await page.locator('#stats-copy').waitFor();
+  assert.equal(await page.locator('#print-sheet [data-column=note], #print-sheet [data-column=spec]').count(),0);
+  await page.locator('#close-print').click();
+  await page.waitForFunction(async () => {
+    const {viewSettings} = await fetch('/api/materials/preferences').then(res => res.json());
+    return ['spec','note'].every(key => viewSettings.printHidden?.includes(key));
+  });
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await printNote.waitFor();
+  assert.equal(await printNote.getAttribute('aria-pressed'),'false');
+  assert.equal(await page.locator('[data-print-column-toggle][value=spec]').isChecked(),false);
+  await page.locator('[data-print-column-toggle][value=note]').check();
+  assert.equal(await printNote.getAttribute('aria-pressed'),'true');
+};
+
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }

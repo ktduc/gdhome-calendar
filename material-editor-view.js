@@ -27,6 +27,33 @@ function visibleColumns() {
   return materialColumns.filter(([key]) => !hiddenColumns.has(key) &&
     (!/^pa[12]$/.test(key) || forcedPA.has(key) || Number(key[2]) < count));
 }
+function printableColumns() {
+  return visibleColumns().filter(([key]) => key !== 'actions');
+}
+function columnPrints(key) {
+  return key !== 'actions' && !materialView.printHidden?.includes(key);
+}
+function savePrintColumns(columns) {
+  const visible = new Set(printableColumns().map(([key]) => key));
+  const included = new Set(columns);
+  const previouslyHidden = (materialView.printHidden || []).filter(key => !visible.has(key));
+  setMaterialView({printHidden:[...previouslyHidden,...[...visible].filter(key => !included.has(key))]});
+}
+function printColumnCheckboxes(attribute) {
+  return printableColumns().map(([key,label]) => '<label class="sb-chip"><input type="checkbox" ' +
+    attribute + ' value="' + key + '"' + (columnPrints(key) ? ' checked' : '') + '> ' + html(label) + '</label>').join('');
+}
+function printColumnButton(key,label) {
+  const enabled = columnPrints(key);
+  return '<button type="button" class="print-column-button" data-action="print-column" data-id="' + key +
+    '" title="' + (key === 'actions' ? 'Cột thao tác chỉ dùng trong bảng nhập' : 'Bật/tắt in cột ' + label) +
+    '" aria-label="In cột ' + label + '" aria-pressed="' + enabled + '"' +
+    (key === 'actions' ? ' disabled' : '') + '>' + headerIcon('printer') + '</button>';
+}
+function materialColumnClass(key,editing) {
+  return editing && !columnPrints(key) ? ' class="is-no-print"' : '';
+}
+
 function sidebarSection(key,title,content) {
   return '<details class="sb-collapsible sidebar-section" data-sidebar="' + key + '"' + (sidebarOpen.get(key) !== false ? ' open' : '') +
     '><summary class="sb-head">' + title + '</summary><div class="material-sidebar-body">' + content + '</div></details>';
@@ -70,7 +97,8 @@ function displaySidebar() {
     '<div class="sb-chip-grid">' + materialColumns.filter(([key]) => optionalColumns.has(key) || /^pa[12]$/.test(key))
       .map(([key,label]) => '<label class="sb-chip" title="' + label + '"><input type="checkbox" data-column-toggle="' + key + '"' +
         ((optionalColumns.has(key) ? !hiddenColumns.has(key) : forcedPA.has(key)) ? ' checked' : '') + '> ' +
-        (optionalColumns.has(key) ? label : 'Luôn hiện ' + label) + '</label>').join('') + '</div>');
+        (optionalColumns.has(key) ? label : 'Luôn hiện ' + label) + '</label>').join('') + '</div>' +
+    '<div class="sb-row-label">Cột in</div><div class="sb-chip-grid material-print-columns">' + printColumnCheckboxes('data-print-column-toggle') + '</div>');
 }
 function materialKpis() {
   const nearest = sheet.groups.map(g => deadlineFor(g).due).filter(Boolean).sort()[0];
@@ -239,10 +267,10 @@ function materialPaperHeading(current) {
 
 function renderMaterialPaper(current,columns,widths,groups,editing) {
   const width = widths.reduce((sum,value) => sum+value,0);
-  const columnHeadings = columns.map(([key,label]) => '<th data-column="' + key + '">' + (key === 'select' ?
+  const columnHeadings = columns.map(([key,label]) => '<th data-column="' + key + '"' + materialColumnClass(key,editing) + '>' + (key === 'select' ?
     '<label class="material-row-number"><input type="checkbox" data-select-all aria-label="Chọn tất cả dòng đang hiện"><span>STT</span></label>' :
     label + '<span class="msp-col-resizer" data-resize="' + key + '" tabindex="0" role="separator" aria-orientation="vertical" aria-label="Độ rộng cột ' +
-    label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + '</th>').join('');
+    label + '" title="Kéo đổi độ rộng · Nháy đúp để đặt lại"></span>') + (editing ? printColumnButton(key,label) : '') + '</th>').join('');
   const columnSizes = columns.map(([key],index) => '<col data-column="' + key + '" style="width:' + widths[index] + 'px">').join('');
   return '<article class="material-paper ' + materialFontClass() + ' density-' + density + '" style="width:' + width +
     'px;--material-page-scale:' + Math.min(1,1050/width) + '">' + materialPaperHeading(current) +
@@ -251,7 +279,13 @@ function renderMaterialPaper(current,columns,widths,groups,editing) {
 }
 
 function materialPaperForExport(current) {
-  const columns = visibleColumns().filter(([key]) => key !== 'actions');
+  const columns = printableColumns().filter(([key]) => columnPrints(key));
+  if (!columns.length) {
+    const message = document.createElement('p');
+    message.className = 'material-paper-output';
+    message.textContent = 'Bật in ít nhất một cột để xem bảng.';
+    return message;
+  }
   const template = document.createElement('template');
   template.innerHTML = renderMaterialPaper(current,columns,columns.map(([key]) => columnWidth(key)),current.groups,false);
   const paper = template.content.firstElementChild;
@@ -343,7 +377,15 @@ function installEditorSidebar() {
   };
   const sidebar = box().querySelector('.material-sidebar');
   sidebar.onchange = event => {
-    const {groupToggle,columnToggle} = event.target.dataset;
+    const {groupToggle,columnToggle,printColumnToggle} = event.target.dataset;
+    if (printColumnToggle !== undefined) {
+      const key = event.target.value;
+      const checked = event.target.checked;
+      const columns = printableColumns().filter(([id]) => id === key ? checked : columnPrints(id));
+      savePrintColumns(columns.map(([id]) => id));
+      renderEditor();
+      return;
+    }
     if (groupToggle) setMembership(hiddenGroups,groupToggle,!event.target.checked);
     if (columnToggle) {
       if (optionalColumns.has(columnToggle)) setMembership(hiddenColumns,columnToggle,!event.target.checked);
@@ -387,7 +429,7 @@ function renderGroup(group,columns,nextNumber,editing) {
     '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
     input('groupName',group.name,'Nhóm') + ' <span class="material-group-controls"><label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
     scheduleControls(group) + ' <button data-action="del-group">Bỏ nhóm</button></span></th></tr>';
-  const rows = (editing ? visibleGroupRows(group) : group.rows).map(row => renderRow(row,columns,nextNumber())).join('');
+  const rows = (editing ? visibleGroupRows(group) : group.rows).map(row => renderRow(row,columns,nextNumber(),editing)).join('');
   const add = !editing || collapsed.has(group.id) ? '' : '<tr><td colspan="' + span + '"><button data-action="add-row">＋ Dòng</button></td></tr>';
   return '<tbody data-group="' + html(group.id) + '">' + heading + rows + add + '</tbody>';
 }
@@ -409,7 +451,7 @@ function imageCell(list, slot, content = '', state = '', removable = false) {
 }
 
 
-function renderRow(row,columns,number) {
+function renderRow(row,columns,number,editing) {
   const chosen = row.options[row.chosen];
   const count = rowPaCount(row);
   const cells = {
@@ -438,5 +480,5 @@ function renderRow(row,columns,number) {
     const canRemove = i > 0 && i === count-1 && !paHasData(pa) && row.chosen !== i;
     cells[key] = imageCell(pa.images,i,code,row.chosen === i ? 'chosen' : row.chosen != null ? 'reserve' : '',canRemove);
   }
-  return '<tr data-row="' + html(row.id) + '">' + columns.map(([key]) => '<td data-column="' + key + '">' + cells[key] + '</td>').join('') + '</tr>';
+  return '<tr data-row="' + html(row.id) + '">' + columns.map(([key]) => '<td data-column="' + key + '"' + materialColumnClass(key,editing) + '>' + cells[key] + '</td>').join('') + '</tr>';
 }

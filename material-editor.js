@@ -373,6 +373,12 @@ document.addEventListener('click', async event => {
         break;
       case 'density': density = button.dataset.id; setMaterialView({density}); renderEditor(); break;
       case 'font-weight': setMaterialView({fontWeight:button.dataset.id}); renderEditor(); break;
+      case 'print-column': {
+        const key = button.dataset.id;
+        savePrintColumns(printableColumns().filter(([id]) => id === key ? !columnPrints(id) : columnPrints(id)).map(([id]) => id));
+        renderEditor();
+        break;
+      }
       case 'header-add-row': {
         const targetGroup = sheet.groups.find(entry => entry.id === byId('header-add-group').value);
         if (targetGroup) modify(() => targetGroup.rows.push(newRow()));

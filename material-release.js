@@ -131,13 +131,18 @@ function statistics(mode) {
     '<label><span>Phòng</span><select name="room"><option value="">Tất cả</option>' +
     rooms.map(room => option(room,room,saved.room)).join('') + '</select></label>' +
     '<label class="export-watermark-toggle"><span>Sọc chìm</span><input name="watermark" type="checkbox"' + (saved.watermark === false ? '' : ' checked') + '></label>' +
+    '<details class="export-print-columns"><summary>Cột in</summary><div class="sidebar-compact"><div class="sb-chip-grid">' +
+    printColumnCheckboxes('name="printColumn"') + '</div></div></details>' +
     '<p id="export-scope-status" role="status"></p><button class="primary">Xem trước</button></form>');
 
   byId('material-image-scope').onsubmit = async event => {
     event.preventDefault();
     const scope = new FormData(event.target);
     const watermark = scope.has('watermark');
-    setMaterialView({export:{...Object.fromEntries(scope),watermark}});
+    const columns = scope.getAll('printColumn');
+    if (!columns.length) { byId('export-scope-status').textContent = 'Bật in ít nhất một cột.'; return; }
+    savePrintColumns(columns);
+    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark}});
     const filtered = { ...sheet,groups:sheet.groups
       .filter(group => scope.get('groups') !== 'visible' || !hiddenGroups.has(group.id))
       .map(group => ({ ...group,rows:group.rows.filter(row =>
@@ -146,6 +151,7 @@ function statistics(mode) {
       .filter(group => group.rows.length) };
     if (!filtered.groups.length) { byId('export-scope-status').textContent = 'Phạm vi này không có dòng vật liệu.'; return; }
     element.close();
+    renderEditor();
     await showStatistics(filtered,mode,watermark);
   };
 }

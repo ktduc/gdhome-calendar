@@ -152,13 +152,15 @@ XONG GĐ10
 | Bước | Trạng thái | Kết quả |
 |---|---|---|
 | 12.1 | ✅ | dùng cùng bố cục bảng làm việc cho ảnh và PDF |
-| 12.2 | ⏳ | Bật/tắt in từng cột |
+| 12.2 | ✅ | lưu và đồng bộ nút in trên từng cột |
 | 12.3 | ⏳ | Ảnh vuông Fill/Vừa |
 | 12.4 | ⏳ | Đóng xem trước và chữ phụ |
 | 12.5 | ⏳ | Kho gợi ý Ghi chú và Quy cách |
 | 12.6 | ⏳ | Đổi thứ tự cột |
 | 12.7 | ⏳ | Tự liên kết Việc Tiến độ |
 
-Bước kế tiếp GĐ12: 12.2 bật tắt in theo cột.
+Bước kế tiếp GĐ12: 12.3 thêm chế độ ảnh Fill và Vừa.
 
 - 12.1: dùng cùng bộ dựng đầu tờ, cột, nhóm và dòng. Thao tác được bỏ khỏi bản xuất. PDF thống kê thu đều vào A4 ngang. Ca Playwright 12.1 đối chiếu thứ tự, tỷ lệ cột trong ±5%, kích thước ô ảnh và logo; ca 9.2 xác nhận ảnh PNG thực tế.
+
+- 12.2: cột tắt in vẫn sửa được và tô xám. Trạng thái dùng chung giữa tiêu đề, sidebar và Copy ảnh. Playwright xác nhận bỏ cột ở bản xuất và phục hồi sau khi xoá localStorage.

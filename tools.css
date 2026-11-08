@@ -185,7 +185,21 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 .material-paper .sheet-grid{min-width:0;table-layout:fixed;border-collapse:separate;border-spacing:0;border-left:1px solid #a7b5c5}
 .material-paper .sheet-grid :is(th,td){box-sizing:border-box;padding:4px;vertical-align:top;border-width:0 1px 1px 0}
 .material-paper .sheet-grid thead th{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.material-paper:not(.material-paper-output) .sheet-grid thead th{padding-right:24px}
+.material-paper:not(.material-paper-output) .sheet-grid thead th[data-column=select]{padding-right:14px}
+.print-column-button{position:absolute;right:7px;top:50%;transform:translateY(-50%);width:16px;height:17px;padding:0;line-height:1;
+  display:grid;place-items:center;border-color:transparent;background:transparent;color:#334155}
+.print-column-button svg{width:13px;height:13px}
+.print-column-button i:empty::before{content:'🖨';font-size:11px;font-style:normal}
+.print-column-button[aria-pressed=false]{color:#64748b}
+.print-column-button:disabled{opacity:.35;cursor:default}
+.sheet-grid th[data-column=select] .print-column-button{right:0;width:14px}
+.material-print-columns{margin-top:4px}
+.export-print-columns summary{cursor:pointer;margin:3px 0}
+#material-image-scope .export-print-columns label{display:flex;justify-content:flex-start;gap:4px}
+.export-print-columns .sb-chip-grid input{width:13px}
 .material-paper .sheet-grid tr[data-row]>td{vertical-align:top}
+.material-paper .sheet-grid :is(th,td).is-no-print{background:#dce1e7;color:#354256}
 .material-paper .sheet-grid .group th{min-height:32px;height:32px;vertical-align:middle}
 .material-paper .sheet-grid :is(input:not([type=checkbox]),select){box-sizing:border-box;color:inherit;border-color:transparent;background:transparent}
 .material-paper .sheet-grid :is(input:not([type=checkbox]),select):is(:hover,:focus){border-color:#a7b5c5;background:#fff}
