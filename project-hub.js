@@ -527,8 +527,8 @@ async function annotateDrawingPdf(pdfBuffer, findings = [], projectName = 'Dự 
     // dự phòng nếu không đọc được font
   }
 
-  const font = regularFontBytes ? await pdfDoc.embedFont(regularFontBytes) : await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = boldFontBytes ? await pdfDoc.embedFont(boldFontBytes) : await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+  const font = regularFontBytes ? await pdfDoc.embedFont(regularFontBytes, { subset: true }) : await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = boldFontBytes ? await pdfDoc.embedFont(boldFontBytes, { subset: true }) : await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
   // 1. Chèn Trang 0 (Trang Tổng Hợp Đánh Giá & Phát Hiện)
   const coverPage = pdfDoc.insertPage(0, [595.28, 841.89]); // A4 chuẩn
