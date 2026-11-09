@@ -109,6 +109,8 @@ function normalize(data) {
       ...(imageName(item.full) && imageName(item.thumb) ? {full:item.full,thumb:item.thumb} : {}),
       ...(woodKey(item.code) ? {...woodMeta(item),brand:text(item.brand,80) || (kindOf(item) === 'wood' ? 'An Cường' : '')} : {}),
       createdAt: Number(item.createdAt) || Date.now(),
+      ...(item.favorite === true ? {favorite:true} : {}),
+      ...(Number.isFinite(item.lastUsedAt) && item.lastUsedAt > 0 ? {lastUsedAt:item.lastUsedAt} : {}),
       ...(Number(item.used) > 0 ? { used: Math.min(1e6, Math.floor(Number(item.used))) } : {})
     }));
   if (!base.woodSeeded) {
@@ -166,6 +168,9 @@ function mergeLibraryItems(data,body) {
   target.suppliers = stringList(selected.flatMap(item => item.suppliers || []));
   target.brands = stringList(selected.flatMap(item => [item.brand,...(item.brands || [])]));
   target.used = Math.min(1e6,selected.reduce((sum,item) => sum+(item.used || 0),0));
+  if (selected.some(item => item.favorite)) target.favorite = true;
+  const lastUsedAt = Math.max(...selected.map(item => item.lastUsedAt || 0));
+  if (lastUsedAt) target.lastUsedAt = lastUsedAt;
   const removed = new Set(ids.filter(id => id !== target.id));
   data.items = data.items.filter(item => !removed.has(item.id));
   return {removed,targetId:target.id};
@@ -341,7 +346,11 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       }
       if (typeof body.note === 'string') item.note = text(body.note, 500);
       if (data.categories.some(c => c.id === body.categoryId)) item.categoryId = body.categoryId;
-      if (body.used === true) item.used = (item.used || 0) + 1;
+      if (typeof body.favorite === 'boolean') item.favorite = body.favorite;
+      if (body.used === true) {
+        item.used = Math.min(1e6,(item.used || 0) + 1);
+        item.lastUsedAt = Date.now();
+      }
     });
     return sendJson(res, 200, data);
   }

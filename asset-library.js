@@ -258,7 +258,11 @@ window.GDHomeAssets = (() => {
       if (patch.hex) item.hex = patch.hex;
       if (typeof patch.square === 'boolean') for (const key of ['square','full','thumb','originalFull','originalThumb']) item[key] = patch[key];
       if (patch.categoryId) item.categoryId = patch.categoryId;
-      if (patch.used) item.used = (item.used || 0) + 1;
+      if (typeof patch.favorite === 'boolean') item.favorite = patch.favorite;
+      if (patch.used === true) {
+        item.used = Math.min(1e6,(item.used || 0) + 1);
+        item.lastUsedAt = Date.now();
+      }
     }
     return {};
   });
@@ -481,9 +485,10 @@ window.GDHomeAssets = (() => {
   }
 
   // ---------------------------------------------------------------- Giao diện chung
-  const facetLabels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',finish:'Bề mặt',
+  const facetLabels = {favorite:'★ Yêu thích',size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',finish:'Bề mặt',
     collection:'Bộ sưu tập',subgroup:'Nhóm phụ kiện',cabinetWidth:'Rộng tủ',tone:'Tông màu',grain:'Vân',tags:'Tag'};
-  const facetValues = (item,key) => [...new Set([key === 'size' ? primarySize(item.size) : item[key],...(key === 'brand' ? item.brands || [] : [])].flat().filter(Boolean).map(String))];
+  const facetValues = (item,key) => [...new Set([key === 'size' ? primarySize(item.size) : key === 'favorite' ?
+    (item.favorite ? 'favorite' : '') : item[key],...(key === 'brand' ? item.brands || [] : [])].flat().filter(Boolean).map(String))];
   const matchFacets = (item,facets,except) => Object.entries(facets).every(([key,values]) =>
     key === except || !values.size || facetValues(item,key).some(value => values.has(value)));
   function clearFacets(facets) {
@@ -505,11 +510,13 @@ window.GDHomeAssets = (() => {
         for (const value of facetValues(item,key)) counts.set(value,(counts.get(value) || 0)+1);
       }
       for (const value of facets[key] || []) if (!counts.has(value)) counts.set(value,0);
+      if (!counts.size && key === 'favorite') counts.set('favorite',0);
       if (!counts.size) return '';
       const choice = (value,caption,checked) => '<label class="asset-facet-choice"><input type="' + (key === 'size' ? 'radio' : 'checkbox') +
         '" data-facet="' + key + '" data-value="' + esc(value) + '"' + (checked ? ' checked' : '') + '> <span>' + esc(caption) + '</span></label>';
       return filterGroup(key,label,(key === 'size' ? choice('','Tất cả',!facets.size?.size) : '') + [...counts].map(([value,count]) =>
-        choice(value,(key === 'size' ? value.replace('x','×') : key === 'cabinetWidth' ? 'Tủ '+value : value) + ' (' + count + ')',facets[key]?.has(value))).join(''));
+        choice(value,(key === 'size' ? value.replace('x','×') : key === 'cabinetWidth' ? 'Tủ '+value : key === 'favorite' ? 'Chỉ mục yêu thích' : value) +
+          ' (' + count + ')',facets[key]?.has(value))).join(''));
     }).join('') + '</div>';
   }
   function arrangeFilterSidebar(root,state) {
@@ -539,6 +546,8 @@ window.GDHomeAssets = (() => {
     sidebar.classList.add('asset-filter-sidebar');
     sidebar.setAttribute('aria-label','Bộ lọc vật liệu');
     sidebar.append(facets);
+    const favorites = facets.querySelector('[data-filter-group=favorite]');
+    if (favorites) sidebar.prepend(favorites);
     state.radioName ||= 'asset-size-' + uid();
     for (const input of sidebar.querySelectorAll('[data-facet=size]')) input.name = state.radioName;
     for (const group of sidebar.querySelectorAll('[data-filter-group]')) {
@@ -557,6 +566,53 @@ window.GDHomeAssets = (() => {
     toggle.onclick = () => { state.drawer = !state.drawer; paintDrawer(); };
     controls.prepend(toggle);
     paintDrawer();
+  }
+  const sortLabels = {used:'Hay dùng',recent:'Mới thêm',name:'Tên A–Z',code:'Mã',manual:'Thứ tự thủ công'};
+  const assetCollator = new Intl.Collator('vi',{numeric:true,sensitivity:'base'});
+  function sortLibrary(items,mode = 'used') {
+    const comparators = {
+      used:(a,b) => (b.used || 0)-(a.used || 0) || (b.lastUsedAt || 0)-(a.lastUsedAt || 0),
+      recent:(a,b) => (b.createdAt || 0)-(a.createdAt || 0),
+      name:() => 0,
+      code:(a,b) => assetCollator.compare(a.code || '',b.code || ''),
+      manual:(a,b) => (a.order ?? Infinity)-(b.order ?? Infinity)
+    };
+    return [...items].sort((a,b) => Number(!!b.favorite)-Number(!!a.favorite) || comparators[mode](a,b) ||
+      assetCollator.compare(a.name || '',b.name || '') || assetCollator.compare(a.id,b.id));
+  }
+  function assetItemActions(item) {
+    if (!['image','wood','paint'].includes(item.kind)) return '';
+    return '<button type="button" data-asset-favorite="' + esc(item.id) + '" aria-pressed="' + !!item.favorite +
+      '" aria-label="' + (item.favorite ? 'Bỏ yêu thích' : 'Yêu thích') + ' ' + esc(item.name || item.code) + '">' +
+      (item.favorite ? '★' : '☆') + '</button><small class="asset-usage" aria-label="' + (item.used || 0) + ' lượt dùng">' + (item.used || 0) + '</small>';
+  }
+  function wireLibraryActions(root,state,paint,{manual = false} = {}) {
+    const toolbar = root.querySelector('.asset-filters,.asset-library-head');
+    if (!toolbar) return;
+    const controls = document.createElement('div');
+    controls.className = 'asset-sort-controls';
+    controls.innerHTML = '<label>Sắp xếp <select aria-label="Sắp xếp">' + Object.entries(sortLabels).filter(([key]) => manual || key !== 'manual')
+      .map(([key,label]) => '<option value="' + key + '">' + label + '</option>').join('') + '</select></label>' +
+      (state.favoriteUndo ? '<button type="button" data-favorite-undo>Hoàn tác yêu thích</button>' : '');
+    toolbar.append(controls);
+    const sort = controls.querySelector('select');
+    sort.value = state.sort || 'used';
+    sort.onchange = () => { state.sort = sort.value; paint(); };
+    async function change(id,value,undo) {
+      if (state.favoriteBusy) return;
+      state.favoriteBusy = true;
+      const previous = state.favoriteUndo;
+      state.favoriteUndo = undo;
+      try { await updateItem({id,favorite:value}); }
+      catch (error) { state.favoriteUndo = previous; toast(error.message); paint(); }
+      finally { state.favoriteBusy = false; }
+    }
+    root.querySelectorAll('[data-asset-favorite]').forEach(button => button.onclick = () => {
+      const id = button.dataset.assetFavorite, value = button.getAttribute('aria-pressed') === 'true';
+      change(id,!value,{id,value});
+    });
+    const undo = controls.querySelector('[data-favorite-undo]');
+    if (undo) undo.onclick = () => change(state.favoriteUndo.id,state.favoriteUndo.value,null);
   }
   function wireFacets(root,facets,paint) {
     const clear = root.querySelector('[data-clear-facets]');
@@ -584,6 +640,7 @@ window.GDHomeAssets = (() => {
         esc(item.code || item.name) + '</strong><span>' + esc(item.code ? item.name : item.collection) + '</span></figcaption>' :
         '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish,item.spec,item.cabinetWidth && 'Tủ '+item.cabinetWidth,item.subgroup].filter(Boolean).join(' · '))) + '</figcaption>') +
       (removable && item.full ? '<details class="asset-card-menu"><summary aria-label="Tuỳ chọn ảnh">⋯</summary><label>Kiểu hiển thị' + displaySelect(item.display || 'fill','data-asset-display') + '</label></details>' : '') +
+      ((selectable || removable) ? assetItemActions(item) : '') +
       (removable && item.builtin ? '<button type="button" data-asset-hide>' + (item.hidden ? 'Hiện' : 'Ẩn') + '</button>' : '') +
       (removable ? '<button type="button" class="asset-remove" data-asset-remove aria-label="Xoá ảnh">×</button>' : '') + '</figure>').join('') + '</div>';
   }
@@ -708,8 +765,8 @@ window.GDHomeAssets = (() => {
         categoryId ||= categoryFor(data,groupName)?.id || 'all';
         const scoped = data.items.filter(item => !item.hidden && (item.full || item.kind === 'paint' || item.kind === 'wood') && (categoryId === 'all' || item.categoryId === categoryId));
         pruneFacets(scoped,facets);
-        const candidates = scoped.filter(item => !query || fold(item.name).includes(fold(query))).sort((a,b) => (b.used || 0)-(a.used || 0));
-        const items = candidates.filter(item => matchFacets(item,facets));
+        const candidates = scoped.filter(item => !query || fold(item.name).includes(fold(query)));
+        const items = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters"><select aria-label="Hạng mục"><option value="all">Tất cả hạng mục</option>' +
           data.categories.map(c => '<option value="' + esc(c.id) + '"' + (c.id === categoryId ? ' selected' : '') + '>' + esc(c.name) +
@@ -720,6 +777,7 @@ window.GDHomeAssets = (() => {
           '<footer><button type="button" data-upload>⬆ Tải lên hạng mục này</button><button type="button" data-full>Quản lý dữ liệu</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         arrangeFilterSidebar(panel,sidebarState);
+        wireLibraryActions(panel,sidebarState,paint);
         wireFacets(panel,facets,paint);
         panel.querySelector('select').onchange = event => { categoryId = event.target.value; clearFacets(facets); paint(); };
         const search = panel.querySelector('input[type=search]');
@@ -838,7 +896,12 @@ window.GDHomeAssets = (() => {
   }
   function wireLocalAssetPhotos(panel,items,onPick) {
     panel.querySelectorAll('.asset-specialized-photos [data-asset-pick]').forEach(button => {
-      button.onclick = () => onPick(items.find(item => item.id === button.closest('[data-asset-id]').dataset.assetId));
+      button.onclick = () => {
+        const item = items.find(item => item.id === button.closest('[data-asset-id]').dataset.assetId);
+        if (!item) return;
+        updateItem({id:item.id,used:true}).catch(() => {});
+        onPick(item);
+      };
     });
     hydrate(panel);
   }
@@ -864,17 +927,17 @@ window.GDHomeAssets = (() => {
         if (!panel.isConnected) return;
         pruneFacets([...(paintData.colors || []),...photos],facets);
         const candidates = (paintData.colors || []).filter(c => !query || fold(c.code).includes(fold(query)) || fold(c.name).includes(fold(query)));
-        const colors = candidates.filter(item => matchFacets(item,facets));
-        const matchingPhotos = photos.filter(item => matchFacets(item,facets));
+        const colors = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
+        const matchingPhotos = sortLibrary(photos.filter(item => matchFacets(item,facets)),sidebarState.sort);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
           '<select aria-label="Hãng sơn">' + paintData.brands.map(name => '<option value="' + esc(name) + '"' +
             (brand === name ? ' selected' : '') + '>' + esc(name) + '</option>').join('') + '</select>' +
           '<input type="search" placeholder="Tìm theo mã hoặc tên màu (vd: 30YY, 9918, White...)" value="' + esc(query) + '"></div>' +
           '<div class="asset-body">' + facetMarkup([...candidates,...photos],facets) +
-          (colors.length ? '<div class="asset-paint-grid">' + colors.map(c => '<button type="button" class="asset-paint-card" data-paint-code="' + esc(c.code) + '" title="' + esc(c.code + ' – ' + c.name) + '">' +
+          (colors.length ? '<div class="asset-paint-grid">' + colors.map(c => '<div class="asset-specialized-card"><button type="button" class="asset-paint-card" data-paint-code="' + esc(c.code) + '" title="' + esc(c.code + ' – ' + c.name) + '">' +
             '<div class="asset-paint-swatch" style="background-color:' + esc(c.hex) + '"></div>' +
-            '<div class="asset-paint-info"><strong>' + esc(c.code) + '</strong><span>' + esc(c.name) + '</span></div></button>').join('') + '</div>' :
+            '<div class="asset-paint-info"><strong>' + esc(c.code) + '</strong><span>' + esc(c.name) + '</span></div></button>' + assetItemActions(c) + '</div>').join('') + '</div>' :
             (facetEmpty(matchingPhotos,facets) || '<p class="asset-empty">Chưa có "' + esc(query) + '" trong bảng màu mẫu.</p>') +
             '<form class="asset-paint-custom"><strong>Dùng mã này</strong><label>Mã <input name="code" required value="' + esc(query) + '"></label>' +
             '<label>Tên màu <input name="name" placeholder="vd Ivory Lace"></label><label>Màu <input name="hex" type="color" value="#f2eee6"></label>' +
@@ -883,6 +946,7 @@ window.GDHomeAssets = (() => {
           '<footer><small class="asset-hint">Nguồn: ' + esc(paintData.source || '') + ' (' + colors.length + ' màu)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         arrangeFilterSidebar(panel,sidebarState);
+        wireLibraryActions(panel,sidebarState,paint);
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('select').onchange = event => { brand = event.target.value; clearFacets(facets); paint(); };
         wireFacets(panel,facets,paint);
@@ -948,8 +1012,8 @@ window.GDHomeAssets = (() => {
         const scoped = byBrand.filter(w => collection === 'all' || w.collection === collection);
         pruneFacets([...scoped,...photos],facets);
         const candidates = scoped.filter(w => !query || fold(w.code).includes(fold(query)) || fold(w.name).includes(fold(query)) || fold(w.collection).includes(fold(query)));
-        const woods = candidates.filter(item => matchFacets(item,facets));
-        const matchingPhotos = photos.filter(item => matchFacets(item,facets));
+        const woods = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
+        const matchingPhotos = sortLibrary(photos.filter(item => matchFacets(item,facets)),sidebarState.sort);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
           '<select aria-label="Hãng"><option value="">Tất cả hãng</option>' +
@@ -958,14 +1022,15 @@ window.GDHomeAssets = (() => {
           collections.map(col => '<option value="' + esc(col) + '"' + (col === collection ? ' selected' : '') + '>' + esc(col) + '</option>').join('') + '</select>' +
           '<input type="search" placeholder="Tìm theo mã, tên hoặc catalogue" value="' + esc(query) + '"></div>' +
           '<div class="asset-body">' + facetMarkup([...candidates,...photos],facets) +
-          (woods.length ? '<div class="asset-wood-grid">' + woods.map((w,index) => '<button type="button" data-wood-index="' + index + '" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
+          (woods.length ? '<div class="asset-wood-grid">' + woods.map((w,index) => '<div class="asset-specialized-card"><button type="button" data-wood-index="' + index + '" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
             (w.thumb ? '<img data-lib-asset="' + esc(w.thumb) + '" alt="">' : '') + '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span>' +
-            '<span class="wood-badge">' + esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>').join('') + '</div>' :
+            '<span class="wood-badge">' + esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>' + assetItemActions(w) + '</div>').join('') + '</div>' :
             (facetEmpty(matchingPhotos,facets) || '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>')) + localAssetPhotos(matchingPhotos) + onlineSlot +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(woodData.source || '') + ' (' + woods.length + ' mã)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         arrangeFilterSidebar(panel,sidebarState);
+        wireLibraryActions(panel,sidebarState,paint);
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('[aria-label=Hãng]').onchange = event => { brand = event.target.value; collection = 'all'; clearFacets(facets); paint(); };
         panel.querySelector('[aria-label="Dòng sản phẩm"]').onchange = event => { collection = event.target.value; clearFacets(facets); paint(); };
@@ -2103,6 +2168,7 @@ window.GDHomeAssets = (() => {
       paint();
     }
     async function bulk(patch) {
+      if (patch.order) sidebarState.sort = 'manual';
       const result = await libraryCall('items/bulk',patch,data => {
         if (patch.undo && guestUndo) { data.items = guestUndo; guestUndo = null; return {}; }
         guestUndo = structuredClone(data.items);
@@ -2142,7 +2208,7 @@ window.GDHomeAssets = (() => {
       const scoped = data.items.filter(item => item.categoryId === current && (!onPick || !item.hidden));
       pruneFacets(scoped,facets);
       const candidates = scoped.filter(item => !query || fold([item.code,item.name,...facetValues(item,'brand'),item.collection].join(' ')).includes(fold(query)));
-      const items = candidates.filter(item => matchFacets(item,facets)).sort((a,b) => (a.order ?? Infinity)-(b.order ?? Infinity));
+      const items = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" draggable="true" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
@@ -2159,6 +2225,7 @@ window.GDHomeAssets = (() => {
           (facetEmpty(items,facets) || grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'})) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       arrangeFilterSidebar(body,sidebarState);
+      wireLibraryActions(body,sidebarState,paint,{manual:!onPick});
       wireFacets(body,facets,paint);
       const findDuplicates = body.querySelector('[data-find-duplicates]');
       if (findDuplicates) findDuplicates.onclick = openDuplicateLibrary;

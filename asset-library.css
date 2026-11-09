@@ -19,6 +19,15 @@
 .asset-facet-choice{display:flex;align-items:center;gap:5px;min-width:0;margin:2px 0;font-size:12px}
 .asset-facet-choice input{flex:none;margin:0}
 .asset-facet-choice span{overflow-wrap:anywhere}
+.asset-sort-controls{display:flex;align-items:center;gap:4px;flex:none}
+.asset-sort-controls select{max-width:134px}
+.asset-specialized-card{position:relative;min-width:0}
+.asset-specialized-card>:is(.asset-wood-card,.asset-paint-card){width:100%;height:100%}
+[data-asset-favorite],.asset-usage{position:absolute;z-index:2;border-radius:4px;background:#fff;color:#475569;line-height:1}
+[data-asset-favorite]{top:56px;left:3px;padding:2px 4px;min-height:0}
+[data-asset-favorite][aria-pressed=true]{color:#805100}
+.asset-usage{top:61px;right:3px;padding:2px 4px;font-size:10px}
+.asset-specialized-card [data-asset-favorite],.asset-specialized-card .asset-usage{top:3px}
 [data-asset-filter-toggle]{display:none}
 @media (max-width:900px){
   .asset-picker-layout,.asset-library-dialog .asset-dialog-body:has(.asset-filter-sidebar){grid-template-columns:minmax(0,1fr)}

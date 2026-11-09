@@ -2546,6 +2546,43 @@ cases['20.16'] = async page => {
   await sidebar.waitFor({state:'hidden'});
 };
 
+cases['20.18'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  const [a,b] = await page.evaluate(async () => (await GDHomeAssets.addItems('cat-6',['Mẫu A','Mẫu B'].map((name,i) => ({
+    name,full:(i ? 'b' : 'a').repeat(64)+'.webp',thumb:(i ? 'b' : 'a').repeat(64)+'.webp'
+  })))).added);
+  const picker = page.locator('.asset-popover');
+  const openPicker = () => page.evaluate(() => GDHomeAssets.pickLibrary(document.querySelector('[data-row=g1-r1] .image-cell[data-slot="0"]'),{
+    groupName:'Gạch ốp lát',onPick:() => {}
+  }));
+  for (const item of [a,b,b,b]) {
+    await openPicker();
+    const done = page.waitForResponse(r => r.url().endsWith('/api/library/items/update') && r.ok());
+    await picker.locator('[data-asset-id="' + item.id + '"] [data-asset-pick]').click();
+    await done;
+  }
+  await openPicker();
+  await picker.locator('.asset-card').first().waitFor();
+  const first = () => picker.locator('.asset-card').first().getAttribute('data-asset-id');
+  assert.equal(await first(),b.id);
+  assert.equal(await picker.locator('.asset-card').first().locator('.asset-usage').textContent(),'3');
+  await picker.locator('[data-asset-favorite="' + a.id + '"]').click();
+  await picker.locator('[data-asset-favorite="' + a.id + '"][aria-pressed=true]').waitFor();
+  assert.equal(await first(),a.id);
+  await picker.getByLabel('Sắp xếp').selectOption('name');
+  assert.equal(await first(),a.id);
+  await picker.getByLabel('Chỉ mục yêu thích (1)').check();
+  assert.equal(await picker.locator('.asset-card').count(),1);
+  await picker.locator('[data-favorite-undo]').click();
+  await picker.locator('[data-asset-favorite="' + a.id + '"][aria-pressed=false]').waitFor();
+  await picker.getByLabel('Sắp xếp').selectOption('used');
+  assert.equal(await first(),b.id);
+  const data = await page.request.get('/api/library').then(r => r.json());
+  assert.equal(data.items.find(item => item.id === a.id).used,1);
+  assert.ok(data.items.find(item => item.id === b.id).lastUsedAt > 0);
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');
@@ -2640,7 +2677,7 @@ cases['20.8'] = async page => {
       await GDHomeAssets.uploadToLibrary('cat-4',[new File([blob],'Xem '+index+'.png',{type:'image/png'})]);
     }
     GDHomeAssets.openLibrary({categoryId:'cat-4'});
-    return (await GDHomeAssets.loadLibrary()).items.filter(item => item.categoryId === 'cat-4');
+    return (await GDHomeAssets.loadLibrary()).items.filter(item => item.categoryId === 'cat-4').sort((a,b) => a.name.localeCompare(b.name,'vi'));
   });
   const cards = page.locator('.asset-library-dialog .asset-card');
   await cards.first().locator('.asset-thumb').dblclick();
