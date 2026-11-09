@@ -2470,16 +2470,24 @@ cases['20.4'] = async page => {
 cases['20.15'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
-  await page.evaluate(async () => {
+  const emptyId = await page.evaluate(async () => {
     await GDHomeAssets.addItems('cat-6',['Chỉ A','Gạch khác'].map((name,i) => ({
       name,tags:[i ? 'thô' : 'bóng'],full:(i ? 'b' : 'a').repeat(64)+'.webp',thumb:(i ? 'b' : 'a').repeat(64)+'.webp'
     })));
     await GDHomeAssets.addItems('cat-5',['Đá B1','Đá B2'].map((name,i) => ({
       name,tags:[i ? 'thô' : 'bóng'],full:(i ? 'd' : 'c').repeat(64)+'.webp',thumb:(i ? 'd' : 'c').repeat(64)+'.webp'
     })));
+    await GDHomeAssets.addItems('cat-4',Array.from({length:48},(_,i) => {
+      const file = i.toString(16).padStart(64,'e')+'.webp';
+      return {name:'Mẫu nhiều '+i,full:file,thumb:file};
+    }));
+    const {category} = await GDHomeAssets.saveCategory('Hạng mục rỗng kiểm thử');
     GDHomeAssets.openLibrary({categoryId:'cat-6'});
+    return category.id;
   });
   const library = page.locator('.asset-library-dialog');
+  await library.locator('.asset-card').getByText('Chỉ A').waitFor();
+  const bounds = await library.boundingBox();
   const filter = root => root.locator('[data-facet=tags][data-value="bóng"]');
   await filter(library).click();
   assert.equal(await library.locator('.asset-card').count(),1);
@@ -2492,6 +2500,16 @@ cases['20.15'] = async page => {
   await library.locator('[data-cat=cat-5]').click();
   await library.locator('.asset-card').getByText('Đá B2').waitFor();
   assert.equal(await library.locator('.asset-card').count(),2);
+  assert.deepEqual(await library.boundingBox(),bounds);
+  await library.locator('[data-cat=cat-4]').click();
+  await library.locator('.asset-card').getByText('Mẫu nhiều 47',{exact:true}).waitFor();
+  assert.deepEqual(await library.boundingBox(),bounds);
+  assert.ok(await library.locator('.asset-library-main').evaluate(main => main.scrollHeight > main.clientHeight));
+  const emptyCategory = '[data-cat="' + emptyId + '"]';
+  await library.locator(emptyCategory).click();
+  await library.locator(emptyCategory+'[aria-current=true]').waitFor();
+  assert.equal(await library.locator('.asset-card').count(),0);
+  assert.deepEqual(await library.boundingBox(),bounds);
   await library.locator('.close-dialog').click();
   await page.evaluate(() => GDHomeAssets.pickLibrary(document.querySelector('[data-row=g1-r1] .image-cell[data-slot="0"]'),{
     groupName:'Gạch ốp lát',onPick:() => {}
@@ -2502,6 +2520,76 @@ cases['20.15'] = async page => {
   await picker.locator('[data-picker-category=cat-5]').check();
   await picker.locator('.asset-card').getByText('Đá B2').waitFor();
   assert.equal(await picker.locator('.asset-card').count(),2);
+};
+
+cases['20-library-ui'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  const {sourceId,itemId} = await page.evaluate(async () => {
+    const {category} = await GDHomeAssets.saveCategory('Kho gạch cũ');
+    const sample = (name,size,letter) => {
+      const file = letter.repeat(64)+'.webp';
+      return {name,size,full:file,thumb:file,tags:['Nội thất']};
+    };
+    await GDHomeAssets.addItems('cat-6',[sample('Gạch A','400x400','a'),sample('Gạch B','300x300','b')]);
+    const {added} = await GDHomeAssets.addItems(category.id,[sample('Mẫu kho cũ','400x400','c')]);
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+    return {sourceId:category.id,itemId:added[0].id};
+  });
+  const library = page.locator('.asset-library-dialog'), sidebar = library.locator('.asset-filter-sidebar');
+  const menu = library.locator('.asset-library-context');
+  const editor = page.locator('.asset-attribute-editor');
+  const size = value => sidebar.locator('[data-facet=size][data-value="' + value + '"]');
+  await size('300x300').waitFor();
+  const measure = () => Promise.all([library,sidebar,library.locator('.asset-library-navigation')].map(locator => locator.boundingBox()));
+  const originalBounds = await measure();
+  await library.getByRole('tab',{name:'Thuộc tính'}).click();
+  await library.locator('[data-attribute-row]').first().waitFor();
+  assert.deepEqual(await measure(),originalBounds);
+  await library.getByRole('tab',{name:'Mẫu vật liệu'}).click();
+  await size('300x300').waitFor();
+  assert.deepEqual(await measure(),originalBounds);
+
+  await size('300x300').click({button:'right'});
+  await menu.getByRole('button',{name:'Sửa giá trị',exact:true}).click();
+  await editor.locator('[name=value]').fill('600x600');
+  await editor.getByRole('button',{name:'Lưu giá trị'}).click();
+  await size('600x600').waitFor();
+  await size('600x600').click({button:'right'});
+  await menu.getByRole('button',{name:'Gộp vào giá trị…'}).click();
+  await editor.locator('[name=target]').selectOption('400x400');
+  await editor.getByRole('button',{name:'Gộp',exact:true}).click();
+  await size('600x600').waitFor({state:'detached'});
+  assert.equal(await sidebar.getByLabel('400×400 (2)').count(),1);
+
+  await sidebar.locator('[data-filter-group=tags] summary').click({button:'right'});
+  await menu.getByRole('button',{name:'Xem bảng giá trị'}).click();
+  await library.getByRole('table').waitFor();
+  assert.equal(await library.locator('[data-attribute-key]').inputValue(),'tags');
+  await library.getByRole('row').getByText('Nội thất',{exact:true}).waitFor();
+  assert.deepEqual(await measure(),originalBounds);
+
+  const source = library.locator('[data-cat="' + sourceId + '"]');
+  await source.click({button:'right'});
+  page.once('dialog',prompt => prompt.accept('Kho gạch cũ đã đổi tên'));
+  await menu.getByRole('button',{name:'Sửa tên hạng mục'}).click();
+  await source.getByText('Kho gạch cũ đã đổi tên',{exact:true}).waitFor();
+  await source.click({button:'right'});
+  await menu.getByRole('button',{name:'Gộp vào hạng mục…'}).click();
+  await editor.locator('[name=target]').selectOption('cat-6');
+  await editor.getByRole('button',{name:'Gộp',exact:true}).click();
+  await source.waitFor({state:'detached'});
+  await library.getByRole('tab',{name:'Mẫu vật liệu'}).click();
+  await library.locator('[data-asset-id="' + itemId + '"]').waitFor();
+  const {items,categories} = await page.request.get('/api/library').then(response => response.json());
+  assert.equal(items.find(item => item.id === itemId).categoryId,'cat-6');
+  assert.deepEqual(categories.find(category => category.id === 'cat-6').aliases,['Kho gạch cũ đã đổi tên']);
+  assert.deepEqual(await measure(),originalBounds);
+
+  await page.goto('/');
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await library.getByRole('tab',{name:'Thuộc tính'}).click();
+  await library.getByRole('table').waitFor();
 };
 
 cases['20.17'] = async page => {
@@ -2747,7 +2835,8 @@ cases['20.12'] = async page => {
     const url = route.request().postDataJSON().urls[0];
     if (url.endsWith('/loi')) return route.fulfill({status:502,json:{message:'Nguồn kiểm thử bị lỗi'}});
     const code = url.endsWith('/a') ? 'WEB-A' : 'WEB-B';
-    return route.fulfill({json:{items:[{code,name:code,image:url+'.png'}]}});
+    const warnings = code === 'WEB-A' ? ['Giữ dữ liệu HTML vì AI chưa đọc được: Gemini · Đã hết hạn mức API.'] : [];
+    return route.fulfill({json:{items:[{code,name:code,image:url+'.png'}],warnings}});
   });
   await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')}));
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'ancuong-wood'}));
@@ -2781,16 +2870,21 @@ cases['20.12'] = async page => {
   });
   await modal.getByRole('button',{name:'Xử lý hàng đợi'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor();
+  const quotaNotice = rows.filter({hasText:'https://example.com/a'}).locator('[data-source-warning]');
+  await quotaNotice.waitFor();
+  assert.match(await quotaNotice.textContent(),/Gemini.*hết hạn mức API/);
   assert.equal(await page.evaluate(() => window.maxCatalogueWorkers),2);
   assert.equal(await modal.locator('[data-source-state=done]').count(),5);
   assert.equal(await modal.locator('[data-source-state=error]').count(),1);
   assert.equal(await modal.locator('.wood-catalogue-card').count(),5);
   await modal.locator('[data-save-wood]').click();
   await modal.getByText(/Đã lưu 5 mã/).waitFor();
+  assert.ok(await quotaNotice.isVisible());
   const data = await page.request.get('/api/library').then(r => r.json());
   const own = data.items.find(item => item.code === 'WEB-B');
   assert.deepEqual([own.categoryId,own.brand,own.suppliers],['cat-5','Hãng riêng',['Kho riêng']]);
-  assert.equal(data.imports.filter(entry => entry.status === 'done').length,5);
+  assert.equal(data.imports.filter(entry => entry.status === 'done').length,4);
+  assert.equal(data.imports.find(entry => entry.source === 'https://example.com/a').status,'partial');
 };
 
 cases['20.12-bulk'] = async page => {

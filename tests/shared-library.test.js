@@ -62,6 +62,26 @@ test('Dữ liệu dùng chung: ghép nhóm vật liệu với hạng mục', () 
   assert.equal(categoryForGroup(library,'Hạng mục lạ'),null);
 });
 
+test('Gộp hạng mục giữ ID mẫu, lịch sử nhập và phạm vi thuộc tính', async () => {
+  const {call} = harness();
+  const sourceId = 'cat-6', targetId = 'cat-5';
+  const added = await call('/api/library/items',{categoryId:sourceId,items:[{full:a,thumb:b,name:'Mẫu gạch'}]});
+  const id = added.data.added[0].id;
+  await call('/api/library/attributes',{action:'save',key:'tags',name:'Tag mẫu',categoryIds:[sourceId,targetId]});
+  await call('/api/library/imports',{imports:[{id:'nhap-1',source:'https://example.com/gach',categoryId:sourceId,status:'done',itemIds:[id]}]});
+  assert.equal((await call('/api/library/categories/merge',{sourceId:'ancuong-wood',targetId})).status,400);
+  assert.equal((await call('/api/library/categories/merge',{sourceId,targetId:'missing'})).status,404);
+  assert.equal((await call('/api/library/categories/merge',{sourceId,targetId})).status,200);
+
+  const {data} = await call('/api/library');
+  assert.ok(!data.categories.some(category => category.id === sourceId));
+  const item = data.items.find(entry => entry.id === id);
+  assert.deepEqual([item.categoryId,item.full,item.thumb],[targetId,a,b]);
+  assert.deepEqual(data.attributes.tags[0].categoryIds,[targetId]);
+  assert.deepEqual([data.imports[0].categoryId,data.imports[0].itemIds],[targetId,[id]]);
+  assert.equal(categoryForGroup(data,'GẠCH ỐP LÁT (sảnh, WC, logia)').id,targetId);
+});
+
 test('Cùng mã và hãng vẫn có thể lưu riêng ở hạng mục đích đã chọn', async () => {
   const {call} = harness();
   const item = {code:'G-161',brand:'Hãng mẫu',name:'Gạch',full:a,thumb:b};

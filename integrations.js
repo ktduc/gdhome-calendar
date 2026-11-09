@@ -280,7 +280,7 @@ function setAiTiming(patch = {}) { Object.assign(AI_TIMING, patch); return { ...
 const AI_ERROR_TEXT = {
   no_key: 'Chưa kết nối AI (chưa có API key). Vào ⚙ Kết nối → AI để dán key (Gemini / ChatGPT / Claude).',
   bad_key: 'API key AI không đúng, đã hết hạn hoặc đã bị thu hồi. Vào ⚙ Kết nối → AI để dán lại key.',
-  quota: 'Đã hết hạn mức AI (gọi quá nhiều lượt hoặc hết lượt miễn phí). Chờ vài phút rồi bấm Thử lại, hoặc bật thanh toán trong Google AI Studio.',
+  quota: 'Đã hết hạn mức API. Kiểm tra hạn mức của dự án hoặc tài khoản gắn với API key. Nếu vừa gửi nhiều yêu cầu, chờ một lúc rồi bấm Thử lại.',
   too_large: 'Tệp quá lớn để AI đọc. Hãy tách file theo tầng hoặc in PDF nhẹ hơn rồi thử lại.',
   timeout: 'AI không phản hồi sau {s} giây (hết thời gian). Tệp có thể quá nặng hoặc máy chủ AI đang chậm – bấm Thử lại.',
   overloaded: 'Máy chủ AI đang quá tải. Chờ vài phút rồi bấm Thử lại.',
@@ -308,6 +308,7 @@ function aiHttpError(provider, status, json) {
   if (status === 413 || /too large|exceeds the (maximum|limit)|payload size|request entity|maximum (context|number of tokens)|token count|input is too long/i.test(text)) return aiError('too_large', raw, status);
   if (status === 429 || /RESOURCE_EXHAUSTED|insufficient_quota|rate limit/i.test(text)) {
     const err = aiError('quota', raw, 429);
+    err.message = (PROVIDER_LABEL[provider] || 'AI') + ' · ' + err.message;
     if (/insufficient_quota|billing/i.test(text)) err.retryable = false;
     return err;
   }

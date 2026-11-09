@@ -101,6 +101,7 @@ test('GĐ18B.4: Giả lập lỗi 429 (hết hạn mức tạm thời) -> tự t
     () => callWithFallback(ai, 'gemini-2.5-flash', callGemini, [], [], 'Test 429 fail'),
     err => {
       assert.equal(err.aiCode, 'quota');
+      assert.match(err.message, /Gemini/);
       assert.match(err.message, /hết hạn mức/i);
       assert.match(err.message, /Thử lại/i);
       return true;

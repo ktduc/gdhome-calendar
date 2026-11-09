@@ -83,7 +83,9 @@ function normalize(data) {
   const base = data && typeof data === 'object' ? data : defaultLibrary();
   const categories = (Array.isArray(base.categories) ? base.categories : [])
     .filter(c => c && typeof c.id === 'string' && text(c.name))
-    .slice(0, 200).map(c => ({ id: c.id.slice(0, 60), name: text(c.name, 80), ...(c.source ? { source: text(c.source, 160) } : {}) }));
+    .slice(0, 200).map(c => ({ id: c.id.slice(0, 60), name: text(c.name, 80), ...(c.source ? { source: text(c.source, 160) } : {}),
+      ...(Array.isArray(c.aliases) ? {aliases:[...new Set(c.aliases.map(alias => text(alias,160)).filter(Boolean))].slice(0,200)} : {})
+    }));
   const genericWood = categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
   if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
   const wood = categories.find(c => c.id === woodCategory.id);
@@ -137,9 +139,11 @@ function categoryForGroup(library, groupName) {
     .replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9]+/g, ' ').trim();
   const target = fold(groupName);
   if (!target) return null;
+  const exact = library.categories.find(category => [category.name, category.source].some(name => fold(name) === target));
+  if (exact) return exact;
   let best = null, bestScore = 0;
   for (const category of library.categories) {
-    const names = [category.name, category.source].map(fold).filter(Boolean);
+    const names = [category.name, category.source, ...(category.aliases || [])].map(fold).filter(Boolean);
     for (const name of names) {
       if (name === target) return category;
       const a = new Set(name.split(' ')), b = target.split(' ');
@@ -405,6 +409,9 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       if (body.id) {
         const category = data.categories.find(c => c.id === body.id);
         if (!category) fail(404, 'Không tìm thấy hạng mục.');
+        if (data.categories.some(c => c.id !== body.id && c.name.toLocaleLowerCase('vi') === name.toLocaleLowerCase('vi'))) {
+          fail(409,'Tên hạng mục đã có. Dùng Gộp để hợp nhất.');
+        }
         category.name = name;
         return category;
       }
@@ -415,6 +422,10 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       return category;
     });
     return sendJson(res, 200, { ...data, category: result });
+  }
+  if (urlPath === '/api/library/categories/merge') {
+    const {data} = await mutate(store,key,data => attributes.mergeCategories(data,body || {}));
+    return sendJson(res,200,data);
   }
   if (urlPath === '/api/library/categories/delete') {
     if (body.id === woodCategory.id) fail(400,'Không thể xoá hạng mục Mã gỗ.');

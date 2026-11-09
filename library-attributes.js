@@ -93,7 +93,26 @@
     if (key === 'suppliers') data.suppliers = data.attributes[key].map(({name,phone,note}) => ({name,phone,note}));
   }
 
-  const api = {labels,normalize,view,change};
+  const canMergeCategory = id => !['ancuong-wood','cat-3','kitchen-accessories'].includes(id);
+  function mergeCategories(data,{sourceId,targetId}) {
+    if (!sourceId || !targetId || sourceId === targetId) fail(400,'Chọn hai hạng mục khác nhau.');
+    if (!canMergeCategory(sourceId)) fail(400,'Hạng mục hệ thống chỉ có thể dùng làm đích gộp.');
+    const source = data.categories.find(category => category.id === sourceId);
+    const target = data.categories.find(category => category.id === targetId);
+    if (!source || !target) fail(404,'Hạng mục đã thay đổi. Hãy chọn lại.');
+
+    target.aliases = [...new Set([...(target.aliases || []),source.name,source.source,...(source.aliases || [])].filter(Boolean))];
+    for (const item of data.items) if (item.categoryId === sourceId) item.categoryId = targetId;
+    for (const record of data.imports || []) if (record.categoryId === sourceId) record.categoryId = targetId;
+    for (const rows of Object.values(data.attributes || {})) for (const row of rows) {
+      if (row.categoryIds?.includes(sourceId)) {
+        row.categoryIds = [...new Set(row.categoryIds.map(id => id === sourceId ? targetId : id))];
+      }
+    }
+    data.categories = data.categories.filter(category => category.id !== sourceId);
+  }
+
+  const api = {labels,normalize,view,change,canMergeCategory,mergeCategories};
   if (typeof module !== 'undefined') module.exports = api;
   else window.GDHomeLibraryAttributes = api;
 })();
