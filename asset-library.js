@@ -369,7 +369,7 @@ window.GDHomeAssets = (() => {
   }
 
   // ---------------------------------------------------------------- Giao diện chung
-  const facetLabels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',tags:'Tag'};
+  const facetLabels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',finish:'Bề mặt',tone:'Tông màu',grain:'Vân',collection:'Bộ sưu tập',tags:'Tag'};
   const facetValues = (item,key) => [item[key]].flat().filter(Boolean);
   const matchFacets = (item,facets,except) => Object.entries(facets).every(([key,values]) =>
     key === except || !values.size || facetValues(item,key).some(value => values.has(value)));
@@ -907,7 +907,34 @@ window.GDHomeAssets = (() => {
   ];
   const catalogueKey = item => (item.brand || 'An Cường').trim().toLowerCase() + ':' + item.code.toUpperCase().replace(/\s+/g,'');
   const bounded = (value,min,max) => Math.max(min,Math.min(max,value));
-  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning} = {}) {
+  const anCuongCode = /^(MFC|MDF|HDF|LAMINATE|ACRYLIC|VENEER)\s*[-–]?\s*([A-Z]{1,4}\s*\d{2,5}(?:[.-]\d+)?)\s*([A-Z][A-Z0-9]{0,7})?\b/i;
+  function anCuongCrop(context,left,top,right,bottom) {
+    left = Math.max(0,Math.floor(left)); top = Math.max(0,Math.floor(top));
+    const width = Math.max(1,Math.floor(right)-left), height = Math.max(1,Math.floor(bottom)-top);
+    const pixels = context.getImageData(left,top,width,height).data;
+    const visible = index => pixels[index+3] > 0 && Math.min(pixels[index],pixels[index+1],pixels[index+2]) < 244;
+    let start = 0, best = [0,0];
+    for (let y=0; y<=height; y++) {
+      let count = 0;
+      if (y < height) for (let x=0; x<width; x+=2) if (visible((y*width+x)*4)) count++;
+      if (count >= width*.17) continue;
+      if (y-start > best[1]-best[0]) best = [start,y];
+      start = y+1;
+    }
+    if (best[1]-best[0] < 3) return null;
+    let minX = width, maxX = 0, brightness = 0, count = 0;
+    for (let y=best[0]; y<best[1]; y++) for (let x=0; x<width; x++) {
+      const index = (y*width+x)*4;
+      if (!visible(index)) continue;
+      minX = Math.min(minX,x); maxX = Math.max(maxX,x);
+      brightness += .2126*pixels[index]+.7152*pixels[index+1]+.0722*pixels[index+2];
+      count++;
+    }
+    const light = brightness/count;
+    return {x:left+minX,y:top+best[0],w:maxX-minX+1,h:best[1]-best[0],tone:light >= 170 ? 'Sáng' : light < 95 ? 'Tối' : 'Trung tính'};
+  }
+
+  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning,layout} = {}) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
@@ -926,6 +953,13 @@ window.GDHomeAssets = (() => {
           const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === item.code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
           const record = {...item,source,crop:item.bbox,confidence:match ? Math.max(.85,item.confidence) : item.confidence};
+          if (layout === 'ancuong') {
+            if (match) {
+              const detected = results[index];
+              results[index] = {...record,...detected,grain:item.grain || detected.grain};
+            }
+            continue;
+          }
           if (match) results[index] = record;
           else results.push(record);
         }
@@ -949,6 +983,13 @@ window.GDHomeAssets = (() => {
           return {text:item.str.trim(),x,y,width:item.width*scale,height:Math.max(1,item.height*scale)};
         });
         const matches = labels.flatMap(label => {
+          if (layout === 'ancuong') {
+            const parsed = label.text.match(anCuongCode);
+            if (!parsed) return [];
+            const name = labels.filter(other => other.y > label.y && other.y-label.y < label.height*3 &&
+              Math.abs(other.x-label.x) < label.height*2 && !anCuongCode.test(other.text)).sort((a,b) => a.y-b.y)[0]?.text || '';
+            return [{...label,material:parsed[1].toUpperCase(),code:parsed[2].toUpperCase(),finish:parsed[3]?.toUpperCase() || '',name}];
+          }
           const match = regexes.map(regex => label.text.match(regex)).filter(Boolean)
             .sort((a,b) => a.index-b.index || b[0].length-a[0].length)[0];
           if (!match?.[0] || match[0].length > 80) return [];
@@ -980,6 +1021,18 @@ window.GDHomeAssets = (() => {
           const h = Math.min(canvas.height,dy*.66);
           const x = bounded(direction === 'left' ? label.x-w-label.height*.4 : label.x-dx*.06,0,canvas.width-w);
           const y = bounded(direction === 'left' ? label.y-h*.55 : label.y-h-label.height*1.2,0,canvas.height-h);
+          if (layout === 'ancuong') {
+            const margin = label.height * .5;
+            const left = Math.max(0,label.x-margin);
+            const right = Math.min(canvas.width,left+dx);
+            const previous = matches.filter(other => Math.abs(other.x-label.x) < dx*.4 && other.y < label.y-label.height*3)
+              .reduce((y,other) => Math.max(y,other.y+other.height*2),0);
+            const box = anCuongCrop(context,left,previous,right,label.y-label.height*.8);
+            if (!box) continue;
+            results.push({code:label.code,name:label.name,material:label.material,finish:label.finish,tone:box.tone,grain:'Gỗ',
+              page:number,source,confidence:.9,crop:{x:box.x/canvas.width,y:box.y/canvas.height,w:box.w/canvas.width,h:box.h/canvas.height}});
+            continue;
+          }
           results.push({code:label.code,name:label.name,page:number,source,confidence:.6,
             crop:{x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height}});
         }
@@ -1026,6 +1079,7 @@ window.GDHomeAssets = (() => {
       '<label><input type="checkbox" name="useAi"' + (categoryId !== 'ancuong-wood' && window.GDHomeAI ? ' checked' : '') + '> Dùng AI để đọc PDF</label>' +
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
       '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea></label>' +
+      '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option></select></label>' +
       '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
       '<label>Hãng <input name="brand" list="wood-brands" value="' + (categoryId === 'ancuong-wood' ? 'An Cường' : '') + '" maxlength="80"></label>' +
       '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
@@ -1099,7 +1153,7 @@ window.GDHomeAssets = (() => {
         } else {
           items = await scanWoodCatalogue(form.elements.pdf.files[0],form.elements.patterns.value,form.elements.direction.value,
             (page,total) => { status.textContent = 'Đang đọc trang ' + page + '/' + total + '…'; },
-            {useAi:form.elements.useAi.checked && !!window.GDHomeAI,signal:controller.signal,onWarning:message => { warning = message; }});
+            {useAi:form.elements.useAi.checked && !!window.GDHomeAI,signal:controller.signal,layout:form.elements.layout.value,onWarning:message => { warning = message; }});
         }
         if (warning) toast('Dùng mẫu mã vì AI không đọc được: ' + warning);
         for (const item of items) sources.add(item.source);
@@ -1110,7 +1164,7 @@ window.GDHomeAssets = (() => {
           '<label>Mã <input data-wood-code-input maxlength="80" value="' + esc(item.code) + '"></label>' +
           '<label>Tên <input data-wood-name-input maxlength="160" value="' + esc(item.name) + '"></label>' +
           (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.brand) + '"></label>' : '') +
-          ['size','finish','collection'].map(key => '<label>' + ({size:'Kích thước',finish:'Bề mặt',collection:'Catalogue'})[key] +
+          ['size','finish','collection','material','tone','grain'].map(key => '<label>' + ({size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân'})[key] +
             '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
           '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></article>').join('');
         const cards = [...list.children];

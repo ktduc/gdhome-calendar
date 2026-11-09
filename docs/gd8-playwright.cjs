@@ -2173,6 +2173,39 @@ cases['19.11'] = async page => {
   assert.deepEqual(data.items.find(item => item.name === 'Mẫu').tags,['Sàn','Loại 1','Ambon Floor']);
 };
 
+cases['19.8'] = async page => {
+  const {PDFDocument,rgb} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const sheet = pdf.addPage([150,287]);
+  sheet.drawRectangle({x:5,y:67,width:139,height:213,color:rgb(.65,.48,.32)});
+  sheet.drawText('MFC-MS 461 SC01',{x:5,y:43,size:10});
+  sheet.drawText('SONOMA OAK',{x:5,y:24,size:9});
+  sheet.drawRectangle({x:104,y:5,width:40,height:39,color:rgb(0,0,0)});
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  await openMaterials(page);
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'ancuong-wood'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=layout]').selectOption('ancuong');
+  await modal.locator('[name=collection]').fill('An Cường mẫu');
+  await modal.locator('[name=pdf]').setInputFiles({name:'demo.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  const card = modal.locator('.wood-catalogue-card');
+  await card.waitFor({timeout:15000});
+  assert.equal(await card.locator('[data-wood-code-input]').inputValue(),'MS 461');
+  assert.equal(await card.locator('[data-wood-name-input]').inputValue(),'SONOMA OAK');
+  assert.equal(await card.locator('[data-catalogue-field=finish]').inputValue(),'SC01');
+  assert.equal(await card.locator('[data-catalogue-field=material]').inputValue(),'MFC');
+  await page.waitForFunction(() => !document.querySelector('[data-save-wood]').disabled);
+  const pixels = await card.locator('canvas').evaluate(canvas => {
+    const data = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    return [...data.filter((_,index) => index%4 === 0)];
+  });
+  assert.ok(pixels.every(red => red > 100 && red < 210),'Crop không chứa chữ, QR hoặc nền trắng');
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

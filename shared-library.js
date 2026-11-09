@@ -22,7 +22,7 @@ const validHex = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(va
 const kindOf = item => ['image','paint','wood'].includes(item.kind) ? item.kind : (item.code ? 'wood' : 'image');
 const woodKey = code => text(code,80).toUpperCase().replace(/\s+/g,'');
 const woodItemKey = item => text(item.brand || 'An Cường',80).toLowerCase() + ':' + woodKey(item.code);
-const woodMeta = item => ({brand:text(item.brand,80) || 'An Cường',code:text(item.code,80),collection:text(item.collection,120),finish:text(item.finish,120)});
+const woodMeta = item => ({brand:text(item.brand,80) || 'An Cường',code:text(item.code,80),collection:text(item.collection,120),finish:text(item.finish,120),material:text(item.material,80),tone:text(item.tone,40),grain:text(item.grain,40)});
 
 const stringList = values => [...new Set((Array.isArray(values) ? values : []).map(value => text(value,80)).filter(Boolean))].slice(0,30);
 function materialSize(value) {
