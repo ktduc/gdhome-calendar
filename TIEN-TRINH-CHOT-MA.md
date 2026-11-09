@@ -318,3 +318,4 @@ XONG GĐ18-GPT
 - 19.3: Thêm kích thước chuẩn, hãng, đơn vị cung cấp và bộ lọc tag.
 - 19.4: Chọn dải, thao tác lô, hoàn tác và kéo thả trong thư viện.
 - 19.7: Ánh xạ cột Notion với xem trước ba dòng và ghi nguồn từng trường.
+- 19.5: Nhập catalogue PDF theo lô AI, đối chiếu regex, duyệt và gộp nhà cung cấp.

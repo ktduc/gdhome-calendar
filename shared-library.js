@@ -85,7 +85,7 @@ function normalize(data) {
       name: text(item.name, 160),
       note: text(item.note, 500),
       ...(imageName(item.full) && imageName(item.thumb) ? {full:item.full,thumb:item.thumb} : {}),
-      ...(woodKey(item.code) ? woodMeta(item) : {}),
+      ...(woodKey(item.code) ? {...woodMeta(item),brand:text(item.brand,80) || (kindOf(item) === 'wood' ? 'An Cường' : '')} : {}),
       createdAt: Number(item.createdAt) || Date.now(),
       ...(Number(item.used) > 0 ? { used: Math.min(1e6, Math.floor(Number(item.used))) } : {})
     }));
@@ -162,11 +162,13 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         const kind = item.kind || (item.code && categoryId === woodCategory.id ? 'wood' : 'image');
         if (!['image','wood','paint'].includes(kind)) fail(400,'Loại mẫu không hợp lệ.');
         if (kind === 'paint' ? !validHex(item.hex) || !woodKey(item.code) : !imageName(item.full) || !imageName(item.thumb)) fail(400,'Mẫu vật liệu không hợp lệ.');
-        const metadata = kind === 'image' ? {} : woodMeta(item);
+        const metadata = item.code ? {...woodMeta(item),brand:text(item.brand,80) || (kind === 'wood' ? 'An Cường' : '')} : {};
         const key = woodKey(metadata.code);
-        const existing = data.items.find(entry => (key ? entry.kind === kind && woodItemKey(entry) === woodItemKey(metadata) : entry.categoryId === categoryId && entry.kind === 'image' && entry.full === item.full));
+        const existing = data.items.find(entry => (key ? entry.code && woodItemKey(entry) === woodItemKey(metadata) : entry.categoryId === categoryId && entry.kind === 'image' && entry.full === item.full));
         if (key && existing) {
-          if (kind === 'wood' && !existing.full) {
+          existing.suppliers = stringList([...(existing.suppliers || []),...stringList(item.suppliers)]);
+          existing.tags = stringList([...(existing.tags || []),...stringList(item.tags)]);
+          if (kind !== 'paint' && !existing.full) {
             Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb});
             added.push(existing);
           } else skipped++;

@@ -129,7 +129,7 @@ window.GDHomeAI = (() => {
     return headers;
   }
 
-  async function startJob(payload,{onProgress,intervalMs = 2000} = {}) {
+  async function startJob(payload,{onProgress,intervalMs = 2000,signal} = {}) {
     const startRes = await fetch('/api/ai/jobs/start',{
       method:'POST',headers:getAuthHeaders(),body:JSON.stringify(payload)
     });
@@ -141,6 +141,10 @@ window.GDHomeAI = (() => {
     onProgress?.(startJson.job);
     while (true) {
       await new Promise(r => setTimeout(r,intervalMs));
+      if (signal?.aborted) {
+        await fetch('/api/project-hub/jobs/cancel',{method:'POST',headers:getAuthHeaders(),body:JSON.stringify({jobId})}).catch(() => {});
+        signal.throwIfAborted();
+      }
       const res = await fetch('/api/project-hub/jobs/status?jobId=' + encodeURIComponent(jobId),{headers:getAuthHeaders()});
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json.job) throw new Error(json.message || 'Tiến trình AI đã kết thúc hoặc bị ngắt.');

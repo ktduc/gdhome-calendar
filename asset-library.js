@@ -818,15 +818,37 @@ window.GDHomeAssets = (() => {
   ];
   const catalogueKey = item => (item.brand || 'An Cường').trim().toLowerCase() + ':' + item.code.toUpperCase().replace(/\s+/g,'');
   const bounded = (value,min,max) => Math.max(min,Math.min(max,value));
-  async function scanWoodCatalogue(file,patterns,direction,onPage) {
+  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning} = {}) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
     if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
     const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
-    const results = [];
+    let results = [];
+    const sources = new Map(), batch = [];
+    async function flush() {
+      if (!batch.length) return;
+      const pages = batch.splice(0);
+      try {
+        const ai = await GDHomeAI.startJob({kind:'catalogue',pages},{signal});
+        for (const item of ai.items || []) {
+          const source = sources.get(item.page);
+          if (!source) continue;
+          const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === item.code.replace(/\s/g,'').toUpperCase());
+          const match = index >= 0;
+          const record = {...item,source,crop:item.bbox,confidence:match ? Math.max(.85,item.confidence) : item.confidence};
+          if (match) results[index] = record;
+          else results.push(record);
+        }
+      } catch (error) {
+        signal?.throwIfAborted();
+        useAi = false;
+        onWarning?.(error.message);
+      }
+    }
     try {
       for (let number = 1; number <= pdf.numPages; number++) {
+        signal?.throwIfAborted();
         onPage(number,pdf.numPages);
         const page = await pdf.getPage(number);
         const base = page.getViewport({scale:1});
@@ -847,7 +869,7 @@ window.GDHomeAssets = (() => {
               !regexes.some(regex => regex.test(other.text)))?.text || '';
           return [{...label,code:match[0].trim().toUpperCase(),name}];
         });
-        if (!matches.length) { page.cleanup(); continue; }
+        if (!matches.length && !useAi) { page.cleanup(); continue; }
         if (results.length + matches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
         const canvas = document.createElement('canvas');
         canvas.width = Math.ceil(viewport.width);
@@ -856,6 +878,9 @@ window.GDHomeAssets = (() => {
         await page.render({canvasContext:context,viewport}).promise;
         // Save page as a compressed image and keep only the swatch canvases live.
         const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
+        sources.set(number,source);
+        if (useAi) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
+          text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
         const nearest = (values,fallback) => values.length ? Math.min(...values) : fallback;
         for (const label of matches) {
           const dx = nearest(matches.filter(o => Math.abs(o.y-label.y) < label.height && Math.abs(o.x-label.x) > label.height*2)
@@ -866,14 +891,17 @@ window.GDHomeAssets = (() => {
           const h = Math.min(canvas.height,dy*.66);
           const x = bounded(direction === 'left' ? label.x-w-label.height*.4 : label.x-dx*.06,0,canvas.width-w);
           const y = bounded(direction === 'left' ? label.y-h*.55 : label.y-h-label.height*1.2,0,canvas.height-h);
-          results.push({code:label.code,name:label.name,page:number,source,width:canvas.width,height:canvas.height,
+          results.push({code:label.code,name:label.name,page:number,source,confidence:.6,
             crop:{x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height}});
         }
         canvas.width = canvas.height = 0;
         page.cleanup();
+        if (batch.length === 4 || number === pdf.numPages) await flush();
       }
+      const retained = new Set(results.map(item => item.source));
+      for (const source of sources.values()) if (!retained.has(source)) URL.revokeObjectURL(source);
     } catch (error) {
-      for (const source of new Set(results.map(item => item.source))) URL.revokeObjectURL(source);
+      for (const source of sources.values()) URL.revokeObjectURL(source);
       throw error;
     } finally { await pdf.destroy(); }
     return results;
@@ -888,8 +916,22 @@ window.GDHomeAssets = (() => {
   async function openWoodCatalogue(categoryId,onSaved) {
     const {dialog,body} = modal('wood-catalogue-dialog','Nhập catalogue PDF mã gỗ');
     const sources = new Set();
-    dialog.addEventListener('close',() => { for (const source of sources) URL.revokeObjectURL(source); },{once:true});
+    let busy = false, controller;
+    const cleanup = () => { for (const source of sources) URL.revokeObjectURL(source); dialog.remove(); };
+    dialog.onclose = () => {
+      if (!busy) return cleanup();
+      GDHomeShell.aiNotice('asset-catalogue-job',{state:'running',body:'Đang xử lý catalogue',label:'Mở lại',onAction:() => dialog.showModal()});
+    };
+    const library = await loadLibrary();
+    if (!dialog.isConnected) return;
+    dialog.querySelector('h2').textContent = 'Nhập catalogue';
     body.innerHTML = '<form class="wood-catalogue-controls">' +
+      '<label>Hạng mục <select name="category">' + library.categories.map(category => '<option value="' + esc(category.id) + '"' +
+        (category.id === categoryId ? ' selected' : '') + '>' + esc(category.name) + '</option>').join('') + '</select></label>' +
+      '<label>Đơn vị cung cấp <input name="suppliers" list="catalogue-suppliers" placeholder="Tên cách nhau bằng dấu phẩy"></label>' +
+      '<datalist id="catalogue-suppliers">' + (library.suppliers || []).map(item => '<option>' + esc(item.name) + '</option>').join('') + '</datalist>' +
+      '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
+      '<label><input type="checkbox" name="useAi"' + (categoryId !== 'ancuong-wood' && window.GDHomeAI ? ' checked' : '') + '> Dùng AI để đọc PDF</label>' +
       '<label>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
       '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
       '<label>Hãng <input name="brand" list="wood-brands" required value="An Cường" maxlength="80"></label>' +
@@ -899,12 +941,13 @@ window.GDHomeAssets = (() => {
       '<label>Bề mặt <input name="finish" maxlength="120" placeholder="VD: Mờ"></label>' +
       '<details><summary>Mẫu mã (regex)</summary><label>Mỗi dòng một mẫu<textarea name="patterns" rows="4" maxlength="1000">' +
       esc(woodPatterns.join('\n')) + '</textarea></label></details>' +
-      '<button type="submit">Đọc PDF</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></form>' +
+      '<button type="submit">Đọc PDF</button><button type="button" data-catalogue-cancel>Huỷ xử lý</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></form>' +
       '<p role="status"></p><div class="wood-catalogue-results"></div>';
     const form = body.querySelector('form'), status = body.querySelector('[role=status]');
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
-    let items = [], busy = false;
+    let items = [];
+    body.querySelector('[data-catalogue-cancel]').onclick = () => controller?.abort();
     const loadPageImage = async source => {
       const image = new Image();
       image.src = source;
@@ -915,28 +958,43 @@ window.GDHomeAssets = (() => {
       event.preventDefault();
       if (busy) return;
       busy = read.disabled = save.disabled = true;
+      controller = new AbortController();
       list.replaceChildren();
       for (const source of sources) URL.revokeObjectURL(source);
       sources.clear();
       try {
+        let warning = '';
         items = await scanWoodCatalogue(form.elements.pdf.files[0],form.elements.patterns.value,form.elements.direction.value,
-          (page,total) => { status.textContent = 'Đang đọc trang ' + page + '/' + total + '…'; });
-        if (!dialog.open) { for (const item of items) URL.revokeObjectURL(item.source); return; }
+          (page,total) => { status.textContent = 'Đang đọc trang ' + page + '/' + total + '…'; },
+          {useAi:form.elements.useAi.checked && !!window.GDHomeAI,signal:controller.signal,onWarning:message => { warning = message; }});
+        if (warning) toast('Dùng mẫu mã vì AI không đọc được: ' + warning);
         for (const item of items) sources.add(item.source);
         status.textContent = items.length ? 'Nhận diện ' + items.length + ' mã. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mã. Thử đổi mẫu nhận diện.';
         list.innerHTML = items.map(item => '<article class="wood-catalogue-card">' +
-          '<canvas aria-label="Ảnh swatch"></canvas><small>Trang ' + item.page + '</small>' +
+          '<canvas aria-label="Ảnh swatch"></canvas><small>Trang ' + item.page + ' · ' + Math.round(item.confidence*100) + '%</small>' +
           '<label><input type="checkbox" data-wood-include checked> Lưu mã này</label>' +
           '<label>Mã <input data-wood-code-input maxlength="80" value="' + esc(item.code) + '"></label>' +
           '<label>Tên <input data-wood-name-input maxlength="160" value="' + esc(item.name) + '"></label>' +
-          '<button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></article>').join('');
+          ['size','finish','collection'].map(key => '<label>' + ({size:'Kích thước',finish:'Bề mặt',collection:'Catalogue'})[key] +
+            '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
+          '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></article>').join('');
         const cards = [...list.children];
         let lastSource, image;
         for (const [i,item] of items.entries()) {
-          if (!dialog.open) return;
+          if (!dialog.isConnected) return;
           if (lastSource !== item.source) { image = await loadPageImage(item.source); lastSource = item.source; }
           const canvas = cards[i].querySelector('canvas');
           drawSwatch(canvas,image,item.crop);
+          cards[i].querySelector('[data-catalogue-merge]').onclick = () => {
+            const code = cards[i].querySelector('[data-wood-code-input]').value.trim().toUpperCase();
+            const duplicate = cards.find((card,index) => index !== i && card.querySelector('[data-wood-include]').checked &&
+              card.querySelector('[data-wood-code-input]').value.trim().toUpperCase() === code);
+            if (!duplicate) return toast('Không có thẻ đang chọn cùng mã.');
+            for (const field of cards[i].querySelectorAll('[data-catalogue-field]')) {
+              if (!field.value) field.value = duplicate.querySelector('[data-catalogue-field="' + field.dataset.catalogueField + '"]').value;
+            }
+            duplicate.querySelector('[data-wood-include]').checked = false;
+          };
           cards[i].querySelector('[data-edit-wood-crop]').onclick = async () => {
             const image = await loadPageImage(item.source);
             editWoodCrop(image,item.crop,crop => { item.crop = crop; drawSwatch(canvas,image,crop); });
@@ -944,10 +1002,16 @@ window.GDHomeAssets = (() => {
         }
         save.disabled = !items.length;
       } catch (error) { status.textContent = error.message; }
-      finally { busy = read.disabled = false; }
+      finally {
+        busy = read.disabled = false;
+        if (!dialog.open) GDHomeShell.aiNotice('asset-catalogue-job',{state:'done',body:esc(status.textContent),label:'Mở kết quả',onAction:() => dialog.showModal()});
+      }
     };
     save.onclick = async () => {
       if (busy || !form.reportValidity()) return;
+      const categoryId = form.elements.category.value;
+      const listValues = value => value.split(',').map(part => part.trim()).filter(Boolean);
+      const suppliers = listValues(form.elements.suppliers.value), tags = listValues(form.elements.tags.value);
       const brand = form.elements.brand.value.trim();
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
       if (!brand || !collection) { status.textContent = 'Nhập hãng và tên catalogue.'; return; }
@@ -961,7 +1025,7 @@ window.GDHomeAssets = (() => {
       let added = 0, skipped = 0, batch = [];
       try {
         const data = await loadLibrary();
-        const existing = new Set(data.items.filter(item => item.categoryId === categoryId && item.code && item.full).map(catalogueKey));
+        const existing = new Map(data.items.filter(item => item.code && item.full).map(item => [catalogueKey(item),item]));
         const flush = async () => {
           if (!batch.length) return;
           const result = await addItems(categoryId,batch);
@@ -972,13 +1036,25 @@ window.GDHomeAssets = (() => {
         for (const {card,code,name} of selected) {
           if (!dialog.open) break;
           const key = catalogueKey({brand,code});
-          if (existing.has(key)) { skipped++; continue; }
-          existing.add(key);
+          const previous = existing.get(key);
+          if (previous && !suppliers.some(value => !previous.suppliers?.includes(value)) && !tags.some(value => !previous.tags?.includes(value))) {
+            skipped++; continue;
+          }
           status.textContent = 'Đang lưu ' + code + '…';
-          const blob = await new Promise(resolve => card.querySelector('canvas').toBlob(resolve,'image/webp',.9));
-          if (!blob || blob.type !== 'image/webp') throw new Error('Không tạo được ảnh WebP.');
-          const full = await storeAsset(blob);
-          batch.push({full,thumb:full,code,name,brand,collection,finish});
+          const item = items[[...list.children].indexOf(card)];
+          const crop = item.crop;
+          const image = previous || await (async () => {
+            const {full,thumb} = await GDHomeImages.compress(await fetch(item.source).then(response => response.blob()),
+              [crop.x,crop.y,crop.x+crop.w,crop.y+crop.h]);
+            const fullKey = await storeAsset(full);
+            return {full:fullKey,thumb:thumb === full ? fullKey : await storeAsset(thumb)};
+          })();
+          const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
+            .map(field => [field.dataset.catalogueField,field.value.trim()]));
+          const record = {full:image.full,thumb:image.thumb,code,name,brand,collection,finish,suppliers,tags,
+            kind:categoryId === 'ancuong-wood' ? 'wood' : 'image',...fields};
+          existing.set(key,record);
+          batch.push(record);
           if (batch.length === 50) await flush();
         }
         await flush();
@@ -1070,7 +1146,7 @@ window.GDHomeAssets = (() => {
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
         '<section class="asset-library-main">' + (category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
-          (category.id === 'ancuong-wood' ? '<button type="button" data-import-wood>Nhập catalogue PDF</button>' : '') +
+          '<button type="button" data-import-wood>Nhập catalogue</button>' +
           (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +

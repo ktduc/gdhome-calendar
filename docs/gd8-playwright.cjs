@@ -1733,7 +1733,7 @@ cases['17.5'] = async page => {
   assert.equal(fallback.configured,false);
 };
 
-cases['17.6'] = async page => {
+async function testCatalogue(page,useAi = false) {
   const {PDFDocument,rgb,StandardFonts} = require('pdf-lib');
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -1753,6 +1753,21 @@ cases['17.6'] = async page => {
     const name = new URL(route.request().url()).pathname.split('/').at(-1);
     return route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,name),contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}});
   });
+  if (useAi) {
+    await page.route('**/api/ai/jobs/start',route => {
+      const body = route.request().postDataJSON();
+      assert.equal(body.kind,'catalogue');
+      assert.equal(body.pages.length,2);
+      assert.match(body.pages[0].image,/^data:image\/jpeg;base64,/);
+      assert.ok(body.pages[0].text.some(label => /MS 3000/.test(label.text) && label.x > 0));
+      return route.fulfill({json:{success:true,job:{id:'test-catalogue',status:'running'}}});
+    });
+    await page.route('**/api/project-hub/jobs/status?jobId=test-catalogue',route => route.fulfill({json:{job:{status:'done',result:{items:colors.map((_,id) => {
+      const i = id%9;
+      return {page:Math.floor(id/9)+1,code:'MS '+(3000+id),name:'Oak '+(id+1),size:'60x60',confidence:.95,
+        bbox:{x:(30+(i%3)*190)/600,y:(40+Math.floor(i/3)*190)/600,w:150/600,h:130/600}};
+    })}}}}));
+  }
   await openMaterials(page);
   await page.locator('[data-sidebar=library] .material-sidebar-actions [data-action=open-library]').click();
   await page.locator('.asset-library-dialog [data-cat=ancuong-wood]').click();
@@ -1761,6 +1776,10 @@ cases['17.6'] = async page => {
   await modal.locator('[name=pdf]').setInputFiles({name:'fixture-ancuong.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
   await modal.locator('[name=collection]').fill('Vân gỗ thử');
   await modal.locator('[name=finish]').fill('Mờ');
+  if (useAi) {
+    await modal.locator('[name=useAi]').check();
+    await modal.locator('[name=suppliers]').fill('Kho A');
+  }
   await modal.getByRole('button',{name:'Đọc PDF'}).click();
   const save = modal.locator('[data-save-wood]');
   await page.waitForFunction(() => !document.querySelector('.wood-catalogue-controls [type=submit]')?.disabled,null,{timeout:25000});
@@ -1791,6 +1810,16 @@ cases['17.6'] = async page => {
   await modal.getByText('Đã lưu 17 mã · bỏ qua 0 mã trùng.').waitFor({timeout:25000});
   await save.click();
   await modal.getByText('Đã lưu 0 mã · bỏ qua 17 mã trùng.').waitFor();
+  if (useAi) {
+    await modal.locator('[name=suppliers]').fill('Kho B');
+    await save.click();
+    await modal.getByText('Đã lưu 0 mã · bỏ qua 17 mã trùng.').waitFor();
+    const library = await page.request.get('/api/library').then(response => response.json());
+    const matches = library.items.filter(item => item.code === 'MS 3000');
+    assert.equal(matches.length,1);
+    assert.deepEqual(matches[0].suppliers,['Kho A','Kho B']);
+    assert.equal(matches[0].size,'600x600');
+  }
   await page.keyboard.press('Escape');
   await page.keyboard.press('Escape');
   await page.evaluate(() => modify(() => { sheet.groups[0].name = 'MÃ GỖ'; }));
@@ -1802,7 +1831,9 @@ cases['17.6'] = async page => {
   await picker.locator('[data-wood-code="MS 3000"]').click();
   assert.equal(await page.locator('[data-row="g1-r1"] [data-field=code]').first().inputValue(),'MS 3000');
   await cell.locator('.image-open img').waitFor();
-};
+}
+cases['17.6'] = page => testCatalogue(page);
+cases['19.5'] = page => testCatalogue(page,true);
 
 cases['18.2'] = async page => {
   await openMaterials(page);
