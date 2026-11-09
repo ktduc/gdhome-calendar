@@ -3,7 +3,7 @@ window.GDHomeConnections = (() => {
   const endpoint = '/api/integrations/settings';
   let dialog;
 
-  async function settings(patch) {
+  async function settings(patch,url = endpoint) {
     if (location.protocol === 'file:') throw new Error('Mở GD HOME Tools qua server để dùng Kết nối.');
     if (localStorage.getItem('gdhome_guest') === '1') throw new Error('Đăng nhập Gmail để dùng Kết nối.');
     const headers = {'Content-Type':'application/json'};
@@ -13,7 +13,7 @@ window.GDHomeConnections = (() => {
     } catch { /* Password or shared mode can still be used. */ }
     const password = localStorage.getItem('gdhome_app_key');
     if (password) headers['x-app-key'] = password;
-    const response = await fetch(endpoint,patch ? {method:'POST',headers,body:JSON.stringify(patch)} : {headers});
+    const response = await fetch(url,patch ? {method:'POST',headers,body:JSON.stringify(patch)} : {headers});
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'Không đọc được kết nối.');
     if (patch) document.dispatchEvent(new CustomEvent('gdhome:connections',{detail:result}));
@@ -39,7 +39,8 @@ window.GDHomeConnections = (() => {
       (notion.dateProps?.length ? '<label>Cột ngày của bảng lịch<select name="notionDateProp">' +
       notion.dateProps.map(name => option(name,name,notion.dateProp)).join('') + '</select></label>' : '') +
       '<form data-connection-form="customers"><label>Bảng Khách hàng / Dự án<input name="notionCustomerDb" value="' +
-      html(data.notionCustomerDb) + '" placeholder="Link database Notion"></label><button class="btn btn-outline">Lưu bảng khách hàng</button></form></section>' +
+      html(data.notionCustomerDb) + '" placeholder="Link database Notion"></label><button class="btn btn-outline">Lưu bảng khách hàng</button></form>' +
+      '<button type="button" data-profile-map>Mở ánh xạ trường hồ sơ</button><div data-profile-map-panel></div></section>' +
       '<section data-connection-section="ai"><h3>AI</h3><p>' + html(ai.configured ? 'Đã kết nối ' + ai.providerLabel : 'Chưa kết nối AI') +
       '</p><form data-connection-form="ai"><label>Nhà cung cấp<select name="aiProvider">' +
       providers.map(provider => option(provider.id,provider.label,ai.provider)).join('') + '</select></label>' +
@@ -58,6 +59,33 @@ window.GDHomeConnections = (() => {
       '<label data-image-search-cx>Google Search Engine ID (cx)<input name="imageSearchCx" value="' + html(data.imageSearch?.cx || '') + '"></label>' +
       '<div class="connection-actions"><button class="btn btn-primary">Lưu kết nối</button>' +
       '<button type="button" class="btn btn-outline" data-clear-connection="imageSearch">Gỡ kết nối</button></div></form></section>';
+    const mapButton = root.querySelector('[data-profile-map]');
+    mapButton.onclick = async () => {
+      const panel = root.querySelector('[data-profile-map-panel]');
+      panel.textContent = 'Đang đọc cột Notion…';
+      try {
+        const {columns,items,map} = await settings(undefined,'/api/notion/customers?preview=1');
+        const labels = {project:'Tên dự án',customer:'Tên khách hàng',address:'Địa chỉ',phone:'SĐT',email:'Email',contract:'Hợp đồng'};
+        panel.innerHTML = '<form data-profile-map-form><h4>Ánh xạ trường hồ sơ</h4>' + Object.entries(labels).map(([key,label]) =>
+          '<label>' + label + '<select name="' + key + '"><option value="">Tự đoán</option>' +
+          columns.map(col => option(col.name,col.name + ' (' + col.type + ')',map[key])).join('') +
+          '</select><small data-profile-examples></small></label>').join('') + '<button class="btn btn-primary">Lưu ánh xạ</button></form>';
+        const form = panel.querySelector('form');
+        for (const select of form.querySelectorAll('select')) {
+          const refresh = () => { select.nextElementSibling.textContent = items.slice(0,3).map(item => item.values[select.value] || '—').join(' · '); };
+          select.onchange = refresh;
+          refresh();
+        }
+        form.onsubmit = async event => {
+          event.preventDefault();
+          try {
+            await settings({notionCustomerMap:Object.fromEntries(new FormData(form))});
+            root.querySelector('.connection-message').textContent = 'Đã lưu ánh xạ hồ sơ.';
+          } catch (error) { root.querySelector('.connection-message').textContent = error.message; }
+        };
+      } catch (error) { panel.textContent = error.message; }
+    };
+    if (focus === 'notion-profile') mapButton.click();
     const provider = root.querySelector('[name=imageSearchProvider]');
     const toggleCx = () => { root.querySelector('[data-image-search-cx]').hidden = provider.value !== 'google'; };
     provider.onchange = toggleCx;

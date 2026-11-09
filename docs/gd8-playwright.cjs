@@ -2071,6 +2071,25 @@ cases['19.4'] = async page => {
   assert.ok((await read()).every(item => !item.tags.includes('mờ')));
 };
 
+cases['19.7'] = async page => {
+  let saved;
+  await page.route('**/api/integrations/settings',route => {
+    if (route.request().method() === 'POST') saved = route.request().postDataJSON().notionCustomerMap;
+    return route.fulfill({json:{ai:{},notion:{},providers:[],notionCustomerDb:'Mẫu'}});
+  });
+  await page.route('**/api/notion/customers?preview=1',route => route.fulfill({json:{
+    columns:[{name:'Cột lạ',type:'place'}],map:{},items:['Phố A','Phố B','Phố C'].map(value => ({values:{'Cột lạ':value}}))
+  }}));
+  await page.goto('/');
+  await page.evaluate(() => GDHomeConnections.open('notion-profile'));
+  const form = page.locator('[data-profile-map-form]');
+  await form.locator('[name=address]').selectOption('Cột lạ');
+  await form.getByText('Phố A · Phố B · Phố C').waitFor();
+  await form.getByRole('button',{name:'Lưu ánh xạ'}).click();
+  await page.getByText('Đã lưu ánh xạ hồ sơ.').waitFor();
+  assert.equal(saved.address,'Cột lạ');
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

@@ -147,11 +147,12 @@ async function resolveDatabaseId(token, rawId) {
 }
 
 const customerFields = ['project','address','customer','phone','email','contract'];
-const customerTypes = new Set(['title','rich_text','phone_number','email','number','select','formula']);
+const customerTypes = new Set(['title','rich_text','phone_number','email','number','select','formula','place']);
 const normalizeCustomer = value => String(value || '').toLowerCase().normalize('NFD').replace(/\p{M}/gu,'').replace(/đ/g,'d').trim();
 function notionCustomerValue(prop) {
   const value = prop?.[prop.type];
   if (Array.isArray(value)) return plain(value).slice(0,500);
+  if (prop?.type === 'place') return String(value?.address || value?.name || '').slice(0,500);
   if (prop?.type === 'select') return value?.name || '';
   if (prop?.type === 'formula') return ['string','number'].includes(value?.type) ? String(value[value.type] ?? '').slice(0,500) : '';
   return String(value ?? '').slice(0,500);
@@ -170,13 +171,13 @@ async function notionCustomers(cfg,params) {
   const map = cfg.notionCustomerMap || {};
   const q = normalizeCustomer(params.get('q')).slice(0,200);
   const phone = /^\+?[\d ().-]+$/.test(q) ? q.replace(/\D/g,'') : '';
-  const filterColumns = ['project','address','customer','phone'].map(key => map[key]).filter(Boolean);
+  const filterColumns = (phone ? ['phone'] : ['project','customer']).map(key => map[key]).filter(Boolean);
   let cursor = (params.get('cursor') || '').slice(0,200);
   const items = [];
   // Notion doesn't support one contains filter across every property type. Filter bounded pages locally.
   for (let page = 0; page < (q ? 4 : 1); page++) {
     const result = await notionApi(connection,'POST','/databases/'+dbId+'/query',{
-      page_size:50,...(cursor ? {start_cursor:cursor} : {})
+      page_size:params.get('preview') === '1' ? 3 : 50,...(cursor ? {start_cursor:cursor} : {})
     });
     for (const row of result.results || []) {
       if (row.object !== 'page' || row.archived || row.in_trash) continue;

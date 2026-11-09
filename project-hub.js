@@ -1235,25 +1235,34 @@ function inferColumnKey(colName, colType) {
   if (colType === 'phone_number' || /sdt|so dien thoai|dien thoai|phone|mobile|tel/.test(n)) return 'phone';
   if (colType === 'email' || /email|mail/.test(n)) return 'email';
   if (/hop dong|so hd|ma hd|contract/.test(n)) return 'contract';
-  if (/dia chi|address|cong trinh|vi tri/.test(n)) return 'address';
+  if (colType === 'place' || /dia chi|address|vi tri/.test(n)) return 'address';
   if (/khach hang|ten kh|chu nha|chu dau tu|customer|client/.test(n)) return 'customer';
-  if (colType === 'title' && !/du an|project/.test(n)) return 'customer';
   return null;
 }
 
-function mapNotionRowToProfile(rowValues, columns = [], map = {}) {
+function mapNotionRowToProfile(rowValues, columns = [], map = {}, origins = {}) {
   const out = {};
   for (const { key } of PROFILE_FIELDS) {
     const mappedCol = map[key];
     if (mappedCol && rowValues[mappedCol]) {
       out[key] = String(rowValues[mappedCol]).trim();
+      origins[key] = mappedCol;
     }
   }
   for (const col of columns) {
     const val = String(rowValues[col.name] || '').trim();
     if (!val) continue;
-    const guessed = inferColumnKey(col.name, col.type);
-    if (guessed && !out[guessed]) out[guessed] = val;
+    const guessed = inferColumnKey(col.name,col.type) ||
+      (col.type === 'rich_text' && /\b(duong|pho|quan|huyen|phuong|xa|tp|tinh|chung cu|toa)\b/.test(normalizeText(val)) ? 'address' : null);
+    if (guessed && !map[guessed] && !out[guessed]) { out[guessed] = val; origins[guessed] = col.name; }
+  }
+  const titleCol = map.project || columns.find(col => col.type === 'title')?.name;
+  if (!out.customer && !map.customer && titleCol && rowValues[titleCol]) {
+    const name = String(rowValues[titleCol]).trim();
+    if (/^(Cô|Chú|Anh|Chị)\s/i.test(name) || !/du an|project/.test(normalizeText(titleCol))) {
+      out.customer = name.split(/\s+-\s+/)[0];
+      origins.customer = titleCol;
+    }
   }
   return out;
 }
@@ -1280,12 +1289,12 @@ async function suggestProjectProfile({ projectId, project, hubRecord, store, dat
   const suggestions = {};
   const sources = [];
 
-  const mergeCandidate = (candidate, sourceLabel) => {
+  const mergeCandidate = (candidate, sourceLabel, origins = {}) => {
     let added = false;
     for (const { key } of PROFILE_FIELDS) {
       const val = String(candidate?.[key] || '').trim();
       if (val && !suggestions[key]?.value) {
-        suggestions[key] = { value: val, source: sourceLabel };
+        suggestions[key] = { value: val, source: origins[key] ? sourceLabel + ' · ' + origins[key] : sourceLabel };
         added = true;
       }
     }
@@ -1304,8 +1313,9 @@ async function suggestProjectProfile({ projectId, project, hubRecord, store, dat
       const params = new URLSearchParams({ q });
       const res = await notionCustomers(userCfg, params);
       if (Array.isArray(res?.items) && res.items.length > 0) {
-        const mapped = mapNotionRowToProfile(res.items[0].values || {}, res.columns || [], res.map || {});
-        mergeCandidate(mapped, label);
+        const origins = {};
+        const mapped = mapNotionRowToProfile(res.items[0].values || {}, res.columns || [], res.map || {},origins);
+        mergeCandidate(mapped,label,origins);
         break;
       }
     }
@@ -1328,7 +1338,9 @@ async function suggestProjectProfile({ projectId, project, hubRecord, store, dat
       try {
         const { buf, mime } = await assets.read(doc.assetKey);
         if (/\.csv$/i.test(doc.name) || mime.startsWith('text/')) {
-          combinedText += `\n--- ${doc.name} ---\n` + buf.toString('utf8').slice(0, 15000);
+          const content = buf.toString('utf8').slice(0,15000);
+          mergeCandidate(extractRegexProfileFromText(content),doc.name);
+          combinedText += `\n--- ${doc.name} ---\n` + content;
         } else if (/\.xlsx?$/i.test(doc.name)) {
           const xlsx = require('xlsx');
           const book = xlsx.read(buf, { sheetRows: 120 });
@@ -1360,7 +1372,7 @@ async function suggestProjectProfile({ projectId, project, hubRecord, store, dat
         const res = await callWithFallback(ai, model, call, imageAttachments, pdfAttachments, promptText, PROFILE_AI_SYSTEM);
         const parsed = extractJson(res.raw);
         if (parsed && typeof parsed === 'object') {
-          mergeCandidate(parsed, 'AI đọc hợp đồng / báo giá');
+          mergeCandidate(parsed,'AI đọc: ' + docs.slice(0,3).map(doc => doc.name).join(', '));
         }
       } catch {}
     }
