@@ -986,7 +986,7 @@ cases['15.2'] = async page => {
   await page.keyboard.press('Escape');
   await picker.waitFor({state:'detached'});
   await pa.click();
-  await picker.locator('[data-asset-pick]').first().click();
+  await picker.locator('[data-asset-pick][title="mau go"]').click();
   await pa.locator('img[src]').first().waitFor();
   await pa.locator('[data-action=view-image]').first().click();
   await page.getByRole('button',{name:'Chỉnh vùng nhìn'}).click();
@@ -1651,7 +1651,9 @@ cases['18.1'] = async page => {
   const cell = row.locator('.image-cell[data-slot="0"]');
   await cell.locator('[data-action=cell-menu]').click();
   await page.locator('.image-cell-dropdown-menu').getByRole('button',{name:/Xoá ảnh/}).click();
-  await cell.locator('.image-open').waitFor({state:'detached',timeout:100});
+  // The save is held for 1.5 s. Allow a frame to render the large sheet while
+  // still requiring the image to disappear before any server reply.
+  await cell.locator('.image-open').waitFor({state:'detached',timeout:600});
   const removePa = row.locator('[data-action=remove-pa]').last();
   await removePa.click();
   await row.locator('.image-cell[data-slot="2"]').waitFor({state:'detached',timeout:100});
