@@ -19,7 +19,7 @@ const paintSeed = ['dulux','jotun'].flatMap(key => {
   return colors.map((color,index) => ({...color,id:'paint-' + key + '-' + index,categoryId:paintCategory.id,kind:'paint',brand,builtin:true,createdAt:1}));
 });
 const validHex = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
-const kindOf = item => item.kind || (item.code ? 'wood' : 'image');
+const kindOf = item => ['image','paint','wood'].includes(item.kind) ? item.kind : (item.code ? 'wood' : 'image');
 const woodKey = code => text(code,80).toUpperCase().replace(/\s+/g,'');
 const woodItemKey = item => text(item.brand || 'An Cường',80).toLowerCase() + ':' + woodKey(item.code);
 const woodMeta = item => ({brand:text(item.brand,80) || 'An Cường',code:text(item.code,80),collection:text(item.collection,120),finish:text(item.finish,120)});
@@ -195,19 +195,20 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         data.items = previous.items;
         return {undoToken:null};
       }
-      const ids = new Set(stringList(Array.isArray(body.ids) ? body.ids.slice(0,5000) : []));
-      // Selections can contain an entire category.
-      if (Array.isArray(body.ids)) for (const id of body.ids.slice(0,5000)) if (typeof id === 'string') ids.add(id);
+      const ids = new Set(Array.isArray(body.ids) ? body.ids.slice(0,5000).filter(id => typeof id === 'string') : []);
       const original = structuredClone(data.items);
       const categoryId = body.categoryId;
       if (categoryId && !data.categories.some(category => category.id === categoryId)) fail(400,'Hạng mục không hợp lệ.');
       const set = body.set || {};
+      const addTags = stringList(body.addTags), removeTags = new Set(stringList(body.removeTags));
+      const addSuppliers = stringList(body.addSuppliers), removeSuppliers = new Set(stringList(body.removeSuppliers));
+      const metadata = itemMetadata(set);
       for (const item of data.items) {
         if (!ids.has(item.id)) continue;
         if (categoryId) item.categoryId = categoryId;
-        for (const field of ['brand','size']) if (Object.hasOwn(set,field)) item[field] = itemMetadata(set)[field];
-        item.tags = stringList([...(item.tags || []),...stringList(body.addTags)]).filter(tag => !stringList(body.removeTags).includes(tag));
-        item.suppliers = stringList([...(item.suppliers || []),...stringList(body.addSuppliers)]).filter(name => !stringList(body.removeSuppliers).includes(name));
+        for (const field of ['brand','size']) if (Object.hasOwn(set,field)) item[field] = metadata[field];
+        item.tags = stringList([...(item.tags || []),...addTags]).filter(tag => !removeTags.has(tag));
+        item.suppliers = stringList([...(item.suppliers || []),...addSuppliers]).filter(name => !removeSuppliers.has(name));
       }
       if (body.delete === true) data.items = data.items.filter(item => !ids.has(item.id));
       if (Array.isArray(body.order)) {

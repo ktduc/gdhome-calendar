@@ -194,6 +194,7 @@ window.GDHomeAssets = (() => {
     if (library && !force) return visibleLibrary(library);
     if (isGuest()) {
       const data = guestLibrary();
+      for (const item of data.items) item.kind ||= item.code ? 'wood' : 'image';
       if (!data.builtinSeeded) {
         const presets = await Promise.all(['paint-dulux','paint-jotun','wood-ancuong'].map(name => fetch('/data/' + name + '.json').then(r => r.json())));
         for (const preset of presets) for (const item of preset.colors || preset.woods || []) {
@@ -241,6 +242,7 @@ window.GDHomeAssets = (() => {
     const item = data.items.find(entry => entry.id === patch.id);
     if (item) {
       if (typeof patch.name === 'string') item.name = patch.name;
+      for (const key of ['brand','size','tags','suppliers']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
       if (patch.hex) item.hex = patch.hex;
       if (patch.categoryId) item.categoryId = patch.categoryId;
@@ -647,7 +649,7 @@ window.GDHomeAssets = (() => {
     const data = await loadLibrary().catch(() => null);
     if (!data) return [];
     const category = categoryId || categoryFor(data,groupName)?.id;
-    return data.items.filter(item => item.full && !item.code && item.categoryId === category && fold(item.name).includes(fold(query)));
+    return data.items.filter(item => item.full && item.kind === 'image' && !item.hidden && item.categoryId === category && fold(item.name).includes(fold(query)));
   }
   function wireLocalAssetPhotos(panel,items,onPick) {
     panel.querySelectorAll('.asset-specialized-photos [data-asset-pick]').forEach(button => {
@@ -659,36 +661,42 @@ window.GDHomeAssets = (() => {
 
   async function loadPaintData(brand = 'Dulux') {
     const data = await loadLibrary();
-    return {source:'Dữ liệu dùng chung',colors:data.items.filter(item => item.kind === 'paint' && !item.hidden && item.brand === brand)};
+    const colors = data.items.filter(item => item.kind === 'paint' && !item.hidden);
+    return {source:'Dữ liệu dùng chung',brands:[...new Set(['Dulux','Jotun',...colors.map(item => item.brand)])],
+      colors:colors.filter(item => item.brand === brand)};
+
 
   }
 
   function pickPaint(anchor, { groupName, onPick, title = 'Chọn màu sơn' } = {}) {
-    return popover(anchor, async (panel, close, place) => {
+    return popover(anchor, async (panel, close, place, signal) => {
+      const facets = {};
       let brand = 'Dulux', query = '', paintData = null;
       async function paint() {
         try { paintData = await loadPaintData(brand); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
         const photos = await findLocalAssetPhotos(query,null,groupName);
         if (!panel.isConnected) return;
-        const colors = (paintData.colors || []).filter(c => !query || fold(c.code).includes(fold(query)) || fold(c.name).includes(fold(query)));
+        const candidates = (paintData.colors || []).filter(c => !query || fold(c.code).includes(fold(query)) || fold(c.name).includes(fold(query)));
+        const colors = candidates.filter(item => matchFacets(item,facets));
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
-          '<select aria-label="Hãng sơn"><option value="Dulux"' + (brand === 'Dulux' ? ' selected' : '') + '>Dulux</option>' +
-          '<option value="Jotun"' + (brand === 'Jotun' ? ' selected' : '') + '>Jotun</option></select>' +
+          '<select aria-label="Hãng sơn">' + paintData.brands.map(name => '<option value="' + esc(name) + '"' +
+            (brand === name ? ' selected' : '') + '>' + esc(name) + '</option>').join('') + '</select>' +
           '<input type="search" placeholder="Tìm theo mã hoặc tên màu (vd: 30YY, 9918, White...)" value="' + esc(query) + '"></div>' +
-          '<div class="asset-body">' +
+          '<div class="asset-body">' + facetMarkup([...candidates,...photos],facets) +
           (colors.length ? '<div class="asset-paint-grid">' + colors.map(c => '<button type="button" class="asset-paint-card" data-paint-code="' + esc(c.code) + '" title="' + esc(c.code + ' – ' + c.name) + '">' +
             '<div class="asset-paint-swatch" style="background-color:' + esc(c.hex) + '"></div>' +
             '<div class="asset-paint-info"><strong>' + esc(c.code) + '</strong><span>' + esc(c.name) + '</span></div></button>').join('') + '</div>' :
             '<p class="asset-empty">Chưa có "' + esc(query) + '" trong bảng màu mẫu.</p>' +
             '<form class="asset-paint-custom"><strong>Dùng mã này</strong><label>Mã <input name="code" required value="' + esc(query) + '"></label>' +
             '<label>Tên màu <input name="name" placeholder="vd Ivory Lace"></label><label>Màu <input name="hex" type="color" value="#f2eee6"></label>' +
-            '<button class="primary">Dùng màu ' + esc(brand) + ' này</button><small class="asset-hint">Xem mã trên quạt màu hoặc web hãng rồi chọn màu gần đúng. Lần sau sẽ có sẵn trong Dữ liệu dùng chung.</small></form>') + localAssetPhotos(photos) + onlineSlot +
+            '<button class="primary">Dùng màu ' + esc(brand) + ' này</button><small class="asset-hint">Xem mã trên quạt màu hoặc web hãng rồi chọn màu gần đúng. Lần sau sẽ có sẵn trong Dữ liệu dùng chung.</small></form>') + localAssetPhotos(photos.filter(item => matchFacets(item,facets))) + onlineSlot +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(paintData.source || '') + ' (' + colors.length + ' màu)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('select').onchange = event => { brand = event.target.value; paint(); };
+        wireFacets(panel,facets,paint);
         wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelectorAll('[data-paint-code]').forEach(button => {
           button.onclick = () => {
@@ -718,6 +726,7 @@ window.GDHomeAssets = (() => {
         place();
       }
       panel.innerHTML = '<p class="asset-empty">Đang tải bảng màu…</p>';
+      document.addEventListener('gdhome:library-changed',paint,{signal});
       paint();
     });
   }
@@ -729,7 +738,8 @@ window.GDHomeAssets = (() => {
 
   const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường'});
   function pickWood(anchor, { groupName, onPick, title = 'Mã gỗ' } = {}) {
-    return popover(anchor, async (panel, close, place) => {
+    return popover(anchor, async (panel, close, place, signal) => {
+      const facets = {};
       let brand = '', collection = 'all', query = '', woodData = null;
       async function paint() {
         try { woodData = await loadWoodData(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
@@ -738,8 +748,9 @@ window.GDHomeAssets = (() => {
         const brands = [...new Set(woodData.woods.map(wood => wood.brand))];
         const byBrand = woodData.woods.filter(wood => !brand || brand === wood.brand);
         const collections = [...new Set(byBrand.map(wood => wood.collection).filter(Boolean))];
-        const woods = byBrand.filter(w => (collection === 'all' || w.collection === collection) &&
+        const candidates = byBrand.filter(w => (collection === 'all' || w.collection === collection) &&
           (!query || fold(w.code).includes(fold(query)) || fold(w.name).includes(fold(query)) || fold(w.collection).includes(fold(query))));
+        const woods = candidates.filter(item => matchFacets(item,facets));
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
           '<select aria-label="Hãng"><option value="">Tất cả hãng</option>' +
@@ -747,23 +758,24 @@ window.GDHomeAssets = (() => {
           '<select aria-label="Dòng sản phẩm"><option value="all">Tất cả dòng sản phẩm</option>' +
           collections.map(col => '<option value="' + esc(col) + '"' + (col === collection ? ' selected' : '') + '>' + esc(col) + '</option>').join('') + '</select>' +
           '<input type="search" placeholder="Tìm theo mã, tên hoặc catalogue" value="' + esc(query) + '"></div>' +
-          '<div class="asset-body">' +
+          '<div class="asset-body">' + facetMarkup([...candidates,...photos],facets) +
           (woods.length ? '<div class="asset-wood-grid">' + woods.map((w,index) => '<button type="button" data-wood-index="' + index + '" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
             (w.thumb ? '<img data-lib-asset="' + esc(w.thumb) + '" alt="">' : '') + '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span>' +
             '<span class="wood-badge">' + esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>').join('') + '</div>' :
-            '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>') + localAssetPhotos(photos) + onlineSlot +
+            '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>') + localAssetPhotos(photos.filter(item => matchFacets(item,facets))) + onlineSlot +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(woodData.source || '') + ' (' + woods.length + ' mã)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('[aria-label=Hãng]').onchange = event => { brand = event.target.value; collection = 'all'; paint(); };
         panel.querySelector('[aria-label="Dòng sản phẩm"]').onchange = event => { collection = event.target.value; paint(); };
+        wireFacets(panel,facets,paint);
         wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelectorAll('[data-wood-code]').forEach(button => {
           button.onclick = () => {
             const w = woods[Number(button.dataset.woodIndex)];
             close();
-            if (w) onPick?.({...w,kind:'wood'});
+            if (w) { updateItem({id:w.id,used:true}).catch(() => {}); onPick?.({...w,kind:'wood'}); }
           };
         });
         wireLocalAssetPhotos(panel,photos,entry => { close(); onPick?.(entry); });
@@ -778,6 +790,7 @@ window.GDHomeAssets = (() => {
         place();
       }
       panel.innerHTML = '<p class="asset-empty">Đang tải danh mục mã gỗ…</p>';
+      document.addEventListener('gdhome:library-changed',paint,{signal});
       paint();
     });
   }
@@ -931,6 +944,8 @@ window.GDHomeAssets = (() => {
         (category.id === categoryId ? ' selected' : '') + '>' + esc(category.name) + '</option>').join('') + '</select></label>' +
       '<label>Đơn vị cung cấp <input name="suppliers" list="catalogue-suppliers" placeholder="Tên cách nhau bằng dấu phẩy"></label>' +
       '<datalist id="catalogue-suppliers">' + (library.suppliers || []).map(item => '<option>' + esc(item.name) + '</option>').join('') + '</datalist>' +
+      ((library.suppliers || []).length ? '<label>Chọn nhiều đơn vị <select name="supplierChoices" multiple>' +
+        library.suppliers.map(item => '<option>' + esc(item.name) + '</option>').join('') + '</select></label>' : '') +
       '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
       '<label><input type="checkbox" name="useAi"' + (categoryId !== 'ancuong-wood' && window.GDHomeAI ? ' checked' : '') + '> Dùng AI để đọc PDF</label>' +
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
@@ -1052,7 +1067,8 @@ window.GDHomeAssets = (() => {
       if (busy || !form.reportValidity()) return;
       const categoryId = form.elements.category.value;
       const listValues = value => value.split(',').map(part => part.trim()).filter(Boolean);
-      const suppliers = listValues(form.elements.suppliers.value), tags = listValues(form.elements.tags.value);
+      const suppliers = [...listValues(form.elements.suppliers.value),...Array.from(form.elements.supplierChoices?.selectedOptions || [],option => option.value)];
+      const tags = listValues(form.elements.tags.value);
       const brand = form.elements.brand.value.trim();
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
       if (mode === 'pdf' && (!brand || !collection)) { status.textContent = 'Nhập hãng và tên catalogue.'; return; }
@@ -1077,7 +1093,7 @@ window.GDHomeAssets = (() => {
         for (const {card,code,name} of selected) {
           if (!dialog.open) break;
           const item = items[[...list.children].indexOf(card)];
-          const itemBrand = card.querySelector('[data-catalogue-brand]')?.value.trim() || brand;
+          const itemBrand = card.querySelector('[data-catalogue-brand]')?.value.trim() || brand || (categoryId === 'ancuong-wood' ? 'An Cường' : '');
           const itemSuppliers = [...new Set([...suppliers,...listValues(card.querySelector('[data-catalogue-supplier]')?.value || '')])];
           const key = code ? catalogueKey({brand:itemBrand,code}) : item.source;
           const previous = existing.get(key);
@@ -1095,7 +1111,7 @@ window.GDHomeAssets = (() => {
           const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
           const record = {full:image.full,thumb:image.thumb,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
-            kind:categoryId === 'ancuong-wood' ? 'wood' : 'image',...fields};
+            kind:categoryId === 'ancuong-wood' && code ? 'wood' : 'image',...fields};
           existing.set(key,record);
           batch.push(record);
           if (batch.length === 50) await flush();
@@ -1210,6 +1226,7 @@ window.GDHomeAssets = (() => {
         if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'a' || event.target.matches('input[type=search],textarea')) return;
         if (onPick) return;
         event.preventDefault();
+        selected.clear();
         items.forEach(item => selected.add(item.id));
         paint();
       };
@@ -1354,12 +1371,14 @@ window.GDHomeAssets = (() => {
           const item = data.items.find(entry => entry.id === id);
           const name = prompt('Tên / mã ảnh mẫu:',item.name || '');
           if (name === null) return;
+          const hex = item.kind === 'paint' ? prompt('Màu hex:',item.hex) : undefined;
+          if (hex === null) return;
           const brand = prompt('Thương hiệu:',item.brand || '');
           const size = prompt('Kích thước:',item.size || '');
           const suppliers = prompt('Đơn vị cung cấp, cách nhau bằng dấu phẩy:',(item.suppliers || []).join(', '));
           const tags = prompt('Tag, cách nhau bằng dấu phẩy:',(item.tags || []).join(', '));
           if ([brand,size,suppliers,tags].includes(null)) return;
-          try { await updateItem({id,name:name.trim(),brand,size,suppliers:suppliers.split(','),tags:tags.split(',')}); paint(); } catch (error) { toast(error.message); }
+          try { await updateItem({id,name:name.trim(),hex,brand,size,suppliers:suppliers.split(','),tags:tags.split(',')}); paint(); } catch (error) { toast(error.message); }
         };
       });
       if (items.length < 4 && query.trim()) renderGoogleFallback(body.querySelector('.asset-google-fallback-slot'),query,{
@@ -1396,7 +1415,7 @@ window.GDHomeAssets = (() => {
       try {
         const items = await loadRenders(projectId,force);
         if (!list.isConnected) return;
-        list.innerHTML = bulkControls() + grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Dự án chưa có phối cảnh 3D.'});
+        list.innerHTML = grid(items,{selectable:!!onPick,removable:true,empty:'Dự án chưa có phối cảnh 3D.'});
         list.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
           const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
           body.closest('dialog').close();

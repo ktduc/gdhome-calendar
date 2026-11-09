@@ -1218,6 +1218,7 @@ async function executeProjectReview({
 // GĐ18B.3: Tự điền Hồ sơ dự án từ Notion (tìm theo SĐT -> tên dự án) + AI đọc hợp đồng/báo giá
 // -----------------------------------------------------------------------------
 const PROFILE_FIELDS = [
+  { key: 'project', label: 'Tên dự án' },
   { key: 'customer', label: 'Tên khách hàng' },
   { key: 'address', label: 'Địa chỉ' },
   { key: 'phone', label: 'SĐT' },
@@ -1379,7 +1380,7 @@ async function suggestProjectProfile({ projectId, project, hubRecord, store, dat
   }
 
   const fields = PROFILE_FIELDS.map(({ key, label }) => {
-    const currentVal = String(currentProfile[key] || '').trim();
+    const currentVal = String((key === 'project' ? projectName : currentProfile[key]) || '').trim();
     const proposedObj = suggestions[key] || null;
     const proposedVal = proposedObj?.value || '';
     // Trường đang có giá trị thì không tự tích ghi đè (checked = false)

@@ -979,15 +979,15 @@ function paintPicked(row,slot,paint) {
     pa.code = paint.code;
     pa.color = paint.name;
   });
-  if (!paint.id) savePaintToSharedLibrary(paint);
+  if (!paint.id) savePaintToSharedLibrary(paint,sheet.groups.find(group => group.rows.includes(row))?.name);
   else GDHomeAssets.updateItem({id:paint.id,used:true}).catch(showError);
 }
 
-async function savePaintToSharedLibrary(paint) {
+async function savePaintToSharedLibrary(paint,groupName) {
   if (!window.GDHomeAssets || !paint) return;
   try {
     const data = await GDHomeAssets.loadLibrary();
-    const cat = GDHomeAssets.categoryFor(data, 'SƠN') || data.categories[0];
+    const cat = GDHomeAssets.categoryFor(data,groupName) || data.categories.find(category => category.id === 'cat-3');
     if (!cat) return;
     const {added} = await GDHomeAssets.addItems(cat.id,[paint]);
     if (added[0]) await GDHomeAssets.updateItem({id:added[0].id,used:true});

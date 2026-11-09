@@ -1396,11 +1396,13 @@ cases['16.3'] = async page => {
 cases['16.4'] = async page => {
   await openMaterials(page);
   // Bấm nút Copy ảnh chính -> chạy trực tiếp, KHÔNG mở modal #material-image-scope
+  await page.evaluate(() => { window.html2canvas = async () => document.createElement('canvas'); });
   await page.locator('#material-copy').click();
-  await page.waitForTimeout(400);
-  assert.equal(await page.locator('#material-image-scope').count(), 0, 'Copy ảnh không hiện modal mỗi lần');
-  // Xem trước xuất ảnh (nếu mở) phải đóng trước khi mở menu ▾
-  await page.evaluate(() => document.querySelectorAll('dialog:is(#print-preview,#material-copy-result)[open]').forEach(d => d.close()));
+  const result = page.locator('#material-copy-result[open]');
+  await result.waitFor({timeout:20000});
+  assert.equal(await page.locator('#material-image-scope').count(),0,'Copy ảnh không hiện modal cài đặt');
+  await result.getByRole('button',{name:'Đóng',exact:true}).last().click();
+  await result.waitFor({state:'detached'});
 
   // Mở menu ▾ -> bấm ⚙ Cài đặt xuất…
   await page.locator('.hdr-split-caret').click();
@@ -2060,6 +2062,9 @@ cases['19.2'] = async page => {
   await page.locator('[data-row=g1-r1] [data-slot="0"]').click();
   await page.locator('[data-paint-code="30YY 72/107"]').click();
   await page.waitForFunction(async id => (await fetch('/api/library').then(r => r.json())).items.find(item => item.id === id)?.used === 1,paint.id);
+  await page.request.post('/api/library/items/delete',{data:{ids:[paint.id]}});
+  assert.ok(!(await library()).items.some(item => item.id === paint.id));
+  assert.ok(!(await library()).items.some(item => item.kind === 'paint' && item.code === paint.code && item.brand === paint.brand));
 };
 
 cases['19.3'] = async page => {

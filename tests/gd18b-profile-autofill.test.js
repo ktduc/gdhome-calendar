@@ -177,3 +177,28 @@ test('GĐ18B.3: Tự điền Hồ sơ dự án từ Notion (tìm theo SĐT trư�
   assert.equal(byKey.phone.current, '0912345678');
   assert.equal(byKey.phone.checked, false, 'Trường đang có giá trị không được tự ghi đè');
 });
+
+test('GĐ19.7: lấy địa chỉ từ cột place tên lạ và tách khách hàng khỏi tên dự án',async t => {
+  const dataKey = 'notion-profile-gd19';
+  const dbId = 'a'.repeat(32);
+  const store = {get:async key => key === 'cfg-'+dataKey ? {secrets:encrypt({
+    notionToken:'token',notionCustomerDbId:dbId,notionCustomerMap:{project:'Tên bên công trình',address:'Cột vị trí lạ'}
+  })} : null};
+  const title = 'Cô TẠ THỊ YẾN - Ch VÂN';
+  t.mock.method(global,'fetch',async (url,options) => {
+    if (options.method === 'GET') return Response.json({properties:{
+      'Tên bên công trình':{type:'title'},'Cột vị trí lạ':{type:'place'}
+    }});
+    return Response.json({results:[{object:'page',id:'demo',properties:{
+      'Tên bên công trình':{type:'title',title:[{plain_text:title}]},
+      'Cột vị trí lạ':{type:'place',place:{address:'Phố A, quận B'}}
+    }}]});
+  });
+  const {fields} = await suggestProjectProfile({projectId:'p1',project:{name:title},hubRecord:{},store,dataKey});
+  const field = key => fields.find(item => item.key === key);
+  assert.equal(field('customer').proposed,'Cô TẠ THỊ YẾN');
+  assert.equal(field('address').proposed,'Phố A, quận B');
+  assert.match(field('address').source,/Cột vị trí lạ/);
+  assert.equal(field('project').proposed,title);
+  assert.equal(field('project').checked,false);
+});

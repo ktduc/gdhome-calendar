@@ -10,7 +10,7 @@ function robotsRules(text) {
     if (match[1].toLowerCase() === 'user-agent') {
       if (!group || group.rules.length) { group = {agents:[],rules:[]}; groups.push(group); }
       group.agents.push(value.toLowerCase());
-    } else if (group && value) group.rules.push({path:value,allow:match[1].toLowerCase() === 'allow'});
+    } else if (group && value && value.length <= 2000 && group.rules.length < 2000) group.rules.push({path:value,allow:match[1].toLowerCase() === 'allow'});
   }
   const specific = groups.filter(group => group.agents.some(agent => agent !== '*' && agent && 'gdhometools'.includes(agent)));
   return (specific.length ? specific : groups.filter(group => group.agents.includes('*'))).flatMap(group => group.rules);
@@ -19,10 +19,21 @@ function robotsRules(text) {
 function allowedPath(rules,url) {
   const path = url.pathname + url.search;
   const matches = rules.filter(({path:pattern}) => {
-    const end = pattern.endsWith('$');
-    const escaped = (end ? pattern.slice(0,-1) : pattern).split('*')
-      .map(part => part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('.*');
-    return new RegExp('^' + escaped + (end ? '$' : '')).test(path);
+    const exact = pattern.endsWith('$');
+    const parts = (exact ? pattern.slice(0,-1) : pattern).split('*');
+    const prefix = parts.shift();
+    if (!path.startsWith(prefix)) return false;
+    if (!parts.length) return !exact || path === prefix;
+    let cursor = prefix.length;
+    const suffix = exact ? parts.pop() : '';
+    if (exact && !path.endsWith(suffix)) return false;
+    const limit = path.length-suffix.length;
+    for (const part of parts) {
+      const index = path.indexOf(part,cursor);
+      if (index < 0 || index+part.length > limit) return false;
+      cursor = index+part.length;
+    }
+    return cursor <= limit;
   });
   matches.sort((a,b) => b.path.length-a.path.length || Number(b.allow)-Number(a.allow));
   return !matches.length || matches[0].allow;
@@ -66,7 +77,7 @@ function extractProducts(html,url,validateUrl = checkSsrfUrl) {
     let image;
     try { image = validateUrl(new URL(record.image,url).href).href; } catch { return; }
     const key = [image,record.code || ''].join('|');
-    if (seen.has(key)) return;
+    if (seen.has(key) || (!record.code && items.some(item => item.image === image))) return;
     seen.add(key);
     items.push({name:decode(record.name || title).slice(0,160),code:decode(record.code).slice(0,80),
       size:decode(record.size).slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image});
@@ -95,7 +106,7 @@ function extractProducts(html,url,validateUrl = checkSsrfUrl) {
       if (!attrs.alt && !/product|san-pham/i.test(attrs.class || '')) continue;
       add({name:attrs.alt || attrs.title,code:attrs['data-sku'],size:attrs['data-size'],image:source});
     }
-    if (meta['og:image'] && !items.some(item => item.image === new URL(meta['og:image'],url).href)) {
+    if (meta['og:image']) {
       add({name:title,code:meta['product:retailer_item_id'],image:meta['og:image']});
     }
   }
