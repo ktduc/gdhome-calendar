@@ -18,7 +18,8 @@ async function uploadImage(file,crop = null,onCompressed) {
 
 async function attachImages(row, slot, files, render = false) {
   const source = sheet;
-  const list = slot === 'render' ? row.render : row.options[Number(slot)].images;
+  const pa = slot === 'render' ? null : row.options[Number(slot)];
+  const list = pa ? pa.images : row.render;
   const selected = [...files].filter(f => f.type.startsWith('image/')).slice(0, Math.max(0,8-list.length));
   if (!selected.length) return;
   say('Đang nén và lưu ảnh…');
@@ -26,7 +27,13 @@ async function attachImages(row, slot, files, render = false) {
   let reduction;
   for (const file of selected) uploaded.push(await uploadImage(file,null,message => { reduction = message; }));
   if (sheet !== source || !sheet.groups.some(g => g.rows.includes(row))) return;
-  modify(() => list.push(...uploaded.slice(0,Math.max(0,8-list.length))),render);
+  modify(() => {
+    const next = uploaded.slice(0,Math.max(0,8-list.length));
+    if (!next.length) return;
+    if (pa?.imageSource === 'library') list.unshift(...next);
+    else list.push(...next);
+    if (pa) pa.imageSource = 'manual';
+  },render);
   byId('notice').textContent = '';
   GDHomeShell.toast(reduction,byId('material-toast'));
 }
@@ -155,7 +162,10 @@ async function cropImage(row, slot, i, element, onSaved) {
     status.textContent = 'Đang lưu ảnh cắt…';
     try {
       const updated = await uploadImage(file,bounds);
-      if (sheet === source && list[i] === item) modify(() => { list[i] = updated; },false);
+      if (sheet === source && list[i] === item) modify(() => {
+        list[i] = {...updated,...(item.display ? {display:item.display} : {})};
+        if (slot !== 'render') row.options[Number(slot)].imageSource = 'manual';
+      },false);
       crop.close();
       if (element.open && sheet === source) onSaved();
 

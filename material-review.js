@@ -49,6 +49,8 @@ function cleanSheet(sheet) {
           return { id:unique(row.id), ...pick(row,['name','room','qty','unit','supplier','note','spec']), render:assetsOnly(row.render),
             ...(Array.isArray(row.noteSuggestions) ? { noteSuggestions:row.noteSuggestions.slice(0,12).map(value => text(value,2000)).filter(Boolean) } : {}),
             options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size','supplier','price']), ...withPaint(pa), ...(typeof pa?.autoName === 'boolean' ? {autoName:pa.autoName} : {}), ...(imageName(pa?.autoNameAsset) ? {autoNameAsset:pa.autoNameAsset} : {}),
+              ...(/^[A-Za-z0-9_.-]{1,60}$/.test(pa?.libraryItemId || '') ? {libraryItemId:pa.libraryItemId} : {}),
+              ...(['manual','library'].includes(pa?.imageSource) ? {imageSource:pa.imageSource} : {}),
               ...(pa?.autoColor ? {autoColor:text(pa.autoColor)} : {}), images:assetsOnly(pa?.images) })),
             paCount:Math.min(3,Math.max(1,Number.isInteger(row.paCount) ? row.paCount : 1)),
             chosen, decision, ordered:!!row.ordered && chosen !== null };

@@ -792,16 +792,13 @@ function materialProjectName() {
 function pickedLibraryImage(item) {
   return {full:item.full,thumb:item.thumb,...(item.view ? {view:item.view} : {}),...(item.display ? {display:item.display} : {})};
 }
-function addPickedImage(row,slot,item,extra) {
+function addPickedImage(row,slot,item) {
   if (!item || !sheet?.groups.some(group => group.rows.includes(row))) return;
   const list = slot === 'render' ? row.render : row.options[Number(slot)]?.images;
   if (!list) return;
   if (list.some(image => (typeof image === 'string' ? image : image.full) === item.full)) return say('Ảnh đã có trong ô.');
   if (list.length >= 8) return say('Mỗi ô tối đa 8 ảnh.');
-  modify(() => {
-    list.push(pickedLibraryImage(item));
-    extra?.();
-  });
+  modify(() => list.push(pickedLibraryImage(item)));
 }
 function selectedCellTarget(kind) {
   const selected = selectedImageCell;
@@ -824,6 +821,7 @@ function pickedLibraryForSelection() {
 }
 function removeMaterialImage(list,index,pa) {
   const [image] = list.splice(index,1);
+  if (pa && !list.length) delete pa.imageSource;
   if (!image || !pa?.code || pa.autoName === false) return;
   const full = typeof image === 'string' ? image : image.full;
   const autoFilled = pa.autoNameAsset ? pa.autoNameAsset === full :
@@ -832,14 +830,42 @@ function removeMaterialImage(list,index,pa) {
   pa.code = '';
   delete pa.autoName;
   delete pa.autoNameAsset;
+  delete pa.libraryItemId;
   if (pa.autoColor === pa.color) pa.color = '';
   delete pa.autoColor;
 }
 function libraryPicked(row,slot,item) {
+  if (!item || !sheet?.groups.some(group => group.rows.includes(row))) return;
   if (item.kind === 'paint') return paintPicked(row,slot,item);
-  if (item.kind === 'wood') return woodPicked(row,slot,item);
+  applyLibraryMaterial(row,slot,item);
+}
+function applyLibraryMaterial(row,slot,item) {
   const pa = row.options[Number(slot)];
-  addPickedImage(row,slot,item,() => { if (pa && !pa.code && (item.code || item.name)) { pa.code = item.code || item.name; pa.autoName = true; pa.autoNameAsset = item.full; } });
+  if (!pa) return;
+  modify(() => {
+    const images = item.full ? [pickedLibraryImage(item)] : [];
+    pa.images.splice(0,pa.images.length,...images);
+    pa.code = item.code || item.name || '';
+    pa.color = item.name || '';
+    pa.brand = item.brand || '';
+    pa.finish = item.finish || '';
+    if (item.kind === 'paint') pa.paint = item;
+    else delete pa.paint;
+    if (item.id) pa.libraryItemId = item.id;
+    else delete pa.libraryItemId;
+    if (item.full) {
+      pa.imageSource = 'library';
+      pa.autoName = true;
+      pa.autoNameAsset = item.full;
+      pa.autoColor = pa.color;
+    } else {
+      delete pa.imageSource;
+      delete pa.autoName;
+      delete pa.autoNameAsset;
+      delete pa.autoColor;
+    }
+    if (item.collection && !row.spec) row.spec = item.collection;
+  });
 }
 let openCellMenuElement = null;
 function closeCellMenu() {
@@ -916,6 +942,7 @@ function openImageCellMenu(anchor, row, group, slot) {
         pa.brand = '';
         pa.code = '';
         pa.color = '';
+        delete pa.libraryItemId;
       });
     }, true);
   }
@@ -972,8 +999,7 @@ function openAssetPicker(cell,row,group,slot) {
     }});
   } else if (isWoodGroup(group?.name)) {
     GDHomeAssets.pickWood(cell,{groupName:group?.name,onPick:wood => {
-      if (wood.kind === 'wood') woodPicked(row,slot,wood);
-      else libraryPicked(row,slot,wood);
+      libraryPicked(row,slot,wood);
     }});
   } else {
     GDHomeAssets.pickLibrary(cell,{groupName:group?.name,onPick:item => libraryPicked(row,slot,item)});
@@ -981,14 +1007,8 @@ function openAssetPicker(cell,row,group,slot) {
 }
 
 function paintPicked(row,slot,paint) {
-  const pa = row.options[Number(slot)];
-  if (!pa) return;
-  modify(() => {
-    pa.paint = paint;
-    pa.brand = paint.brand;
-    pa.code = paint.code;
-    pa.color = paint.name;
-  });
+  if (!row.options[Number(slot)]) return;
+  applyLibraryMaterial(row,slot,paint);
   if (!paint.id) savePaintToSharedLibrary(paint,sheet.groups.find(group => group.rows.includes(row))?.name);
   else GDHomeAssets.updateItem({id:paint.id,used:true}).catch(showError);
 }
@@ -1006,22 +1026,6 @@ async function savePaintToSharedLibrary(paint,groupName) {
   }
 }
 
-function woodPicked(row,slot,wood) {
-  const pa = row.options[Number(slot)];
-  if (!pa) return;
-  modify(() => {
-    pa.brand = wood.brand;
-    pa.code = wood.code;
-    pa.autoName = !!wood.full;
-    pa.autoNameAsset = wood.full;
-    if (wood.finish) pa.finish = wood.finish;
-    if (wood.full && pa.images.length < 8 && !pa.images.some(img => (typeof img === 'string' ? img : img.full) === wood.full)) {
-      pa.images.push(pickedLibraryImage(wood));
-    }
-    if (!pa.color) { pa.color = wood.name; pa.autoColor = wood.full ? wood.name : undefined; }
-    if (!row.spec) row.spec = wood.collection;
-  });
-}
 async function uploadProjectRenders() {
   const files = await GDHomeAssets.filePicker('image/*,application/pdf');
   if (!files.length) return;

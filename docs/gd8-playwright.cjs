@@ -2361,6 +2361,56 @@ cases['20.2'] = async page => {
   }
 };
 
+cases['20.3'] = async page => {
+  await openMaterials(page);
+  const [a,b] = await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:200,height:100});
+    const ctx = canvas.getContext('2d'), items = [];
+    for (const [i,color] of ['#bb5533','#2277aa'].entries()) {
+      ctx.fillStyle = color;
+      ctx.fillRect(0,0,200,100);
+      const full = await GDHomeAssets.storeAsset(await new Promise(resolve => canvas.toBlob(resolve)));
+      items.push({full,thumb:full,kind:'wood',code:'TEST205'+i,name:'Vân '+i,brand:'Hãng '+i,...(i ? {view:{x:.6,y:.5,z:1.2}} : {})});
+    }
+    modify(() => { sheet.groups[0].name = 'MÃ GỖ'; });
+    return (await GDHomeAssets.addItems('cat-1',items)).added;
+  });
+  const cell = page.locator('[data-row=g1-r1] .image-cell[data-slot="0"]');
+  async function pick(code) {
+    await cell.locator('[data-action=cell-menu]').click();
+    await page.getByRole('button',{name:'Chọn mã gỗ'}).click();
+    const picker = page.locator('.asset-popover');
+    await picker.locator('input[type=search]').fill(code);
+    await picker.locator('[data-wood-code="' + code + '"]').click();
+  }
+  await pick(a.code);
+  assert.equal(await cell.locator('.image-open img').getAttribute('data-asset'),a.thumb);
+  await pick(b.code);
+  assert.equal(await cell.locator('.image-open img').getAttribute('data-asset'),b.thumb);
+  assert.equal(await page.locator('[data-row=g1-r1] [data-field=code]').first().inputValue(),b.code);
+  await page.waitForFunction(async id => {
+    const data = await fetch('/api/materials').then(r => r.json());
+    return data.sheets[0].groups[0].rows[0].options[0].libraryItemId === id;
+  },b.id);
+  const current = await page.evaluate(() => sheet.groups[0].rows[0].options[0]);
+  assert.deepEqual(current.images,[{full:b.full,thumb:b.thumb,view:b.view}]);
+  assert.equal(current.brand,b.brand);
+  assert.equal(current.color,b.name);
+  assert.equal(current.imageSource,'library');
+  await page.locator('#material-header-actions [data-action=undo]').click();
+  assert.equal(await cell.locator('.image-open img').getAttribute('data-asset'),a.thumb);
+  assert.equal(await page.locator('[data-row=g1-r1] [data-field=code]').first().inputValue(),a.code);
+  await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:20,height:20});
+    const blob = await new Promise(resolve => canvas.toBlob(resolve));
+    await attachImages(sheet.groups[0].rows[0],'0',[new File([blob],'manual.png',{type:'image/png'})],true);
+  });
+  const manual = await page.evaluate(() => sheet.groups[0].rows[0].options[0]);
+  assert.equal(manual.imageSource,'manual');
+  assert.notEqual(manual.images[0].full,a.full);
+  assert.equal(manual.images[1].full,a.full);
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');
