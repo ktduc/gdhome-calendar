@@ -9,6 +9,7 @@ const text = (value, max = 160) => typeof value === 'string' ? value.trim().repl
 const shortName = name => text(name.replace(/\s*\(.*\)\s*$/, ''), 80) || text(name, 80);
 const queues = new Map();
 const bulkUndo = new Map();
+const mergeUndo = new Map();
 const woodCategory = {id:'ancuong-wood',name:'Mã gỗ'};
 const woodSeed = require('./data/wood-ancuong.json').woods.map((wood,i) => ({
   ...wood,id:'ancuong-seed-' + i,categoryId:woodCategory.id,brand:'An Cường',finish:'',kind:'wood',builtin:true,createdAt:1
@@ -42,6 +43,7 @@ function itemMetadata(item) {
   const cabinetWidth = number(item.cabinetWidth,20000);
   const tags = stringList([...(Array.isArray(item.tags) ? item.tags : []),...(cabinetWidth ? ['Tủ '+cabinetWidth] : [])]);
   return {brand:text(item.brand,80),size:materialSize(item.size || item.name),tags,suppliers:stringList(item.suppliers),
+    ...(Array.isArray(item.brands) ? {brands:stringList(item.brands)} : {}),
     ...(item.spec ? {spec:text(item.spec,160)} : {}),...(item.subgroup ? {subgroup:text(item.subgroup,80)} : {}),
     ...(cabinetWidth ? {cabinetWidth} : {}),...(item.innerWidth ? {innerWidth:number(item.innerWidth,20000)} : {}),
     ...(item.unit ? {unit:text(item.unit,30)} : {}),...(item.price ? {price:number(item.price,1e10)} : {})};
@@ -138,17 +140,80 @@ function categoryForGroup(library, groupName) {
   return bestScore >= 0.5 ? best : null;
 }
 
-async function mutate(store, key, change) {
+async function mutate(store, key, change, persist = data => store.put(key,data)) {
   const previous = queues.get(key) || Promise.resolve();
   const run = previous.catch(() => {}).then(async () => {
     const data = normalize(await store.get(key));
     const result = await change(data);
     data._version += 1;
-    await store.put(key, data);
+    await persist(data,result);
     return { data, result };
   });
   queues.set(key, run);
   try { return await run; } finally { if (queues.get(key) === run) queues.delete(key); }
+}
+
+function mergeLibraryItems(data,body) {
+  const ids = Array.isArray(body.ids) ? [...new Set(body.ids)] : [];
+  if (ids.length < 2 || ids.length > 5000 || !ids.includes(body.targetId)) fail(400,'Chọn mã đích và ít nhất một mã khác.');
+  const byId = new Map(data.items.map(item => [item.id,item]));
+  const selected = ids.map(id => byId.get(id));
+  if (selected.some(item => !item)) fail(404,'Có mã không thuộc thư viện của tài khoản.');
+  const target = byId.get(body.targetId);
+  target.tags = stringList(selected.flatMap(item => item.tags || []));
+  target.suppliers = stringList(selected.flatMap(item => item.suppliers || []));
+  target.brands = stringList(selected.flatMap(item => [item.brand,...(item.brands || [])]));
+  target.used = Math.min(1e6,selected.reduce((sum,item) => sum+(item.used || 0),0));
+  const removed = new Set(ids.filter(id => id !== target.id));
+  data.items = data.items.filter(item => !removed.has(item.id));
+  return {removed,targetId:target.id};
+}
+
+function changeMaterialReferences(data,result) {
+  const changes = [];
+  const undo = new Map((result.undo?.changes || []).map(change => [JSON.stringify([change.sheetId,change.rowId,change.slot]),change]));
+  for (const sheet of [...data.sheets,...(data.archivedSheets || [])]) for (const group of sheet.groups) for (const row of group.rows) {
+    for (const [slot,pa] of row.options.entries()) {
+      const from = pa.libraryItemId;
+      const reversed = undo.get(JSON.stringify([sheet.id,row.id,slot]));
+      const to = result.removed?.has(from) ? result.targetId : reversed && reversed.to === from ? reversed.from : undefined;
+      if (!to) continue;
+      pa.libraryItemId = to;
+      changes.push({sheetId:sheet.id,rowId:row.id,slot,from,to});
+    }
+  }
+  return changes;
+}
+
+async function mergeWithMaterials(store,key,dataKey,body) {
+  const {MaterialStore} = require('./materials');
+  const materialStore = new MaterialStore(store,dataKey);
+  return mutate(store,key,data => {
+    if (body.undo) {
+      const undo = mergeUndo.get(key);
+      if (!undo || undo.token !== body.undo || undo.version !== data._version || undo.expires <= Date.now()) {
+        fail(409,'Thư viện đã thay đổi hoặc đã hết thời gian hoàn tác.');
+      }
+      data.items = undo.items;
+      return {undo};
+    }
+    const items = structuredClone(data.items);
+    return {...mergeLibraryItems(data,body),items};
+  },async (data,result) => {
+    const referenceUpdate = await materialStore.update(result.undo?.changes.length ? result.undo.materialVersion : undefined,materials => ({
+      changes:changeMaterialReferences(materials,result)
+    }),'_version',[[key,data]]);
+    result.referenceChanges = referenceUpdate.changes;
+    result.materialVersion = referenceUpdate._version;
+    if (result.undo) mergeUndo.delete(key);
+    else {
+      const snapshot = {token:crypto.randomUUID(),items:result.items,version:data._version,changes:result.referenceChanges,
+        materialVersion:result.materialVersion,expires:Date.now()+300000};
+      mergeUndo.set(key,snapshot);
+      result.undoToken = snapshot.token;
+      setTimeout(() => { if (mergeUndo.get(key) === snapshot) mergeUndo.delete(key); },300000).unref();
+    }
+  });
 }
 
 async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, sendJson }) {
@@ -242,6 +307,11 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       setTimeout(() => { if (bulkUndo.get(key) === snapshot) bulkUndo.delete(key); },300000).unref();
     } else bulkUndo.delete(key);
     return sendJson(res,200,{...data,undoToken:result.undoToken});
+  }
+  if (urlPath === '/api/library/items/merge') {
+    const {data,result} = await mergeWithMaterials(store,key,dataKey,body || {});
+    return sendJson(res,200,{...data,undoToken:result.undoToken || null,
+      referenceChanges:result.referenceChanges,materialVersion:result.materialVersion});
   }
   if (urlPath === '/api/library/items/update') {
     const { data } = await mutate(store, key, data => {

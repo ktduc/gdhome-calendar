@@ -1071,6 +1071,44 @@ async function fillMaterialAssetSidebar(force = false) {
 }
 
 document.addEventListener('gdhome:library-changed',() => fillMaterialAssetSidebar());
+
+function mapLibraryReferences(documents,findTarget) {
+  const changes = [];
+  for (const doc of new Set(documents.filter(Boolean))) for (const group of doc.groups) for (const row of group.rows) {
+    for (const [slot,pa] of row.options.entries()) {
+      const from = pa.libraryItemId, to = findTarget(doc.id,row.id,slot,from);
+      if (!to || from === to) continue;
+      pa.libraryItemId = to;
+      changes.push({sheetId:doc.id,rowId:row.id,slot,from,to});
+    }
+  }
+  return changes;
+}
+function materialReferenceLookup(changes,reverse = false) {
+  const mapping = new Map(changes.map(({sheetId,rowId,slot,from,to}) => [JSON.stringify([sheetId,rowId,slot,reverse ? to : from]),reverse ? from : to]));
+  return (sheetId,rowId,slot,from) => mapping.get(JSON.stringify([sheetId,rowId,slot,from]));
+}
+function applyLibraryReferences(findTarget) {
+  mapLibraryReferences([...(materials?.sheets || []),sheet,...before,...after],findTarget);
+}
+document.addEventListener('gdhome:library-references',({detail}) => {
+  if (!materials) return;
+  applyLibraryReferences(materialReferenceLookup(detail.referenceChanges));
+  if (materials._version === detail.materialVersion-1) materials._version = detail.materialVersion;
+  saveToolsSnapshot();
+});
+function mergeGuestLibraryReferences(removed = [],target,undo) {
+  const state = guestMaterialState(), ids = new Set(removed);
+  const findTarget = undo ? materialReferenceLookup(undo,true) : (_sheet,_row,_slot,from) => ids.has(from) ? target : undefined;
+  const changes = mapLibraryReferences(state.sheets || [],findTarget);
+  if (changes.length) {
+    state._version = (state._version || 0)+1;
+    localStorage.setItem(guestMaterialKey,JSON.stringify(state));
+    if (materials) materials._version = state._version;
+  }
+  applyLibraryReferences(findTarget);
+  return changes;
+}
 document.addEventListener('gdhome:renders-changed',event => {
   if (event.detail === sheet?.projectId) fillMaterialAssetSidebar();
 });

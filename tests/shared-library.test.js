@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { handleLibrary, categoryForGroup, defaultLibrary, cleanView } = require('../shared-library');
+const { handleLibrary, categoryForGroup, defaultLibrary, cleanView, libraryKey } = require('../shared-library');
+const { MaterialStore } = require('../materials');
 const { cleanSheet } = require('../material-review');
 
 const a = 'a'.repeat(64) + '.webp', b = 'b'.repeat(64) + '.webp';
@@ -18,7 +19,7 @@ function harness() {
     } catch (error) { status = error.status || 500; payload = { message:error.message }; }
     return { status,data:payload };
   }
-  return { call,data };
+  return { call,data,store };
 }
 
 test('Dữ liệu dùng chung: hạng mục mặc định, thêm/xoá ảnh, tách theo tài khoản', async () => {
@@ -79,4 +80,42 @@ test('Màu sơn trong PA được giữ khi lưu, mã màu sai bị bỏ', () =>
   const [first,second] = sheet.groups[0].rows[0].options;
   assert.deepEqual(first.paint,{kind:'paint',brand:'Dulux',code:'30YY 72/107',name:'Ivory Lace',hex:'#f5f0e1'});
   assert.equal(second.paint,undefined);
+});
+
+test('GĐ20.4 gộp mã theo tài khoản, giữ ảnh đích, nối PA và hoàn tác', async () => {
+  const account = 'merge@example.com';
+  const {call,store} = harness();
+  const material = new MaterialStore(store,account);
+  const add = items => call('/api/library/items',{categoryId:'cat-1',items},account);
+  const first = await add([{code:'MFC-MS 461 SC01',full:a,thumb:a,brand:'Hãng A',tags:['Vân'],suppliers:['Kho A']}]);
+  const second = await add([{code:'MFC MS461 SC01',full:b,thumb:b,brand:'Hãng B',tags:['Mờ'],suppliers:['Kho B']}]);
+  const target = first.data.added[0], source = second.data.added[0];
+  const merge = {targetId:target.id,ids:[target.id,source.id]};
+  await call('/api/library/items/update',{id:target.id,used:true},account);
+  await call('/api/library/items/update',{id:source.id,used:true},account);
+  await material.update(0,data => {
+    data.sheets.push({id:'sheet',groups:[{id:'group',rows:[{id:'row',options:[
+      {libraryItemId:source.id}, {libraryItemId:target.id}, {}
+    ]}]}]});
+  });
+  assert.equal((await call('/api/library/items/merge',merge,'other@example.com')).status,404);
+  const originalPut = store.put;
+  store.put = async (key,value) => {
+    if (key === libraryKey(account)) throw new Error('Lỗi giả lập khi lưu thư viện');
+    return originalPut(key,value);
+  };
+  assert.equal((await call('/api/library/items/merge',merge,account)).status,500);
+  store.put = originalPut;
+  const options = async () => (await material.get()).sheets[0].groups[0].rows[0].options;
+  assert.equal((await options())[0].libraryItemId,source.id,'Lỗi lưu thư viện khôi phục tham chiếu PA');
+  const merged = await call('/api/library/items/merge',merge,account);
+  assert.equal(merged.status,200,merged.data.message);
+  assert.ok(!merged.data.items.some(item => item.id === source.id));
+  const item = merged.data.items.find(item => item.id === target.id);
+  assert.deepEqual([item.full,item.used,item.tags,item.suppliers,item.brands],[a,2,['Vân','Mờ'],['Kho A','Kho B'],['Hãng A','Hãng B']]);
+  assert.equal((await options())[0].libraryItemId,target.id);
+  const undone = await call('/api/library/items/merge',{undo:merged.data.undoToken},account);
+  assert.equal(undone.status,200,undone.data.message);
+  assert.ok(undone.data.items.some(item => item.id === source.id));
+  assert.deepEqual((await options()).map(pa => pa.libraryItemId),[source.id,target.id,undefined]);
 });

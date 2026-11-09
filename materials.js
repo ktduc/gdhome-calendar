@@ -99,7 +99,7 @@ class MaterialStore {
     return data;
   }
 
-  async update(version, edit, revisionKey = '_version') {
+  async update(version, edit, revisionKey = '_version', extraWrites = []) {
     const previous = queues.get(this.key) || Promise.resolve();
     const pending = previous.catch(() => {}).then(async () => {
       const data = await this.get();
@@ -118,7 +118,24 @@ class MaterialStore {
         data.revisions = [];
       }
       writes.push([this.key,data]);
+      writes.push(...extraWrites);
       if (this.store.putMaterials) await this.store.putMaterials(writes);
+      else if (extraWrites.length) {
+        const snapshots = await Promise.all(writes.map(([key]) => this.store.get(key)));
+        let written = 0;
+        try {
+          for (const [key,value] of writes) {
+            await this.store.put(key,value);
+            written++;
+          }
+        } catch (error) {
+          for (let i=written-1; i>=0; i--) {
+            const [key] = writes[i];
+            await this.store.put(key,snapshots[i] || (key === this.key ? blank() : {entries:[]}));
+          }
+          throw error;
+        }
+      }
       else for (const [key,value] of writes) await this.store.put(key,value);
       return { _version:data[revisionKey], ...result };
     });

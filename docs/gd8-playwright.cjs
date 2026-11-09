@@ -2411,6 +2411,56 @@ cases['20.3'] = async page => {
   assert.equal(manual.images[1].full,a.full);
 };
 
+cases['20.4'] = async page => {
+  await openMaterials(page);
+  const [target,source,near,byHash] = await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:75,height:50});
+    const ctx = canvas.getContext('2d'), assets = [];
+    for (const color of ['#aa8866','#446688','#337744']) {
+      ctx.fillStyle = color;
+      ctx.fillRect(0,0,75,50);
+      assets.push(await GDHomeAssets.storeAsset(await new Promise(resolve => canvas.toBlob(resolve))));
+    }
+    const specs = [
+      ['ZQF-Á 87654321 X01','Hãng A',assets[0]],
+      ['zqfa87654321x01','Hãng B',assets[1]],
+      ['ZQFA87654321X02','Hãng C',assets[2]],
+      ['Mã khác','Hãng D',assets[2]]
+    ];
+    const {added} = await GDHomeAssets.addItems('cat-1',specs.map(([code,brand,full],index) =>
+      ({code,brand,full,thumb:full,name:'Mẫu gộp '+index,tags:['Tag '+index],suppliers:['Kho '+index]})));
+    libraryPicked(sheet.groups[0].rows[0],'0',added[1]);
+    await flushSave();
+    GDHomeAssets.openLibrary({categoryId:'cat-1'});
+    return added;
+  });
+  const loadPa = () => page.request.get('/api/materials').then(r => r.json()).then(data => data.sheets[0].groups[0].rows[0].options[0]);
+  assert.equal((await loadPa()).libraryItemId,source.id);
+  await page.locator('[data-find-duplicates]').click();
+  const dialog = page.locator('.asset-merge-dialog');
+  const group = dialog.locator('fieldset').filter({has:page.locator('[data-asset-id="' + target.id + '"]')});
+  for (const item of [target,source,near,byHash]) await group.locator('[data-asset-id="' + item.id + '"]').waitFor();
+  await group.locator('input[type=radio][value="' + target.id + '"]').check();
+  await group.locator('[data-merge-include][value="' + source.id + '"]').check();
+  const optional = group.locator('[data-merge-include][value="' + byHash.id + '"]');
+  if (await optional.isChecked()) await optional.uncheck();
+  await group.locator('[data-merge-group]').click();
+  await dialog.getByText(/Đã gộp mã/).waitFor();
+  const loadLibrary = () => page.request.get('/api/library').then(r => r.json());
+  let data = await loadLibrary();
+  const saved = data.items.find(item => item.id === target.id);
+  assert.equal(saved.full,target.full);
+  assert.ok(saved.brands.includes(source.brand) && saved.tags.includes('Tag 1') && saved.suppliers.includes('Kho 1'));
+  assert.ok(!data.items.some(item => item.id === source.id));
+  assert.equal((await loadPa()).libraryItemId,target.id);
+  assert.equal(await page.evaluate(() => sheet.groups[0].rows[0].options[0].libraryItemId),target.id);
+  await dialog.locator('[data-merge-undo]').click();
+  await dialog.getByText(/Đã hoàn tác/).waitFor();
+  data = await loadLibrary();
+  assert.ok(data.items.some(item => item.id === source.id));
+  assert.equal((await loadPa()).libraryItemId,source.id);
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');

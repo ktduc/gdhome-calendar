@@ -349,6 +349,7 @@ document.addEventListener('drop',event => {
 if (window.GDHomeAssets) GDHomeAssets.configure({
   headers:() => authHeaders(),
   guest:() => materialGuest,
+  mergeGuestReferences:(removed,target,undo) => mergeGuestLibraryReferences(removed,target,undo),
   storeAsset:blob => storeMaterialImage(blob),
   readAsset:name => readMaterialAsset(name)
 });

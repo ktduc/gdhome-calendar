@@ -478,7 +478,7 @@ window.GDHomeAssets = (() => {
 
   // ---------------------------------------------------------------- Giao diện chung
   const facetLabels = {subgroup:'Nhóm phụ kiện',cabinetWidth:'Rộng tủ',size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',finish:'Bề mặt',tone:'Tông màu',grain:'Vân',collection:'Bộ sưu tập',tags:'Tag'};
-  const facetValues = (item,key) => [item[key]].flat().filter(Boolean).map(String);
+  const facetValues = (item,key) => [...new Set([item[key],...(key === 'brand' ? item.brands || [] : [])].flat().filter(Boolean).map(String))];
   const matchFacets = (item,facets,except) => Object.entries(facets).every(([key,values]) =>
     key === except || !values.size || facetValues(item,key).some(value => values.has(value)));
   function facetMarkup(items,facets) {
@@ -1858,6 +1858,148 @@ window.GDHomeAssets = (() => {
     paint();
   }
 
+  const duplicateCode = code => String(code || '').normalize('NFD').replace(/\p{M}/gu,'')
+    .replace(/đ/gi,'d').toLowerCase().replace(/[\s\p{Pd}]+/gu,'');
+  function similarCode(a,b) {
+    const limit = Math.floor(Math.max(a.length,b.length)*.15);
+    if (!limit || Math.abs(a.length-b.length) > limit) return false;
+    if (limit === 1) {
+      let i = 0, j = 0, edits = 0;
+      while (i < a.length && j < b.length) {
+        if (a[i] === b[j]) { i++; j++; continue; }
+        if (++edits > 1) return false;
+        if (a.length >= b.length) i++;
+        if (b.length >= a.length) j++;
+      }
+      return edits + (a.length-i) + (b.length-j) <= 1;
+    }
+    let previous = Array.from({length:b.length+1},(_,i) => i);
+    for (let i=1; i<=a.length; i++) {
+      const row = Array(b.length+1).fill(limit+1);
+      row[0] = i;
+      let minimum = i;
+      for (let j=Math.max(1,i-limit); j<=Math.min(b.length,i+limit); j++) {
+        row[j] = Math.min(row[j-1]+1,previous[j]+1,previous[j-1]+Number(a[i-1] !== b[j-1]));
+        minimum = Math.min(minimum,row[j]);
+      }
+      if (minimum > limit) return false;
+      previous = row;
+    }
+    return previous[b.length] <= limit;
+  }
+  async function duplicateGroups(items,signal) {
+    const parents = items.map((_,i) => i);
+    function root(i) {
+      while (parents[i] !== i) {
+        parents[i] = parents[parents[i]];
+        i = parents[i];
+      }
+      return i;
+    }
+    const codes = new Map(), hashes = new Map();
+    function groupBy(map,key,index) {
+      if (!key) return;
+      if (map.has(key)) parents[root(index)] = root(map.get(key));
+      else map.set(key,index);
+    }
+    for (const [i,item] of items.entries()) {
+      groupBy(codes,duplicateCode(item.code),i);
+      groupBy(hashes,(item.originalFull || item.full)?.split('.')[0],i);
+    }
+    const entries = [...codes].sort(([a],[b]) => a.length-b.length);
+    for (const [i,[code,index]] of entries.entries()) {
+      if (i%60 === 0) {
+        await new Promise(resolve => setTimeout(resolve,0));
+        if (signal.aborted) return [];
+      }
+      for (let j=i+1; j<entries.length; j++) {
+        const [other,target] = entries[j];
+        if (code.length < other.length*.85) break;
+        if (root(index) !== root(target) && similarCode(code,other)) parents[root(target)] = root(index);
+      }
+    }
+    const groups = new Map();
+    for (const [i,item] of items.entries()) {
+      const key = root(i);
+      if (!groups.has(key)) groups.set(key,[]);
+      groups.get(key).push(item);
+    }
+    return [...groups.values()].filter(group => group.length > 1);
+  }
+
+  function openDuplicateLibrary() {
+    const {dialog,body} = modal('asset-merge-dialog','Tìm mã trùng');
+    body.innerHTML = '<p role="status">Đang dò mã và ảnh trùng…</p><button type="button" data-merge-undo hidden>Hoàn tác gộp</button><div data-duplicate-groups></div>';
+    const status = body.querySelector('[role=status]'), list = body.querySelector('[data-duplicate-groups]');
+    const undoButton = body.querySelector('[data-merge-undo]'), lifetime = new AbortController();
+    let undoToken, guestUndo, busy = false;
+    dialog.addEventListener('close',() => lifetime.abort(),{once:true});
+    async function paint(message) {
+      const data = await loadLibrary();
+      const groups = await duplicateGroups(data.items,lifetime.signal);
+      if (!dialog.isConnected) return;
+      list.innerHTML = groups.map((group,index) => '<fieldset><legend>Nhóm ' + (index+1) + ' · ' + group.length + ' mẫu</legend>' +
+        '<div class="asset-merge-grid">' + group.map((item,i) => '<div>' + grid([item],{selectable:false}) +
+          '<label><input type="checkbox" data-merge-include value="' + esc(item.id) + '"' + (i === 0 ? ' checked' : '') + '> Gộp</label>' +
+          '<label><input type="radio" name="merge-target-' + index + '" value="' + esc(item.id) + '"' + (i === 0 ? ' checked' : '') + '> Đích</label></div>').join('') +
+        '</div><button type="button" data-merge-group>Gộp</button></fieldset>').join('');
+      status.textContent = (message ? message + ' · ' : '') + (groups.length ? groups.length + ' nhóm mã hoặc ảnh trùng/gần giống.' : 'Không còn nhóm trùng.');
+      undoButton.hidden = !undoToken;
+      await hydrate(list);
+    }
+    async function apply(patch) {
+      if (busy) return;
+      busy = true;
+      try {
+        const result = await libraryCall('items/merge',patch,data => {
+          if (patch.undo) {
+            if (!guestUndo || guestUndo.version !== data._version) throw new Error('Thư viện đã thay đổi.');
+            data.items = guestUndo.items;
+            return {guestReverse:guestUndo.changes};
+          }
+          const ids = new Set(patch.ids);
+          const target = data.items.find(item => item.id === patch.targetId);
+          if (!target || !ids.has(target.id) || ids.size < 2) throw new Error('Chọn mã đích và ít nhất một mã khác.');
+          const selected = data.items.filter(item => ids.has(item.id));
+          if (selected.length !== ids.size) throw new Error('Có mã không còn trong thư viện.');
+          guestUndo = {items:structuredClone(data.items),version:data._version+1};
+          for (const field of ['tags','suppliers']) target[field] = [...new Set(selected.flatMap(item => item[field] || []))];
+          target.brands = [...new Set(selected.flatMap(item => [item.brand,...(item.brands || [])]).filter(Boolean))];
+          target.used = selected.reduce((sum,item) => sum+(item.used || 0),0);
+          ids.delete(target.id);
+          data.items = data.items.filter(item => !ids.has(item.id));
+          return {undoToken:'guest',guestRemoved:[...ids],guestTarget:target.id};
+        });
+        if (isGuest()) {
+          const referenceChanges = hooks.mergeGuestReferences?.(result.guestRemoved,result.guestTarget,result.guestReverse) || [];
+          if (result.undoToken) guestUndo.changes = referenceChanges;
+        } else {
+          document.dispatchEvent(new CustomEvent('gdhome:library-references',{detail:result}));
+        }
+        undoToken = result.undoToken;
+        await paint(patch.undo ? 'Đã hoàn tác' : 'Đã gộp mã');
+      } catch (error) { status.textContent = error.message; }
+      finally { busy = false; }
+    }
+    undoButton.onclick = () => apply({undo:undoToken});
+    list.onchange = event => {
+      if (event.target.matches('[type=radio]')) event.target.closest('label').previousElementSibling.querySelector('input').checked = true;
+    };
+    list.onclick = event => {
+      const button = event.target.closest('[data-merge-group]');
+      if (!button) return;
+      const group = button.closest('fieldset');
+      const ids = [...group.querySelectorAll('[data-merge-include]:checked')].map(box => box.value);
+      const targetId = group.querySelector('[type=radio]:checked')?.value;
+      if (ids.length < 2 || !ids.includes(targetId)) {
+        status.textContent = 'Chọn mã đích và ít nhất một mã khác để gộp.';
+        return;
+      }
+      apply({targetId,ids});
+    };
+    paint().catch(error => { status.textContent = error.message; });
+  }
+
   function openLibrary({groupName,categoryId,onPick} = {}) {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
     let current = categoryId || null, query = '', status = '';
@@ -1898,13 +2040,14 @@ window.GDHomeAssets = (() => {
       try { data = await loadLibrary(); } catch (error) { body.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
       current ||= categoryFor(data,groupName)?.id || data.categories[0]?.id || null;
       const category = data.categories.find(c => c.id === current);
-      const candidates = data.items.filter(item => item.categoryId === current && (!onPick || !item.hidden) && (!query || fold([item.code,item.name,item.brand,item.collection].join(' ')).includes(fold(query))));
+      const candidates = data.items.filter(item => item.categoryId === current && (!onPick || !item.hidden) && (!query || fold([item.code,item.name,...facetValues(item,'brand'),item.collection].join(' ')).includes(fold(query))));
       const items = candidates.filter(item => matchFacets(item,facets)).sort((a,b) => (a.order ?? Infinity)-(b.order ?? Infinity));
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" draggable="true" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
         '<section class="asset-library-main">' + (category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
           '<button type="button" data-import-wood>Nhập catalogue</button>' +
+          (!onPick ? '<button type="button" data-find-duplicates>Tìm mã trùng</button>' : '') +
           (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
@@ -1914,6 +2057,8 @@ window.GDHomeAssets = (() => {
           '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + bulkControls() + grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'}) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       wireFacets(body,facets,paint);
+      const findDuplicates = body.querySelector('[data-find-duplicates]');
+      if (findDuplicates) findDuplicates.onclick = openDuplicateLibrary;
       body.querySelectorAll('[data-bulk-select]').forEach(box => box.onclick = event => {
         const id = box.closest('[data-asset-id]').dataset.assetId;
         const ids = items.map(item => item.id);

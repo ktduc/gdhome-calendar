@@ -245,12 +245,16 @@ class GistStore {
   }
   // Hồ sơ ký và bản phát hành chỉ báo thành công sau khi Gist nhận cả lần ghi.
   async putMaterials(writes) {
+    if (this.flushing) await this.flushing;
+    const pending = writes.map(([key]) => fileNameForKey(key)).filter(name => this.dirty.delete(name));
     const files = Object.fromEntries(writes.map(([key,data]) => [
       fileNameForKey(key), { content: JSON.stringify(data, null, 2) }
     ]));
     try {
       await this.api('PATCH', `/gists/${this.gistId}`, { files });
     } catch {
+      for (const name of pending) this.dirty.add(name);
+      if (pending.length) this.schedule(1500);
       throw Object.assign(new Error('Chưa lưu được Chốt mã lên GitHub Gist. Thử lại.'), { status: 503 });
     }
     for (const [key,data] of writes) {

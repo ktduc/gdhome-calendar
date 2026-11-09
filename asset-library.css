@@ -142,6 +142,11 @@
 .asset-grid-managed .asset-card-menu[open]{z-index:3}
 .asset-grid-managed [data-asset-hide]{position:absolute;bottom:2px;right:2px;min-height:0;padding:1px 3px;font-size:10px}
 .asset-marquee{position:fixed;pointer-events:none;border:1px solid #2563eb;background:#60a5fa40;z-index:6}
+.asset-merge-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.asset-merge-grid .asset-grid{display:block}
+.asset-merge-grid .asset-thumb{height:86px;aspect-ratio:auto}
+.asset-merge-grid label{display:inline-flex;align-items:center}
+.asset-merge-dialog [data-merge-group]{margin-top:6px}
 @media (max-width:650px){.catalogue-review:has(>[data-catalogue-details]:not([hidden])){grid-template-columns:minmax(0,1fr)}}
 .wood-crop-stage{position:relative;width:fit-content;margin:0 auto 8px}
 .wood-crop-stage img{display:block;max-width:min(80vw,760px);max-height:65vh;object-fit:contain}
