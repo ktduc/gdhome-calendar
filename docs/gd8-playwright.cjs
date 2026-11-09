@@ -2031,6 +2031,22 @@ cases['19.2'] = async page => {
   await page.waitForFunction(async id => (await fetch('/api/library').then(r => r.json())).items.find(item => item.id === id)?.used === 1,paint.id);
 };
 
+cases['19.3'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',[
+      {name:'Gạch 60x60',brand:'Hãng A',tags:['mờ'],suppliers:['Kho A','Kho B'],full:'a'.repeat(64)+'.webp',thumb:'a'.repeat(64)+'.webp'},
+      {name:'Gạch 30x60',brand:'Hãng A',tags:['bóng'],suppliers:['Kho B'],full:'b'.repeat(64)+'.webp',thumb:'b'.repeat(64)+'.webp'}
+    ]);
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const dialog = page.locator('.asset-library-dialog');
+  await dialog.getByRole('button',{name:'600×600 (1)'}).click();
+  await dialog.getByRole('button',{name:'Kho A (1)'}).click();
+  assert.equal(await dialog.locator('.asset-card').count(),1);
+  assert.match(await dialog.locator('.asset-card').textContent(),/600×600.*Hãng A/s);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

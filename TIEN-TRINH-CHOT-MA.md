@@ -315,3 +315,4 @@ XONG GĐ18-GPT
 
 - 19.1: Ẩn gợi ý thao tác trong ô ảnh trống khi xuất.
 - 19.2: Lưu mã gỗ và màu sơn dưới dạng item thư viện.
+- 19.3: Thêm kích thước chuẩn, hãng, đơn vị cung cấp và bộ lọc tag.

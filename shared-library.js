@@ -23,6 +23,21 @@ const woodKey = code => text(code,80).toUpperCase().replace(/\s+/g,'');
 const woodItemKey = item => text(item.brand || 'An Cường',80).toLowerCase() + ':' + woodKey(item.code);
 const woodMeta = item => ({brand:text(item.brand,80) || 'An Cường',code:text(item.code,80),collection:text(item.collection,120),finish:text(item.finish,120)});
 
+const stringList = values => [...new Set((Array.isArray(values) ? values : []).map(value => text(value,80)).filter(Boolean))].slice(0,30);
+function materialSize(value) {
+  const match = String(value || '').match(/\b(\d{2,4})(?:\s*(cm|mm))?(?:\s*[x×*]\s*|\s+)(\d{2,4})(?:\s*(cm|mm))?\b/i);
+  if (!match) return '';
+  const unit = match[4] || match[2];
+  const factor = unit ? (unit.toLowerCase() === 'cm' ? 10 : 1) : (+match[1] < 100 && +match[3] < 100 ? 10 : 1);
+  return (+match[1]*factor) + 'x' + (+match[3]*factor);
+}
+function itemMetadata(item) {
+  return {brand:text(item.brand,80),size:materialSize(item.size || item.name),tags:stringList(item.tags),suppliers:stringList(item.suppliers)};
+}
+function supplierRecord(item) {
+  return {name:text(item?.name,80),phone:text(item?.phone,40),note:text(item?.note,300)};
+}
+
 function fail(status, message) {
   throw Object.assign(new Error(message), { status });
 }
@@ -60,6 +75,7 @@ function normalize(data) {
     .slice(0, 5000).map(item => ({
       id: String(item.id || crypto.randomUUID()).slice(0, 60),
       categoryId: ids.has(item.categoryId) ? item.categoryId : (categories[0]?.id || ''),
+      ...itemMetadata(item),
       kind:kindOf(item),
       ...(item.builtin || item.id?.startsWith?.('ancuong-seed-') ? {builtin:true} : {}),
       ...(item.hidden ? {hidden:true} : {}),
@@ -79,7 +95,7 @@ function normalize(data) {
     const keys = new Set(items.filter(item => item.kind === 'paint').map(woodItemKey));
     items.push(...paintSeed.filter(item => !keys.has(woodItemKey(item))));
   }
-  return { _version: Number(base._version) || 0, categories, items,woodSeeded:true,paintSeeded:true };
+  return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),woodSeeded:true,paintSeeded:true };
 }
 
 // Ghép tên nhóm vật liệu (vd "GẠCH ỐP LÁT (sảnh, WC, logia)") với một hạng mục thư viện.
@@ -156,7 +172,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         }
         if (existing) { added.push(existing); continue; }
         const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
-          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb}),createdAt: Date.now(),...metadata };
+          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb}),createdAt: Date.now(),...itemMetadata(item),...metadata };
         data.items.unshift(entry);
         added.push(entry);
       }
@@ -172,6 +188,9 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       if (typeof body.name === 'string') item.name = text(body.name, 160);
       if (typeof body.hidden === 'boolean') item.hidden = body.hidden;
       if (item.kind === 'paint' && validHex(body.hex)) item.hex = body.hex.toLowerCase();
+      for (const field of ['brand','size','tags','suppliers']) {
+        if (Object.hasOwn(body,field)) item[field] = itemMetadata(body)[field];
+      }
       if (typeof body.note === 'string') item.note = text(body.note, 500);
       if (data.categories.some(c => c.id === body.categoryId)) item.categoryId = body.categoryId;
       if (body.used === true) item.used = (item.used || 0) + 1;
@@ -182,6 +201,19 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     const ids = new Set(Array.isArray(body.ids) ? body.ids : [body.id]);
     const { data } = await mutate(store, key, data => { data.items = data.items.filter(item => !ids.has(item.id)); });
     return sendJson(res, 200, data);
+  }
+  if (urlPath === '/api/library/suppliers') {
+    const supplier = supplierRecord(body);
+    if (!supplier.name) fail(400,'Nhập tên đơn vị cung cấp.');
+    const {data} = await mutate(store,key,data => {
+      const previous = text(body.previousName,80) || supplier.name;
+      data.suppliers = data.suppliers.filter(item => item.name !== previous && item.name !== supplier.name);
+      data.suppliers.push(supplier);
+      if (previous !== supplier.name) for (const item of data.items) {
+        item.suppliers = stringList((item.suppliers || []).map(name => name === previous ? supplier.name : name));
+      }
+    });
+    return sendJson(res,200,data);
   }
   if (urlPath === '/api/library/categories') {
     const name = text(body.name, 80);
@@ -221,4 +253,4 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   fail(404, 'API thư viện không tồn tại.');
 }
 
-module.exports = { handleLibrary, libraryKey, defaultLibrary, normalize, categoryForGroup, cleanView };
+module.exports = { handleLibrary, libraryKey, defaultLibrary, normalize, categoryForGroup, cleanView, materialSize };
