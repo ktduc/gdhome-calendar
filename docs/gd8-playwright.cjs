@@ -2226,6 +2226,41 @@ cases['19.9'] = async page => {
   assert.equal(metrics.height,100);
   assert.ok(metrics.edge[2] > 120 && metrics.above[2] > 120);
   assert.ok(metrics.center[0] > 225 && metrics.center[2] < 30);
+  const {PDFDocument,rgb} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const sheet = pdf.addPage([360,160]);
+  sheet.drawRectangle({x:0,y:0,width:360,height:160,color:rgb(.1,.3,.55)});
+  sheet.drawRectangle({x:12,y:34,width:275,height:90,color:rgb(.95,.95,.95)});
+  sheet.drawText('30',{x:335,y:132,size:12,color:rgb(1,1,1)});
+  sheet.drawText('120',{x:307,y:74,size:12,color:rgb(1,1,1)});
+  sheet.drawText('KT1210',{x:135,y:8,size:14,color:rgb(1,1,1)});
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-4'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=layout]').selectOption('phao');
+  await modal.locator('[name=useAi]').uncheck();
+  await modal.locator('[name=brand]').fill('Mẫu');
+  await modal.locator('[name=collection]').fill('Phào');
+  await modal.locator('[name=pdf]').setInputFiles({name:'phao.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  const card = modal.locator('.wood-catalogue-card');
+  await card.waitFor({timeout:15000});
+  assert.equal(await card.locator('[data-wood-code-input]').inputValue(),'KT1210');
+  assert.equal(await card.locator('[data-catalogue-field=size]').inputValue(),'30x120');
+  assert.ok(await modal.locator('[name=square]').isChecked());
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 1 mã/).waitFor();
+  const item = (await page.request.get('/api/library').then(r => r.json())).items.find(item => item.code === 'KT1210');
+  assert.equal(item.size,'30x120');
+  assert.ok(item.square && item.originalFull !== item.full);
+  await modal.locator('.close-dialog').click();
+  const library = page.locator('.asset-library-dialog');
+  const toggle = library.locator('[data-asset-id="' + item.id + '"] [data-asset-square]');
+  await toggle.click();
+  await page.waitForFunction(async id => !(await fetch('/api/library').then(r => r.json())).items.find(item => item.id === id)?.square,item.id);
 };
 
 cases['19.10'] = async page => {

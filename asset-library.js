@@ -840,7 +840,7 @@ window.GDHomeAssets = (() => {
     for (const entry of entries) await walk(entry);
     return files;
   }
-  function reviewFolders(categoryId,files) {
+  function reviewFolders(categoryId,files,square = false) {
     const groups = new Map();
     let images = 0;
     for (const {file,path} of files) {
@@ -866,17 +866,20 @@ window.GDHomeAssets = (() => {
       const pdfs = [], seen = new Set();
       try {
         const data = await loadLibrary();
-        data.items.filter(item => item.categoryId === categoryId).forEach(item => seen.add(item.full));
+        data.items.filter(item => item.categoryId === categoryId).forEach(item => seen.add(item.originalFull || item.full));
         for (const [index,files] of [...groups.values()].entries()) {
           const tags = body.querySelectorAll('tbody input')[index].value.split(',').map(tag => tag.trim()).filter(Boolean);
           for (const file of files) {
             controller.signal.throwIfAborted();
             if (isPdf(file)) { pdfs.push({file,tags}); continue; }
-            const image = await uploadImage(file);
+            const original = await uploadImage(file);
             controller.signal.throwIfAborted();
-            if (!seen.has(image.full)) {
-              seen.add(image.full);
-              await addItems(categoryId,[{...image,name:file.name.replace(/\.[^.]+$/,''),tags}]);
+            if (!seen.has(original.full)) {
+              const image = square ? await uploadImage(file,{square:true}) : original;
+              controller.signal.throwIfAborted();
+              seen.add(original.full);
+              await addItems(categoryId,[{...image,name:file.name.replace(/\.[^.]+$/,''),tags,
+                ...(square ? {square:true,originalFull:original.full,originalThumb:original.thumb} : {})}]);
             }
             status.textContent = 'Đã xử lý ' + (++done) + '/' + images + ' ảnh';
           }
@@ -945,7 +948,7 @@ window.GDHomeAssets = (() => {
     const codes = /\b[A-Z]{1,5}\d{2,}(?:[.-][A-Z0-9]+)*[A-Z0-9]*\b/i;
     const subgroup = kitchenSubgroups.find(name => labels.some(label => fold(label.text).includes(fold(name)))) || '';
     const rows = [];
-    for (const label of labels.filter(label => specPattern.test(label.text))) {
+    for (const label of labels.filter(label => specPattern.test(label.text) || codes.test(label.text))) {
       const row = labels.filter(other => Math.abs(other.y-label.y) <= Math.max(label.height,other.height)*.55)
         .sort((a,b) => a.x-b.x).map(other => other.text).join(' ');
       const spec = row.match(specPattern);
@@ -980,7 +983,8 @@ window.GDHomeAssets = (() => {
         for (const item of ai.items || []) {
           const source = sources.get(item.page);
           if (!source) continue;
-          const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === item.code.replace(/\s/g,'').toUpperCase());
+          const code = layout === 'ancuong' ? item.code.match(anCuongCode)?.[2] || item.code : item.code;
+          const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
           const record = {...item,source,crop:item.bbox,confidence:match ? Math.max(.85,item.confidence) : item.confidence};
           if (['phao','ancuong','kitchen'].includes(layout)) {
@@ -1324,6 +1328,7 @@ window.GDHomeAssets = (() => {
           savedCrops.set(cropKey,image);
           const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
+          if (form.elements.layout.value === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
           const record = {full:image.full,thumb:image.thumb,square:image.square,originalFull:image.originalFull,originalThumb:image.originalThumb,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
             kind:categoryId === 'ancuong-wood' && code ? 'wood' : 'image',...fields};
           existing.set(key,record);
@@ -1570,12 +1575,12 @@ window.GDHomeAssets = (() => {
           if (!entries.some(entry => entry.isDirectory)) return;
           event.preventDefault();
           event.stopImmediatePropagation();
-          droppedCatalogueFiles(entries).then(files => reviewFolders(current,files)).catch(error => toast(error.message));
+          droppedCatalogueFiles(entries).then(files => reviewFolders(current,files,squareUploads)).catch(error => toast(error.message));
         },true);
       }
       const folder = body.querySelector('[data-folder-input]');
       if (folder) folder.onchange = () => {
-        try { reviewFolders(current,[...folder.files].map(file => ({file,path:file.webkitRelativePath.split('/').slice(0,-1).join('/')}))); }
+        try { reviewFolders(current,[...folder.files].map(file => ({file,path:file.webkitRelativePath.split('/').slice(0,-1).join('/')})),squareUploads); }
         catch (error) { toast(error.message); }
         folder.value = '';
       };
