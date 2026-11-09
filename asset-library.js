@@ -51,10 +51,7 @@ window.GDHomeAssets = (() => {
   // ---------------------------------------------------------------- Ảnh
   async function storeAsset(blob) {
     if (hooks.storeAsset) return hooks.storeAsset(blob);
-    const response = await fetch('/api/materials/assets',{method:'POST',headers:{...hooks.headers(),'Content-Type':blob.type},body:blob});
-    const data = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(data.message || 'Không lưu được ảnh.');
-    return data.name;
+    return GDHomeImages.uploadAsset(blob,hooks.headers);
   }
   async function readAsset(name) {
     if (hooks.readAsset) return hooks.readAsset(name);
@@ -585,9 +582,12 @@ window.GDHomeAssets = (() => {
     }
     sidebar.classList.add('asset-filter-sidebar');
     sidebar.setAttribute('aria-label','Bộ lọc vật liệu');
-    sidebar.append(facets);
+    const categoryColumn = document.createElement('div');
+    categoryColumn.className = 'asset-category-column';
+    categoryColumn.append(...sidebar.children);
     const favorites = facets.querySelector('[data-filter-group=favorite]');
-    if (favorites) sidebar.prepend(favorites);
+    if (favorites) categoryColumn.prepend(favorites);
+    sidebar.append(categoryColumn,facets);
     for (const input of sidebar.querySelectorAll('[data-facet=size]')) input.name = state.radioName + '-size';
     for (const input of sidebar.querySelectorAll('[data-category-check]')) input.name = state.radioName + '-category';
     for (const group of sidebar.querySelectorAll('[data-filter-group]')) {
@@ -1505,7 +1505,7 @@ window.GDHomeAssets = (() => {
       confidence:.9,needsReview:false} : {code:text,name,confidence:.35,needsReview:true};
   }
 
-  async function anCuongSwatches(context,canvas,labels) {
+  async function anCuongSwatches(context,canvas,labels,includeCode) {
     const {width,height} = canvas;
     const boxes = (await catalogueQrBoxes(context,width,height)).sort((a,b) => a.y-b.y || a.x-b.x);
     const candidates = boxes.flatMap(qr => {
@@ -1533,8 +1533,8 @@ window.GDHomeAssets = (() => {
     const ratios = candidates.map(({box,bottom}) => (bottom-box.y)/box.w).sort((a,b) => a-b);
     const ratio = (ratios[Math.floor((ratios.length-1)/2)]+ratios[Math.floor(ratios.length/2)])/2;
     return candidates.map(({box,bottom,label}) => {
-      const w = box.w, h = Math.min(height-box.y,Math.max(bottom-box.y,Math.round(w*ratio)));
-      return {...label,qr:true,tone:box.tone,grain:'Gỗ',view:clampView({x:.5,y:box.h/(2*h),z:1},w/h),
+      const w = box.w, h = includeCode ? Math.min(height-box.y,Math.max(bottom-box.y,Math.round(w*ratio))) : box.h;
+      return {...label,qr:true,tone:box.tone,grain:'Gỗ',...(includeCode ? {view:clampView({x:.5,y:box.h/(2*h),z:1},w/h)} : {}),
         crop:{x:box.x/width,y:box.y/height,w:w/width,h:h/height}};
     });
   }
@@ -1549,6 +1549,18 @@ window.GDHomeAssets = (() => {
     if (!ratio) return box;
     const w = Math.min(1,ratio,Math.sqrt(box.w*box.h*ratio)), h = w/ratio;
     return {x:bounded(box.x+(box.w-w)/2,0,1-w),y:bounded(box.y+(box.h-h)/2,0,1-h),w,h};
+  }
+  function includeCatalogueCode(crop,codeBox) {
+    if (!codeBox) return crop;
+    const x = bounded(Math.min(crop.x,codeBox.x),0,1), y = bounded(Math.min(crop.y,codeBox.y),0,1);
+    const right = bounded(Math.max(crop.x+crop.w,codeBox.x+codeBox.w),x,1);
+    const bottom = bounded(Math.max(crop.y+crop.h,codeBox.y+codeBox.h),y,1);
+    return {x,y,w:right-x,h:bottom-y};
+  }
+  function pdfLabelCrop(label,canvas) {
+    const pad = label.height*.25;
+    return {x:(label.x-pad)/canvas.width,y:(label.y-label.height-pad)/canvas.height,
+      w:(label.width+2*pad)/canvas.width,h:(label.height+2*pad)/canvas.height};
   }
 
   function wireCatalogueGuide(form,status) {
@@ -1674,7 +1686,7 @@ window.GDHomeAssets = (() => {
     return rows;
   }
 
-  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning,layout,guide} = {}) {
+  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning,layout,guide,includeCode = true} = {}) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
@@ -1683,12 +1695,22 @@ window.GDHomeAssets = (() => {
     let results = [];
     const sources = new Map(), pageAspects = new Map(), batch = [];
     const guideRatio = catalogueGuideRatio(guide);
-    const guideCrop = (crop,page) => fitCatalogueCrop(crop,guideRatio/pageAspects.get(page));
+    const example = guide?.examples?.find(example => example.crop && example.codeBox);
+    function guidedCodeBox(crop) {
+      if (!example) return;
+      const {crop:sample,codeBox} = example;
+      return {x:crop.x+(codeBox.x-sample.x)*crop.w/sample.w,y:crop.y+(codeBox.y-sample.y)*crop.h/sample.h,
+        w:codeBox.w*crop.w/sample.w,h:codeBox.h*crop.h/sample.h};
+    }
+    function guideCrop(crop,page,codeBox) {
+      const fitted = fitCatalogueCrop(crop,guideRatio/pageAspects.get(page));
+      return includeCode ? includeCatalogueCode(fitted,codeBox || guidedCodeBox(fitted) || crop) : fitted;
+    }
     async function flush() {
       if (!batch.length) return;
       const pages = batch.splice(0);
       try {
-        const ai = await GDHomeAI.startJob({kind:'catalogue',pages,...(guide?.prompt || guide?.examples?.length ? {guide} : {})},{signal});
+        const ai = await GDHomeAI.startJob({kind:'catalogue',pages,includeCode,...(guide?.prompt || guide?.examples?.length ? {guide} : {})},{signal});
         for (const item of ai.items || []) {
           const source = sources.get(item.page);
           if (!source) continue;
@@ -1704,7 +1726,8 @@ window.GDHomeAssets = (() => {
           const code = item.code;
           const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
-          const record = {...item,source,crop:guideCrop(item.bbox,item.page),confidence:match ? Math.max(.85,item.confidence) : item.confidence};
+          const record = {...item,source,crop:guideCrop(item.bbox,item.page,results[index]?.codeBox || item.codeBBox),
+            confidence:match ? Math.max(.85,item.confidence) : item.confidence};
           if (['phao','kitchen'].includes(layout)) {
             if (match) {
               const detected = results[index];
@@ -1755,7 +1778,7 @@ window.GDHomeAssets = (() => {
         const context = canvas.getContext('2d');
         await page.render({canvasContext:context,viewport}).promise;
         signal?.throwIfAborted();
-        const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels) : [];
+        const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels,includeCode) : [];
         if (results.length + matches.length + swatches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
         if (layout === 'ancuong' && !swatches.length) {
           canvas.width = canvas.height = 0;
@@ -1776,7 +1799,9 @@ window.GDHomeAssets = (() => {
               /quy cach|don gia|ma dat hang|kich thuoc tu/.test(fold(label.text)))
               .reduce((top,label) => Math.min(top,label.y-label.height*1.2),first.y-first.height*2);
             const crop = {x:0,y:0,w:1,h:bounded(tableTop/canvas.height,.05,1)};
-            for (const {y,height,...row} of matches) results.push({...row,page:number,source,crop:guideCrop(crop,number),confidence:.9});
+            const table = {x:0,y:crop.h,w:1,h:Math.max(0,Math.max(...matches.map(row => row.y+row.height*.35))/canvas.height-crop.h)};
+            const framed = guideCrop(crop,number,table);
+            for (const {y,height,...row} of matches) results.push({...row,page:number,source,crop:framed,confidence:.9});
           }
           canvas.width = canvas.height = 0;
           page.cleanup();
@@ -1785,6 +1810,7 @@ window.GDHomeAssets = (() => {
         }
         const nearest = (values,fallback) => values.length ? Math.min(...values) : fallback;
         for (const label of matches) {
+          const codeBox = pdfLabelCrop(label,canvas);
           const dx = nearest(matches.filter(o => Math.abs(o.y-label.y) < label.height && Math.abs(o.x-label.x) > label.height*2)
             .map(o => Math.abs(o.x-label.x)),canvas.width/Math.max(1,new Set(matches.map(m => Math.round(m.x/label.height))).size));
           const dy = nearest(matches.filter(o => Math.abs(o.y-label.y) > label.height*2)
@@ -1804,12 +1830,12 @@ window.GDHomeAssets = (() => {
             const split = numbers.filter(other => /^\d{2,4}$/.test(other.text)).sort((a,b) => a.y-b.y).map(other => other.text);
             const size = combined?.match(/\d{2,4}\s*[×x*]\s*\d{2,4}/i)?.[0].replace(/\s+/g,'').replace(/[×*]/,'x') ||
               (split.length >= 2 ? split.slice(0,2).join('x') : '');
-            results.push({code:label.code,name:label.name,size,page:number,source,confidence:.85,
-              crop:guideCrop({x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height},number)});
+            results.push({code:label.code,name:label.name,size,page:number,source,confidence:.85,codeBox,
+              crop:guideCrop({x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height},number,codeBox)});
             continue;
           }
-          results.push({code:label.code,name:label.name,page:number,source,confidence:.6,
-            crop:guideCrop({x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height},number)});
+          results.push({code:label.code,name:label.name,page:number,source,confidence:.6,codeBox,
+            crop:guideCrop({x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height},number,codeBox)});
         }
         canvas.width = canvas.height = 0;
         page.cleanup();
@@ -1960,7 +1986,7 @@ window.GDHomeAssets = (() => {
         row.dataset.catalogueSource = entry.type;
         row.dataset.sourceState = 'waiting';
         row.innerHTML = '<span title="' + esc(entry.name) + '">' + esc(entry.name) + '</span><small data-source-progress>Chờ</small>' +
-          '<details><summary>Thiết lập riêng</summary><label>Hạng mục <select data-source-setting="categoryId">' +
+          '<details><summary>Thiết lập riêng</summary><label>Lưu nguồn này vào <select data-source-setting="categoryId">' +
           selectOptions(categories.map(({id,name}) => [id,name])) + '</select></label>' +
           '<label>Thương hiệu <input data-source-setting="brand" maxlength="80"></label>' +
           '<label>Đơn vị cung cấp <input data-source-setting="suppliers"></label>' +
@@ -2014,7 +2040,7 @@ window.GDHomeAssets = (() => {
       '<button type="button" role="tab" data-catalogue-tab="mixed" aria-selected="false">Nhiều nguồn</button>' +
       '<button type="button" role="tab" data-catalogue-tab="history" aria-selected="false">Đã nhập</button></div>' +
       '<section data-catalogue-history hidden></section><form class="wood-catalogue-controls">' +
-      '<label>Hạng mục <select name="category">' + library.categories.map(category => '<option value="' + esc(category.id) + '"' +
+      '<label>Hạng mục lưu mặc định <select name="category">' + library.categories.map(category => '<option value="' + esc(category.id) + '"' +
         (category.id === categoryId ? ' selected' : '') + '>' + esc(category.name) + '</option>').join('') + '</select></label>' +
       '<label>Đơn vị cung cấp <input name="suppliers" list="catalogue-suppliers" placeholder="Tên cách nhau bằng dấu phẩy"></label>' +
       '<datalist id="catalogue-suppliers">' + (library.suppliers || []).map(item => '<option>' + esc(item.name) + '</option>').join('') + '</datalist>' +
@@ -2023,6 +2049,7 @@ window.GDHomeAssets = (() => {
       '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
       '<label><input type="checkbox" name="useAi"' + (categoryId !== 'ancuong-wood' && window.GDHomeAI ? ' checked' : '') + '> Dùng AI để đọc PDF</label>' +
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" multiple></label>' +
+      '<label data-catalogue-pdf-code><input type="checkbox" name="includeCode" checked> Giữ dòng mã trong ảnh PDF</label>' +
       '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea></label>' +
       '<label data-catalogue-autosave hidden><input type="checkbox" name="autoSave" checked> Tự lưu tất cả, lọc lại sau</label>' +
       '<div data-catalogue-mixed hidden><label>Thư mục <input type="file" name="folder" webkitdirectory multiple></label>' +
@@ -2050,7 +2077,11 @@ window.GDHomeAssets = (() => {
       '<button type="button" data-catalogue-select="qr">Chỉ giữ thẻ có QR</button>' +
       '<label>Lọc <select data-catalogue-filter><option value="all">Tất cả</option><option value="selected">Đã chọn</option><option value="review">Cần kiểm tra</option></select></label>' +
       '<label>Catalogue <input data-batch-collection maxlength="120"></label><label>Bề mặt <input data-batch-finish maxlength="120"></label>' +
-      '<button type="button" data-catalogue-assign>Gán cho nhóm chọn</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></div>' +
+      '<button type="button" data-catalogue-assign>Gán cho nhóm chọn</button>' +
+      '<label>Hạng mục đích <select data-catalogue-destination><option value="">Theo thiết lập nguồn</option>' +
+      library.categories.map(category => '<option value="' + esc(category.id) + '">' + esc(category.name) + '</option>').join('') +
+      '</select></label><button type="button" data-assign-destination>Áp dụng cho thẻ đã chọn</button>' +
+      '<button type="button" data-save-wood disabled>Lưu mã đã chọn</button></div>' +
       '<div class="catalogue-review"><div class="wood-catalogue-results"></div><aside data-catalogue-details hidden aria-label="Chi tiết thẻ"></aside></div>';
     const form = body.querySelector('form');
     if (preset.tags) form.elements.tags.value = preset.tags.join(', ');
@@ -2062,6 +2093,7 @@ window.GDHomeAssets = (() => {
     form.elements.category.onchange = () => {
       form.elements.display.value = categoryDisplay(library.categories.find(c => c.id === form.elements.category.value));
       suggest();
+      refreshSelection();
     };
     form.elements.layout.onchange = () => { if (['phao','kitchen'].includes(form.elements.layout.value)) form.elements.display.value = 'pad'; };
     const status = body.querySelector('[role=status]');
@@ -2150,15 +2182,23 @@ window.GDHomeAssets = (() => {
     const filter = toolbar.querySelector('[data-catalogue-filter]');
     const include = card => card.querySelector('[data-wood-include]');
     const selected = () => cards.filter(card => include(card).checked);
+    const destinationOf = item => item.destinationId || item.originImport.override.categoryId || form.elements.category.value;
     function refreshSelection() {
       const chosen = selected();
       for (const [i,card] of cards.entries()) {
         card.classList.toggle('is-selected',include(card).checked);
-        card.hidden = (filter.value === 'selected' && !include(card).checked) || (filter.value === 'review' && !items[i].needsReview);
+        const issue = items[i].saveError;
+        card.classList.toggle('needs-review',!!(issue || items[i].needsReview));
+        if (issue) card.title = issue;
+        else card.removeAttribute('title');
+        card.hidden = (filter.value === 'selected' && !include(card).checked) || (filter.value === 'review' && !items[i].needsReview && !issue);
       }
       const index = activeDetail ?? (chosen.length === 1 ? cards.indexOf(chosen[0]) : -1);
       const detail = details[index];
       if (detail && !cards[index].hidden) {
+        const destination = library.categories.find(category => category.id === destinationOf(items[index]));
+        detail.querySelector('[data-catalogue-destination-label]').textContent = destination?.name || '';
+        detail.querySelector('[data-catalogue-save-error]').textContent = items[index].saveError || '';
         if (detailPanel.firstElementChild !== detail) detailPanel.replaceChildren(detail);
       } else detailPanel.replaceChildren();
       detailPanel.hidden = !detailPanel.childElementCount;
@@ -2183,6 +2223,14 @@ window.GDHomeAssets = (() => {
       refreshSelection();
     }
     filter.onchange = () => { activeDetail = null; refreshSelection(); };
+    toolbar.querySelector('[data-assign-destination]').onclick = () => {
+      if (busy) return;
+      const chosen = selected();
+      const destination = toolbar.querySelector('[data-catalogue-destination]').value;
+      for (const card of chosen) items[cards.indexOf(card)].destinationId = destination;
+      if (chosen.length) status.textContent = 'Đã đặt hạng mục lưu cho ' + chosen.length + ' thẻ.';
+      refreshSelection();
+    };
     toolbar.querySelectorAll('[data-catalogue-select]').forEach(button => button.onclick = () => {
       for (const [i,card] of cards.entries()) {
         const box = include(card);
@@ -2228,6 +2276,7 @@ window.GDHomeAssets = (() => {
       form.querySelector('[data-catalogue-web]').hidden = mode === 'pdf';
       form.querySelector('[data-catalogue-autosave]').hidden = mode === 'pdf';
       form.querySelector('[data-catalogue-pdf]').hidden = mode === 'web';
+      form.querySelector('[data-catalogue-pdf-code]').hidden = mode === 'web';
       form.querySelector('[data-catalogue-guide]').hidden = mode === 'web';
       form.querySelector('[data-catalogue-mixed]').hidden = mode !== 'mixed';
       read.textContent = ({web:'Đọc website',pdf:'Đọc PDF',mixed:'Xử lý hàng đợi'})[mode];
@@ -2291,7 +2340,8 @@ window.GDHomeAssets = (() => {
               let imported;
               if (entry.type === 'web') imported = await scanCatalogueWeb(entry.url,{useAi,signal,onProgress,onWarning,budget,onSource:source => sources.add(source)});
               else if (entry.type === 'pdf') imported = await scanWoodCatalogue(entry.file,form.elements.patterns.value,form.elements.direction.value,
-                (page,total) => onProgress('Đang đọc trang ' + page + '/' + total + '…'),{useAi,signal,layout:entry.layout,guide,onWarning});
+                (page,total) => onProgress('Đang đọc trang ' + page + '/' + total + '…'),
+                {useAi,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked});
               else {
                 const source = URL.createObjectURL(entry.file);
                 const image = new Image();
@@ -2322,10 +2372,11 @@ window.GDHomeAssets = (() => {
         let saveWarning = '';
         if (mode !== 'pdf' && form.elements.autoSave.checked && items.length) {
           const automatic = items.filter(item => !item.needsReview && (item.code || item.web || item.fileImage));
-          if (automatic.length && await persistSelection(automatic.map(item => ({item,code:item.code || '',name:item.name})),{auto:true})) {
-            const saved = new Set(automatic);
+          if (automatic.length) {
+            const saved = await persistSelection(automatic.map(item => ({item,code:item.code || '',name:item.name})),{auto:true});
+            saveWarning = status.textContent;
             items = items.filter(item => !saved.has(item));
-          } else if (automatic.length) saveWarning = status.textContent;
+          }
           if (!items.length) return;
         }
         for (const item of items) sources.add(item.source);
@@ -2338,7 +2389,7 @@ window.GDHomeAssets = (() => {
           '<button type="button" data-show-catalogue-detail aria-label="Chi tiết ' + esc(item.code || item.name) + '">⋯</button>' +
           '<input aria-label="Mã" data-wood-code-input maxlength="80" value="' + esc(item.code) + '">' +
           '<input aria-label="Tên" data-wood-name-input maxlength="160" value="' + esc(item.name) + '">' +
-          '<div data-catalogue-detail-fields>' +
+          '<div data-catalogue-detail-fields><p>Hạng mục lưu <strong data-catalogue-destination-label></strong></p><small data-catalogue-save-error></small>' +
           (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.originImport.override.suppliers ? '' : item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.originImport.override.brand || item.brand) + '"></label>' : '') +
           (item.originImport.layout === 'kitchen' && !item.web && !item.fileImage ? '<datalist id="catalogue-kitchen-' + esc(item.code) + '">' +
             kitchenSubgroups.map(name => '<option>' + esc(name) + '</option>').join('') + '</datalist>' +
@@ -2371,9 +2422,17 @@ window.GDHomeAssets = (() => {
         let lastSource, image;
         for (const [i,item] of items.entries()) {
           if (!dialog.isConnected) return;
-          if (lastSource !== item.source) { image = await loadPageImage(item.source); lastSource = item.source; }
+          if (lastSource !== item.source) {
+            lastSource = item.source;
+            image = await loadPageImage(item.source).catch(() => null);
+          }
           const canvas = cards[i].querySelector('canvas');
-          drawSwatch(canvas,image,item.crop);
+          if (image) drawSwatch(canvas,image,item.crop);
+          else {
+            item.saveError ||= 'Ảnh nguồn không đọc được.';
+            canvas.hidden = true;
+            details[i].querySelector('[data-edit-wood-crop]').disabled = true;
+          }
           cards[i].onclick = event => {
             if (!event.target.closest('input,button,label,.asset-identity-editor')) toggleCard(i,!include(cards[i]).checked,event.shiftKey);
           };
@@ -2383,7 +2442,7 @@ window.GDHomeAssets = (() => {
             refreshSelection();
           };
           cards[i].ondblclick = event => {
-            if (event.target.closest('input,button,label,.asset-identity-editor')) return;
+            if (canvas.hidden || event.target.closest('input,button,label,.asset-identity-editor')) return;
             editView(readIdentity(item),{sequence:items.filter((_,index) => !cards[index].hidden).map(readIdentity),onSave:syncIdentity,
               urlFor:async entry => {
                 const preview = document.createElement('canvas');
@@ -2421,24 +2480,31 @@ window.GDHomeAssets = (() => {
       }
     };
     async function persistSelection(selection,{auto = false} = {}) {
-      const sharedCategoryId = form.elements.category.value;
       const suppliers = sharedSuppliers();
       const sharedTags = listValues(form.elements.tags.value);
       const brand = form.elements.brand.value.trim();
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
       let added = 0, skipped = 0, batch = [], batchCategory;
-      const savedCrops = new Map();
+      const savedCrops = new Map(), finished = new Set(), failures = [];
+      const destinations = new Map(selection.map(({item}) => [item,destinationOf(item)]));
       const reviewed = new Map();
+      const failedSources = new Set();
       const finishHistory = (complete = false) => {
-        for (const [entry,metadata] of reviewed) Object.assign(entry,{...metadata,
-          status:complete && !entry.incomplete ? 'done' : 'partial',count:entry.itemIds.length});
+        for (const [entry,metadata] of reviewed) {
+          const status = complete && !entry.incomplete && !failedSources.has(entry) ? 'done' : 'partial';
+          Object.assign(entry,{...metadata,status,count:entry.itemIds.length});
+          setProgress(entry,status,(status === 'partial' ? 'Dở · đã lưu ' : 'Đã lưu ') + entry.count + ' mẫu');
+        }
         return saveImportRows([...reviewed.keys()]);
       };
       try {
         const data = await loadLibrary();
-        const existing = new Map(data.items.filter(item => item.code && item.full).map(item => [catalogueKey(item),item]));
-        const savedCodes = new Set(data.items.filter(item => item.full && item.code).map(item => duplicateCode(item.code)));
-        const savedHashes = new Set(data.items.flatMap(item => [item.full,item.originalFull]).filter(Boolean).map(name => name.split('.')[0]));
+        const scopeKey = (categoryId,value) => categoryId + ':' + value;
+        const existing = new Map(data.items.filter(item => item.code && item.full).map(item => [scopeKey(item.categoryId,catalogueKey(item)),item]));
+        const savedCodes = new Set(data.items.filter(item => item.full && item.code).map(item => scopeKey(item.categoryId,duplicateCode(item.code))));
+        const savedHashes = new Set(data.items.flatMap(item => [item.full,item.originalFull].filter(Boolean)
+          .map(name => scopeKey(item.categoryId,name.split('.')[0]))));
+        const skip = item => { skipped++; finished.add(item); };
         const flush = async () => {
           if (!batch.length) return;
           const result = await addItems(batchCategory,batch.map(({record}) => record));
@@ -2448,12 +2514,14 @@ window.GDHomeAssets = (() => {
             const found = batch.find(({record}) => addedItem.code ? catalogueKey(addedItem) === catalogueKey(record) : record.full === addedItem.full);
             if (found?.entry && !found.entry.itemIds.includes(addedItem.id)) found.entry.itemIds.push(addedItem.id);
           }
+          for (const {item} of batch) finished.add(item);
           batch = [];
         };
         for (const {item,detail,code,name} of selection) {
           if (!dialog.open && !auto) break;
           const entry = item.originImport;
-          const categoryId = entry.override.categoryId || sharedCategoryId;
+          const categoryId = destinations.get(item);
+          delete item.saveError;
           const entryBrand = entry.override.brand || brand;
           const entrySuppliers = entry.override.suppliers ? listValues(entry.override.suppliers) : suppliers;
           if (batchCategory && batchCategory !== categoryId) await flush();
@@ -2465,50 +2533,61 @@ window.GDHomeAssets = (() => {
           const tags = [...new Set([...sharedTags,...(entry.path ? folderTags(entry.path) : []),
             ...(auto ? ['chua-duyet',...(entry.url ? [new URL(entry.url).hostname] : [])] : [])])];
           reviewed.set(entry,{categoryId,brand:entryBrand,suppliers:entrySuppliers});
-          const codeKey = duplicateCode(code);
-          if (entry?.onlyNew && codeKey && savedCodes.has(codeKey)) { skipped++; continue; }
-          const key = code ? catalogueKey({brand:itemBrand,code}) : item.source;
+          const codeKey = code && scopeKey(categoryId,duplicateCode(code));
+          if (entry.onlyNew && codeKey && savedCodes.has(codeKey)) { skip(item); continue; }
+          const key = scopeKey(categoryId,code ? catalogueKey({brand:itemBrand,code}) : item.source);
           const previous = existing.get(key);
           if (previous && !itemSuppliers.some(value => !previous.suppliers?.includes(value)) && !tags.some(value => !previous.tags?.includes(value))) {
-            skipped++; continue;
+            skip(item); continue;
           }
           status.textContent = 'Đang lưu ' + code + '…';
           const crop = item.crop;
           const cropKey = JSON.stringify([item.source,crop]);
-          const image = previous || savedCrops.get(cropKey) || await (async () => {
-            const source = await fetch(item.source).then(response => response.blob());
-            const bounds = [crop.x,crop.y,crop.x+crop.w,crop.y+crop.h];
-            const {full,thumb} = await GDHomeImages.compress(source,bounds);
-            if (entry?.onlyNew && savedHashes.has(await catalogueHash(full))) return null;
-            const key = await storeAsset(full);
-            return {full:key,thumb:thumb === full ? key : await storeAsset(thumb)};
-          })();
-          if (!image || (entry?.onlyNew && savedHashes.has(image.full.split('.')[0]))) { skipped++; continue; }
+          let image = previous || savedCrops.get(cropKey);
+          try {
+            if (!image) {
+              const response = await fetch(item.source);
+              if (!response.ok) throw new Error('Không đọc được ảnh nguồn.');
+              const bounds = [crop.x,crop.y,crop.x+crop.w,crop.y+crop.h];
+              const {full,thumb} = await GDHomeImages.compress(await response.blob(),bounds);
+              if (entry.onlyNew && savedHashes.has(scopeKey(categoryId,await catalogueHash(full)))) { skip(item); continue; }
+              const key = await storeAsset(full);
+              image = {full:key,thumb:thumb === full ? key : await storeAsset(thumb)};
+            }
+          } catch (error) {
+            item.saveError = error.message;
+            failures.push((code || name || entry.name) + ' · ' + error.message);
+            failedSources.add(entry);
+            continue;
+          }
+          const hashKey = scopeKey(categoryId,image.full.split('.')[0]);
+          if (entry.onlyNew && savedHashes.has(hashKey)) { skip(item); continue; }
           savedCrops.set(cropKey,image);
           if (codeKey) savedCodes.add(codeKey);
-          savedHashes.add(image.full.split('.')[0]);
+          savedHashes.add(hashKey);
           const fields = Object.fromEntries(detail ? [...detail.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]) :
             ['size','spec','cabinetWidth','innerWidth','unit','price','subgroup','finish','collection','material','tone','grain']
               .filter(field => item[field]).map(field => [field,item[field]]));
           if (entry.layout === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
           const category = library.categories.find(category => category.id === categoryId);
-          const record = {full:image.full,thumb:image.thumb,display:entry.override.categoryId ? categoryDisplay(category) : form.elements.display.value,
+          const record = {full:image.full,thumb:image.thumb,display:item.destinationId || entry.override.categoryId ? categoryDisplay(category) : form.elements.display.value,
             view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,kind:code && woodCategory(category) ? 'wood' : 'image',...fields};
           existing.set(key,record);
-          batch.push({record,entry});
+          batch.push({record,entry,item});
           if (batch.length === 50) await flush();
         }
         await flush();
         await finishHistory(auto || dialog.open);
-        status.textContent = 'Đã lưu ' + added + ' mã · bỏ qua ' + skipped + ' mã trùng.';
+        status.textContent = 'Đã lưu ' + added + ' mã · bỏ qua ' + skipped + ' mã trùng.' +
+          (failures.length ? ' ' + failures.length + ' mẫu chưa lưu. Có thể chọn lại và lưu tiếp. ' + failures.slice(0,3).join(' · ') : '');
         onSaved?.();
-        return true;
       } catch (error) {
+        for (const {item} of batch) item.saveError = error.message;
         await finishHistory().catch(historyError => toast(historyError.message));
         status.textContent = (added ? 'Đã lưu ' + added + ' mã. ' : '') + error.message;
-        return false;
       }
+      return finished;
     }
     save.onclick = async () => {
       if (busy || !form.reportValidity()) return;

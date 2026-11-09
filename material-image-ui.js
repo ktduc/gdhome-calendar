@@ -1,11 +1,6 @@
 async function storeMaterialImage(blob) {
   if (materialGuest) return saveGuestAsset(blob);
-  const response = await fetch('/api/materials/assets',{
-    method:'POST',headers:{...authHeaders(),'Content-Type':blob.type},body:blob
-  });
-  const data = await response.json();
-  if (!response.ok) throw new Error(data.message || 'Không lưu được ảnh.');
-  return data.name;
+  return GDHomeImages.uploadAsset(blob,authHeaders);
 }
 
 async function uploadImage(file,crop = null,onCompressed) {

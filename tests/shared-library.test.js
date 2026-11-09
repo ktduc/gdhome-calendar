@@ -62,6 +62,19 @@ test('Dữ liệu dùng chung: ghép nhóm vật liệu với hạng mục', () 
   assert.equal(categoryForGroup(library,'Hạng mục lạ'),null);
 });
 
+test('Cùng mã và hãng vẫn có thể lưu riêng ở hạng mục đích đã chọn', async () => {
+  const {call} = harness();
+  const item = {code:'G-161',brand:'Hãng mẫu',name:'Gạch',full:a,thumb:b};
+  for (const categoryId of ['cat-6','cat-5']) {
+    const result = await call('/api/library/items',{categoryId,items:[item]});
+    assert.equal(result.status,200);
+    assert.equal(result.data.added[0].categoryId,categoryId);
+  }
+  const retry = await call('/api/library/items',{categoryId:'cat-5',items:[item]});
+  assert.equal(retry.data.skipped,1);
+  assert.deepEqual(retry.data.items.filter(entry => entry.code === item.code).map(entry => entry.categoryId).sort(),['cat-5','cat-6']);
+});
+
 test('Vùng nhìn ảnh: giữ x/y/z hợp lệ, bỏ giá trị mặc định', () => {
   assert.equal(cleanView({x:0.5,y:0.5,z:1}),undefined);
   assert.deepEqual(cleanView({x:2,y:-1,z:9}),{x:1,y:0,z:6});

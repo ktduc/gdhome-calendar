@@ -1792,6 +1792,7 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
     await modal.locator('[name=suppliers]').fill('Kho A');
   }
   if (withGuide) {
+    await modal.locator('[name=includeCode]').uncheck();
     const example = await page.evaluate(() => {
       const canvas = Object.assign(document.createElement('canvas'),{width:200,height:100});
       canvas.getContext('2d').fillRect(0,0,200,100);
@@ -2537,6 +2538,9 @@ cases['20.16'] = async page => {
   const brand = sidebar.locator('[data-filter-group=brand]');
   assert.ok(await sidebar.locator('[data-filter-group=category]').count());
   await brand.getByLabel('Hãng A (1)').waitFor();
+  const categories = await sidebar.locator('.asset-category-column').boundingBox();
+  const attributes = await sidebar.locator('.asset-facets').boundingBox();
+  assert.ok(attributes.x >= categories.x+categories.width && Math.abs(attributes.y-categories.y) <= 2);
   await brand.locator('summary').click();
   assert.equal(await brand.getByLabel('Hãng A (1)').isVisible(),false);
   await page.setViewportSize({width:850,height:740});
@@ -2787,6 +2791,96 @@ cases['20.12'] = async page => {
   const own = data.items.find(item => item.code === 'WEB-B');
   assert.deepEqual([own.categoryId,own.brand,own.suppliers],['cat-5','Hãng riêng',['Kho riêng']]);
   assert.equal(data.imports.filter(entry => entry.status === 'done').length,5);
+};
+
+cases['20.12-bulk'] = async page => {
+  await openMaterials(page);
+  const png = Buffer.from(imageFixture,'base64');
+  let processed = 0, transient = false, allowRetry = false;
+  await page.route('**/api/catalogue/web',route => {
+    const url = new URL(route.request().postDataJSON().urls[0]);
+    const n = Number(url.searchParams.get('page') || 1), end = Math.min(n*60,161);
+    const items = Array.from({length:end-(n-1)*60},(_,i) => {
+      const code = 'LOT-' + ((n-1)*60+i+1);
+      return {code,name:code,image:url.origin+'/'+code+'.png'};
+    });
+    return route.fulfill({json:{items,total:3,next:n < 3 ? url.origin+'/tiles?page='+(n+1) : null}});
+  });
+  await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:png}));
+  await page.route('**/api/materials/assets/*',route => route.fulfill({contentType:'image/png',body:png}));
+  await page.route('**/api/materials/assets',route => {
+    const index = processed+1;
+    if (index === 99 && !transient) {
+      transient = true;
+      return route.fulfill({status:429,headers:{'Retry-After':'0'},json:{}});
+    }
+    processed++;
+    if (index === 101 && !allowRetry) return route.fulfill({status:400,json:{message:'Ảnh kiểm thử chưa lưu được.'}});
+    return route.fulfill({json:{name:'a'.repeat(64)+'.png'}});
+  });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=urls]').fill('https://example.com/tiles');
+  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.getByText(/Đã lưu 160 mã.*1 mẫu chưa lưu/).waitFor({timeout:45000});
+  assert.equal(processed,161);
+  assert.ok(transient);
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),1);
+  assert.equal(await modal.locator('[data-wood-code-input]').inputValue(),'LOT-101');
+  allowRetry = true;
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 1 mã/).waitFor();
+  const data = await page.request.get('/api/library').then(r => r.json());
+  assert.equal(data.items.filter(item => item.categoryId === 'cat-6' && item.code?.startsWith('LOT-')).length,161);
+  assert.deepEqual([data.imports[0].status,data.imports[0].count],['done',161]);
+};
+
+cases['20.6-code'] = async page => {
+  await openMaterials(page);
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  const {PDFDocument,rgb} = require('pdf-lib');
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',[{code:'MS 9381',brand:'Hãng mẫu',name:'Mẫu cũ',
+      full:'a'.repeat(64)+'.png',thumb:'a'.repeat(64)+'.png'}]);
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  await page.route('**/api/materials/assets/' + 'a'.repeat(64) + '.png',route =>
+    route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=brand]').fill('Hãng mẫu');
+  await modal.locator('[name=collection]').fill('Gạch thử');
+  await modal.locator('[name=useAi]').uncheck();
+  assert.ok(await modal.locator('[name=includeCode]').isChecked());
+  async function read(includeCode) {
+    const pdf = await PDFDocument.create();
+    pdf.setTitle(includeCode ? 'Có dòng mã' : 'Ảnh riêng');
+    const sheet = pdf.addPage([240,240]);
+    sheet.drawRectangle({x:24,y:82,width:166,height:128,color:rgb(.1,.45,.65)});
+    sheet.drawText('MS 9381',{x:30,y:62,size:15,color:rgb(.8,.05,.05)});
+    await modal.locator('[name=includeCode]').setChecked(includeCode);
+    await modal.locator('[name=pdf]').setInputFiles({name:'nhan-ma.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+    await modal.getByRole('button',{name:'Đọc PDF'}).click();
+    await modal.locator('[data-save-wood]:enabled').waitFor();
+    return modal.locator('.wood-catalogue-card canvas').evaluate(canvas => {
+      const rgba = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+      return rgba.some((value,index) => index%4 === 0 && value > 120 && rgba[index+1] < 70 && rgba[index+2] < 70);
+    });
+  }
+  assert.equal(await read(false),false,'Chế độ chỉ ảnh loại vùng chữ đỏ');
+  await modal.locator('[data-remove-source]').click();
+  assert.equal(await read(true),true,'Giữ dòng mã đỏ trên khung xuất phát từ trang PDF');
+  await modal.locator('[data-catalogue-destination]').selectOption('cat-5');
+  await modal.locator('[data-assign-destination]').click();
+  assert.match(await modal.locator('[data-catalogue-destination-label]').textContent(),/ĐÁ ỐP LÁT/);
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 1 mã/).waitFor();
+  const data = await page.request.get('/api/library').then(r => r.json());
+  assert.deepEqual(data.items.filter(item => item.code === 'MS 9381' && item.brand === 'Hãng mẫu').map(item => item.categoryId).sort(),['cat-5','cat-6']);
 };
 
 cases['20.13'] = async page => {

@@ -9,6 +9,26 @@ window.GDHomeImages = (() => {
     else reject(new Error('Không nén được ảnh.'));
   },type,quality));
 
+  async function uploadAsset(blob,headers) {
+    for (let attempt = 0; ; attempt++) {
+      let response, error;
+      try {
+        response = await fetch('/api/materials/assets',{method:'POST',headers:{...headers(),'Content-Type':blob.type},
+          body:blob,signal:AbortSignal.timeout(35000)});
+        const data = await response.json().catch(() => ({}));
+        if (response.ok && isAssetName(data.name)) return data.name;
+        error = new Error(data.message || 'Không lưu được ảnh (HTTP ' + response.status + ').');
+      } catch (cause) {
+        error = new Error('Mất kết nối khi lưu ảnh.',{cause});
+      }
+      const status = response?.status;
+      if (attempt >= 2 || (status && status !== 408 && status !== 429 && status < 500)) throw error;
+      const retryAfter = response?.headers.get('Retry-After');
+      const delay = retryAfter && (Number.isFinite(Number(retryAfter)) ? Number(retryAfter)*1000 : Date.parse(retryAfter)-Date.now());
+      await new Promise(resolve => setTimeout(resolve,Math.min(15000,Math.max(500*(attempt+1),delay || 0))));
+    }
+  }
+
   async function compress(source,crop = null) {
     const bitmap = await createImageBitmap(source);
     try {
@@ -69,5 +89,5 @@ window.GDHomeImages = (() => {
     return sizeFormat.format(bytes/factor) + ' ' + unit;
   }
   const reduction = (source,full) => size(source.size) + ' → ' + size(full.size);
-  return {compress,reduction,extension,mimeFor,isAssetName,applyPadding};
+  return {compress,uploadAsset,reduction,extension,mimeFor,isAssetName,applyPadding};
 })();

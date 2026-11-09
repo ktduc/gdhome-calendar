@@ -277,7 +277,8 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         if (kind === 'paint' ? !validHex(item.hex) || !woodKey(item.code) : !imageName(item.full) || !imageName(item.thumb)) fail(400,'Mẫu vật liệu không hợp lệ.');
         const metadata = item.code ? {...woodMeta(item),brand:text(item.brand,80) || (kind === 'wood' ? 'An Cường' : '')} : {};
         const key = woodKey(metadata.code);
-        const existing = data.items.find(entry => (key ? entry.code && woodItemKey(entry) === woodItemKey(metadata) : entry.categoryId === categoryId && entry.kind === 'image' && entry.full === item.full));
+        const existing = data.items.find(entry => entry.categoryId === categoryId &&
+          (key ? entry.code && woodItemKey(entry) === woodItemKey(metadata) : entry.kind === 'image' && entry.full === item.full));
         if (key && existing) {
           existing.suppliers = stringList([...(existing.suppliers || []),...stringList(item.suppliers)]);
           existing.tags = stringList([...(existing.tags || []),...stringList(item.tags)]);
