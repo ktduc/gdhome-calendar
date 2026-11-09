@@ -586,8 +586,8 @@ function imageCell(list, slot, content = '', state = '', removable = false, edit
   const choose = slot === 'render' ? '' : '<button type="button" class="image-pick' + (isChosen ? ' chosen' : '') + '" data-action="pick-pa" aria-label="' + (isChosen ? 'Bỏ chốt PA' : 'Chốt PA') + (Number(slot)+1) + '" aria-pressed="' + isChosen + '" title="' + (isChosen ? 'Phương án đã chốt · Bấm để bỏ chốt' : 'Chốt phương án') + '">' + (isChosen ? '✓ Đã chốt' : '✓') + '</button>';
 
   return '<div class="image-cell ' + state + (hasImage ? ' has-image' : isPaint ? ' has-paint has-image' : '') + '" tabindex="0" data-slot="' + slot +
-    '" aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả."><div class="image-preview">' + photo +
-    (!hasImage && !isPaint ? '<div class="image-empty-hint">Bấm để chọn<br>·<br>Ctrl+V để dán</div>' : '') +
+    '"' + (editing ? ' aria-label="Ô ảnh · Ctrl+V để dán ảnh" title="Ctrl+V để dán ảnh hoặc kéo thả."' : '') + '>' + '<div class="image-preview">' + photo +
+    (editing && !hasImage && !isPaint ? '<div class="image-empty-hint">Bấm để chọn<br>·<br>Ctrl+V để dán</div>' : '') +
     (state === 'reserve' ? '<span class="image-state">Dự phòng</span>' : '') +
     '</div>' + (list && list.length > 1 ? '<div class="material-image-thumbs">' +
       list.slice(1).map((image,i) => '<button class="material-image-thumb"' + (editing ? ' draggable="true"' : '') + ' data-action="view-image" data-index="' + (i+1) +

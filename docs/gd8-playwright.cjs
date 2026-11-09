@@ -2007,6 +2007,17 @@ cases['18.8'] = async page => {
   }
 };
 
+cases['19.1'] = async page => {
+  await openMaterials(page);
+  assert.ok(await page.locator('.image-empty-hint').count());
+  await page.locator('.hdr-split-caret').click();
+  await page.locator('[data-image-mode=preview]').click();
+  const paper = page.locator('#print-sheet');
+  await paper.waitFor();
+  assert.doesNotMatch(await paper.innerHTML(),/Bấm để chọn|Ctrl\+V/);
+  assert.equal(await paper.locator('.image-empty-hint').count(),0);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

@@ -309,3 +309,8 @@ XONG GĐ17
 `node --test` đạt 51/51. Playwright đạt cả 10 ca GĐ18-GPT và 8 ca hồi quy GĐ16–17. Ca 18.1 giả lập mạng trễ 1,5 giây và lỗi 503. Ca 18.10 kiểm tra không có request tải ảnh lên khi kéo thả. Phần GPT dùng các điểm nối sẵn có của Chốt mã, không cần thay đổi các file dùng chung do Antigravity phụ trách.
 
 XONG GĐ18-GPT
+
+
+## GĐ19
+
+- 19.1: Ẩn gợi ý thao tác trong ô ảnh trống khi xuất.
