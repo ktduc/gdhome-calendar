@@ -85,6 +85,26 @@ test('GĐ20.17 chỉ lưu kích thước đầu tiên của mỗi mẫu', async 
     .find(item => item.id === added.data.added[0].id).size,'600x300');
 });
 
+test('GĐ20.11 đổi tên, gộp và xoá giá trị theo tài khoản', async () => {
+  const {call} = harness();
+  const items = await call('/api/library/items',{categoryId:'cat-6',items:[
+    {full:a,thumb:a,brand:'Hãng A',suppliers:['Kho 1'],finish:'Mờ'},
+    {full:b,thumb:b,brand:'Hãng B',suppliers:['Kho 2']}
+  ]});
+  assert.equal(items.status,200);
+  const modify = (action,data) => call('/api/library/attributes',{key:'brand',action,...data});
+  assert.equal((await modify('save',{previous:'Hãng A',name:'Hãng C',categoryIds:['cat-6']})).status,200);
+  const merged = await modify('merge',{target:'Hãng B',names:['Hãng B','Hãng C']});
+  assert.deepEqual(merged.data.items.filter(item => item.full).map(item => item.brand),['Hãng B','Hãng B']);
+  assert.equal((await modify('delete',{previous:'Hãng B'})).status,409);
+  const outsider = await call('/api/library/attributes',null,'other@example.com');
+  assert.ok(!outsider.data.attributes.brand.some(row => row.name === 'Hãng B'));
+  assert.equal((await modify('delete',{previous:'Hãng B',confirm:true})).status,200);
+  const result = await call('/api/library/attributes');
+  assert.ok(!result.data.attributes.brand.some(row => row.name === 'Hãng B' || row.name === 'Hãng C'));
+  assert.equal(result.data.attributes.finish.find(row => row.name === 'Mờ').count,1);
+});
+
 test('Màu sơn trong PA được giữ khi lưu, mã màu sai bị bỏ', () => {
   const sheet = cleanSheet({ groups:[{ id:'g',name:'SƠN TƯỜNG',rows:[{ id:'r',name:'Sơn tường',render:[],
     options:[{ code:'30YY 72/107',paint:{kind:'paint',brand:'Dulux',code:'30YY 72/107',name:'Ivory Lace',hex:'#F5F0E1',x:'<b>'},images:[] },

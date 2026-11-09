@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const materialTemplate = require('./material-template');
 const { imageName } = require('./material-assets');
+const attributes = require('./library-attributes');
 
 const libraryKey = dataKey => 'lib-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
 const text = (value, max = 160) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
@@ -44,7 +45,10 @@ function itemMetadata(item) {
   const number = (value,max) => Math.min(max,Math.max(0,Math.round(Number(String(value || '').replace(/[.,\s]/g,'')) || 0)));
   const cabinetWidth = number(item.cabinetWidth,20000);
   const tags = stringList([...(Array.isArray(item.tags) ? item.tags : []),...(cabinetWidth ? ['Tủ '+cabinetWidth] : [])]);
-  return {brand:text(item.brand,80),size:materialSize(item.size || item.name,!!item.size),tags,suppliers:stringList(item.suppliers),
+  const suppliedSize = Object.hasOwn(item,'size');
+  return {brand:text(item.brand,80),size:materialSize(suppliedSize ? item.size : item.name,suppliedSize),tags,suppliers:stringList(item.suppliers),
+    ...Object.fromEntries(['material','finish','collection','subgroup'].filter(key => Object.hasOwn(item,key))
+      .map(key => [key,text(item[key],['finish','collection'].includes(key) ? 120 : 80)])),
     ...(Array.isArray(item.brands) ? {brands:stringList(item.brands)} : {}),
     ...(item.spec ? {spec:text(item.spec,160)} : {}),...(item.subgroup ? {subgroup:text(item.subgroup,80)} : {}),
     ...(cabinetWidth ? {cabinetWidth} : {}),...(item.innerWidth ? {innerWidth:number(item.innerWidth,20000)} : {}),
@@ -107,7 +111,7 @@ function normalize(data) {
       name: text(item.name, 160),
       note: text(item.note, 500),
       ...(imageName(item.full) && imageName(item.thumb) ? {full:item.full,thumb:item.thumb} : {}),
-      ...(woodKey(item.code) ? {...woodMeta(item),brand:text(item.brand,80) || (kindOf(item) === 'wood' ? 'An Cường' : '')} : {}),
+      ...(woodKey(item.code) ? {...woodMeta(item),brand:text(item.brand,80) || (!Object.hasOwn(item,'brand') && kindOf(item) === 'wood' ? 'An Cường' : '')} : {}),
       createdAt: Number(item.createdAt) || Date.now(),
       ...(item.favorite === true ? {favorite:true} : {}),
       ...(Number.isFinite(item.lastUsedAt) && item.lastUsedAt > 0 ? {lastUsedAt:item.lastUsedAt} : {}),
@@ -121,7 +125,8 @@ function normalize(data) {
     const keys = new Set(items.filter(item => item.kind === 'paint').map(woodItemKey));
     items.push(...paintSeed.filter(item => !keys.has(woodItemKey(item))));
   }
-  return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),woodSeeded:true,paintSeeded:true };
+  return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
+    attributes:attributes.normalize({...base,categories}),woodSeeded:true,paintSeeded:true };
 }
 
 // Ghép tên nhóm vật liệu (vd "GẠCH ỐP LÁT (sảnh, WC, logia)") với một hạng mục thư viện.
@@ -225,6 +230,10 @@ async function mergeWithMaterials(store,key,dataKey,body) {
 
 async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, sendJson }) {
   const key = libraryKey(dataKey);
+  if (urlPath === '/api/library/attributes' && req.method === 'GET') {
+    const data = normalize(await store.get(key));
+    return sendJson(res,200,{categories:data.categories,attributes:Object.fromEntries(Object.keys(attributes.labels).map(key => [key,attributes.view(data,key)]))});
+  }
   if (urlPath === '/api/library' && req.method === 'GET') {
     const stored = await store.get(key);
     if (!stored?.paintSeeded || !stored?.woodSeeded) {
@@ -235,6 +244,10 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   }
   if (req.method !== 'POST') fail(405, 'Phương thức không hỗ trợ.');
   const body = await readJsonBody(req);
+  if (urlPath === '/api/library/attributes') {
+    const {data} = await mutate(store,key,data => attributes.change(data,body,{size:materialSize}));
+    return sendJson(res,200,data);
+  }
   const ensure = async data => {
     if (!data.categories.length) Object.assign(data, defaultLibrary(), { _version: data._version, items: data.items });
   };
@@ -341,8 +354,9 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       }
       if (typeof body.hidden === 'boolean') item.hidden = body.hidden;
       if (item.kind === 'paint' && validHex(body.hex)) item.hex = body.hex.toLowerCase();
-      for (const field of ['brand','size','tags','suppliers']) {
-        if (Object.hasOwn(body,field)) item[field] = itemMetadata(body)[field];
+      const metadata = itemMetadata(body);
+      for (const field of Object.keys(attributes.labels)) {
+        if (Object.hasOwn(body,field)) item[field] = metadata[field];
       }
       if (typeof body.note === 'string') item.note = text(body.note, 500);
       if (data.categories.some(c => c.id === body.categoryId)) item.categoryId = body.categoryId;

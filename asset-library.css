@@ -72,6 +72,16 @@
 .asset-library-head strong{font-size:15px;margin-right:auto}
 .asset-library-head input{width:180px}
 .asset-library-main .asset-grid{margin-top:8px}
+.asset-library-dialog .asset-dialog-body.is-attributes{display:block}
+.asset-library-tabs,.asset-attributes-controls{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px}
+.asset-library-tabs [aria-selected=true]{background:#dbeafe}
+.asset-attributes-panel table{width:100%;border-collapse:collapse}
+.asset-attributes-panel :is(th,td){padding:5px;border-bottom:1px solid #d8d2c8;text-align:left}
+.asset-attributes-panel td small{display:block;color:#475569}
+.asset-attribute-editor{width:min(540px,94vw)}
+.asset-attribute-form{display:grid;gap:8px}
+.asset-attribute-form label{display:grid;gap:4px}
+.asset-attribute-form :is(input,textarea,select){min-width:0;width:100%}
 @media (max-width:720px){.asset-library-dialog .asset-dialog-body{grid-template-columns:1fr}.asset-categories{position:static}}
 
 .asset-view-dialog{width:min(520px,94vw)}

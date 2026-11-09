@@ -2583,6 +2583,44 @@ cases['20.18'] = async page => {
   assert.ok(data.items.find(item => item.id === b.id).lastUsedAt > 0);
 };
 
+cases['20.11'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',['Hãng mẫu A','Hãng mẫu B'].map((brand,i) => ({
+      name:'Gạch mẫu '+i,brand,full:(i ? 'b' : 'a').repeat(64)+'.webp',thumb:(i ? 'b' : 'a').repeat(64)+'.webp'
+    })));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog'), editor = page.locator('.asset-attribute-editor');
+  const row = name => library.locator('[data-attribute-row]').filter({has:page.getByLabel(name,{exact:true})});
+  await library.getByRole('tab',{name:'Thuộc tính'}).click();
+  await library.locator('[data-attribute-key]').selectOption('brand');
+  await row('Hãng mẫu A').locator('[data-attribute-action=edit]').click();
+  await editor.locator('[name=value]').fill('Hãng mẫu C');
+  await editor.locator('[name=categories]').selectOption('cat-6');
+  await editor.getByRole('button',{name:'Lưu giá trị'}).click();
+  await editor.waitFor({state:'detached'});
+  await row('Hãng mẫu C').getByText('GẠCH ỐP LÁT',{exact:true}).waitFor();
+  await row('Hãng mẫu C').locator('input').check();
+  await row('Hãng mẫu B').locator('input').check();
+  await library.locator('[data-attribute-target]').selectOption('Hãng mẫu B');
+  await library.locator('[data-attribute-merge]').click();
+  await row('Hãng mẫu B').getByText('2',{exact:true}).waitFor();
+  page.once('dialog',prompt => prompt.accept());
+  await row('Hãng mẫu B').locator('[data-attribute-action=delete]').click();
+  await row('Hãng mẫu B').waitFor({state:'detached'});
+  const data = await page.request.get('/api/library').then(r => r.json());
+  assert.ok(data.items.filter(item => item.full).every(item => !item.brand));
+  await library.getByRole('tab',{name:'Mẫu vật liệu'}).click();
+  await library.locator('.asset-card figcaption').first().dblclick();
+  await editor.locator('[name=finish]').fill('Bề mặt mới');
+  await editor.getByRole('button',{name:'Lưu mẫu'}).click();
+  await editor.waitFor({state:'detached'});
+  const attrs = await page.request.get('/api/library/attributes').then(r => r.json());
+  assert.equal(attrs.attributes.finish.find(row => row.name === 'Bề mặt mới').count,1);
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');

@@ -241,7 +241,8 @@ window.GDHomeAssets = (() => {
     let skipped = 0;
     for (const item of items) {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
-      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,size:primarySize(item.size),createdAt:Date.now(),
+      const metadata = Object.fromEntries(['brand','suppliers','tags','material','finish','collection','subgroup'].filter(key => Object.hasOwn(item,key)).map(key => [key,item[key]]));
+      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,size:primarySize(item.size),createdAt:Date.now(),...metadata,
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
     data.items.unshift(...added);
@@ -252,7 +253,7 @@ window.GDHomeAssets = (() => {
     if (item) {
       if (typeof patch.name === 'string') item.name = patch.name;
       for (const key of ['code','view']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
-      for (const key of ['brand','size','tags','suppliers','display']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
+      for (const key of ['brand','size','tags','suppliers','display','material','finish','collection','subgroup']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       if (Object.hasOwn(patch,'size')) item.size = primarySize(patch.size);
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
       if (patch.hex) item.hex = patch.hex;
@@ -614,6 +615,80 @@ window.GDHomeAssets = (() => {
     const undo = controls.querySelector('[data-favorite-undo]');
     if (undo) undo.onclick = () => change(state.favoriteUndo.id,state.favoriteUndo.value,null);
   }
+  const attributeCatalog = () => window.GDHomeLibraryAttributes;
+  function attributeSuggestions(owner,data,categoryId,fields) {
+    owner.dataset.suggestionId ||= uid();
+    for (const [key,inputs] of Object.entries(fields)) {
+      if (!inputs.length) continue;
+      const id = 'library-values-' + owner.dataset.suggestionId + '-' + key;
+      let list = owner.querySelector('#' + id);
+      const defaults = inputs.flatMap(input => {
+        if (!input.dataset.attrDefaults) {
+          const original = input.list || (key === 'subgroup' ? input.closest('[data-catalogue-detail-fields]')?.querySelector('datalist') : null);
+          input.dataset.attrDefaults = JSON.stringify([...(original?.options || [])].map(option => option.value));
+        }
+        return JSON.parse(input.dataset.attrDefaults);
+      });
+      if (!list) {
+        list = document.createElement('datalist');
+        list.id = id;
+        owner.append(list);
+      }
+      const values = attributeCatalog().view(data,key).filter(row => !row.categoryIds.length || row.categoryIds.includes(categoryId)).map(row => row.name);
+      list.replaceChildren(...[...new Set([...defaults,...values])].map(value => new Option(value)));
+      for (const input of inputs) input.setAttribute('list',id);
+    }
+  }
+  const attributePatch = patch => libraryCall('attributes',patch,data => {
+    attributeCatalog().change(data,patch,{size:primarySize});
+    return {};
+  });
+  function editLibraryAttribute(data,key,row) {
+    const {dialog,body} = modal('asset-attribute-editor',row ? 'Sửa giá trị thuộc tính' : 'Thêm giá trị thuộc tính');
+    body.innerHTML = '<form class="asset-attribute-form"><label>' + esc(attributeCatalog().labels[key]) +
+      ' <input name="value" maxlength="120" required value="' + esc(row?.name) + '"></label>' +
+      (key === 'suppliers' ? '<label>Số điện thoại <input name="phone" maxlength="40" value="' + esc(row?.phone) + '"></label>' +
+        '<label>Ghi chú <textarea name="note" maxlength="300">' + esc(row?.note) + '</textarea></label>' : '') +
+      '<label>Hạng mục áp dụng <select name="categories" multiple>' + data.categories.map(category =>
+        '<option value="' + esc(category.id) + '"' + (row?.categoryIds.includes(category.id) ? ' selected' : '') + '>' + esc(category.name) + '</option>').join('') +
+      '</select></label><small>Để trống nếu dùng cho mọi hạng mục.</small><button>Lưu giá trị</button><p role="status"></p></form>';
+    const form = body.querySelector('form');
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      try {
+        await attributePatch({key,action:'save',previous:row?.name,name:form.elements.value.value,
+          categoryIds:[...form.elements.categories.selectedOptions].map(option => option.value),
+          phone:form.elements.phone?.value,note:form.elements.note?.value});
+        dialog.close();
+      } catch (error) { form.querySelector('[role=status]').textContent = error.message; }
+      finally { button.disabled = false; }
+    };
+  }
+  function editLibraryItem(item,data) {
+    const {dialog,body} = modal('asset-attribute-editor','Sửa mẫu vật liệu');
+    body.innerHTML = '<form class="asset-attribute-form"><label>Tên <input name="name" maxlength="160" value="' + esc(item.name) + '"></label>' +
+      (item.kind === 'paint' ? '<label>Màu hex <input name="hex" value="' + esc(item.hex) + '"></label>' : '') +
+      Object.entries(attributeCatalog().labels).map(([key,label]) => '<label>' + esc(label) + ' <input name="' + key + '" value="' +
+        esc(Array.isArray(item[key]) ? item[key].join(', ') : item[key]) + '"></label>').join('') + '<button>Lưu mẫu</button><p role="status"></p></form>';
+    const form = body.querySelector('form');
+    const keys = Object.keys(attributeCatalog().labels);
+    attributeSuggestions(form,data,item.categoryId,Object.fromEntries(keys.map(key => [key,[form.elements[key]]])));
+    form.onsubmit = async event => {
+      event.preventDefault();
+      const button = form.querySelector('button');
+      button.disabled = true;
+      const patch = {id:item.id,name:form.elements.name.value.trim(),hex:form.elements.hex?.value.trim()};
+      for (const key of keys) {
+        const value = form.elements[key].value.trim();
+        patch[key] = ['tags','suppliers'].includes(key) ? value.split(',').map(part => part.trim()).filter(Boolean) : value;
+      }
+      try { await updateItem(patch); dialog.close(); }
+      catch (error) { form.querySelector('[role=status]').textContent = error.message; }
+      finally { button.disabled = false; }
+    };
+  }
   function wireFacets(root,facets,paint) {
     const clear = root.querySelector('[data-clear-facets]');
     if (clear) clear.onclick = () => { clearFacets(facets); paint(); };
@@ -626,6 +701,51 @@ window.GDHomeAssets = (() => {
       } else if (values.has(value)) values.delete(value);
       else values.add(value);
       paint();
+    });
+  }
+  const libraryTabs = active => '<div class="asset-library-tabs" role="tablist" aria-label="Quản lý dữ liệu">' +
+    [['items','Mẫu vật liệu'],['attributes','Thuộc tính']].map(([id,label]) => '<button type="button" role="tab" data-library-tab="' +
+      id + '" aria-selected="' + (id === active) + '">' + label + '</button>').join('') + '</div>';
+  function renderLibraryAttributes(body,data,state,paint) {
+    const {labels,view} = attributeCatalog(), key = state.attributeKey || 'size';
+    const rows = view(data,key);
+    body.innerHTML = '<section class="asset-attributes-panel">' + libraryTabs('attributes') +
+      '<div class="asset-attributes-controls"><label>Nhóm thuộc tính <select data-attribute-key>' +
+      Object.entries(labels).map(([value,label]) => '<option value="' + value + '"' + (key === value ? ' selected' : '') + '>' + esc(label) + '</option>').join('') +
+      '</select></label><button type="button" data-attribute-add>Thêm giá trị</button>' +
+      '<label>Gộp về <select data-attribute-target><option value="">Chọn giá trị đích</option>' +
+      rows.map(row => '<option>' + esc(row.name) + '</option>').join('') + '</select></label><button type="button" data-attribute-merge>Gộp</button></div>' +
+      '<p role="status">' + esc(state.attributeMessage) + '</p><table><thead><tr><th>Giá trị</th><th>Số mẫu</th><th>Hạng mục</th><th>Thao tác</th></tr></thead><tbody>' +
+      rows.map((row,i) => '<tr data-attribute-row="' + i + '"><td><label><input type="checkbox" data-attribute-select value="' +
+        esc(row.name) + '"> ' + esc(row.name) + '</label>' +
+        (row.phone || row.note ? '<small>' + esc([row.phone,row.note].filter(Boolean).join(' · ')) + '</small>' : '') +
+        '</td><td>' + row.count + '</td><td>' + esc(row.categoryIds.length ? row.categoryIds.map(id => data.categories.find(category => category.id === id)?.name).filter(Boolean).join(', ') : 'Tất cả') +
+        '</td><td><button type="button" data-attribute-action="edit">Sửa</button> <button type="button" data-attribute-action="up" aria-label="Lên"' +
+        (i === 0 ? ' disabled' : '') + '>↑</button> <button type="button" data-attribute-action="down" aria-label="Xuống"' +
+        (i === rows.length-1 ? ' disabled' : '') + '>↓</button> <button type="button" data-attribute-action="delete">Xoá</button></td></tr>').join('') +
+      '</tbody></table></section>';
+    const status = body.querySelector('[role=status]');
+    async function apply(patch) {
+      if (state.attributeBusy) return;
+      state.attributeBusy = true;
+      state.attributeMessage = 'Đã cập nhật thuộc tính.';
+      try { await attributePatch({key,...patch}); }
+      catch (error) { state.attributeMessage = ''; status.textContent = error.message; }
+      finally { state.attributeBusy = false; }
+    }
+    body.querySelector('[data-attribute-key]').onchange = event => { state.attributeKey = event.target.value; state.attributeMessage = ''; paint(); };
+    body.querySelector('[data-attribute-add]').onclick = () => editLibraryAttribute(data,key);
+    body.querySelector('[data-attribute-merge]').onclick = () => apply({action:'merge',
+      names:[...body.querySelectorAll('[data-attribute-select]:checked')].map(box => box.value),
+      target:body.querySelector('[data-attribute-target]').value});
+    body.querySelectorAll('[data-attribute-action]').forEach(button => button.onclick = () => {
+      const row = rows[Number(button.closest('tr').dataset.attributeRow)], action = button.dataset.attributeAction;
+      if (action === 'edit') return editLibraryAttribute(data,key,row);
+      if (action === 'delete') {
+        if (row.count && !confirm('Xoá “' + row.name + '” khỏi ' + row.count + ' mẫu đang dùng?')) return;
+        return apply({action,previous:row.name,confirm:true});
+      }
+      apply({action:'move',previous:row.name,step:action === 'up' ? -1 : 1});
     });
   }
   function grid(items,{selectable = true,removable = false,selected = null,empty = 'Chưa có ảnh.'} = {}) {
@@ -1685,7 +1805,14 @@ window.GDHomeAssets = (() => {
     if (preset.file) { const transfer = new DataTransfer(); transfer.items.add(preset.file); form.elements.pdf.files = transfer.files; }
     if (preset.tags) form.elements.tags.value = preset.tags.join(', ');
     if (categoryId === 'kitchen-accessories') form.elements.layout.value = 'kitchen';
-    form.elements.category.onchange = () => { form.elements.display.value = categoryDisplay(library.categories.find(c => c.id === form.elements.category.value)); };
+    const suggest = () => attributeSuggestions(form,library,form.elements.category.value,{
+      brand:[form.elements.brand],collection:[form.elements.collection],finish:[form.elements.finish],
+      suppliers:[form.elements.suppliers],tags:[form.elements.tags]});
+    suggest();
+    form.elements.category.onchange = () => {
+      form.elements.display.value = categoryDisplay(library.categories.find(c => c.id === form.elements.category.value));
+      suggest();
+    };
     form.elements.layout.onchange = () => { if (['phao','kitchen'].includes(form.elements.layout.value)) form.elements.display.value = 'pad'; };
     const status = body.querySelector('[role=status]');
     const readGuide = wireCatalogueGuide(form,status);
@@ -1843,6 +1970,9 @@ window.GDHomeAssets = (() => {
           fields.remove();
           return fields;
         });
+        attributeSuggestions(form,library,form.elements.category.value,Object.fromEntries(
+          ['size','material','finish','collection','subgroup'].map(key => [key,details.flatMap(detail =>
+            [...detail.querySelectorAll('[data-catalogue-field="' + key + '"]')]) ])));
         const syncIdentity = (item,patch) => {
           Object.assign(item,patch);
           const card = cards[items.indexOf(item)];
@@ -2155,6 +2285,7 @@ window.GDHomeAssets = (() => {
     let uploadDisplay;
     const facets = {}, selected = new Set();
     const sidebarState = {groups:{}};
+    const viewState = {tab:'items'};
     let rangeAnchor, dragged, undoToken, guestUndo;
     function changeCategory(id) {
       if (current !== id) {
@@ -2200,6 +2331,17 @@ window.GDHomeAssets = (() => {
     async function paint() {
       let data;
       try { data = await loadLibrary(); } catch (error) { body.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
+      body.classList.toggle('is-attributes',viewState.tab === 'attributes');
+      const wireTabs = () => body.querySelectorAll('[data-library-tab]').forEach(button => button.onclick = () => {
+        viewState.tab = button.dataset.libraryTab;
+        paint();
+      });
+      if (viewState.tab === 'attributes') {
+        dialog.onkeydown = null;
+        renderLibraryAttributes(body,data,viewState,paint);
+        wireTabs();
+        return;
+      }
       if (!data.categories.some(category => category.id === current)) {
         current = categoryFor(data,groupName)?.id || data.categories[0]?.id || null;
         clearFacets(facets);
@@ -2212,7 +2354,7 @@ window.GDHomeAssets = (() => {
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" draggable="true" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
-        '<section class="asset-library-main">' + (category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
+        '<section class="asset-library-main">' + (!onPick ? libraryTabs('items') : '') + (category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
           '<button type="button" data-import-wood>Nhập catalogue</button>' +
           (!onPick ? '<button type="button" data-find-duplicates>Tìm mã trùng</button>' : '') +
           (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
@@ -2227,6 +2369,7 @@ window.GDHomeAssets = (() => {
       arrangeFilterSidebar(body,sidebarState);
       wireLibraryActions(body,sidebarState,paint,{manual:!onPick});
       wireFacets(body,facets,paint);
+      wireTabs();
       const findDuplicates = body.querySelector('[data-find-duplicates]');
       if (findDuplicates) findDuplicates.onclick = openDuplicateLibrary;
       body.querySelectorAll('[data-bulk-select]').forEach(box => box.onclick = event => {
@@ -2429,19 +2572,10 @@ window.GDHomeAssets = (() => {
       });
       body.querySelectorAll('.asset-card figcaption').forEach(caption => {
         caption.title = 'Nháy đúp để sửa mẫu';
-        caption.ondblclick = async () => {
+        caption.ondblclick = () => {
           const id = caption.closest('[data-asset-id]').dataset.assetId;
           const item = data.items.find(entry => entry.id === id);
-          const name = prompt('Tên / mã ảnh mẫu:',item.name || '');
-          if (name === null) return;
-          const hex = item.kind === 'paint' ? prompt('Màu hex:',item.hex) : undefined;
-          if (hex === null) return;
-          const brand = prompt('Thương hiệu:',item.brand || '');
-          const size = prompt('Kích thước:',item.size || '');
-          const suppliers = prompt('Đơn vị cung cấp, cách nhau bằng dấu phẩy:',(item.suppliers || []).join(', '));
-          const tags = prompt('Tag, cách nhau bằng dấu phẩy:',(item.tags || []).join(', '));
-          if ([brand,size,suppliers,tags].includes(null)) return;
-          try { await updateItem({id,name:name.trim(),hex,brand,size,suppliers:suppliers.split(','),tags:tags.split(',')}); paint(); } catch (error) { toast(error.message); }
+          if (item) editLibraryItem(item,data);
         };
       });
       if (items.length < 4 && query.trim()) renderGoogleFallback(body.querySelector('.asset-google-fallback-slot'),query,{
