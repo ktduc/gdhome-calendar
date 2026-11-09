@@ -245,6 +245,7 @@ window.GDHomeAssets = (() => {
     const item = data.items.find(entry => entry.id === patch.id);
     if (item) {
       if (typeof patch.name === 'string') item.name = patch.name;
+      for (const key of ['code','view']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       for (const key of ['brand','size','tags','suppliers','display']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
       if (patch.hex) item.hex = patch.hex;
@@ -302,6 +303,30 @@ window.GDHomeAssets = (() => {
     const css = viewCss(view);
     return css ? ' style="--view:' + css + '"' : '';
   };
+  function editAssetIdentity(container,item,save) {
+    if (container.querySelector('.asset-identity-editor')) return;
+    const form = document.createElement('form');
+    form.className = 'asset-identity-editor';
+    form.innerHTML = '<label>Mã <input name="code" maxlength="80"></label><label>Tên <input name="name" maxlength="160"></label><button>Lưu</button>';
+    form.elements.code.value = item.code || '';
+    form.elements.name.value = item.name || '';
+    form.onkeydown = event => {
+      event.stopPropagation();
+      if (event.key === 'Escape') { event.preventDefault(); form.remove(); container.focus(); }
+    };
+    form.onsubmit = async event => {
+      event.preventDefault();
+      form.querySelector('button').disabled = true;
+      try {
+        await save({code:form.elements.code.value.trim(),name:form.elements.name.value.trim()});
+        form.remove();
+        container.focus();
+      } catch (error) { toast(error.message); form.querySelector('button').disabled = false; }
+    };
+    container.append(form);
+    form.elements.code.focus();
+    form.elements.code.select();
+  }
   const displayOptions = [['fill','Cắt đầy ô'],['fit','Vừa khung'],['pad','Lấp nền ô vuông']];
   const displayAttribute = display => displayOptions.some(([value]) => value === display) ? ' data-display="' + display + '"' : '';
   function categoryDisplay(category) {
@@ -319,20 +344,23 @@ window.GDHomeAssets = (() => {
     return {x:round(clamp(view.x ?? 0.5,visX)),y:round(clamp(view.y ?? 0.5,visY)),z:round(z)};
   }
 
-  function editView(item,{title = 'Chỉnh vùng nhìn'} = {}) {
+  function editView(item,{title = 'Chỉnh vùng nhìn',sequence,onSave,urlFor = entry => assetUrl(entry.full || entry.thumb)} = {}) {
     return new Promise(async (resolve,reject) => {
       let url;
-      try { url = await assetUrl(item.full || item.thumb); } catch (error) { reject(error); return; }
+      try { url = await urlFor(item); } catch (error) { reject(error); return; }
       const dialog = document.createElement('dialog');
       dialog.className = 'shell-dialog asset-view-dialog';
       dialog.innerHTML = '<h2>' + esc(title) + '</h2><p>Kéo ảnh để chọn vùng hiển thị trong ô vuông, cuộn chuột hoặc kéo thanh để phóng to. Ảnh gốc không bị cắt.</p>' +
         '<div class="asset-view-stage" tabindex="0" aria-label="Vùng nhìn ảnh, dùng phím mũi tên để di chuyển"><img alt="" draggable="false"></div>' +
         '<label class="asset-view-zoom">Phóng to <input type="range" min="1" max="4" step="0.01"></label>' +
         '<div class="toolbar"><button type="button" data-view="reset">Đặt lại</button><span></span>' +
-        '<button type="button" data-view="cancel">Huỷ</button><button type="button" class="primary" data-view="save">Lưu vùng nhìn</button></div>';
+        (sequence ? '<button type="button" data-view="previous" aria-label="Mã trước">←</button><button type="button" data-view="next" aria-label="Mã sau">→</button>' +
+          '<button type="button" data-view="rename">Sửa mã/tên (F2)</button><button type="button" data-view="save">Đóng</button>' :
+          '<button type="button" data-view="cancel">Huỷ</button><button type="button" class="primary" data-view="save">Lưu vùng nhìn</button>') + '</div>';
       document.body.append(dialog);
       const stage = dialog.querySelector('.asset-view-stage'), img = stage.querySelector('img'), zoom = dialog.querySelector('input[type=range]');
-      let ratio = 1, view = {x:item.view?.x ?? 0.5,y:item.view?.y ?? 0.5,z:item.view?.z ?? 1}, result = null;
+      let ratio = 1, view = item.view || {x:.5,y:.5,z:1}, result = null, moving = false;
+      let index = sequence?.indexOf(item);
       img.src = url;
       try { await img.decode(); } catch { /* Ảnh vẫn hiển thị sau khi tải xong. */ }
       ratio = (img.naturalWidth || 1)/(img.naturalHeight || 1);
@@ -341,6 +369,51 @@ window.GDHomeAssets = (() => {
         view = clampView(view,ratio);
         img.style.transform = viewCss(view) || 'none';
         zoom.value = view.z;
+      }
+      const heading = dialog.querySelector('h2');
+      function titleForItem() {
+        if (!sequence) return;
+        heading.textContent = [item.code,item.name].filter(Boolean).join(' · ') || title;
+        dialog.querySelector('[data-view=previous]').disabled = index <= 0;
+        dialog.querySelector('[data-view=next]').disabled = index >= sequence.length-1;
+      }
+      async function persist(patch = {}) {
+        if (!onSave) return;
+        const change = {...patch};
+        const saved = item.view || {x:.5,y:.5,z:1};
+        if (['x','y','z'].some(key => saved[key] !== view[key])) change.view = view;
+        if (!Object.keys(change).length) return;
+        await onSave(item,change);
+        Object.assign(item,change);
+        titleForItem();
+      }
+      async function navigate(step) {
+        const next = index+step;
+        if (moving || next < 0 || next >= sequence.length) return;
+        moving = true;
+        try {
+          await persist();
+          const url = await urlFor(sequence[next]);
+          img.src = url;
+          await img.decode();
+          index = next;
+          item = sequence[index];
+          ratio = img.naturalWidth/img.naturalHeight;
+          img.dataset.imageAxis = ratio >= 1 ? 'wide' : 'tall';
+          view = item.view || {x:.5,y:.5,z:1};
+          paint();
+          titleForItem();
+          stage.focus();
+        } catch (error) { toast(error.message); }
+        finally { moving = false; }
+      }
+      function rename() { if (!moving) editAssetIdentity(dialog,item,persist); }
+      async function closePreview() {
+        if (moving) return;
+        moving = true;
+        try { await persist(); dialog.close(); }
+        catch (error) { toast(error.message); }
+        finally { moving = false; }
       }
       let drag = null;
       stage.onpointerdown = event => {
@@ -358,6 +431,7 @@ window.GDHomeAssets = (() => {
       stage.onlostpointercapture = () => { drag = null; };
       stage.onwheel = event => { event.preventDefault(); view = {...view,z:view.z*(event.deltaY < 0 ? 1.08 : 1/1.08)}; paint(); };
       stage.onkeydown = event => {
+        if (sequence && ['ArrowLeft','ArrowRight'].includes(event.key)) return;
         const step = {ArrowLeft:[-0.02,0],ArrowRight:[0.02,0],ArrowUp:[0,-0.02],ArrowDown:[0,0.02]}[event.key];
         if (!step) return;
         event.preventDefault();
@@ -365,8 +439,25 @@ window.GDHomeAssets = (() => {
         paint();
       };
       zoom.oninput = () => { view = {...view,z:Number(zoom.value)}; paint(); };
+      if (sequence) {
+        dialog.oncancel = event => { event.preventDefault(); closePreview(); };
+        dialog.onkeydown = event => {
+          if (event.key === 'F2') { event.preventDefault(); rename(); }
+          if (['ArrowLeft','ArrowRight'].includes(event.key) && event.target !== zoom) {
+            event.preventDefault();
+            navigate(event.key === 'ArrowLeft' ? -1 : 1);
+          }
+        };
+      }
       dialog.onclick = event => {
         const command = event.target.closest('[data-view]')?.dataset.view;
+        if (sequence) {
+          if (event.target === dialog || command === 'save') closePreview();
+          if (command === 'rename') rename();
+          if (command === 'previous' || command === 'next') navigate(command === 'previous' ? -1 : 1);
+          if (command === 'reset') { view = {x:.5,y:.5,z:1}; paint(); }
+          return;
+        }
         if (event.target === dialog || command === 'cancel') dialog.close();
         if (command === 'reset') { view = {x:0.5,y:0.5,z:1}; paint(); }
         if (command === 'save') {
@@ -376,6 +467,7 @@ window.GDHomeAssets = (() => {
       };
       dialog.onclose = () => { dialog.remove(); resolve(dialog.returnValue === 'save' ? (result || {x:0.5,y:0.5,z:1}) : null); };
       paint();
+      titleForItem();
       dialog.showModal();
       stage.focus();
     });
@@ -1464,7 +1556,7 @@ window.GDHomeAssets = (() => {
         if (warning) toast('Dùng mẫu mã vì AI không đọc được: ' + warning);
         for (const item of items) sources.add(item.source);
         status.textContent = items.length ? 'Nhận diện ' + items.length + ' mẫu. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mẫu có ảnh.';
-        list.innerHTML = items.map(item => '<article class="wood-catalogue-card">' +
+        list.innerHTML = items.map(item => '<article class="wood-catalogue-card" tabindex="0">' +
           '<canvas aria-label="Ảnh swatch"></canvas><small>' + (item.web ? 'Website' : 'Trang ' + item.page) + ' · ' + Math.round(item.confidence*100) + '%</small>' +
           '<label><input type="checkbox" data-wood-include' + (item.needsReview ? '> Cần kiểm tra' : ' checked> Lưu mã này') + '</label>' +
           '<label>Mã <input data-wood-code-input maxlength="80" value="' + esc(item.code) + '"></label>' +
@@ -1480,12 +1572,36 @@ window.GDHomeAssets = (() => {
             '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
           '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></article>').join('');
         const cards = [...list.children];
+        const syncIdentity = (item,patch) => {
+          Object.assign(item,patch);
+          const card = cards[items.indexOf(item)];
+          if ('code' in patch) card.querySelector('[data-wood-code-input]').value = patch.code;
+          if ('name' in patch) card.querySelector('[data-wood-name-input]').value = patch.name;
+        };
+        const readIdentity = item => {
+          const card = cards[items.indexOf(item)];
+          return Object.assign(item,{code:card.querySelector('[data-wood-code-input]').value,name:card.querySelector('[data-wood-name-input]').value});
+        };
         let lastSource, image;
         for (const [i,item] of items.entries()) {
           if (!dialog.isConnected) return;
           if (lastSource !== item.source) { image = await loadPageImage(item.source); lastSource = item.source; }
           const canvas = cards[i].querySelector('canvas');
           drawSwatch(canvas,image,item.crop);
+          cards[i].ondblclick = event => {
+            if (event.target.closest('input,button,label,.asset-identity-editor')) return;
+            editView(readIdentity(item),{sequence:items.filter((_,index) => !cards[index].hidden).map(readIdentity),onSave:syncIdentity,
+              urlFor:async entry => {
+                const preview = document.createElement('canvas');
+                drawSwatch(preview,await loadPageImage(entry.source),entry.crop,1200);
+                return preview.toDataURL('image/jpeg',.9);
+              }}).catch(error => toast(error.message));
+          };
+          cards[i].onkeydown = event => {
+            if (event.key !== 'F2') return;
+            event.preventDefault();
+            editAssetIdentity(cards[i],readIdentity(item),patch => syncIdentity(item,patch));
+          };
           cards[i].querySelector('[data-catalogue-merge]').onclick = () => {
             const code = cards[i].querySelector('[data-wood-code-input]').value.trim().toUpperCase();
             const duplicate = cards.find((card,index) => index !== i && card.querySelector('[data-wood-include]').checked &&
@@ -1823,6 +1939,23 @@ window.GDHomeAssets = (() => {
         try { await updateItem({id:select.closest('[data-asset-id]').dataset.assetId,display:select.value}); }
         catch (error) { toast(error.message); paint(); }
       });
+      if (!onPick) {
+        const pictured = items.filter(item => item.full || item.thumb);
+        body.querySelectorAll('[data-asset-open]').forEach(button => button.ondblclick = () => {
+          const item = pictured.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
+          if (item) editView(item,{sequence:pictured,onSave:(entry,patch) => updateItem({id:entry.id,...patch})}).catch(error => toast(error.message));
+        });
+        const handleSelectionKey = dialog.onkeydown;
+        dialog.onkeydown = event => {
+          if (event.key !== 'F2') return handleSelectionKey(event);
+          const card = event.target.closest('[data-asset-id]') || (selected.size === 1 ?
+            [...body.querySelectorAll('[data-asset-id]')].find(node => selected.has(node.dataset.assetId)) : null);
+          const item = items.find(entry => entry.id === card?.dataset.assetId);
+          if (!item) return;
+          event.preventDefault();
+          editAssetIdentity(card,item,patch => updateItem({id:item.id,...patch}));
+        };
+      }
       body.querySelectorAll('[data-asset-hide]').forEach(button => button.onclick = () => {
         const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
         updateItem({id:item.id,hidden:!item.hidden}).catch(error => toast(error.message));

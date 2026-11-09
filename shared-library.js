@@ -248,6 +248,15 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const item = data.items.find(entry => entry.id === body.id);
       if (!item) fail(404, 'Không tìm thấy ảnh.');
       if (typeof body.name === 'string') item.name = text(body.name, 160);
+      if (typeof body.code === 'string' && body.code.trim() !== (item.code || '')) {
+        const code = text(body.code,80);
+        if (!code && (item.kind === 'paint' || !item.full)) fail(400,'Nhập mã mẫu.');
+        if (code && data.items.some(entry => entry !== item && entry.code && woodItemKey(entry) === woodItemKey({...item,code}))) {
+          fail(409,'Mã này đã có trong thư viện.');
+        }
+        item.code = code;
+      }
+      if (Object.hasOwn(body,'view')) item.view = cleanView(body.view);
       if (cleanDisplay(body.display)) item.display = body.display;
       if (typeof body.square === 'boolean') {
         if (![body.full,body.thumb,body.originalFull,body.originalThumb].every(imageName)) fail(400,'Ảnh gốc hoặc ảnh vuông không hợp lệ.');

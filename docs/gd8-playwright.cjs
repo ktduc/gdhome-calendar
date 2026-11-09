@@ -2357,6 +2357,51 @@ cases['20.7'] = async page => {
   assert.ok(result.pad.startsWith('rgb('));
 };
 
+cases['20.8'] = async page => {
+  await openMaterials(page);
+  const items = await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:300,height:150});
+    const ctx = canvas.getContext('2d');
+    for (const [index,color] of ['#ad9966','#335577'].entries()) {
+      ctx.fillStyle = color;
+      ctx.fillRect(0,0,300,150);
+      const blob = await new Promise(resolve => canvas.toBlob(resolve));
+      await GDHomeAssets.uploadToLibrary('cat-4',[new File([blob],'Xem '+index+'.png',{type:'image/png'})]);
+    }
+    GDHomeAssets.openLibrary({categoryId:'cat-4'});
+    return (await GDHomeAssets.loadLibrary()).items.filter(item => item.categoryId === 'cat-4');
+  });
+  const cards = page.locator('.asset-library-dialog .asset-card');
+  await cards.first().locator('.asset-thumb').dblclick();
+  const preview = page.locator('.asset-view-dialog');
+  const stage = preview.locator('.asset-view-stage');
+  await stage.waitFor();
+  const box = await stage.boundingBox();
+  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+  await page.mouse.down();
+  await page.mouse.move(box.x+box.width/2+54,box.y+box.height/2);
+  await page.mouse.up();
+  await page.keyboard.press('ArrowRight');
+  await preview.getByRole('heading',{name:items[1].name}).waitFor();
+  let data = await page.request.get('/api/library').then(r => r.json());
+  assert.ok(data.items.find(item => item.id === items[0].id).view?.x < .48);
+  await page.keyboard.press('F2');
+  await preview.locator('[name=code]').fill('KT301');
+  await preview.locator('[name=name]').fill('Mẫu đã đổi');
+  await preview.locator('[name=name]').press('Enter');
+  await preview.getByRole('heading',{name:'KT301 · Mẫu đã đổi'}).waitFor();
+  await page.keyboard.press('Escape');
+  await preview.waitFor({state:'detached'});
+  await cards.first().locator('.asset-thumb').focus();
+  await page.keyboard.press('F2');
+  await cards.first().locator('[name=name]').fill('Huỷ thay đổi');
+  await page.keyboard.press('Escape');
+  assert.equal(await cards.first().locator('.asset-identity-editor').count(),0);
+  data = await page.request.get('/api/library').then(r => r.json());
+  assert.equal(data.items.find(item => item.id === items[0].id).name,items[0].name);
+  assert.equal(data.items.find(item => item.id === items[1].id).code,'KT301');
+};
+
 cases['19.10'] = async page => {
   const {PDFDocument,rgb} = require('pdf-lib');
   const pdf = await PDFDocument.create();

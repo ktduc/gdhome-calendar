@@ -51,6 +51,10 @@
 .asset-view-zoom{display:flex;align-items:center;gap:8px;justify-content:center;font-size:13px}
 .asset-view-zoom input{width:220px}
 .asset-view-dialog .toolbar{display:flex;gap:8px;align-items:center}.asset-view-dialog .toolbar span{flex:1}
+.asset-identity-editor{display:flex;flex-wrap:wrap;gap:6px;padding:8px;background:#fff;border:1px solid #cbd5e1;border-radius:6px}
+.asset-identity-editor input{max-width:100%;min-width:0}
+:is(.asset-card,.wood-catalogue-card):has(>.asset-identity-editor){position:relative;z-index:3}
+:is(.asset-card,.wood-catalogue-card)>.asset-identity-editor{position:absolute;top:100%;left:0;width:min(260px,70vw)}
 
 /* Vùng nhìn trong ô ảnh vuông (chỉ khi khung ảnh = Fill) */
 [data-image-fit=fill] :is(.image-open,.print-square) img[style*="--view"]{transform:translate(-50%,-50%) var(--view)}
