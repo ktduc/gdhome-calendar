@@ -16,7 +16,8 @@
     const source = sourceKey(item?.source), id = text(item?.id,60);
     if (!source || !/^[a-zA-Z0-9_-]+$/.test(id) || !['partial','done','error'].includes(item.status)) return null;
     const strings = (list,max,length) => [...new Set((Array.isArray(list) ? list : []).map(value => text(value,length)).filter(Boolean))].slice(0,max);
-    return {id,source,name:text(item.name,200),at:Number.isFinite(item.at) && item.at > 0 ? item.at : Date.now(),
+    return {id,source,type:['pdf','web','image'].includes(item.type) ? item.type : (source.startsWith('sha256:') ? 'pdf' : 'web'),
+      name:text(item.name,200),at:Number.isFinite(item.at) && item.at > 0 ? item.at : Date.now(),
       categoryId:text(item.categoryId,60),brand:text(item.brand,80),suppliers:strings(item.suppliers,30,80),
       count:Math.min(5000,Math.max(0,Math.floor(Number(item.count) || 0))),status:item.status,itemIds:strings(item.itemIds,5000,60)};
   }

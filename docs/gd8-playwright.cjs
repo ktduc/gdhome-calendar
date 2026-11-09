@@ -2713,6 +2713,68 @@ cases['20.10'] = async page => {
   assert.ok(saved.items.filter(item => /^X[1-3]$/.test(item.code || '')).every(item => !item.tags.includes('chua-duyet')));
 };
 
+cases['20.12'] = async page => {
+  await openMaterials(page);
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  const {PDFDocument} = require('pdf-lib');
+  const files = [];
+  for (const code of [8831,8832]) {
+    const pdf = await PDFDocument.create();
+    await drawAnCuongTile(pdf,pdf.addPage([150,287]),0,0,code);
+    files.push({name:'go-'+code+'.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  }
+  await page.route('**/api/catalogue/web',route => {
+    const url = route.request().postDataJSON().urls[0];
+    if (url.endsWith('/loi')) return route.fulfill({status:502,json:{message:'Nguồn kiểm thử bị lỗi'}});
+    const code = url.endsWith('/a') ? 'WEB-A' : 'WEB-B';
+    return route.fulfill({json:{items:[{code,name:code,image:url+'.png'}]}});
+  });
+  await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')}));
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'ancuong-wood'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Nhiều nguồn'}).click();
+  await modal.locator('[name=autoSave]').uncheck();
+  await modal.locator('[name=layout]').selectOption('ancuong');
+  await modal.locator('[name=collection]').fill('Catalogue thử');
+  await modal.locator('[name=pdf]').setInputFiles(files);
+  await modal.locator('[name=urls]').fill('https://example.com/a\nhttps://example.com/b\nhttps://example.com/loi');
+  const dropped = await page.evaluateHandle(encoded => {
+    const transfer = new DataTransfer();
+    transfer.items.add(new File([Uint8Array.from(atob(encoded),letter => letter.charCodeAt(0))],'Ảnh thư mục.png',{type:'image/png'}));
+    return transfer;
+  },imageFixture);
+  await modal.locator('[data-catalogue-drop]').dispatchEvent('drop',{dataTransfer:dropped});
+  const rows = modal.locator('[data-catalogue-source]');
+  assert.equal(await rows.count(),6);
+  const webB = rows.filter({hasText:'https://example.com/b'});
+  await webB.locator('summary').click();
+  await webB.locator('[data-source-setting=categoryId]').selectOption('cat-5');
+  await webB.locator('[data-source-setting=brand]').fill('Hãng riêng');
+  await webB.locator('[data-source-setting=suppliers]').fill('Kho riêng');
+  await page.evaluate(() => {
+    window.maxCatalogueWorkers = 0;
+    const queue = document.querySelector('[data-catalogue-queue]');
+    new MutationObserver(() => {
+      window.maxCatalogueWorkers = Math.max(window.maxCatalogueWorkers,queue.querySelectorAll('[data-source-state=running]').length);
+    }).observe(queue,{attributes:true,subtree:true});
+  });
+  await modal.getByRole('button',{name:'Xử lý hàng đợi'}).click();
+  await modal.locator('[data-save-wood]:enabled').waitFor();
+  assert.equal(await page.evaluate(() => window.maxCatalogueWorkers),2);
+  assert.equal(await modal.locator('[data-source-state=done]').count(),5);
+  assert.equal(await modal.locator('[data-source-state=error]').count(),1);
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),5);
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 5 mã/).waitFor();
+  const data = await page.request.get('/api/library').then(r => r.json());
+  const own = data.items.find(item => item.code === 'WEB-B');
+  assert.deepEqual([own.categoryId,own.brand,own.suppliers],['cat-5','Hãng riêng',['Kho riêng']]);
+  assert.equal(data.imports.filter(entry => entry.status === 'done').length,5);
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');
