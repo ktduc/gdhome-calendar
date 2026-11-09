@@ -1735,7 +1735,7 @@ cases['17.5'] = async page => {
   assert.equal(fallback.configured,false);
 };
 
-async function testCatalogue(page,useAi = false) {
+async function testCatalogue(page,useAi = false,withGuide = false) {
   const {PDFDocument,rgb,StandardFonts} = require('pdf-lib');
   const pdf = await PDFDocument.create();
   const font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -1762,6 +1762,12 @@ async function testCatalogue(page,useAi = false) {
       assert.equal(body.pages.length,2);
       assert.match(body.pages[0].image,/^data:image\/jpeg;base64,/);
       assert.ok(body.pages[0].text.some(label => /MS 3000/.test(label.text) && label.x > 0));
+      if (withGuide) {
+        assert.equal(body.guide.prompt,'Chỉ lấy ô vân hình chữ nhật.');
+        const [example] = body.guide.examples;
+        assert.match(example.image,/^data:image\/jpeg;base64,/);
+        assert.ok(example.crop.x > .2 && example.codeBox);
+      }
       return route.fulfill({json:{success:true,job:{id:'test-catalogue',status:'running'}}});
     });
     await page.route('**/api/project-hub/jobs/status?jobId=test-catalogue',route => route.fulfill({json:{job:{status:'done',result:{items:colors.map((_,id) => {
@@ -1782,6 +1788,31 @@ async function testCatalogue(page,useAi = false) {
     await modal.locator('[name=useAi]').check();
     await modal.locator('[name=suppliers]').fill('Kho A');
   }
+  if (withGuide) {
+    const example = await page.evaluate(() => {
+      const canvas = Object.assign(document.createElement('canvas'),{width:200,height:100});
+      canvas.getContext('2d').fillRect(0,0,200,100);
+      return canvas.toDataURL('image/png').split(',')[1];
+    });
+    await modal.locator('[name=guidePrompt]').fill('Chỉ lấy ô vân hình chữ nhật.');
+    await modal.locator('[name=guideImages]').setInputFiles({name:'mau.png',mimeType:'image/png',buffer:Buffer.from(example,'base64')});
+    for (const field of ['crop','codeBox']) {
+      await modal.locator('[data-guide-box=' + field + ']').click();
+      const crop = page.locator('.wood-crop-dialog');
+      const box = await crop.locator('.wood-crop-frame').boundingBox();
+      await page.mouse.move(box.x+box.width/2,box.y+box.height/2);
+      await page.mouse.down();
+      await page.mouse.move(box.x+box.width/2+10,box.y+box.height/2);
+      await page.mouse.up();
+      await crop.getByRole('button',{name:'Áp dụng khung cắt'}).click();
+    }
+    await modal.locator('[name=guideName]').fill('Vân ngang');
+    await modal.locator('[data-guide-save]').click();
+    await modal.locator('[name=guidePrompt]').fill('');
+    await modal.locator('[name=guidePreset]').selectOption('');
+    await modal.locator('[name=guidePreset]').selectOption('Vân ngang');
+    assert.equal(await modal.locator('[name=guidePrompt]').inputValue(),'Chỉ lấy ô vân hình chữ nhật.');
+  }
   await modal.getByRole('button',{name:'Đọc PDF'}).click();
   const save = modal.locator('[data-save-wood]');
   await page.waitForFunction(() => !document.querySelector('.wood-catalogue-controls [type=submit]')?.disabled,null,{timeout:25000});
@@ -1790,11 +1821,12 @@ async function testCatalogue(page,useAi = false) {
   assert.equal(await cards.count(),18);
   const pixels = await cards.evaluateAll(cards => cards.map(card => {
     const canvas = card.querySelector('canvas'), ctx = canvas.getContext('2d');
-    return {code:card.querySelector('[data-wood-code-input]').value,
+    return {code:card.querySelector('[data-wood-code-input]').value,ratio:canvas.width/canvas.height,
       rgb:[...ctx.getImageData(Math.floor(canvas.width/2),Math.floor(canvas.height/2),1,1).data.slice(0,3)]};
   }));
   for (const [i,entry] of pixels.entries()) {
     assert.equal(entry.code,'MS ' + (3000+i));
+    if (withGuide) assert.ok(Math.abs(entry.ratio-2) < .02);
     assert.ok(entry.rgb.every((value,ch) => Math.abs(value-colors[i][ch]) < 12),JSON.stringify(entry));
   }
   await cards.first().locator('[data-edit-wood-crop]').click();
@@ -1836,6 +1868,7 @@ async function testCatalogue(page,useAi = false) {
 }
 cases['17.6'] = page => testCatalogue(page);
 cases['19.5'] = page => testCatalogue(page,true);
+cases['20.6'] = page => testCatalogue(page,true,true);
 
 cases['18.2'] = async page => {
   await openMaterials(page);

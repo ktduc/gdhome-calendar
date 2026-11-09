@@ -1060,6 +1060,115 @@ window.GDHomeAssets = (() => {
 
   const kitchenSubgroups = ['Giá bát đĩa nâng hạ','Giá bát đĩa','Giá xoong nồi','Giá dao thớt gia vị','Thùng gạo','Thùng rác',
     'Tủ đồ khô','Góc liên hoàn','Ray / bản lề','Tay nâng'];
+  function catalogueGuideRatio(guide) {
+    const ratios = (guide?.examples || []).filter(example => example.crop).map(({aspect,crop}) => aspect*crop.w/crop.h).sort((a,b) => a-b);
+    return ratios.length ? (ratios[Math.floor((ratios.length-1)/2)]+ratios[Math.floor(ratios.length/2)])/2 : 0;
+  }
+  function fitCatalogueCrop(box,ratio) {
+    if (!ratio) return box;
+    const w = Math.min(1,ratio,Math.sqrt(box.w*box.h*ratio)), h = w/ratio;
+    return {x:bounded(box.x+(box.w-w)/2,0,1-w),y:bounded(box.y+(box.h-h)/2,0,1-h),w,h};
+  }
+
+  function wireCatalogueGuide(form,status) {
+    const region = form.querySelector('[data-catalogue-guide]');
+    const previews = region.querySelector('[data-guide-previews]');
+    const input = form.elements.guideImages;
+    const template = form.elements.guidePreset;
+    const key = 'gdhome-catalogue-layouts-v1';
+    let templates, examples = [];
+    try { templates = JSON.parse(localStorage.getItem(key) || '[]'); } catch { templates = []; }
+    if (!Array.isArray(templates)) templates = [];
+    const matching = () => templates.filter(item => item.category === form.elements.category.value && item.brand === fold(form.elements.brand.value));
+    const updateTemplates = () => {
+      template.innerHTML = '<option value="">Chọn mẫu đã lưu</option>' + matching().map(item => '<option>' + esc(item.name) + '</option>').join('');
+    };
+    function render() {
+      previews.replaceChildren();
+      examples.forEach((example,index) => {
+        const card = document.createElement('div');
+        const image = new Image();
+        image.src = example.image;
+        image.alt = 'Ảnh minh hoạ ' + (index+1);
+        card.append(image);
+        for (const [field,label] of [['crop','Vùng cần cắt'],['codeBox','Vùng chứa mã']]) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.textContent = label;
+          button.dataset.guideBox = field;
+          button.setAttribute('aria-pressed',!!example[field]);
+          button.onclick = async () => {
+            const copy = new Image();
+            copy.src = example.image;
+            await copy.decode();
+            editWoodCrop(copy,example[field] || {x:.2,y:.2,w:.6,h:.6},box => { example[field] = box; render(); },label);
+          };
+          card.append(button);
+        }
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.textContent = 'Bỏ ảnh';
+        remove.onclick = () => { examples.splice(index,1); render(); };
+        card.append(remove);
+        previews.append(card);
+      });
+    }
+    async function add(files) {
+      try {
+        const images = files.filter(file => file.type.startsWith('image/'));
+        if (images.length+examples.length > 3) throw new Error('Chọn tối đa 3 ảnh minh hoạ.');
+        for (const file of images) {
+          if (file.size > 12*1024*1024) throw new Error('Ảnh minh hoạ tối đa 12 MB trước khi nén.');
+          const bitmap = await createImageBitmap(file);
+          const canvas = document.createElement('canvas');
+          const scale = Math.min(1,640/Math.max(bitmap.width,bitmap.height));
+          canvas.width = Math.max(1,Math.round(bitmap.width*scale));
+          canvas.height = Math.max(1,Math.round(bitmap.height*scale));
+          const context = canvas.getContext('2d');
+          context.fillStyle = '#fff';
+          context.fillRect(0,0,canvas.width,canvas.height);
+          context.drawImage(bitmap,0,0,canvas.width,canvas.height);
+          bitmap.close();
+          if (examples.length >= 3) break;
+          examples.push({image:canvas.toDataURL('image/jpeg',.68),aspect:canvas.width/canvas.height});
+        }
+      } catch (error) { status.textContent = error.message; }
+      render();
+    }
+    input.onchange = () => { add([...input.files]); input.value = ''; };
+    enableDrop(region,add);
+    region.onpaste = event => {
+      const files = [...event.clipboardData.files].filter(file => file.type.startsWith('image/'));
+      if (files.length) { event.preventDefault(); add(files); }
+    };
+    const read = () => ({prompt:form.elements.guidePrompt.value.trim(),examples:structuredClone(examples)});
+    form.elements.category.addEventListener('change',updateTemplates);
+    form.elements.brand.addEventListener('input',updateTemplates);
+    template.onchange = () => {
+      const saved = matching().find(item => item.name === template.value);
+      if (!saved) return;
+      form.elements.layout.value = saved.layout;
+      form.elements.guidePrompt.value = saved.prompt;
+      examples = structuredClone(saved.examples);
+      render();
+    };
+    region.querySelector('[data-guide-save]').onclick = () => {
+      const name = form.elements.guideName.value.trim();
+      if (!name) { status.textContent = 'Nhập tên mẫu bố cục.'; return; }
+      const category = form.elements.category.value, brand = fold(form.elements.brand.value);
+      const next = [{name,category,brand,layout:form.elements.layout.value,...read()},
+        ...templates.filter(item => item.name !== name || item.category !== category || item.brand !== brand)].slice(0,12);
+      try {
+        localStorage.setItem(key,JSON.stringify(next));
+        templates = next;
+        updateTemplates();
+        template.value = name;
+        status.textContent = 'Đã lưu mẫu bố cục ' + name + '.';
+      } catch { status.textContent = 'Không đủ bộ nhớ trình duyệt để lưu mẫu bố cục.'; }
+    };
+    updateTemplates();
+    return read;
+  }
   function kitchenCatalogueRows(labels) {
     const specPattern = /R\s*\d{2,4}\s*[x×*]\s*S\s*\d{2,4}\s*[x×*]\s*C\s*\d{2,4}/i;
     const codes = /\b[A-Z]{1,5}\d{2,}(?:[.-][A-Z0-9]+)*[A-Z0-9]*\b/i;
@@ -1084,19 +1193,21 @@ window.GDHomeAssets = (() => {
     return rows;
   }
 
-  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning,layout} = {}) {
+  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning,layout,guide} = {}) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
     if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
     const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
     let results = [];
-    const sources = new Map(), batch = [];
+    const sources = new Map(), pageAspects = new Map(), batch = [];
+    const guideRatio = catalogueGuideRatio(guide);
+    const guideCrop = (crop,page) => fitCatalogueCrop(crop,guideRatio/pageAspects.get(page));
     async function flush() {
       if (!batch.length) return;
       const pages = batch.splice(0);
       try {
-        const ai = await GDHomeAI.startJob({kind:'catalogue',pages},{signal});
+        const ai = await GDHomeAI.startJob({kind:'catalogue',pages,...(guide?.prompt || guide?.examples?.length ? {guide} : {})},{signal});
         for (const item of ai.items || []) {
           const source = sources.get(item.page);
           if (!source) continue;
@@ -1112,7 +1223,7 @@ window.GDHomeAssets = (() => {
           const code = item.code;
           const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
-          const record = {...item,source,crop:item.bbox,confidence:match ? Math.max(.85,item.confidence) : item.confidence};
+          const record = {...item,source,crop:guideCrop(item.bbox,item.page),confidence:match ? Math.max(.85,item.confidence) : item.confidence};
           if (['phao','kitchen'].includes(layout)) {
             if (match) {
               const detected = results[index];
@@ -1173,6 +1284,7 @@ window.GDHomeAssets = (() => {
         // Save page as a compressed image and keep only the swatch canvases live.
         const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
         sources.set(number,source);
+        pageAspects.set(number,canvas.width/canvas.height);
         if (useAi && (layout !== 'ancuong' || !labels.length)) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
         for (const swatch of swatches) results.push({...swatch,page:number,source});
@@ -1183,7 +1295,7 @@ window.GDHomeAssets = (() => {
               /quy cach|don gia|ma dat hang|kich thuoc tu/.test(fold(label.text)))
               .reduce((top,label) => Math.min(top,label.y-label.height*1.2),first.y-first.height*2);
             const crop = {x:0,y:0,w:1,h:bounded(tableTop/canvas.height,.05,1)};
-            for (const {y,height,...row} of matches) results.push({...row,page:number,source,crop,confidence:.9});
+            for (const {y,height,...row} of matches) results.push({...row,page:number,source,crop:guideCrop(crop,number),confidence:.9});
           }
           canvas.width = canvas.height = 0;
           page.cleanup();
@@ -1212,11 +1324,11 @@ window.GDHomeAssets = (() => {
             const size = combined?.match(/\d{2,4}\s*[×x*]\s*\d{2,4}/i)?.[0].replace(/\s+/g,'').replace(/[×*]/,'x') ||
               (split.length >= 2 ? split.slice(0,2).join('x') : '');
             results.push({code:label.code,name:label.name,size,page:number,source,confidence:.85,
-              crop:{x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height}});
+              crop:guideCrop({x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height},number)});
             continue;
           }
           results.push({code:label.code,name:label.name,page:number,source,confidence:.6,
-            crop:{x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height}});
+            crop:guideCrop({x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height},number)});
         }
         canvas.width = canvas.height = 0;
         page.cleanup();
@@ -1270,6 +1382,11 @@ window.GDHomeAssets = (() => {
       '<label>Catalogue <input name="collection" list="wood-catalogues" maxlength="120" placeholder="VD: Melamine/MFC"></label>' +
       '<datalist id="wood-catalogues"><option>Melamine/MFC</option><option>Laminate</option><option>Acrylic</option><option>Veneer</option></datalist>' +
       '<label>Bề mặt <input name="finish" maxlength="120" placeholder="VD: Mờ"></label>' +
+      '<fieldset data-catalogue-guide><legend>Hướng dẫn đọc PDF</legend>' +
+      '<label>Mô tả cách lọc <textarea name="guidePrompt" maxlength="2000" rows="2"></textarea></label>' +
+      '<label>Ảnh minh hoạ · dán, kéo thả hoặc chọn tối đa 3 ảnh <input type="file" name="guideImages" accept="image/*" multiple></label>' +
+      '<div data-guide-previews></div><label>Mẫu bố cục <select name="guidePreset"></select></label>' +
+      '<label>Tên mẫu <input name="guideName" maxlength="80"></label><button type="button" data-guide-save>Lưu mẫu bố cục</button></fieldset>' +
       '<details><summary>Mẫu mã (regex)</summary><label>Mỗi dòng một mẫu<textarea name="patterns" rows="4" maxlength="1000">' +
       esc(woodPatterns.join('\n')) + '</textarea></label></details>' +
       '<button type="submit">Đọc PDF</button><button type="button" data-catalogue-cancel>Huỷ xử lý</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></form>' +
@@ -1281,6 +1398,7 @@ window.GDHomeAssets = (() => {
     form.elements.category.onchange = () => { form.elements.display.value = categoryDisplay(library.categories.find(c => c.id === form.elements.category.value)); };
     form.elements.layout.onchange = () => { if (['phao','kitchen'].includes(form.elements.layout.value)) form.elements.display.value = 'pad'; };
     const status = body.querySelector('[role=status]');
+    const readGuide = wireCatalogueGuide(form,status);
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
     let items = [], mode = 'pdf';
@@ -1290,6 +1408,7 @@ window.GDHomeAssets = (() => {
       for (const button of body.querySelectorAll('[data-catalogue-tab]')) button.setAttribute('aria-selected',String(tab === button));
       form.querySelector('[data-catalogue-web]').hidden = mode !== 'web';
       form.querySelector('[data-catalogue-pdf]').hidden = mode !== 'pdf';
+      form.querySelector('[data-catalogue-guide]').hidden = mode !== 'pdf';
       form.elements.pdf.required = mode === 'pdf';
       form.elements.urls.required = mode === 'web';
       read.textContent = mode === 'web' ? 'Đọc website' : 'Đọc PDF';
@@ -1340,7 +1459,7 @@ window.GDHomeAssets = (() => {
         } else {
           items = await scanWoodCatalogue(form.elements.pdf.files[0],form.elements.patterns.value,form.elements.direction.value,
             (page,total) => { status.textContent = 'Đang đọc trang ' + page + '/' + total + '…'; },
-            {useAi:form.elements.useAi.checked && !!window.GDHomeAI,signal:controller.signal,layout:form.elements.layout.value,onWarning:message => { warning = message; }});
+            {useAi:form.elements.useAi.checked && !!window.GDHomeAI,signal:controller.signal,layout:form.elements.layout.value,guide:readGuide(),onWarning:message => { warning = message; }});
         }
         if (warning) toast('Dùng mẫu mã vì AI không đọc được: ' + warning);
         for (const item of items) sources.add(item.source);
@@ -1455,8 +1574,8 @@ window.GDHomeAssets = (() => {
     };
   }
 
-  function editWoodCrop(image,current,onSave) {
-    const {dialog,body} = modal('wood-crop-dialog','Chỉnh khung cắt swatch');
+  function editWoodCrop(image,current,onSave,title = 'Chỉnh khung cắt swatch') {
+    const {dialog,body} = modal('wood-crop-dialog',title);
     const crop = {...current};
     const stage = document.createElement('div');
     stage.className = 'wood-crop-stage';
