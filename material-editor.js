@@ -907,13 +907,20 @@ function openImageCellMenu(anchor, row, group, slot) {
     });
   } else {
     let pickLabel = 'Chọn từ thư viện';
-    if (isPaintGroup(group?.name)) pickLabel = 'Chọn màu sơn (Dulux, Jotun)';
-    else if (isWoodGroup(group?.name)) pickLabel = 'Chọn mã gỗ';
+    if (isWoodGroup(group?.name)) pickLabel = 'Chọn mã gỗ';
+    else if (isPaintGroup(group?.name)) pickLabel = 'Chọn màu sơn (Dulux, Jotun)';
     addItem('🖼', pickLabel, () => {
       const cell = anchor.closest('.image-cell');
       focusMaterialImageCell(cell);
       openAssetPicker(cell, row, group, slot);
     });
+    if (isWoodGroup(group?.name) && isPaintGroup(group?.name)) {
+      addItem('🎨','Chọn màu sơn (Dulux, Jotun)',() => {
+        const cell = anchor.closest('.image-cell');
+        focusMaterialImageCell(cell);
+        GDHomeAssets.pickPaint(cell,{groupName:group.name,onPick:item => libraryPicked(row,slot,item)});
+      });
+    }
   }
 
   addItem('⬆', 'Tải ảnh lên…', async () => {
@@ -985,21 +992,19 @@ function isPaintGroup(name) {
   return /SƠN/i.test(name || '');
 }
 function isWoodGroup(name) {
-  return /MÃ GỖ|MA GO/i.test(name || '');
+  return /\b(?:go|tu\s+bep)\b/i.test(String(name || '').normalize('NFD').replace(/\p{M}/gu,''));
 }
 
 function openAssetPicker(cell,row,group,slot) {
   if (!window.GDHomeAssets || !row) return;
   if (slot === 'render') {
     GDHomeAssets.pickRender(cell,{projectId:sheet.projectId,groupName:group?.name,onPick:item => addPickedImage(row,'render',item)});
+  } else if (isWoodGroup(group?.name)) {
+    GDHomeAssets.pickWood(cell,{groupName:group?.name,onPick:item => libraryPicked(row,slot,item)});
   } else if (isPaintGroup(group?.name)) {
     GDHomeAssets.pickPaint(cell,{groupName:group?.name,onPick:paint => {
       if (paint.kind === 'paint') paintPicked(row,slot,paint);
       else libraryPicked(row,slot,paint);
-    }});
-  } else if (isWoodGroup(group?.name)) {
-    GDHomeAssets.pickWood(cell,{groupName:group?.name,onPick:wood => {
-      libraryPicked(row,slot,wood);
     }});
   } else {
     GDHomeAssets.pickLibrary(cell,{groupName:group?.name,onPick:item => libraryPicked(row,slot,item)});

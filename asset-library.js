@@ -1159,15 +1159,16 @@ window.GDHomeAssets = (() => {
     const library = await loadLibrary();
     const categories = new Set(library.categories.filter(woodCategory).map(category => category.id));
     return {woods:library.items.filter(item => !item.hidden && item.code &&
-      (item.kind === 'wood' || (item.kind !== 'paint' && categories.has(item.categoryId)))).map(withWoodBrand),source:'Dữ liệu dùng chung'};
+      (item.kind === 'wood' || (item.kind !== 'paint' && (categories.has(item.categoryId) ||
+        facetValues(item,'brand').some(brand => fold(brand) === 'an cuong'))))).map(withWoodBrand),source:'Dữ liệu dùng chung'};
   }
 
-  const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường'});
+  const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường',kind:'wood'});
   function pickWood(anchor, { groupName, onPick, title = 'Mã gỗ' } = {}) {
     return popover(anchor, async (panel, close, place, signal) => {
       const facets = {};
       const sidebarState = {groups:{}};
-      let brand = '', collection = 'all', query = '', revision = 0;
+      let brand = '', collection = 'all', query = '', revision = 0, tab = 'codes';
       async function paint() {
         const current = ++revision;
         let woodData;
@@ -1185,24 +1186,33 @@ window.GDHomeAssets = (() => {
         const candidates = scoped.filter(w => !query || fold(w.code).includes(fold(query)) || fold(w.name).includes(fold(query)) || fold(w.collection).includes(fold(query)));
         const woods = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
         const matchingPhotos = sortLibrary(photos.filter(item => matchFacets(item,facets)),sidebarState.sort);
+        const photoSamples = sortLibrary([...new Map([...matchingPhotos,...woods.filter(item => item.full && item.thumb)]
+          .map(item => [item.id,item])).values()],sidebarState.sort);
+        const codeCards = woods.length ? '<div class="asset-wood-grid">' + woods.map((w,index) =>
+          '<div class="asset-specialized-card"><button type="button" data-wood-index="' + index + '" class="asset-wood-card" data-wood-code="' +
+          esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' + (w.thumb ? '<img data-lib-asset="' + esc(w.thumb) + '" alt="">' : '') +
+          '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span><span class="wood-badge">' +
+          esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>' + assetItemActions(w) + '</div>').join('') + '</div>' :
+          (facetEmpty(matchingPhotos,facets) || '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>');
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
           '<select aria-label="Hãng"><option value="">Tất cả hãng</option>' +
           brands.map(name => '<option value="' + esc(name) + '"' + (name === brand ? ' selected' : '') + '>' + esc(name) + '</option>').join('') + '</select>' +
           '<select aria-label="Dòng sản phẩm"><option value="all">Tất cả dòng sản phẩm</option>' +
           collections.map(col => '<option value="' + esc(col) + '"' + (col === collection ? ' selected' : '') + '>' + esc(col) + '</option>').join('') + '</select>' +
-          '<input type="search" placeholder="Tìm theo mã, tên hoặc catalogue" value="' + esc(query) + '"></div>' +
-          '<div class="asset-body">' + facetMarkup([...candidates,...photos],facets) +
-          (woods.length ? '<div class="asset-wood-grid">' + woods.map((w,index) => '<div class="asset-specialized-card"><button type="button" data-wood-index="' + index + '" class="asset-wood-card" data-wood-code="' + esc(w.code) + '" title="' + esc(w.code + ' – ' + w.name) + '">' +
-            (w.thumb ? '<img data-lib-asset="' + esc(w.thumb) + '" alt="">' : '') + '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span>' +
-            '<span class="wood-badge">' + esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>' + assetItemActions(w) + '</div>').join('') + '</div>' :
-            (facetEmpty(matchingPhotos,facets) || '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>')) + localAssetPhotos(matchingPhotos) + onlineSlot +
+          '<input type="search" placeholder="Tìm theo mã, tên hoặc catalogue" value="' + esc(query) + '">' +
+          '<div role="tablist" class="asset-wood-tabs" aria-label="Nguồn mẫu gỗ">' + [['codes','Mã gỗ'],['photos','Ảnh mẫu']].map(([key,label]) =>
+            '<button type="button" role="tab" data-wood-tab="' + key + '" aria-selected="' + (key === tab) + '">' + label + '</button>').join('') + '</div></div>' +
+          '<div class="asset-body">' + facetMarkup([...candidates,...photos],facets) + (tab === 'photos' ?
+            (localAssetPhotos(photoSamples) || facetEmpty(photoSamples,facets) || '<p class="asset-empty">Chưa có ảnh mẫu phù hợp.</p>') :
+            codeCards + localAssetPhotos(matchingPhotos)) + onlineSlot +
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(woodData.source || '') + ' (' + woods.length + ' mã)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
         arrangeFilterSidebar(panel,sidebarState);
         wireLibraryActions(panel,sidebarState,paint);
         panel.querySelector('[data-close]').onclick = close;
+        panel.querySelectorAll('[data-wood-tab]').forEach(button => button.onclick = () => { tab = button.dataset.woodTab; paint(); });
         panel.querySelector('[aria-label=Hãng]').onchange = event => { brand = event.target.value; collection = 'all'; clearFacets(facets); paint(); };
         panel.querySelector('[aria-label="Dòng sản phẩm"]').onchange = event => { collection = event.target.value; clearFacets(facets); paint(); };
         wireFacets(panel,facets,paint);
@@ -1214,7 +1224,7 @@ window.GDHomeAssets = (() => {
             if (w) { updateItem({id:w.id,used:true}).catch(() => {}); onPick?.({...w,kind:'wood'}); }
           };
         });
-        wireLocalAssetPhotos(panel,photos,entry => { close(); onPick?.(entry); });
+        wireLocalAssetPhotos(panel,tab === 'photos' ? photoSamples : photos,entry => { close(); onPick?.(entry); });
         if (woods.length + photos.length < 4 && query.trim()) {
           renderGoogleFallback(panel.querySelector('.asset-google-fallback-slot'), query, {
             onPickImage: entry => {

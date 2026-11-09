@@ -38,6 +38,8 @@
 .asset-facet-choice span{overflow-wrap:anywhere}
 .asset-sort-controls{display:flex;align-items:center;gap:4px;flex:none}
 .asset-sort-controls select{max-width:134px}
+.asset-wood-tabs{display:flex;gap:4px;flex:none}
+.asset-wood-tabs [aria-selected=true]{background:#dbeafe}
 .asset-specialized-card{position:relative;min-width:0}
 .asset-specialized-card>:is(.asset-wood-card,.asset-paint-card){width:100%;height:100%}
 [data-asset-favorite],.asset-usage{position:absolute;z-index:2;border-radius:4px;background:#fff;color:#475569;line-height:1}

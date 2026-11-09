@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const { mkdtemp,rm,writeFile } = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 const cases = {};
 
@@ -1465,7 +1466,7 @@ cases['16.6'] = async page => {
   await cell.click();
   const popover = page.locator('.asset-popover');
   await popover.waitFor();
-  assert.ok(await popover.getByText('Mã gỗ',{exact:true}).isVisible(), 'Mở bảng chọn mã gỗ An Cường');
+  assert.ok(await popover.locator('header').getByText('Mã gỗ',{exact:true}).isVisible(), 'Mở bảng chọn mã gỗ An Cường');
 
   const searchInput = popover.locator('input[type="search"]');
   await searchInput.fill('7241');
@@ -2815,6 +2816,117 @@ cases['20.13'] = async page => {
   assert.deepEqual([mobile.x,mobile.y,mobile.width,mobile.height],[0,0,850,720]);
 };
 
+async function googleCatalogueFixture({fixture,schedule,dir}) {
+  const email = 'gd20-fixture@example.test', client = 'gd20-fixture.apps.googleusercontent.com';
+  const childCode = `
+    const nativeFetch = globalThis.fetch;
+    globalThis.fetch = (input,options) => {
+      const url = typeof input === 'string' && new URL(input);
+      if (url?.origin !== 'https://oauth2.googleapis.com' || url.pathname !== '/tokeninfo') return nativeFetch(input,options);
+      if (url.searchParams.get('id_token') !== 'gd20-test-credential') return Promise.resolve(new Response('',{status:401}));
+      return Promise.resolve(Response.json({aud:process.env.GOOGLE_CLIENT_ID,iss:'accounts.google.com',
+        email_verified:true,email:process.env.GD20_TEST_EMAIL,name:'Tài khoản Google thử',exp:Math.floor(Date.now()/1000)+3600}));
+    };
+    process.once('message',async ({fixture,schedule}) => {
+      const {server,initStore,getStore} = require('./server');
+      const {MaterialStore} = require('./materials');
+      await initStore();
+      const email = process.env.GD20_TEST_EMAIL;
+      await getStore().put(email,schedule);
+      await new MaterialStore(getStore(),email).update(undefined,data => { data.sheets = [fixture]; });
+      server.listen(0,'127.0.0.1',() => process.send({port:server.address().port}));
+    });
+  `;
+  const child = spawn(process.execPath,['-e',childCode],{cwd:path.resolve(__dirname,'..'),windowsHide:true,
+    env:{...process.env,DATA_DIR:path.join(dir,'google-fixture'),GIST_TOKEN:'',GITHUB_TOKEN:'',GOOGLE_CLIENT_ID:client,
+      ALLOWED_EMAILS:email,SESSION_SECRET:'gd20-test-session-secret',GD20_TEST_EMAIL:email},stdio:['ignore','ignore','pipe','ipc']});
+  let errors = '';
+  child.stderr.on('data',chunk => { errors = (errors+chunk).slice(-4000); });
+  try {
+    const port = await new Promise((resolve,reject) => {
+      const timer = setTimeout(() => reject(new Error('Google fixture chưa khởi động: ' + errors)),10000);
+      child.once('message',data => { clearTimeout(timer); resolve(data.port); });
+      child.once('error',error => { clearTimeout(timer); reject(error); });
+      child.once('exit',code => { clearTimeout(timer); reject(new Error('Google fixture thoát ' + code + ': ' + errors)); });
+      child.send({fixture,schedule});
+    });
+    return {child,baseURL:'http://127.0.0.1:'+port};
+  } catch (error) { child.kill(); throw error; }
+}
+
+async function checkAnCuongGroups(page) {
+  const {PDFDocument} = require('pdf-lib');
+  for (const [index,code] of [8891,8892].entries()) {
+    const pdf = await PDFDocument.create();
+    await drawAnCuongTile(pdf,pdf.addPage([150,287]),0,0,code);
+    const modal = await openAnCuongReview(page,pdf);
+    if (index) await modal.locator('[name=category]').selectOption('cat-5');
+    await modal.locator('[data-save-wood]').click();
+    await modal.getByText(/Đã lưu 1 mã/).waitFor();
+    await modal.locator('.close-dialog').click();
+    await page.locator('.asset-library-dialog .close-dialog').click();
+  }
+  const picture = await page.evaluate(async () => {
+    const data = await GDHomeAssets.loadLibrary();
+    const item = data.items.find(item => item.code === 'MS 8892');
+    const {added} = await GDHomeAssets.addItems('cat-5',[{name:'Gỗ ngoài hạng mục',kind:'wood',brand:'Hãng thử',
+      code:'WOOD-8893',full:item.full,thumb:item.thumb}]);
+    modify(() => ['GỖ CÔNG NGHIỆP','TỦ BẾP','SƠN GỖ','Cửa gỗ','Sàn gỗ'].forEach((name,i) => { sheet.groups[i].name = name; }));
+    return [data.items.find(item => item.code === 'MS 8891'),item,added[0]];
+  });
+  assert.equal(picture[1].categoryId,'cat-5');
+  assert.equal(picture[1].kind,'image','Nhận ra gỗ theo hãng dù bản ghi ở hạng mục đá');
+  for (let i=0; i<5; i++) {
+    const item = picture[i%picture.length], row = page.locator('[data-row=g'+(i+1)+'-r1]');
+    const cell = row.locator('.image-cell[data-slot="0"]');
+    await cell.click();
+    const picker = page.locator('.asset-popover');
+    await picker.locator('input[type=search]').fill(item.code);
+    const code = picker.locator('[data-wood-code="'+item.code+'"]');
+    const waitForImage = async locator => {
+      const image = locator.locator('img');
+      await image.waitFor();
+      await page.waitForFunction(node => node.naturalWidth > 0,await image.elementHandle());
+    };
+    await waitForImage(code);
+    await picker.getByRole('tab',{name:'Ảnh mẫu'}).click();
+    const photo = picker.locator('[data-asset-id="'+item.id+'"] [data-asset-pick]');
+    await waitForImage(photo);
+    await photo.click();
+    assert.equal(await row.locator('[data-field=code]').first().inputValue(),item.code);
+    assert.equal(await cell.locator('.image-open img').getAttribute('data-asset'),item.thumb);
+  }
+}
+
+cases['20.14'] = async (page,context) => {
+  await checkAnCuongGroups(page);
+  const {child,baseURL} = await googleCatalogueFixture(context);
+  let signedIn;
+  try {
+    signedIn = await context.browser.newPage({baseURL,viewport:{width:1050,height:720}});
+    signedIn.setDefaultTimeout(6000);
+    assert.equal((await signedIn.request.get('/api/library')).status(),401);
+    const login = await signedIn.request.post('/api/auth/google',{data:{credential:'gd20-test-credential'}});
+    assert.equal(login.status(),200);
+    const {token,user} = await login.json();
+    assert.equal(user.email,'gd20-fixture@example.test');
+    await signedIn.addInitScript(({token,user}) => localStorage.setItem('gdhome_session',JSON.stringify({token,user})),{token,user});
+    await signedIn.route('https://accounts.google.com/**',route => route.abort());
+    const errors = [];
+    signedIn.on('pageerror',error => errors.push(error.message));
+    await checkAnCuongGroups(signedIn);
+    assert.equal(await signedIn.evaluate(() => materialGuest),false);
+    assert.deepEqual(errors,[]);
+  } finally {
+    await signedIn?.close();
+    if (child.exitCode === null && child.signalCode === null) {
+      const exited = new Promise(resolve => child.once('exit',resolve));
+      child.kill();
+      await exited;
+    }
+  }
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');
@@ -3022,7 +3134,7 @@ async function main() {
       const pageErrors = [];
       page.on('pageerror',error => pageErrors.push(error.message));
       try {
-        await cases[key](page);
+        await cases[key](page,{browser,fixture,schedule:caseSchedule,dir});
         assert.deepEqual(pageErrors,[],'Lỗi JavaScript trên trang');
         console.log(key+' đạt');
       }
