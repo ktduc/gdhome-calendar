@@ -142,3 +142,6 @@
 .asset-card:has(.asset-card-check) .asset-card-badge{top:26px}
 .asset-drop-mark{box-shadow:inset 0 3px #2563eb}
 .asset-bulk-controls{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
+
+.wood-catalogue-controls [hidden]{display:none}
+.wood-catalogue-dialog [role=tab][aria-selected=true]{background:#dbeafe}

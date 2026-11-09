@@ -2121,6 +2121,36 @@ cases['19.7'] = async page => {
   assert.equal(saved.address,'Cột lạ');
 };
 
+cases['19.6'] = async page => {
+  await page.route('**/api/catalogue/web',route => {
+    assert.deepEqual(route.request().postDataJSON().urls,['https://example.com/gach']);
+    return route.fulfill({json:{items:[{name:'Gạch mẫu',code:'G-19',size:'60x60',brand:'Hãng mẫu',supplier:'example.com',
+      image:'https://example.com/gach.png'}]}});
+  });
+  await page.route('**/api/catalogue/image',route => {
+    assert.equal(route.request().postDataJSON().url,'https://example.com/gach.png');
+    return route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')});
+  });
+  await openMaterials(page);
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=urls]').fill('https://example.com/gach');
+  await modal.getByRole('button',{name:'Đọc website'}).click();
+  const card = modal.locator('.wood-catalogue-card');
+  await card.waitFor();
+  assert.equal(await card.locator('[data-catalogue-supplier]').inputValue(),'example.com');
+  await card.locator('[data-catalogue-supplier]').fill('Kho gạch');
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText('Đã lưu 1 mã · bỏ qua 0 mã trùng.').waitFor();
+  const library = await page.request.get('/api/library').then(r => r.json());
+  const item = library.items.find(item => item.code === 'G-19');
+  assert.equal(item.categoryId,'cat-6');
+  assert.equal(item.size,'600x600');
+  assert.deepEqual(item.suppliers,['Kho gạch']);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

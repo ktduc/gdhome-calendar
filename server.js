@@ -583,7 +583,7 @@ async function handleApi(req, res, urlPath) {
   }
 
   // Notion + AI (chỉ cho người đã đăng nhập)
-  if (urlPath.startsWith('/api/notion/') || urlPath.startsWith('/api/ai/') || urlPath.startsWith('/api/integrations/') || urlPath.startsWith('/api/google/')) {
+  if (urlPath.startsWith('/api/notion/') || urlPath.startsWith('/api/ai/') || urlPath.startsWith('/api/integrations/') || urlPath.startsWith('/api/google/') || urlPath.startsWith('/api/catalogue/')) {
     if (await integrations.handleIntegrations(req, res, urlPath, { sendJson, readJsonBody, dataKey, store, dataDir:DATA_DIR })) return;
   }
 

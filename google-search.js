@@ -1,6 +1,29 @@
 'use strict';
 const net = require('net');
 const dns = require('dns').promises;
+const http = require('node:http');
+const https = require('node:https');
+const {Readable} = require('node:stream');
+
+function publicFetch(url,{signal,headers}) {
+  return new Promise((resolve,reject) => {
+    const transport = url.startsWith('https:') ? https : http;
+    const request = transport.get(url,{signal,headers,lookup(host,options,callback) {
+      dns.lookup(host,{all:true}).then(addresses => {
+        if (!addresses.length || addresses.some(entry => isPrivateIp(entry.address))) {
+          callback(httpError(400,'Địa chỉ IP nội bộ bị chặn (SSRF protection).'));
+          return;
+        }
+        if (options.all) callback(null,addresses);
+        else callback(null,addresses[0].address,addresses[0].family);
+      },callback);
+    }},response => {
+      resolve({status:response.statusCode,ok:response.statusCode >= 200 && response.statusCode < 300,
+        headers:new Headers(response.headers),body:Readable.toWeb(response)});
+    });
+    request.on('error',reject);
+  });
+}
 
 function httpError(status, message) {
   return Object.assign(new Error(message), { status });
@@ -45,6 +68,7 @@ function checkSsrfUrl(targetUrl) {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw httpError(400, 'Chỉ hỗ trợ giao thức HTTP và HTTPS.');
   }
+  if (parsed.username || parsed.password) throw httpError(400,'URL không được chứa thông tin đăng nhập.');
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, '');
   if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) {
     throw httpError(400, 'Địa chỉ máy chủ nội bộ bị chặn (SSRF protection).');
@@ -75,8 +99,10 @@ async function validateHostIp(hostname, dnsResolver = dns.lookup) {
   }
 }
 
-async function proxyDownloadImage(targetUrl, { fetchFn = fetch, dnsResolver = dns.lookup } = {}) {
-  let parsed = checkSsrfUrl(targetUrl);
+async function downloadPublicResource(targetUrl, {
+  fetchFn = publicFetch,dnsResolver = dns.lookup,validateUrl = checkSsrfUrl,type = 'image',beforeRequest
+} = {}) {
+  let parsed = validateUrl(targetUrl);
   await validateHostIp(parsed.hostname, dnsResolver);
 
   const controller = new AbortController();
@@ -85,29 +111,39 @@ async function proxyDownloadImage(targetUrl, { fetchFn = fetch, dnsResolver = dn
     let res;
     // Tự đi theo chuyển hướng và kiểm tra lại từng địa chỉ, để không bị dẫn vào mạng nội bộ.
     for (let hop = 0; ; hop++) {
+      await beforeRequest?.(parsed);
       res = await fetchFn(parsed.href, {
         signal: controller.signal,
         redirect: 'manual',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) GDHomeTools/1.0',
-          'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8'
+          'Accept': type === 'image' ? 'image/webp,image/apng,image/*,*/*;q=0.8' : type === 'html' ? 'text/html,application/xhtml+xml' : 'text/plain'
         }
       });
       if (![301, 302, 303, 307, 308].includes(res.status)) break;
       if (hop >= 3) throw httpError(400, 'Ảnh chuyển hướng quá nhiều lần.');
       const location = res.headers.get('location');
       if (!location) throw httpError(400, 'Chuyển hướng không hợp lệ.');
-      parsed = checkSsrfUrl(new URL(location, parsed).href);
+      await res.body?.cancel?.().catch(() => {});
+      parsed = validateUrl(new URL(location, parsed).href);
       await validateHostIp(parsed.hostname, dnsResolver);
     }
-    if (!res.ok) throw httpError(res.status, 'Không tải được ảnh từ trang nguồn (' + res.status + ').');
+    if (!res.ok) {
+      await res.body?.cancel?.().catch(() => {});
+      throw httpError(res.status, 'Không tải được nội dung từ trang nguồn (' + res.status + ').');
+    }
     const contentType = (res.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
-    if (!contentType.startsWith('image/')) {
-      throw httpError(400, 'Tệp tải về không phải là ảnh hợp lệ (' + (contentType || 'unknown') + ').');
+    const valid = type === 'image' ? contentType.startsWith('image/') : type === 'html' ?
+      ['text/html','application/xhtml+xml'].includes(contentType) : ['text/plain',''].includes(contentType);
+    if (!valid) {
+      await res.body?.cancel?.().catch(() => {});
+      const reason = type === 'image' ? 'Tệp tải về không phải là ảnh hợp lệ' : 'Định dạng tải về không phù hợp';
+      throw httpError(400,reason + ' (' + (contentType || 'không rõ') + ').');
     }
     const len = Number(res.headers.get('content-length') || 0);
     if (len > 8 * 1024 * 1024) {
-      throw httpError(413, 'File ảnh vượt quá giới hạn 8 MB.');
+      await res.body?.cancel?.().catch(() => {});
+      throw httpError(413, 'Tệp vượt quá giới hạn 8 MB.');
     }
     // Đọc dần và dừng ngay khi vượt 8 MB (kể cả khi trang nguồn không báo dung lượng).
     const chunks = [];
@@ -130,10 +166,15 @@ async function proxyDownloadImage(targetUrl, { fetchFn = fetch, dnsResolver = dn
       if (size > 8 * 1024 * 1024) throw httpError(413, 'File ảnh vượt quá giới hạn 8 MB.');
     }
     const buf = Buffer.concat(chunks);
-    return { buffer: buf, contentType };
+    return {buffer:buf,contentType,url:parsed.href};
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function proxyDownloadImage(url,options) {
+  const {buffer,contentType} = await downloadPublicResource(url,{...options,type:'image'});
+  return {buffer,contentType};
 }
 
 async function googleImageSearch(key, cx, query, { fetchFn = fetch } = {}) {
@@ -184,5 +225,6 @@ module.exports = {
   checkSsrfUrl,
   validateHostIp,
   proxyDownloadImage,
+  downloadPublicResource,
   googleImageSearch
 };

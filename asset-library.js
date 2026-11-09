@@ -925,16 +925,18 @@ window.GDHomeAssets = (() => {
     const library = await loadLibrary();
     if (!dialog.isConnected) return;
     dialog.querySelector('h2').textContent = 'Nhập catalogue';
-    body.innerHTML = '<form class="wood-catalogue-controls">' +
+    body.innerHTML = '<div role="tablist" aria-label="Nguồn catalogue"><button type="button" role="tab" data-catalogue-tab="pdf" aria-selected="true">Từ PDF</button>' +
+      '<button type="button" role="tab" data-catalogue-tab="web" aria-selected="false">Từ link website</button></div><form class="wood-catalogue-controls">' +
       '<label>Hạng mục <select name="category">' + library.categories.map(category => '<option value="' + esc(category.id) + '"' +
         (category.id === categoryId ? ' selected' : '') + '>' + esc(category.name) + '</option>').join('') + '</select></label>' +
       '<label>Đơn vị cung cấp <input name="suppliers" list="catalogue-suppliers" placeholder="Tên cách nhau bằng dấu phẩy"></label>' +
       '<datalist id="catalogue-suppliers">' + (library.suppliers || []).map(item => '<option>' + esc(item.name) + '</option>').join('') + '</datalist>' +
       '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
       '<label><input type="checkbox" name="useAi"' + (categoryId !== 'ancuong-wood' && window.GDHomeAI ? ' checked' : '') + '> Dùng AI để đọc PDF</label>' +
-      '<label>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
+      '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
+      '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea></label>' +
       '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
-      '<label>Hãng <input name="brand" list="wood-brands" required value="An Cường" maxlength="80"></label>' +
+      '<label>Hãng <input name="brand" list="wood-brands" value="' + (categoryId === 'ancuong-wood' ? 'An Cường' : '') + '" maxlength="80"></label>' +
       '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
       '<label>Catalogue <input name="collection" list="wood-catalogues" maxlength="120" placeholder="VD: Melamine/MFC"></label>' +
       '<datalist id="wood-catalogues"><option>Melamine/MFC</option><option>Laminate</option><option>Acrylic</option><option>Veneer</option></datalist>' +
@@ -946,7 +948,19 @@ window.GDHomeAssets = (() => {
     const form = body.querySelector('form'), status = body.querySelector('[role=status]');
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
-    let items = [];
+    let items = [], mode = 'pdf';
+    for (const tab of body.querySelectorAll('[data-catalogue-tab]')) tab.onclick = () => {
+      if (busy) return;
+      mode = tab.dataset.catalogueTab;
+      for (const button of body.querySelectorAll('[data-catalogue-tab]')) button.setAttribute('aria-selected',String(tab === button));
+      form.querySelector('[data-catalogue-web]').hidden = mode !== 'web';
+      form.querySelector('[data-catalogue-pdf]').hidden = mode !== 'pdf';
+      form.elements.pdf.required = mode === 'pdf';
+      form.elements.urls.required = mode === 'web';
+      read.textContent = mode === 'web' ? 'Đọc website' : 'Đọc PDF';
+      save.disabled = true;
+      list.replaceChildren();
+    };
     body.querySelector('[data-catalogue-cancel]').onclick = () => controller?.abort();
     const loadPageImage = async source => {
       const image = new Image();
@@ -964,17 +978,44 @@ window.GDHomeAssets = (() => {
       sources.clear();
       try {
         let warning = '';
-        items = await scanWoodCatalogue(form.elements.pdf.files[0],form.elements.patterns.value,form.elements.direction.value,
-          (page,total) => { status.textContent = 'Đang đọc trang ' + page + '/' + total + '…'; },
-          {useAi:form.elements.useAi.checked && !!window.GDHomeAI,signal:controller.signal,onWarning:message => { warning = message; }});
+        if (mode === 'web') {
+          const urls = form.elements.urls.value.split(/\r?\n/).map(value => value.trim()).filter(Boolean);
+          status.textContent = 'Đang đọc website…';
+          const result = await api('/api/catalogue/web',{method:'POST',signal:controller.signal,body:JSON.stringify({urls,useAi:form.elements.useAi.checked})});
+          items = [];
+          const failures = [...(result.warnings || [])];
+          for (const [index,product] of (result.items || []).slice(0,60).entries()) {
+            controller.signal.throwIfAborted();
+            if (index) await new Promise(resolve => setTimeout(resolve,350));
+            controller.signal.throwIfAborted();
+            status.textContent = 'Đang tải ảnh ' + (index+1) + '/' + result.items.length + '…';
+            try {
+              const response = await fetch('/api/catalogue/image',{method:'POST',signal:controller.signal,
+                headers:{...hooks.headers(),'Content-Type':'application/json'},body:JSON.stringify({url:product.image})});
+              if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || 'Không tải được ảnh.');
+              const source = URL.createObjectURL(await response.blob());
+              sources.add(source);
+              items.push({...product,source,crop:{x:0,y:0,w:1,h:1},confidence:.7,web:true});
+            } catch (error) {
+              controller.signal.throwIfAborted();
+              failures.push(error.message);
+            }
+          }
+          if (failures.length) toast(failures.join(' · '));
+        } else {
+          items = await scanWoodCatalogue(form.elements.pdf.files[0],form.elements.patterns.value,form.elements.direction.value,
+            (page,total) => { status.textContent = 'Đang đọc trang ' + page + '/' + total + '…'; },
+            {useAi:form.elements.useAi.checked && !!window.GDHomeAI,signal:controller.signal,onWarning:message => { warning = message; }});
+        }
         if (warning) toast('Dùng mẫu mã vì AI không đọc được: ' + warning);
         for (const item of items) sources.add(item.source);
-        status.textContent = items.length ? 'Nhận diện ' + items.length + ' mã. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mã. Thử đổi mẫu nhận diện.';
+        status.textContent = items.length ? 'Nhận diện ' + items.length + ' mẫu. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mẫu có ảnh.';
         list.innerHTML = items.map(item => '<article class="wood-catalogue-card">' +
-          '<canvas aria-label="Ảnh swatch"></canvas><small>Trang ' + item.page + ' · ' + Math.round(item.confidence*100) + '%</small>' +
+          '<canvas aria-label="Ảnh swatch"></canvas><small>' + (item.web ? 'Website' : 'Trang ' + item.page) + ' · ' + Math.round(item.confidence*100) + '%</small>' +
           '<label><input type="checkbox" data-wood-include checked> Lưu mã này</label>' +
           '<label>Mã <input data-wood-code-input maxlength="80" value="' + esc(item.code) + '"></label>' +
           '<label>Tên <input data-wood-name-input maxlength="160" value="' + esc(item.name) + '"></label>' +
+          (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.brand) + '"></label>' : '') +
           ['size','finish','collection'].map(key => '<label>' + ({size:'Kích thước',finish:'Bề mặt',collection:'Catalogue'})[key] +
             '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
           '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></article>').join('');
@@ -1014,10 +1055,10 @@ window.GDHomeAssets = (() => {
       const suppliers = listValues(form.elements.suppliers.value), tags = listValues(form.elements.tags.value);
       const brand = form.elements.brand.value.trim();
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
-      if (!brand || !collection) { status.textContent = 'Nhập hãng và tên catalogue.'; return; }
+      if (mode === 'pdf' && (!brand || !collection)) { status.textContent = 'Nhập hãng và tên catalogue.'; return; }
       const selected = [...list.children].flatMap(card => {
         const code = card.querySelector('[data-wood-code-input]').value.trim();
-        return card.querySelector('[data-wood-include]').checked && code ?
+        return card.querySelector('[data-wood-include]').checked && (code || mode === 'web') ?
           [{card,code,name:card.querySelector('[data-wood-name-input]').value.trim()}] : [];
       });
       if (!selected.length) { status.textContent = 'Chọn ít nhất một thẻ có mã.'; return; }
@@ -1035,13 +1076,15 @@ window.GDHomeAssets = (() => {
         };
         for (const {card,code,name} of selected) {
           if (!dialog.open) break;
-          const key = catalogueKey({brand,code});
+          const item = items[[...list.children].indexOf(card)];
+          const itemBrand = card.querySelector('[data-catalogue-brand]')?.value.trim() || brand;
+          const itemSuppliers = [...new Set([...suppliers,...listValues(card.querySelector('[data-catalogue-supplier]')?.value || '')])];
+          const key = code ? catalogueKey({brand:itemBrand,code}) : item.source;
           const previous = existing.get(key);
-          if (previous && !suppliers.some(value => !previous.suppliers?.includes(value)) && !tags.some(value => !previous.tags?.includes(value))) {
+          if (previous && !itemSuppliers.some(value => !previous.suppliers?.includes(value)) && !tags.some(value => !previous.tags?.includes(value))) {
             skipped++; continue;
           }
           status.textContent = 'Đang lưu ' + code + '…';
-          const item = items[[...list.children].indexOf(card)];
           const crop = item.crop;
           const image = previous || await (async () => {
             const {full,thumb} = await GDHomeImages.compress(await fetch(item.source).then(response => response.blob()),
@@ -1051,7 +1094,7 @@ window.GDHomeAssets = (() => {
           })();
           const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
-          const record = {full:image.full,thumb:image.thumb,code,name,brand,collection,finish,suppliers,tags,
+          const record = {full:image.full,thumb:image.thumb,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
             kind:categoryId === 'ancuong-wood' ? 'wood' : 'image',...fields};
           existing.set(key,record);
           batch.push(record);
