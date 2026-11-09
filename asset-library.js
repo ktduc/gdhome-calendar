@@ -511,7 +511,9 @@ window.GDHomeAssets = (() => {
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
       (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '"' + displayAttribute(item.display) + ' alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
       (item.size || item.brand ? '<span class="asset-card-badge">' + esc([item.size?.replace('x','×'),item.brand].filter(Boolean).join(' · ')) + '</span>' : '') +
-      '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish,item.spec,item.cabinetWidth && 'Tủ '+item.cabinetWidth,item.subgroup].filter(Boolean).join(' · '))) + '</figcaption>' +
+      (selected ? '<figcaption title="' + esc([item.code,item.name,item.collection,item.finish,item.spec].filter(Boolean).join(' · ')) + '"><strong>' +
+        esc(item.code || item.name) + '</strong><span>' + esc(item.code ? item.name : item.collection) + '</span></figcaption>' :
+        '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish,item.spec,item.cabinetWidth && 'Tủ '+item.cabinetWidth,item.subgroup].filter(Boolean).join(' · '))) + '</figcaption>') +
       (removable && item.full ? '<details class="asset-card-menu"><summary aria-label="Tuỳ chọn ảnh">⋯</summary><label>Kiểu hiển thị' + displaySelect(item.display || 'fill','data-asset-display') + '</label></details>' : '') +
       (removable && item.builtin ? '<button type="button" data-asset-hide>' + (item.hidden ? 'Hiện' : 'Ẩn') + '</button>' : '') +
       (removable ? '<button type="button" class="asset-remove" data-asset-remove aria-label="Xoá ảnh">×</button>' : '') + '</figure>').join('') + '</div>';
@@ -1904,7 +1906,8 @@ window.GDHomeAssets = (() => {
     }
     for (const [i,item] of items.entries()) {
       groupBy(codes,duplicateCode(item.code),i);
-      groupBy(hashes,(item.originalFull || item.full)?.split('.')[0],i);
+      groupBy(hashes,item.full?.split('.')[0],i);
+      groupBy(hashes,item.originalFull?.split('.')[0],i);
     }
     const entries = [...codes].sort(([a],[b]) => a.length-b.length);
     for (const [i,[code,index]] of entries.entries()) {

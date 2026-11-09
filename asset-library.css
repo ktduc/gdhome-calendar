@@ -138,6 +138,8 @@
 [data-catalogue-details]:not([hidden]){display:block;position:sticky;top:52px;padding:8px;border:1px solid #d8d2c8;border-radius:6px}
 [data-catalogue-detail-fields]{display:grid;gap:5px}
 .asset-grid-managed figcaption{grid-row:2/4;margin:0}
+.asset-grid-managed figcaption>*{display:block;overflow:hidden;text-overflow:ellipsis;line-height:16px}
+.asset-grid-managed figcaption span{color:#64748b}
 .asset-grid-managed .asset-card-menu{position:absolute;top:2px;right:20px;background:#fff;z-index:2;padding:0 3px}
 .asset-grid-managed .asset-card-menu[open]{z-index:3}
 .asset-grid-managed [data-asset-hide]{position:absolute;bottom:2px;right:2px;min-height:0;padding:1px 3px;font-size:10px}

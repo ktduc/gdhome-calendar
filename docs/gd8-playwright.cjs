@@ -2510,6 +2510,8 @@ cases['20.7'] = async page => {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = '#115588';
     ctx.fillRect(0,0,2000,1000);
+    ctx.fillStyle = '#cc4422';
+    ctx.fillRect(250,200,1500,600);
     const file = new File([await new Promise(resolve => canvas.toBlob(resolve))],'test-pad.png',{type:'image/png'});
     const [item] = await GDHomeAssets.uploadToLibrary('cat-4',[file],() => {},'pad');
     const dimensions = await Promise.all([item.full,item.thumb].map(async name => {
@@ -2518,17 +2520,27 @@ cases['20.7'] = async page => {
     }));
     const print = document.createElement('div');
     print.dataset.imageFit = 'fill';
+    print.style.width = '160px';
     print.innerHTML = printImages([item],'/api/materials/assets/',true);
     document.body.append(print);
     const img = print.querySelector('img');
     img.src = await GDHomeAssets.assetUrl(item.full);
     await decodeMaterialThumbnail(img);
-    return {dimensions,display:img.dataset.display,fit:getComputedStyle(img).objectFit,pad:img.parentElement.style.getPropertyValue('--pad-color')};
+    const fit = getComputedStyle(img).objectFit;
+    const pad = img.parentElement.style.getPropertyValue('--pad-color');
+    const sample = (canvas,y) => [...canvas.getContext('2d').getImageData(Math.floor(canvas.width/2),Math.floor(canvas.height*y),1,1).data];
+    const padCanvas = await captureStatsImage(print);
+    img.dataset.display = 'fit';
+    const fitCanvas = await captureStatsImage(print);
+    return {dimensions,display:item.display,fit,pad,padPixel:sample(padCanvas,.18),fitPixel:sample(fitCanvas,.18),center:sample(fitCanvas,.5)};
   });
   assert.deepEqual(result.dimensions,[[1600,800],[480,240]]);
   assert.equal(result.display,'pad');
   assert.equal(result.fit,'contain');
   assert.ok(result.pad.startsWith('rgb('));
+  assert.ok(result.padPixel[2] > 105 && result.padPixel[0] < 40,'PNG lấy màu nền mép ảnh khi dùng pad');
+  assert.deepEqual(result.fitPixel,[255,255,255,255],'PNG giữ viền trắng khi dùng fit');
+  assert.ok(result.center[0] > 170 && result.center[2] < 55,'PNG có nội dung ảnh');
 };
 
 cases['20.8'] = async page => {
