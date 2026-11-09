@@ -813,6 +813,82 @@ window.GDHomeAssets = (() => {
     return uploaded;
   }
 
+  function folderTags(path) {
+    const title = value => value.toLocaleLowerCase('vi').replace(/(^|\s)\p{L}/gu,letter => letter.toLocaleUpperCase('vi'));
+    return [...new Set(path.split('/').filter(Boolean).flatMap(folder => folder.split(/\s+-\s+/)).map(title))];
+  }
+  async function droppedCatalogueFiles(entries) {
+    const files = [];
+    async function walk(entry,path = '') {
+      if (entry.isFile) {
+        const file = await new Promise((resolve,reject) => entry.file(resolve,reject));
+        files.push({file,path});
+      } else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        for (;;) {
+          const children = await new Promise((resolve,reject) => reader.readEntries(resolve,reject));
+          if (!children.length) break;
+          for (const child of children) await walk(child,path + entry.name + '/');
+        }
+      }
+      if (files.length > 2000) throw new Error('Thư mục vượt 2.000 tệp.');
+    }
+    for (const entry of entries) await walk(entry);
+    return files;
+  }
+  function reviewFolders(categoryId,files) {
+    const groups = new Map();
+    let images = 0;
+    for (const {file,path} of files) {
+      if (!isPdf(file) && !file.type.startsWith('image/')) continue;
+      if (!isPdf(file) && ++images > 500) throw new Error('Mỗi lần nhập tối đa 500 ảnh.');
+      if (!groups.has(path)) groups.set(path,[]);
+      groups.get(path).push(file);
+    }
+    if (!groups.size) throw new Error('Không tìm thấy ảnh hoặc PDF.');
+    const {dialog,body} = modal('asset-folder-dialog','Duyệt thư mục nhập');
+    const controller = new AbortController();
+    body.innerHTML = '<table><thead><tr><th>Thư mục</th><th>Ảnh / PDF</th><th>Tag</th></tr></thead><tbody>' +
+      [...groups].map(([path,files]) => '<tr><td>' + esc(path || 'Tệp rời') + '</td><td>' +
+        files.filter(file => !isPdf(file)).length + ' ảnh / ' + files.filter(isPdf).length +
+        ' PDF</td><td><input aria-label="Tag thư mục" value="' + esc(folderTags(path).join(', ')) + '"></td></tr>').join('') +
+      '</tbody></table><p role="status"></p><button data-folder-save>Lưu ảnh và mở PDF</button> <button data-folder-cancel>Huỷ</button>';
+    dialog.addEventListener('close',() => controller.abort(),{once:true});
+    body.querySelector('[data-folder-cancel]').onclick = () => controller.abort();
+    body.querySelector('[data-folder-save]').onclick = async event => {
+      event.currentTarget.disabled = true;
+      const status = body.querySelector('[role=status]');
+      let done = 0;
+      const pdfs = [], seen = new Set();
+      try {
+        const data = await loadLibrary();
+        data.items.filter(item => item.categoryId === categoryId).forEach(item => seen.add(item.full));
+        for (const [index,files] of [...groups.values()].entries()) {
+          const tags = body.querySelectorAll('tbody input')[index].value.split(',').map(tag => tag.trim()).filter(Boolean);
+          for (const file of files) {
+            controller.signal.throwIfAborted();
+            if (isPdf(file)) { pdfs.push({file,tags}); continue; }
+            const image = await uploadImage(file);
+            controller.signal.throwIfAborted();
+            if (!seen.has(image.full)) {
+              seen.add(image.full);
+              await addItems(categoryId,[{...image,name:file.name.replace(/\.[^.]+$/,''),tags}]);
+            }
+            status.textContent = 'Đã xử lý ' + (++done) + '/' + images + ' ảnh';
+          }
+        }
+        if (pdfs.length) {
+          dialog.close();
+          const next = () => {
+            const pdf = pdfs.shift();
+            if (pdf) openWoodCatalogue(categoryId,null,{...pdf,onClose:next});
+          };
+          next();
+        } else status.textContent = 'Đã xử lý ' + done + '/' + images + ' ảnh. Hoàn tất.';
+      } catch (error) { status.textContent = controller.signal.aborted ? 'Đã huỷ. Các ảnh đã lưu vẫn giữ trong thư viện.' : error.message; }
+    };
+  }
+
   function modal(className,title) {
     const dialog = document.createElement('dialog');
     dialog.className = 'shell-dialog asset-dialog ' + className;
@@ -926,11 +1002,11 @@ window.GDHomeAssets = (() => {
     canvas.height = Math.max(1,Math.round(h*scale));
     canvas.getContext('2d').drawImage(image,image.naturalWidth*crop.x,image.naturalHeight*crop.y,w,h,0,0,canvas.width,canvas.height);
   }
-  async function openWoodCatalogue(categoryId,onSaved) {
+  async function openWoodCatalogue(categoryId,onSaved,preset = {}) {
     const {dialog,body} = modal('wood-catalogue-dialog','Nhập catalogue PDF mã gỗ');
     const sources = new Set();
     let busy = false, controller;
-    const cleanup = () => { for (const source of sources) URL.revokeObjectURL(source); dialog.remove(); };
+    const cleanup = () => { for (const source of sources) URL.revokeObjectURL(source); dialog.remove(); preset.onClose?.(); };
     dialog.onclose = () => {
       if (!busy) return cleanup();
       GDHomeShell.aiNotice('asset-catalogue-job',{state:'running',body:'Đang xử lý catalogue',label:'Mở lại',onAction:() => dialog.showModal()});
@@ -960,7 +1036,10 @@ window.GDHomeAssets = (() => {
       esc(woodPatterns.join('\n')) + '</textarea></label></details>' +
       '<button type="submit">Đọc PDF</button><button type="button" data-catalogue-cancel>Huỷ xử lý</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></form>' +
       '<p role="status"></p><div class="wood-catalogue-results"></div>';
-    const form = body.querySelector('form'), status = body.querySelector('[role=status]');
+    const form = body.querySelector('form');
+    if (preset.file) { const transfer = new DataTransfer(); transfer.items.add(preset.file); form.elements.pdf.files = transfer.files; }
+    if (preset.tags) form.elements.tags.value = preset.tags.join(', ');
+    const status = body.querySelector('[role=status]');
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
     let items = [], mode = 'pdf';
@@ -1209,6 +1288,7 @@ window.GDHomeAssets = (() => {
           (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
+          '<label>Chọn thư mục <input type="file" webkitdirectory multiple data-folder-input></label>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' + facetMarkup(candidates,facets) +
           '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + bulkControls() + grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'}) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
@@ -1343,7 +1423,20 @@ window.GDHomeAssets = (() => {
         drop.onclick = async () => { const files = await filePicker('image/*'); if (files.length) upload(files); };
         drop.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); drop.click(); } };
         enableDrop(drop,upload);
+        drop.addEventListener('drop',event => {
+          const entries = [...event.dataTransfer.items].map(item => item.webkitGetAsEntry?.()).filter(Boolean);
+          if (!entries.some(entry => entry.isDirectory)) return;
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          droppedCatalogueFiles(entries).then(files => reviewFolders(current,files)).catch(error => toast(error.message));
+        },true);
       }
+      const folder = body.querySelector('[data-folder-input]');
+      if (folder) folder.onchange = () => {
+        try { reviewFolders(current,[...folder.files].map(file => ({file,path:file.webkitRelativePath.split('/').slice(0,-1).join('/')}))); }
+        catch (error) { toast(error.message); }
+        folder.value = '';
+      };
       dialog.onpaste = event => {
         const files = [...(event.clipboardData?.items || [])].filter(item => item.kind === 'file' && item.type.startsWith('image/')).map(item => item.getAsFile()).filter(Boolean);
         if (!files.length || !current || event.target.closest('input')) return;

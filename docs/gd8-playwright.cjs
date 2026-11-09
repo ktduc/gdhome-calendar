@@ -2156,6 +2156,23 @@ cases['19.6'] = async page => {
   assert.deepEqual(item.suppliers,['Kho gạch']);
 };
 
+cases['19.11'] = async page => {
+  await openMaterials(page);
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-folder-input]').evaluate((input,base64) => {
+    const file = new File([Uint8Array.from(atob(base64),c => c.charCodeAt(0))],'Mẫu.png',{type:'image/png'});
+    Object.defineProperty(file,'webkitRelativePath',{value:'SÀN/LOẠI 1 - AMBON FLOOR/Mẫu.png'});
+    Object.defineProperty(input,'files',{value:[file]});
+    input.dispatchEvent(new Event('change'));
+  },imageFixture);
+  const review = page.locator('.asset-folder-dialog');
+  assert.equal(await review.getByLabel('Tag thư mục').inputValue(),'Sàn, Loại 1, Ambon Floor');
+  await review.locator('[data-folder-save]').click();
+  await review.getByText(/Hoàn tất/).waitFor();
+  const data = await page.request.get('/api/library').then(r => r.json());
+  assert.deepEqual(data.items.find(item => item.name === 'Mẫu').tags,['Sàn','Loại 1','Ambon Floor']);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });
