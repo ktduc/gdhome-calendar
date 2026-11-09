@@ -2334,6 +2334,33 @@ cases['20.5'] = async page => {
   await preview.waitFor({state:'detached'});
 };
 
+cases['20.2'] = async page => {
+  const pdf = await require('pdf-lib').PDFDocument.create();
+  const sheet = pdf.addPage([300,287]);
+  await drawAnCuongTile(pdf,sheet,0,0,8761);
+  await drawAnCuongTile(pdf,sheet,150,0,8762);
+  const modal = await openAnCuongReview(page,pdf);
+  await modal.locator('[name=category]').selectOption('cat-1');
+  await page.evaluate(() => {
+    window.libraryChanges = 0;
+    document.addEventListener('gdhome:library-changed',() => window.libraryChanges++);
+  });
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 2 mã/).waitFor();
+  assert.ok(await page.evaluate(() => window.libraryChanges > 0));
+  await modal.locator('.close-dialog').click();
+  await page.locator('.asset-library-dialog .close-dialog').click();
+  await page.evaluate(() => modify(() => { sheet.groups[0].name = 'MÃ GỖ'; }));
+  await page.locator('[data-row=g1-r1] .image-cell[data-slot="0"]').click();
+  const picker = page.locator('.asset-popover');
+  await picker.locator('input[type=search]').fill('876');
+  for (const code of ['MS 8761','MS 8762']) {
+    const sample = picker.locator('[data-wood-code="' + code + '"] img');
+    await sample.waitFor();
+    await page.waitForFunction(node => !!node.naturalWidth,await sample.elementHandle());
+  }
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');

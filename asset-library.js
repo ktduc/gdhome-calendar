@@ -172,6 +172,8 @@ window.GDHomeAssets = (() => {
   // ---------------------------------------------------------------- Dữ liệu dùng chung
   const fold = value => String(value || '').normalize('NFD').replace(/\p{M}/gu,'').replace(/đ/gi,'d').toLowerCase()
     .replace(/\(.*?\)/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
+  const woodCategory = category => ['ancuong-wood','cat-1','cat-11'].includes(category?.id) ||
+    /\b(?:ma go|mau (?:anh )?go|san go|van go|wood)\b/.test(fold(category?.name));
   function guestLibrary() {
     try {
       const stored = JSON.parse(localStorage.getItem(guestLibraryKey) || 'null');
@@ -221,12 +223,13 @@ window.GDHomeAssets = (() => {
       const data = guestLibrary();
       const result = guestChange(data);
       library = saveGuest(data);
-      document.dispatchEvent(new Event('gdhome:library-changed'));
+      notifyLibrary();
       return {...library,...result};
     }
     const data = await api('/api/library/' + path,{method:'POST',body:JSON.stringify(body)});
     if (!library || data._version >= library._version) library = data;
-    document.dispatchEvent(new Event('gdhome:library-changed'));
+    libraryError = null;
+    notifyLibrary();
     return data;
   }
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
@@ -840,18 +843,25 @@ window.GDHomeAssets = (() => {
 
   async function loadWoodData() {
     const library = await loadLibrary();
-    return {woods:library.items.filter(item => item.kind === 'wood' && !item.hidden).map(withWoodBrand),source:'Dữ liệu dùng chung'};
+    const categories = new Set(library.categories.filter(woodCategory).map(category => category.id));
+    return {woods:library.items.filter(item => !item.hidden && item.code &&
+      (item.kind === 'wood' || (item.kind !== 'paint' && categories.has(item.categoryId)))).map(withWoodBrand),source:'Dữ liệu dùng chung'};
   }
 
   const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường'});
   function pickWood(anchor, { groupName, onPick, title = 'Mã gỗ' } = {}) {
     return popover(anchor, async (panel, close, place, signal) => {
       const facets = {};
-      let brand = '', collection = 'all', query = '', woodData = null;
+      let brand = '', collection = 'all', query = '', revision = 0;
       async function paint() {
-        try { woodData = await loadWoodData(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
+        const current = ++revision;
+        let woodData;
+        try { woodData = await loadWoodData(); } catch (error) {
+          if (current === revision) panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>';
+          return;
+        }
         const photos = await findLocalAssetPhotos(query,'ancuong-wood',groupName);
-        if (!panel.isConnected) return;
+        if (!panel.isConnected || current !== revision) return;
         const brands = [...new Set(woodData.woods.map(wood => wood.brand))];
         const byBrand = woodData.woods.filter(wood => !brand || brand === wood.brand);
         const collections = [...new Set(byBrand.map(wood => wood.collection).filter(Boolean))];
@@ -1799,7 +1809,7 @@ window.GDHomeAssets = (() => {
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
           if (form.elements.layout.value === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
           const record = {full:image.full,thumb:image.thumb,display:form.elements.display.value,view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
-            kind:categoryId === 'ancuong-wood' && code ? 'wood' : 'image',...fields};
+            kind:code && woodCategory(library.categories.find(category => category.id === categoryId)) ? 'wood' : 'image',...fields};
           existing.set(key,record);
           batch.push(record);
           if (batch.length === 50) await flush();
