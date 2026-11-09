@@ -2041,7 +2041,7 @@ cases['18.8'] = async page => {
   const cell = id => page.locator('[data-row="g1-r' + id + '"] .image-cell[data-slot="0"]');
   const panel = page.locator('.asset-popover');
   await cell(1).click();
-  await panel.getByLabel('Hạng mục').selectOption(category);
+  await panel.locator('[data-picker-category="' + category + '"]').check();
   await panel.locator('input[type=search]').fill('Oak');
   await panel.getByRole('heading',{name:'Tìm trên mạng'}).waitFor();
   assert.equal(await panel.locator('.asset-card').count(),1);
@@ -2496,7 +2496,7 @@ cases['20.15'] = async page => {
   const picker = page.locator('.asset-popover');
   await filter(picker).click();
   assert.equal(await picker.locator('.asset-card').count(),1);
-  await picker.getByLabel('Hạng mục').selectOption('cat-5');
+  await picker.locator('[data-picker-category=cat-5]').check();
   await picker.locator('.asset-card').getByText('Đá B2').waitFor();
   assert.equal(await picker.locator('.asset-card').count(),2);
 };

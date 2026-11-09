@@ -83,9 +83,11 @@
 .asset-library-dialog .asset-dialog-body{display:grid;grid-template-columns:230px 1fr;gap:14px;align-items:start}
 .asset-categories{position:sticky;top:0;display:flex;flex-direction:column;gap:6px}
 .asset-cat-list{display:flex;flex-direction:column;gap:2px;max-height:60vh;overflow:auto}
-.asset-cat-list button{display:flex;justify-content:space-between;gap:6px;padding:6px 8px;border:0;border-radius:6px;background:none;text-align:left;cursor:pointer;font-size:12.5px}
-.asset-cat-list button:hover{background:#eef2f7}
-.asset-cat-list button[aria-current=true]{background:#e8f0fe;color:#174ea6;font-weight:600}
+.asset-cat-list label{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:6px;padding:6px 8px;border-radius:6px;
+  background:none;text-align:left;cursor:pointer;font-size:12.5px}
+.asset-cat-list label:hover{background:#eef2f7}
+.asset-cat-list label[aria-current=true]{background:#e8f0fe;color:#174ea6;font-weight:600}
+.asset-cat-list input{margin:0}
 .asset-cat-list small{color:#64748b}
 .asset-library-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
 .asset-library-head strong{font-size:15px;margin-right:auto}

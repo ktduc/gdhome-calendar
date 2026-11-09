@@ -505,6 +505,18 @@ window.GDHomeAssets = (() => {
   const facetEmpty = (items,facets) => !items.length && Object.values(facets).some(values => values.size) ?
     '<p class="asset-empty">Không có mẫu khớp bộ lọc · <button type="button" data-clear-facets>Bỏ lọc</button></p>' : '';
   const filterGroup = (key,label,content) => '<details data-filter-group="' + key + '" open><summary>' + label + '</summary>' + content + '</details>';
+  function pickerCategorySelect(categories,items,current) {
+    const counts = new Map();
+    for (const item of items) counts.set(item.categoryId,(counts.get(item.categoryId) || 0)+1);
+    return '<select aria-label="Hạng mục" data-picker-categories><option value="all">Tất cả hạng mục (' + items.length + ')</option>' +
+      categories.map(category => '<option value="' + esc(category.id) + '"' + (current === category.id ? ' selected' : '') + '>' +
+        esc(category.name) + ' (' + (counts.get(category.id) || 0) + ')</option>').join('') + '</select>';
+  }
+  function wirePickerCategories(root,onChange) {
+    root.querySelectorAll('[data-picker-category]').forEach(input => input.onchange = () => {
+      if (input.checked) onChange(input.value);
+    });
+  }
   function facetMarkup(items,facets) {
     return '<div class="asset-facets">' + Object.entries(facetLabels).map(([key,label]) => {
       const counts = new Map();
@@ -526,6 +538,7 @@ window.GDHomeAssets = (() => {
     let sidebar = root.querySelector('.asset-categories');
     const controls = root.querySelector('.asset-filters,.asset-library-head');
     if (!facets || !controls) return;
+    state.radioName ||= 'asset-filter-' + uid();
     if (!sidebar) {
       const grid = root.querySelector('.asset-body');
       const layout = document.createElement('div'), main = document.createElement('div');
@@ -533,7 +546,32 @@ window.GDHomeAssets = (() => {
       main.className = 'asset-picker-main';
       sidebar = document.createElement('aside');
       sidebar.innerHTML = filterGroup('category','Hạng mục','');
-      sidebar.querySelector('details').append(...controls.querySelectorAll('select'));
+      const categoryGroup = sidebar.querySelector('details');
+      const categories = controls.querySelector('[data-picker-categories]');
+      if (categories) {
+        for (const option of categories.options) {
+          const label = document.createElement('label'), input = document.createElement('input');
+          label.className = 'asset-facet-choice';
+          input.type = 'radio';
+          input.name = state.radioName + '-category';
+          input.value = input.dataset.pickerCategory = option.value;
+          input.checked = option.selected;
+          label.append(input,document.createTextNode(option.text));
+          categoryGroup.append(label);
+        }
+        categories.remove();
+      }
+      for (const select of controls.querySelectorAll('select')) {
+        const label = select.getAttribute('aria-label'), key = label === 'Dòng sản phẩm' ? 'collection' : 'brand';
+        let group = facets.querySelector('[data-filter-group=' + key + ']');
+        if (!group) {
+          group = document.createElement('details');
+          group.dataset.filterGroup = key;
+          group.innerHTML = '<summary>' + facetLabels[key] + '</summary>';
+          facets.prepend(group);
+        }
+        group.append(select);
+      }
       controls.before(layout);
       layout.append(sidebar,main);
       main.append(controls,grid);
@@ -550,8 +588,8 @@ window.GDHomeAssets = (() => {
     sidebar.append(facets);
     const favorites = facets.querySelector('[data-filter-group=favorite]');
     if (favorites) sidebar.prepend(favorites);
-    state.radioName ||= 'asset-size-' + uid();
-    for (const input of sidebar.querySelectorAll('[data-facet=size]')) input.name = state.radioName;
+    for (const input of sidebar.querySelectorAll('[data-facet=size]')) input.name = state.radioName + '-size';
+    for (const input of sidebar.querySelectorAll('[data-category-check]')) input.name = state.radioName + '-category';
     for (const group of sidebar.querySelectorAll('[data-filter-group]')) {
       const key = group.dataset.filterGroup;
       group.open = state.groups[key] ?? true;
@@ -934,14 +972,13 @@ window.GDHomeAssets = (() => {
         try { data = await loadLibrary(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
         if (!panel.isConnected) return;
         categoryId ||= categoryFor(data,groupName)?.id || 'all';
-        const scoped = data.items.filter(item => !item.hidden && (item.full || item.kind === 'paint' || item.kind === 'wood') && (categoryId === 'all' || item.categoryId === categoryId));
+        const available = data.items.filter(item => !item.hidden && (item.full || item.kind === 'paint' || item.kind === 'wood'));
+        const scoped = available.filter(item => categoryId === 'all' || item.categoryId === categoryId);
         pruneFacets(scoped,facets);
         const candidates = scoped.filter(item => !query || fold(item.name).includes(fold(query)));
         const items = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
-          '<div class="asset-filters"><select aria-label="Hạng mục"><option value="all">Tất cả hạng mục</option>' +
-          data.categories.map(c => '<option value="' + esc(c.id) + '"' + (c.id === categoryId ? ' selected' : '') + '>' + esc(c.name) +
-            ' (' + data.items.filter(item => item.categoryId === c.id).length + ')</option>').join('') + '</select>' +
+          '<div class="asset-filters">' + pickerCategorySelect(data.categories,available,categoryId) +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-body">' + facetMarkup(candidates,facets) + (facetEmpty(items,facets) ||
             grid(items,{empty:query ? 'Không tìm thấy ảnh cho "' + query + '".' : 'Hạng mục này chưa có ảnh.'})) + onlineSlot + '</div>' +
@@ -950,7 +987,7 @@ window.GDHomeAssets = (() => {
         arrangeFilterSidebar(panel,sidebarState);
         wireLibraryActions(panel,sidebarState,paint);
         wireFacets(panel,facets,paint);
-        panel.querySelector('select').onchange = event => { categoryId = event.target.value; clearFacets(facets); paint(); };
+        wirePickerCategories(panel,value => { categoryId = value; clearFacets(facets); paint(); });
         const search = panel.querySelector('input[type=search]');
         search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = panel.querySelector('input[type=search]'); s?.focus(); s?.setSelectionRange(query.length,query.length); }); },250); };
         panel.querySelector('[data-full]').onclick = () => { close(); openLibrary({groupName,categoryId:categoryId === 'all' ? null : categoryId,onPick}); };
@@ -1081,7 +1118,7 @@ window.GDHomeAssets = (() => {
   async function loadPaintData(brand = 'Dulux') {
     const data = await loadLibrary();
     const colors = data.items.filter(item => item.kind === 'paint' && !item.hidden);
-    return {source:'Dữ liệu dùng chung',brands:[...new Set(['Dulux','Jotun',...colors.map(item => item.brand)])],
+    return {source:'Dữ liệu dùng chung',categories:data.categories,brands:[...new Set(['Dulux','Jotun',...colors.map(item => item.brand)])],
       colors:colors.filter(item => item.brand === brand)};
 
 
@@ -1091,17 +1128,22 @@ window.GDHomeAssets = (() => {
     return popover(anchor, async (panel, close, place, signal) => {
       const facets = {};
       const sidebarState = {groups:{}};
-      let brand = 'Dulux', query = '', paintData = null;
+      let brand = 'Dulux', query = '', paintData = null, categoryId = 'all';
       async function paint() {
         try { paintData = await loadPaintData(brand); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
-        const photos = await findLocalAssetPhotos(query,null,groupName);
+        const allPhotos = await findLocalAssetPhotos(query,null,groupName);
         if (!panel.isConnected) return;
-        pruneFacets([...(paintData.colors || []),...photos],facets);
-        const candidates = (paintData.colors || []).filter(c => !query || fold(c.code).includes(fold(query)) || fold(c.name).includes(fold(query)));
+        const available = [...paintData.colors,...allPhotos], categories = new Set(available.map(item => item.categoryId));
+        if (categoryId !== 'all' && !categories.has(categoryId)) { categoryId = 'all'; clearFacets(facets); }
+        const inCategory = item => categoryId === 'all' || item.categoryId === categoryId;
+        const scoped = paintData.colors.filter(inCategory), photos = allPhotos.filter(inCategory);
+        pruneFacets([...scoped,...photos],facets);
+        const candidates = scoped.filter(c => !query || fold(c.code).includes(fold(query)) || fold(c.name).includes(fold(query)));
         const colors = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
         const matchingPhotos = sortLibrary(photos.filter(item => matchFacets(item,facets)),sidebarState.sort);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
+          pickerCategorySelect(paintData.categories.filter(category => categories.has(category.id)),available,categoryId) +
           '<select aria-label="Hãng sơn">' + paintData.brands.map(name => '<option value="' + esc(name) + '"' +
             (brand === name ? ' selected' : '') + '>' + esc(name) + '</option>').join('') + '</select>' +
           '<input type="search" placeholder="Tìm theo mã hoặc tên màu (vd: 30YY, 9918, White...)" value="' + esc(query) + '"></div>' +
@@ -1119,7 +1161,8 @@ window.GDHomeAssets = (() => {
         arrangeFilterSidebar(panel,sidebarState);
         wireLibraryActions(panel,sidebarState,paint);
         panel.querySelector('[data-close]').onclick = close;
-        panel.querySelector('select').onchange = event => { brand = event.target.value; clearFacets(facets); paint(); };
+        panel.querySelector('[aria-label="Hãng sơn"]').onchange = event => { brand = event.target.value; categoryId = 'all'; clearFacets(facets); paint(); };
+        wirePickerCategories(panel,value => { categoryId = value; clearFacets(facets); paint(); });
         wireFacets(panel,facets,paint);
         wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelectorAll('[data-paint-code]').forEach(button => {
@@ -1160,7 +1203,7 @@ window.GDHomeAssets = (() => {
     const categories = new Set(library.categories.filter(woodCategory).map(category => category.id));
     return {woods:library.items.filter(item => !item.hidden && item.code &&
       (item.kind === 'wood' || (item.kind !== 'paint' && (categories.has(item.categoryId) ||
-        facetValues(item,'brand').some(brand => fold(brand) === 'an cuong'))))).map(withWoodBrand),source:'Dữ liệu dùng chung'};
+        facetValues(item,'brand').some(brand => fold(brand) === 'an cuong'))))).map(withWoodBrand),source:'Dữ liệu dùng chung',categories:library.categories};
   }
 
   const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường',kind:'wood'});
@@ -1168,7 +1211,7 @@ window.GDHomeAssets = (() => {
     return popover(anchor, async (panel, close, place, signal) => {
       const facets = {};
       const sidebarState = {groups:{}};
-      let brand = '', collection = 'all', query = '', revision = 0, tab = 'codes';
+      let brand = '', collection = 'all', query = '', revision = 0, tab = 'codes', categoryId = 'all';
       async function paint() {
         const current = ++revision;
         let woodData;
@@ -1176,10 +1219,14 @@ window.GDHomeAssets = (() => {
           if (current === revision) panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>';
           return;
         }
-        const photos = await findLocalAssetPhotos(query,'ancuong-wood',groupName);
+        const allPhotos = await findLocalAssetPhotos(query,'ancuong-wood',groupName);
         if (!panel.isConnected || current !== revision) return;
-        const brands = [...new Set(woodData.woods.map(wood => wood.brand))];
-        const byBrand = woodData.woods.filter(wood => !brand || brand === wood.brand);
+        const available = [...woodData.woods,...allPhotos], categories = new Set(available.map(item => item.categoryId));
+        if (categoryId !== 'all' && !categories.has(categoryId)) { categoryId = 'all'; clearFacets(facets); }
+        const inCategory = item => categoryId === 'all' || item.categoryId === categoryId;
+        const categoryWoods = woodData.woods.filter(inCategory), photos = allPhotos.filter(inCategory);
+        const brands = [...new Set(categoryWoods.map(wood => wood.brand))];
+        const byBrand = categoryWoods.filter(wood => !brand || brand === wood.brand);
         const collections = [...new Set(byBrand.map(wood => wood.collection).filter(Boolean))];
         const scoped = byBrand.filter(w => collection === 'all' || w.collection === collection);
         pruneFacets([...scoped,...photos],facets);
@@ -1196,6 +1243,7 @@ window.GDHomeAssets = (() => {
           (facetEmpty(matchingPhotos,facets) || '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>');
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
+          pickerCategorySelect(woodData.categories.filter(category => categories.has(category.id)),available,categoryId) +
           '<select aria-label="Hãng"><option value="">Tất cả hãng</option>' +
           brands.map(name => '<option value="' + esc(name) + '"' + (name === brand ? ' selected' : '') + '>' + esc(name) + '</option>').join('') + '</select>' +
           '<select aria-label="Dòng sản phẩm"><option value="all">Tất cả dòng sản phẩm</option>' +
@@ -1215,6 +1263,7 @@ window.GDHomeAssets = (() => {
         panel.querySelectorAll('[data-wood-tab]').forEach(button => button.onclick = () => { tab = button.dataset.woodTab; paint(); });
         panel.querySelector('[aria-label=Hãng]').onchange = event => { brand = event.target.value; collection = 'all'; clearFacets(facets); paint(); };
         panel.querySelector('[aria-label="Dòng sản phẩm"]').onchange = event => { collection = event.target.value; clearFacets(facets); paint(); };
+        wirePickerCategories(panel,value => { categoryId = value; brand = ''; collection = 'all'; clearFacets(facets); paint(); });
         wireFacets(panel,facets,paint);
         wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelectorAll('[data-wood-code]').forEach(button => {
@@ -2715,9 +2764,10 @@ window.GDHomeAssets = (() => {
       pruneFacets(scoped,facets);
       const candidates = scoped.filter(item => !query || fold([item.code,item.name,...facetValues(item,'brand'),item.collection].join(' ')).includes(fold(query)));
       const items = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
-      body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" draggable="true" data-cat="' + esc(c.id) + '"' +
-        (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
-        '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
+      body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<label draggable="true" data-cat="' + esc(c.id) + '"' +
+        (c.id === current ? ' aria-current="true"' : '') + '><input type="radio" data-category-check' + (c.id === current ? ' checked' : '') +
+        '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
+        '</small></label>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
         '<section class="asset-library-main">' + (!onPick ? libraryTabs('items') : '') + (category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
           '<button type="button" data-import-wood>Nhập catalogue</button>' +
           (!onPick ? '<button type="button" data-find-duplicates>Tìm mã trùng</button>' : '') +
@@ -2849,7 +2899,9 @@ window.GDHomeAssets = (() => {
           return {};
         }); } catch (error) { toast(error.message); }
       });
-      body.querySelectorAll('[data-cat]').forEach(button => button.onclick = () => changeCategory(button.dataset.cat));
+      body.querySelectorAll('[data-category-check]').forEach(input => input.onchange = () => {
+        if (input.checked) changeCategory(input.closest('[data-cat]').dataset.cat);
+      });
       body.querySelector('[data-cat-add]').onclick = async () => {
         const name = prompt('Tên hạng mục mới (vd: Gạch ốp lát, Sàn gỗ, Rèm):');
         if (!name?.trim()) return;
