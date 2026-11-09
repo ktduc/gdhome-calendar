@@ -593,3 +593,119 @@ XONG GĐ20
 ## GĐ20 bổ sung lần 3
 
 - 20.17. Khi đọc kích thước cũ dạng mảng hoặc danh sách phân tách bằng dấu phẩy/chấm phẩy, thư viện chỉ dùng giá trị đầu tiên. Kích thước được lưu thành một chuỗi. Mục chưa có kích thước hợp lệ để trống.
+
+| Mục | Commit | Nội dung đã kiểm thử | Kết quả |
+|---|---|---|---|
+| 20.15 | `ce2a2d6` | Reset khi đổi hạng mục, bỏ lọc hết hiệu lực và có nút Bỏ lọc khi danh sách trống. | Đạt |
+| 20.17 | `aa5f8b4` | Mỗi mẫu dùng một kích thước. Chọn giá trị khác thay lựa chọn cũ. | Đạt |
+| 20.16 | `4d36c1d` | Nhóm lọc có số đếm và nút gập ở cột trái. Màn hẹp dùng ngăn kéo. | Đạt |
+| 20.18 | `cd65408` | Sắp theo yêu thích và lượt dùng, có số lượt, thời điểm dùng và hoàn tác gắn sao. | Đạt |
+| 20.11 | `9423d0b` | Danh mục thuộc tính theo tài khoản. Đổi tên, gộp, xoá có cập nhật các mẫu đang dùng. | Đạt |
+| 20.9 | `fc7ef15` | Lịch sử nguồn theo URL chuẩn hoặc hash. Mở kết quả và bỏ qua mã hoặc ảnh đã có. | Đạt |
+| 20.10 | `5187f7e` | Theo phân trang qua bộ tải an toàn, tự lưu với tag Chưa duyệt và duyệt hàng loạt. | Đạt |
+| 20.12 | `f1a1fca` | PDF, link và ảnh thư mục cùng một hàng đợi. Chạy tối đa hai nguồn, giữ thiết lập riêng. | Đạt |
+| 20.13 | `850bbd9` | Bảng chọn cao hết vùng nhìn, neo cạnh ô, nhớ độ rộng và mở toàn màn hình ở màn hẹp. | Đạt |
+| 20.14 | `8fcf867` | Mã An Cường có ảnh xuất hiện ở Mã gỗ và Ảnh mẫu, kể cả khi nhập ngoài hạng mục Mã gỗ. | Đạt |
+| Hoàn thiện | `d837e07` | Hạng mục có ô chọn và số đếm trong bảng chọn và hộp quản lý. | Đạt |
+| Hoàn thiện | `f6e7893` | Dừng nhập giữ mẫu đã tải được, ghi trạng thái Dở và số mẫu đã lưu. | Đạt |
+
+Ca 20.14 kiểm tra phiên Google trên máy chủ thử với phản hồi tokeninfo giả lập. Khi nhập lại PDF từ lịch sử, bộ nhập yêu cầu chọn lại tệp gốc.
+
+### Kiểm thử cuối trên `a633449`
+
+- `node --test` đạt 72/72.
+- `node docs/gd8-playwright.cjs` trên Microsoft Edge đạt 88/88.
+- Ca 15.2 chọn đúng ảnh vừa tải lên sau khi đổi cách sắp xếp. Ca 18.1 vẫn yêu cầu xoá ảnh khỏi giao diện trước khi máy chủ giả lập trả lời.
+
+| Ca Edge | Kết quả |
+|---|---|
+| 8.1 | Đạt |
+| 8.2 | Đạt |
+| 8.3 | Đạt |
+| 8.4 | Đạt |
+| 8.5 | Đạt |
+| 8.6 | Đạt |
+| 9.1 | Đạt |
+| 9.2 | Đạt |
+| 9.3 | Đạt |
+| 9.4 | Đạt |
+| 9.5 | Đạt |
+| 9.6 | Đạt |
+| 10.1 | Đạt |
+| 10.2 | Đạt |
+| 10.3 | Đạt |
+| 10.3-guest | Đạt |
+| 10.4 | Đạt |
+| 10.5 | Đạt |
+| 10.6 | Đạt |
+| 10.6-recovery | Đạt |
+| 12.1 | Đạt |
+| 12.2 | Đạt |
+| 12.3 | Đạt |
+| 12.4 | Đạt |
+| 12.5 | Đạt |
+| 12.6 | Đạt |
+| 12.7 | Đạt |
+| 13.1 | Đạt |
+| 13.2 | Đạt |
+| 13.3 | Đạt |
+| 13.4 | Đạt |
+| 13.5 | Đạt |
+| 15.1 | Đạt |
+| 15.2 | Đạt |
+| 15.3 | Đạt |
+| 16.1 | Đạt |
+| 16.2 | Đạt |
+| 16.3 | Đạt |
+| 16.4 | Đạt |
+| 16.5 | Đạt |
+| 16.6 | Đạt |
+| 16.7 | Đạt |
+| 17.0 | Đạt |
+| 17.1 | Đạt |
+| 17.2 | Đạt |
+| 17.3 | Đạt |
+| 17.4 | Đạt |
+| 17.5 | Đạt |
+| 17.6 | Đạt |
+| 18.1 | Đạt |
+| 18.2 | Đạt |
+| 18.3 | Đạt |
+| 18.4 | Đạt |
+| 18.5 | Đạt |
+| 18.6 | Đạt |
+| 18.7 | Đạt |
+| 18.8 | Đạt |
+| 18.9 | Đạt |
+| 18.10 | Đạt |
+| 19.1 | Đạt |
+| 19.2 | Đạt |
+| 19.3 | Đạt |
+| 19.4 | Đạt |
+| 19.5 | Đạt |
+| 19.6 | Đạt |
+| 19.7 | Đạt |
+| 19.8 | Đạt |
+| 19.9 | Đạt |
+| 19.10 | Đạt |
+| 19.11 | Đạt |
+| 20.1 | Đạt |
+| 20.2 | Đạt |
+| 20.3 | Đạt |
+| 20.4 | Đạt |
+| 20.5 | Đạt |
+| 20.6 | Đạt |
+| 20.7 | Đạt |
+| 20.8 | Đạt |
+| 20.9 | Đạt |
+| 20.10 | Đạt |
+| 20.11 | Đạt |
+| 20.12 | Đạt |
+| 20.13 | Đạt |
+| 20.14 | Đạt |
+| 20.15 | Đạt |
+| 20.16 | Đạt |
+| 20.17 | Đạt |
+| 20.18 | Đạt |
+
+XONG GĐ20
