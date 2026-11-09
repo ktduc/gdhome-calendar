@@ -16,5 +16,8 @@
     "express": "^4.21.2",
     "pdf-lib": "^1.17.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  },
+  "devDependencies": {
+    "qrcode": "^1.5.4"
   }
 }

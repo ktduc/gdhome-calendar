@@ -479,3 +479,9 @@ Kiểm thử tại `e0f475b`. `node --test` đạt **67/67**. Toàn bộ Playwri
 | 19.11 | Đạt |
 
 XONG GĐ19 BỔ SUNG
+
+## GĐ20
+
+| Mục | Thay đổi | Kiểm thử |
+|---|---|---|
+| 20.1 | Bố cục An Cường nhận thẻ theo QR, cắt sát ô vân, đọc mã từ lớp văn bản và chỉ dùng AI trên trang có mẫu QR nhưng thiếu lớp văn bản. Mã sai định dạng được bỏ chọn và gắn cờ kiểm tra. | Node 67/67. Playwright Edge đạt 20.1, 19.8, 17.6, 19.5, 19.9, 19.10. |

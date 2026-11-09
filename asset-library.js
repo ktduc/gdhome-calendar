@@ -914,7 +914,76 @@ window.GDHomeAssets = (() => {
   ];
   const catalogueKey = item => (item.brand || 'An Cường').trim().toLowerCase() + ':' + item.code.toUpperCase().replace(/\s+/g,'');
   const bounded = (value,min,max) => Math.max(min,Math.min(max,value));
-  const anCuongCode = /^(MFC|MDF|HDF|LAMINATE|ACRYLIC|VENEER)\s*[-–]?\s*([A-Z]{1,4}\s*\d{2,5}(?:[.-]\d+)?)\s*([A-Z][A-Z0-9]{0,7})?\b/i;
+  const anCuongCode = /^(MFC|MDF|HDF|LAM(?:INATE)?|ACR(?:YLIC)?|VENEER)\s*[-–]?\s*((?:[A-Z]{1,4}\s*)?\d{2,5}(?:[.-]\d+)?)\s+([A-Z][A-Z0-9]{0,7})\b/i;
+  // A finder has a dark/light/dark/light/dark sequence of 1:1:3:1:1
+  // through its center. Require a vertical crossing and two matching neighbors.
+  function qrFinderBoxes({data,width,height}) {
+    const dark = new Uint8Array(width*height);
+    for (let i=0; i<dark.length; i++) dark[i] = Number(data[i*4]+data[i*4+1]+data[i*4+2] < 270);
+    const finders = [];
+    function scan(length,pixel,onFinder) {
+      const runs = [];
+      let start = 0, color = pixel(0);
+      for (let i=1; i<=length; i++) {
+        const next = i < length ? pixel(i) : -1;
+        if (next === color) continue;
+        runs.push(i-start);
+        if (runs.length > 5) runs.shift();
+        if (color && runs.length === 5) {
+          const module = runs.reduce((sum,n) => sum+n,0)/7;
+          if (module >= 1 && runs.every((n,j) => Math.abs(n/module-(j === 2 ? 3 : 1)) <= .65)) {
+            onFinder(i-runs[4]-runs[3]-runs[2]/2,module);
+          }
+        }
+        color = next;
+        start = i;
+      }
+    }
+    for (let y=0; y<height; y++) scan(width,x => dark[y*width+x],(x,module) => {
+      const known = finders.find(p => Math.abs(p.x-x) < module && Math.abs(p.y-y) < module*2);
+      if (known) return;
+      const column = Math.floor(x), top = Math.max(0,y-Math.ceil(module*6));
+      scan(Math.min(height-top,Math.ceil(module*12)),j => dark[(top+j)*width+column],(middle,vertical) => {
+        if (Math.abs(top+middle-y) <= module*1.5 && Math.abs(vertical/module-1) <= .35) {
+          finders.push({x,y:top+middle,module:(module+vertical)/2});
+        }
+      });
+    });
+    const boxes = [];
+    for (const corner of finders) {
+      const {x,y,module} = corner;
+      const same = p => Math.abs(p.module/module-1) <= .25;
+      const across = finders.filter(p => same(p) && p.x-x >= module*12 && p.x-x <= module*175 &&
+        Math.abs(p.y-y) <= module*1.5).sort((a,b) => a.x-b.x);
+      for (const right of across) {
+        const span = right.x-x;
+        const down = finders.find(p => same(p) && Math.abs(p.x-x) <= module*1.5 && Math.abs(p.y-y-span) <= module*2);
+        if (!down) continue;
+        const version = (span/module-14)/4;
+        if (Math.abs(version-Math.round(version)) > .45) continue;
+        boxes.push({x:x-module*3.5,y:y-module*3.5,w:span+module*7,h:down.y-y+module*7});
+        break;
+      }
+    }
+    return boxes;
+  }
+
+  async function catalogueQrBoxes(context,width,height) {
+    const boxes = [];
+    if (window.BarcodeDetector) {
+      try {
+        const detector = new window.BarcodeDetector({formats:['qr_code']});
+        for (const {boundingBox:{x,y,width:w,height:h}} of await detector.detect(context.canvas)) boxes.push({x,y,w,h});
+      } catch {
+        // Some platforms expose the API without a working QR detector.
+      }
+    }
+    for (const box of qrFinderBoxes(context.getImageData(0,0,width,height))) {
+      if (boxes.some(other => Math.abs(other.x-box.x) < box.w*.35 && Math.abs(other.y-box.y) < box.h*.35)) continue;
+      boxes.push(box);
+    }
+    return boxes;
+  }
   function anCuongCrop(context,left,top,right,bottom) {
     left = Math.max(0,Math.floor(left)); top = Math.max(0,Math.floor(top));
     const width = Math.max(1,Math.floor(right)-left), height = Math.max(1,Math.floor(bottom)-top);
@@ -939,6 +1008,45 @@ window.GDHomeAssets = (() => {
     }
     const light = brightness/count;
     return {x:left+minX,y:top+best[0],w:maxX-minX+1,h:best[1]-best[0],tone:light >= 170 ? 'Sáng' : light < 95 ? 'Tối' : 'Trung tính'};
+  }
+
+  function anCuongLabel(text,name = '') {
+    const parsed = text.match(anCuongCode);
+    return parsed ? {code:parsed[2].toUpperCase(),name,material:parsed[1].toUpperCase(),finish:parsed[3].toUpperCase(),
+      confidence:.9,needsReview:false} : {code:text,name,confidence:.35,needsReview:true};
+  }
+
+  async function anCuongSwatches(context,canvas,labels) {
+    const {width,height} = canvas;
+    const boxes = (await catalogueQrBoxes(context,width,height)).sort((a,b) => a.y-b.y || a.x-b.x);
+    const candidates = boxes.flatMap(qr => {
+      const right = Math.min(width,qr.x+qr.w*1.08), left = Math.max(0,right-qr.w*3.8);
+      const band = labels.filter(label => label.x >= left && label.x < qr.x &&
+        label.y >= qr.y-qr.h*.45 && label.y <= qr.y+qr.h);
+      const labelTop = band.reduce((top,label) => Math.min(top,label.y-label.height),qr.y);
+      const previous = boxes.filter(box => box.y < qr.y-qr.h && Math.abs(box.x-qr.x) < qr.w)
+        .reduce((top,box) => Math.max(top,box.y+box.h),0);
+      const box = anCuongCrop(context,left,Math.max(previous,labelTop-qr.w*6.5),right,labelTop);
+      if (!box || box.h/box.w < 1.15 || box.h/box.w > 2.3 || box.w < qr.w*1.7 ||
+          Math.abs(box.x+box.w-(qr.x+qr.w)) > qr.w*.45 ||
+          qr.y-box.y-box.h > qr.h*.75) return [];
+      const lines = [];
+      for (const part of band.filter(label => label.x >= box.x-qr.w*.15 && label.y > box.y+box.h)
+        .sort((a,b) => a.y-b.y || a.x-b.x)) {
+        const line = lines.find(row => Math.abs(row.y-part.y) < part.height*.45);
+        if (line) line.parts.push(part);
+        else lines.push({y:part.y,parts:[part]});
+      }
+      const [text='',name=''] = lines.map(line => line.parts.sort((a,b) => a.x-b.x).map(part => part.text).join(' '));
+      return [{box,label:anCuongLabel(text,name)}];
+    });
+    const ratios = candidates.map(({box}) => box.h/box.w).sort((a,b) => a-b);
+    const ratio = (ratios[Math.floor((ratios.length-1)/2)]+ratios[Math.floor(ratios.length/2)])/2;
+    return candidates.map(({box,label}) => {
+      // Center a common-aspect crop inside the detected bounds to avoid the white border.
+      const w = Math.min(box.w-2,(box.h-2)/ratio), h = w*ratio;
+      return {...label,qr:true,tone:box.tone,grain:'Gỗ',crop:{x:(box.x+(box.w-w)/2)/width,y:(box.y+(box.h-h)/2)/height,w:w/width,h:h/height}};
+    });
   }
 
   const kitchenSubgroups = ['Giá bát đĩa nâng hạ','Giá bát đĩa','Giá xoong nồi','Giá dao thớt gia vị','Thùng gạo','Thùng rác',
@@ -983,11 +1091,20 @@ window.GDHomeAssets = (() => {
         for (const item of ai.items || []) {
           const source = sources.get(item.page);
           if (!source) continue;
-          const code = layout === 'ancuong' ? item.code.match(anCuongCode)?.[2] || item.code : item.code;
+          if (layout === 'ancuong') {
+            if (!item.bbox) continue;
+            const {x,y,w,h} = item.bbox;
+            const match = results.find(row => row.page === item.page && row.needsReview &&
+              x+w/2 >= row.crop.x && x+w/2 <= row.crop.x+row.crop.w &&
+              y+h/2 >= row.crop.y && y+h/2 <= row.crop.y+row.crop.h);
+            if (match) Object.assign(match,anCuongLabel(item.code,item.name),{grain:item.grain || match.grain});
+            continue;
+          }
+          const code = item.code;
           const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
           const record = {...item,source,crop:item.bbox,confidence:match ? Math.max(.85,item.confidence) : item.confidence};
-          if (['phao','ancuong','kitchen'].includes(layout)) {
+          if (['phao','kitchen'].includes(layout)) {
             if (match) {
               const detected = results[index];
               results[index] = {...record,...detected,grain:item.grain || detected.grain};
@@ -1016,14 +1133,7 @@ window.GDHomeAssets = (() => {
           const [x,y] = viewport.convertToViewportPoint(item.transform[4],item.transform[5]);
           return {text:item.str.trim(),x,y,width:item.width*scale,height:Math.max(1,item.height*scale)};
         });
-        const matches = layout === 'kitchen' ? kitchenCatalogueRows(labels) : labels.flatMap(label => {
-          if (layout === 'ancuong') {
-            const parsed = label.text.match(anCuongCode);
-            if (!parsed) return [];
-            const name = labels.filter(other => other.y > label.y && other.y-label.y < label.height*3 &&
-              Math.abs(other.x-label.x) < label.height*2 && !anCuongCode.test(other.text)).sort((a,b) => a.y-b.y)[0]?.text || '';
-            return [{...label,material:parsed[1].toUpperCase(),code:parsed[2].toUpperCase(),finish:parsed[3]?.toUpperCase() || '',name}];
-          }
+        const matches = layout === 'ancuong' ? [] : layout === 'kitchen' ? kitchenCatalogueRows(labels) : labels.flatMap(label => {
           if (layout === 'phao') {
             const code = label.text.match(/\b[A-Z]{1,4}\d{3,8}[A-Z0-9]*\b/i)?.[0];
             return code ? [{...label,code:code.toUpperCase(),name:code}] : [];
@@ -1037,18 +1147,26 @@ window.GDHomeAssets = (() => {
               !regexes.some(regex => regex.test(other.text)))?.text || '';
           return [{...label,code:match[0].trim().toUpperCase(),name}];
         });
-        if (!matches.length && !useAi) { page.cleanup(); continue; }
-        if (results.length + matches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
+        if (layout !== 'ancuong' && !matches.length && !useAi) { page.cleanup(); continue; }
         const canvas = document.createElement('canvas');
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
         const context = canvas.getContext('2d');
         await page.render({canvasContext:context,viewport}).promise;
+        signal?.throwIfAborted();
+        const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels) : [];
+        if (results.length + matches.length + swatches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
+        if (layout === 'ancuong' && !swatches.length) {
+          canvas.width = canvas.height = 0;
+          page.cleanup();
+          continue;
+        }
         // Save page as a compressed image and keep only the swatch canvases live.
         const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
         sources.set(number,source);
-        if (useAi) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
+        if (useAi && (layout !== 'ancuong' || !labels.length)) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
+        for (const swatch of swatches) results.push({...swatch,page:number,source});
         if (layout === 'kitchen') {
           const first = matches[0];
           if (first) {
@@ -1073,18 +1191,6 @@ window.GDHomeAssets = (() => {
           const h = Math.min(canvas.height,dy*.66);
           const x = bounded(direction === 'left' ? label.x-w-label.height*.4 : label.x-dx*.06,0,canvas.width-w);
           const y = bounded(direction === 'left' ? label.y-h*.55 : label.y-h-label.height*1.2,0,canvas.height-h);
-          if (layout === 'ancuong') {
-            const margin = label.height * .5;
-            const left = Math.max(0,label.x-margin);
-            const right = Math.min(canvas.width,left+dx);
-            const previous = matches.filter(other => Math.abs(other.x-label.x) < dx*.4 && other.y < label.y-label.height*3)
-              .reduce((y,other) => Math.max(y,other.y+other.height*2),0);
-            const box = anCuongCrop(context,left,previous,right,label.y-label.height*.8);
-            if (!box) continue;
-            results.push({code:label.code,name:label.name,material:label.material,finish:label.finish,tone:box.tone,grain:'Gỗ',
-              page:number,source,confidence:.9,crop:{x:box.x/canvas.width,y:box.y/canvas.height,w:box.w/canvas.width,h:box.h/canvas.height}});
-            continue;
-          }
           if (layout === 'phao') {
             const left = Math.max(0,label.x-dx*.45);
             const right = Math.min(canvas.width,left+dx);
@@ -1107,6 +1213,7 @@ window.GDHomeAssets = (() => {
         page.cleanup();
         if (batch.length === 4 || number === pdf.numPages) await flush();
       }
+      await flush();
       const retained = new Set(results.map(item => item.source));
       for (const source of sources.values()) if (!retained.has(source)) URL.revokeObjectURL(source);
     } catch (error) {
@@ -1230,7 +1337,7 @@ window.GDHomeAssets = (() => {
         status.textContent = items.length ? 'Nhận diện ' + items.length + ' mẫu. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mẫu có ảnh.';
         list.innerHTML = items.map(item => '<article class="wood-catalogue-card">' +
           '<canvas aria-label="Ảnh swatch"></canvas><small>' + (item.web ? 'Website' : 'Trang ' + item.page) + ' · ' + Math.round(item.confidence*100) + '%</small>' +
-          '<label><input type="checkbox" data-wood-include checked> Lưu mã này</label>' +
+          '<label><input type="checkbox" data-wood-include' + (item.needsReview ? '> Cần kiểm tra' : ' checked> Lưu mã này') + '</label>' +
           '<label>Mã <input data-wood-code-input maxlength="80" value="' + esc(item.code) + '"></label>' +
           '<label>Tên <input data-wood-name-input maxlength="160" value="' + esc(item.name) + '"></label>' +
           (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.brand) + '"></label>' : '') +

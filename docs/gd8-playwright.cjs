@@ -2173,14 +2173,16 @@ cases['19.11'] = async page => {
   assert.deepEqual(data.items.find(item => item.name === 'Mẫu').tags,['Sàn','Loại 1','Ambon Floor']);
 };
 
-cases['19.8'] = async page => {
-  const {PDFDocument,rgb} = require('pdf-lib');
-  const pdf = await PDFDocument.create();
-  const sheet = pdf.addPage([150,287]);
-  sheet.drawRectangle({x:5,y:67,width:139,height:213,color:rgb(.65,.48,.32)});
-  sheet.drawText('MFC-MS 461 SC01',{x:5,y:43,size:10});
-  sheet.drawText('SONOMA OAK',{x:5,y:24,size:9});
-  sheet.drawRectangle({x:104,y:5,width:40,height:39,color:rgb(0,0,0)});
+async function drawAnCuongTile(pdf,sheet,x,y,code) {
+  const {rgb} = require('pdf-lib');
+  const qr = await pdf.embedPng(await require('qrcode').toBuffer('GDHOME-' + code,{margin:0,scale:6}));
+  sheet.drawRectangle({x:x+5,y:y+67,width:139,height:213,color:rgb(.65,.48,.32)});
+  sheet.drawText('MFC-MS ' + code + ' SC01',{x:x+5,y:y+43,size:10});
+  sheet.drawText('SONOMA OAK',{x:x+5,y:y+24,size:9});
+  sheet.drawImage(qr,{x:x+104,y:y+5,width:40,height:40});
+}
+
+async function openAnCuongReview(page,pdf) {
   if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
     route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
       contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
@@ -2190,8 +2192,17 @@ cases['19.8'] = async page => {
   const modal = page.locator('.wood-catalogue-dialog');
   await modal.locator('[name=layout]').selectOption('ancuong');
   await modal.locator('[name=collection]').fill('An Cường mẫu');
+  await modal.locator('[name=useAi]').check();
   await modal.locator('[name=pdf]').setInputFiles({name:'demo.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
   await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await page.waitForFunction(() => !document.querySelector('.wood-catalogue-dialog [type=submit]').disabled);
+  return modal;
+}
+
+cases['19.8'] = async page => {
+  const pdf = await require('pdf-lib').PDFDocument.create();
+  await drawAnCuongTile(pdf,pdf.addPage([150,287]),0,0,461);
+  const modal = await openAnCuongReview(page,pdf);
   const card = modal.locator('.wood-catalogue-card');
   await card.waitFor({timeout:15000});
   assert.equal(await card.locator('[data-wood-code-input]').inputValue(),'MS 461');
@@ -2204,6 +2215,33 @@ cases['19.8'] = async page => {
     return [...data.filter((_,index) => index%4 === 0)];
   });
   assert.ok(pixels.every(red => red > 100 && red < 210),'Crop không chứa chữ, QR hoặc nền trắng');
+};
+
+cases['20.1'] = async page => {
+  const pdf = await require('pdf-lib').PDFDocument.create();
+  const certificate = pdf.addPage([450,861]);
+  certificate.drawText('ISO 9001 / SA 8000',{x:40,y:700,size:30});
+  certificate.drawText('MFC-MS 777 SC01',{x:40,y:200,size:12});
+  const sheet = pdf.addPage([450,861]);
+  for (let i=0; i<9; i++) await drawAnCuongTile(pdf,sheet,(i%3)*150,Math.floor(i/3)*287,461+i);
+  await page.addInitScript(() => { Object.defineProperty(window,'BarcodeDetector',{value:undefined}); });
+  let calls = 0;
+  await page.route('**/api/ai/jobs/start',route => {
+    calls++;
+    return route.abort();
+  });
+  const modal = await openAnCuongReview(page,pdf);
+  const cards = modal.locator('.wood-catalogue-card');
+  assert.equal(await cards.count(),9,await modal.locator('[role=status]').innerText());
+  assert.deepEqual((await cards.locator('[data-wood-code-input]').evaluateAll(inputs => inputs.map(input => input.value))).sort(),
+    Array.from({length:9},(_,i) => 'MS ' + (461+i)));
+  assert.equal(calls,0,'Không gọi AI cho trang chứng chỉ hoặc trang có lớp văn bản');
+  assert.equal(await cards.locator('[data-wood-include]:checked').count(),9);
+  const crops = await cards.locator('canvas').evaluateAll(canvases => canvases.map(canvas => {
+    const pixels = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
+    return pixels.every((value,i) => i%4 !== 0 || (value > 100 && value < 210));
+  }));
+  assert.ok(crops.every(Boolean),'Các khung cắt không chứa chữ, QR hoặc nền trắng');
 };
 
 cases['19.9'] = async page => {
