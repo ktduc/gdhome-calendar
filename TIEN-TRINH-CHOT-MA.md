@@ -485,3 +485,19 @@ XONG GĐ19 BỔ SUNG
 | Mục | Thay đổi | Kiểm thử |
 |---|---|---|
 | 20.1 | Bố cục An Cường nhận thẻ theo QR, cắt sát ô vân, đọc mã từ lớp văn bản và chỉ dùng AI trên trang có mẫu QR nhưng thiếu lớp văn bản. Mã sai định dạng được bỏ chọn và gắn cờ kiểm tra. | Node 67/67. Playwright Edge đạt 20.1, 19.8, 17.6, 19.5, 19.9, 19.10. |
+
+### GĐ20 còn lại
+
+| Mục | Commit | Nội dung đã kiểm thử | Kết quả |
+|---|---|---|---|
+| 20.1-SỬA | `67f215f` | Ảnh An Cường gồm ô vân, mã, tên và QR. PA lưu vùng nhìn mặc định trên phần vân. | Đạt |
+| 20.7 | `3de8261` | Full 1600 px và thumb 480 px giữ tỷ lệ. Kiểu Cắt đầy ô, Vừa khung và Lấp nền lưu riêng. | Đạt |
+| 20.6 | `7aa1199` | Lô AI có mô tả và ảnh minh hoạ. Khung cắt theo tỷ lệ mẫu, mẫu có tên lưu theo hạng mục và hãng trên trình duyệt. | Đạt |
+| 20.8 | `9c45395` | Nháy đúp mở ảnh, lưu vùng nhìn khi chuyển mã, F2 sửa mã và tên. | Đạt |
+| 20.5 | `79b67ac` | Lưới gọn, chi tiết riêng, quét chọn, giữ Alt để bỏ chọn và gán thuộc tính hàng loạt. | Đạt |
+| 20.2 | `795c41a` | Hai mã vừa nhập xuất hiện cùng ảnh trong bộ chọn gỗ của PA mà không cần tải lại. | Đạt |
+| 20.3 | `b351eb6` | Chọn B thay cả ảnh và mã của A. Hoàn tác khôi phục A, ảnh dán sau đó được đánh dấu thủ công. | Đạt |
+| 20.4 | `cfed37e` | Nhóm mã theo chuẩn hoá, độ giống và hash ảnh. Gộp theo tài khoản, nối tham chiếu PA và hoàn tác. | Đạt |
+| Hoàn thiện | `e8f889a` | Khung ảnh PNG giữ tỷ lệ và đúng nền theo kiểu hiển thị. Lưới thư viện tách dòng mã và tên. | Đạt |
+
+Lượt hồi quy đầu phát hiện ca 19.6 còn trỏ ô nhà cung cấp vào thẻ cũ. Đã cập nhật ca để kiểm tra giá trị, sửa và lưu nhà cung cấp từ panel chi tiết. Chạy lại riêng 19.6 và 20.5 đều đạt.

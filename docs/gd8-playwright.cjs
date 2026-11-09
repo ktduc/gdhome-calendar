@@ -2179,8 +2179,9 @@ cases['19.6'] = async page => {
   await modal.getByRole('button',{name:'Đọc website'}).click();
   const card = modal.locator('.wood-catalogue-card');
   await card.waitFor();
-  assert.equal(await card.locator('[data-catalogue-supplier]').inputValue(),'example.com');
-  await card.locator('[data-catalogue-supplier]').fill('Kho gạch');
+  const supplier = modal.locator('[data-catalogue-details] [data-catalogue-supplier]');
+  assert.equal(await supplier.inputValue(),'example.com');
+  await supplier.fill('Kho gạch');
   await modal.locator('[data-save-wood]').click();
   await modal.getByText('Đã lưu 1 mã · bỏ qua 0 mã trùng.').waitFor();
   const library = await page.request.get('/api/library').then(r => r.json());
