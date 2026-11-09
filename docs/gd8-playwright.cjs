@@ -2462,6 +2462,43 @@ cases['20.4'] = async page => {
   assert.equal((await loadPa()).libraryItemId,source.id);
 };
 
+cases['20.15'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',['Chỉ A','Gạch khác'].map((name,i) => ({
+      name,tags:[i ? 'thô' : 'bóng'],full:(i ? 'b' : 'a').repeat(64)+'.webp',thumb:(i ? 'b' : 'a').repeat(64)+'.webp'
+    })));
+    await GDHomeAssets.addItems('cat-5',['Đá B1','Đá B2'].map((name,i) => ({
+      name,tags:[i ? 'thô' : 'bóng'],full:(i ? 'd' : 'c').repeat(64)+'.webp',thumb:(i ? 'd' : 'c').repeat(64)+'.webp'
+    })));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog');
+  const filter = root => root.locator('[data-facet=tags][data-value="bóng"]');
+  await filter(library).click();
+  assert.equal(await library.locator('.asset-card').count(),1);
+  await library.locator('input[type=search]').fill('Gạch khác');
+  await library.getByText('Không có mẫu khớp bộ lọc', {exact:false}).waitFor();
+  await library.locator('[data-clear-facets]').click();
+  await library.locator('.asset-card').getByText('Gạch khác').waitFor();
+  await library.locator('input[type=search]').fill('');
+  await filter(library).click();
+  await library.locator('[data-cat=cat-5]').click();
+  await library.locator('.asset-card').getByText('Đá B2').waitFor();
+  assert.equal(await library.locator('.asset-card').count(),2);
+  await library.locator('.close-dialog').click();
+  await page.evaluate(() => GDHomeAssets.pickLibrary(document.querySelector('[data-row=g1-r1] .image-cell[data-slot="0"]'),{
+    groupName:'Gạch ốp lát',onPick:() => {}
+  }));
+  const picker = page.locator('.asset-popover');
+  await filter(picker).click();
+  assert.equal(await picker.locator('.asset-card').count(),1);
+  await picker.getByLabel('Hạng mục').selectOption('cat-5');
+  await picker.locator('.asset-card').getByText('Đá B2').waitFor();
+  assert.equal(await picker.locator('.asset-card').count(),2);
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');
