@@ -111,14 +111,38 @@
 .asset-paint-custom button{grid-column:1/-1}.asset-paint-custom small{grid-column:1/-1}
 
 .asset-wood-card img{width:100%;height:72px;object-fit:cover;margin-bottom:4px}
-.wood-catalogue-dialog{width:min(900px,94vw);max-height:90vh;overflow:auto}
+.wood-catalogue-dialog,.asset-library-dialog{width:min(1260px,94vw);max-height:90vh}
 .wood-catalogue-controls{display:flex;flex-wrap:wrap;align-items:end;gap:8px}
-.wood-catalogue-controls label,.wood-catalogue-card label{display:grid;gap:3px}
-.wood-catalogue-controls input,.wood-catalogue-card input{min-width:0;max-width:100%}
-.wood-catalogue-results{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:8px}
-.wood-catalogue-card{min-width:0;display:grid;gap:4px;padding:8px;border:1px solid #d8d2c8;border-radius:6px}
-.wood-catalogue-card canvas{width:100%;height:80px;object-fit:contain}
-.wood-catalogue-card label:has([type=checkbox]){display:flex;align-items:center}
+.wood-catalogue-controls label,[data-catalogue-detail-fields] label{display:grid;gap:3px}
+.wood-catalogue-controls input,.wood-catalogue-card input,[data-catalogue-details] input{min-width:0;max-width:100%}
+.catalogue-review{display:grid;gap:10px;align-items:start}
+.catalogue-review:has(>[data-catalogue-details]:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(145px,215px)}
+.catalogue-review-toolbar:not([hidden]),.asset-library-main .asset-bulk-controls{position:sticky;z-index:4;top:0;background:#f8fafc;padding:6px}
+.catalogue-review-toolbar:not([hidden]){display:flex;align-items:center;flex-wrap:wrap;gap:5px}
+.catalogue-review-toolbar input{width:100px}
+.wood-catalogue-results,.asset-grid-managed{display:grid;grid-template-columns:repeat(auto-fill,minmax(106px,1fr));gap:6px;user-select:none}
+.wood-catalogue-card,.asset-grid-managed>.asset-card{position:relative;min-width:0;display:grid;grid-template-rows:80px 16px 16px;gap:1px;padding:2px;
+  border:1px solid #d8d2c8;border-radius:6px;background:#fff;cursor:pointer}
+.wood-catalogue-card[hidden]{display:none}
+.wood-catalogue-card.is-selected,.asset-grid-managed>.asset-card.is-selected{border-color:#3778cd;background:#eaf3ff}
+.wood-catalogue-card.needs-review{border-color:#d99a16;box-shadow:inset 0 0 0 1px #f2cf72}
+.wood-catalogue-card canvas,.asset-grid-managed .asset-thumb{width:80px;height:80px;justify-self:center;object-fit:contain}
+.wood-catalogue-card>small,.wood-catalogue-card>[data-wood-include],.wood-catalogue-card>[data-show-catalogue-detail]{position:absolute;top:3px}
+.wood-catalogue-card>small{left:18px;padding:1px 3px;background:#fff;border-radius:3px;font-size:10px;line-height:1.2;pointer-events:none}
+.wood-catalogue-card>[data-wood-include]{left:2px;margin:0}
+.wood-catalogue-card>[data-show-catalogue-detail]{right:2px;min-height:0;height:21px;padding:0 3px}
+.wood-catalogue-card>:is([data-wood-code-input],[data-wood-name-input]){width:100%;box-sizing:border-box;border:0;padding:0 2px;background:transparent;
+  line-height:16px;font-size:11px;text-overflow:ellipsis}
+.wood-catalogue-card>[data-wood-code-input]{font-weight:600}
+.wood-catalogue-card>[data-wood-name-input]{color:#64748b}
+[data-catalogue-details]:not([hidden]){display:block;position:sticky;top:52px;padding:8px;border:1px solid #d8d2c8;border-radius:6px}
+[data-catalogue-detail-fields]{display:grid;gap:5px}
+.asset-grid-managed figcaption{grid-row:2/4;margin:0}
+.asset-grid-managed .asset-card-menu{position:absolute;top:2px;right:20px;background:#fff;z-index:2;padding:0 3px}
+.asset-grid-managed .asset-card-menu[open]{z-index:3}
+.asset-grid-managed [data-asset-hide]{position:absolute;bottom:2px;right:2px;min-height:0;padding:1px 3px;font-size:10px}
+.asset-marquee{position:fixed;pointer-events:none;border:1px solid #2563eb;background:#60a5fa40;z-index:6}
+@media (max-width:650px){.catalogue-review:has(>[data-catalogue-details]:not([hidden])){grid-template-columns:minmax(0,1fr)}}
 .wood-crop-stage{position:relative;width:fit-content;margin:0 auto 8px}
 .wood-crop-stage img{display:block;max-width:min(80vw,760px);max-height:65vh;object-fit:contain}
 .wood-crop-frame{position:absolute;box-sizing:border-box;border:2px solid #dc2626;box-shadow:0 0 0 1px #fff;cursor:move;touch-action:none}

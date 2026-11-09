@@ -502,7 +502,8 @@ window.GDHomeAssets = (() => {
   }
   function grid(items,{selectable = true,removable = false,selected = null,empty = 'Chưa có ảnh.'} = {}) {
     if (!items.length) return '<p class="asset-empty">' + esc(empty) + '</p>';
-    return '<div class="asset-grid">' + items.map(item => '<figure class="asset-card" data-asset-id="' + esc(item.id) + '"' + (selected ? ' draggable="true"' : '') + '>' +
+    return '<div class="asset-grid' + (selected ? ' asset-grid-managed' : '') + '">' + items.map(item => '<figure class="asset-card' + (selected?.has(item.id) ? ' is-selected' : '') +
+      '" data-asset-id="' + esc(item.id) + '"' + (selected ? ' draggable="true"' : '') + '>' +
       (selected ? '<label class="asset-card-check"><input type="checkbox" data-bulk-select aria-label="Chọn ' + esc(item.name || item.code) + '"' + (selected.has(item.id) ? ' checked' : '') + '></label>' : '') +
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
       (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '"' + displayAttribute(item.display) + ' alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
@@ -1442,6 +1443,39 @@ window.GDHomeAssets = (() => {
     canvas.height = Math.max(1,Math.round(h*scale));
     canvas.getContext('2d').drawImage(image,image.naturalWidth*crop.x,image.naturalHeight*crop.y,w,h,0,0,canvas.width,canvas.height);
   }
+  function wireMarquee(grid,selector,apply,{ignore = 'input,button,label,summary,select,form'} = {}) {
+    let start, frame;
+    grid.onpointerdown = event => {
+      if (event.button !== 0 || event.target.closest(ignore)) return;
+      start = {x:event.clientX,y:event.clientY,id:event.pointerId,subtract:event.altKey};
+    };
+    grid.onpointermove = event => {
+      if (!start || start.id !== event.pointerId || !(event.buttons & 1)) return;
+      if (!frame && Math.hypot(event.clientX-start.x,event.clientY-start.y) < 6) return;
+      if (!frame) {
+        frame = document.createElement('div');
+        frame.className = 'asset-marquee';
+        grid.append(frame);
+        grid.setPointerCapture(event.pointerId);
+      }
+      const x = Math.min(start.x,event.clientX), y = Math.min(start.y,event.clientY);
+      Object.assign(frame.style,{left:x+'px',top:y+'px',width:Math.abs(event.clientX-start.x)+'px',height:Math.abs(event.clientY-start.y)+'px'});
+    };
+    const reset = () => { frame?.remove(); start = frame = null; };
+    grid.onpointerup = () => {
+      if (!frame) { reset(); return; }
+      const range = frame.getBoundingClientRect(), subtract = start.subtract;
+      const intersecting = [...grid.querySelectorAll(selector)].filter(card => {
+        if (card.hidden) return false;
+        const rect = card.getBoundingClientRect();
+        return rect.left < range.right && rect.right > range.left && rect.top < range.bottom && rect.bottom > range.top;
+      });
+      reset();
+      apply(intersecting,subtract);
+    };
+    grid.onlostpointercapture = grid.onpointercancel = reset;
+    grid.onpointerleave = () => { if (!frame) reset(); };
+  }
   async function openWoodCatalogue(categoryId,onSaved,preset = {}) {
     const {dialog,body} = modal('wood-catalogue-dialog','Nhập catalogue PDF mã gỗ');
     const sources = new Set();
@@ -1481,8 +1515,14 @@ window.GDHomeAssets = (() => {
       '<label>Tên mẫu <input name="guideName" maxlength="80"></label><button type="button" data-guide-save>Lưu mẫu bố cục</button></fieldset>' +
       '<details><summary>Mẫu mã (regex)</summary><label>Mỗi dòng một mẫu<textarea name="patterns" rows="4" maxlength="1000">' +
       esc(woodPatterns.join('\n')) + '</textarea></label></details>' +
-      '<button type="submit">Đọc PDF</button><button type="button" data-catalogue-cancel>Huỷ xử lý</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></form>' +
-      '<p role="status"></p><div class="wood-catalogue-results"></div>';
+      '<button type="submit">Đọc PDF</button><button type="button" data-catalogue-cancel>Huỷ xử lý</button></form>' +
+      '<p role="status"></p><div class="catalogue-review-toolbar" hidden><strong data-catalogue-count></strong>' +
+      '<button type="button" data-catalogue-select="clear">Bỏ chọn</button><button type="button" data-catalogue-select="invert">Đảo chọn</button>' +
+      '<button type="button" data-catalogue-select="qr">Chỉ giữ thẻ có QR</button>' +
+      '<label>Lọc <select data-catalogue-filter><option value="all">Tất cả</option><option value="selected">Đã chọn</option><option value="review">Cần kiểm tra</option></select></label>' +
+      '<label>Catalogue <input data-batch-collection maxlength="120"></label><label>Bề mặt <input data-batch-finish maxlength="120"></label>' +
+      '<button type="button" data-catalogue-assign>Gán cho nhóm chọn</button><button type="button" data-save-wood disabled>Lưu mã đã chọn</button></div>' +
+      '<div class="catalogue-review"><div class="wood-catalogue-results"></div><aside data-catalogue-details hidden aria-label="Chi tiết thẻ"></aside></div>';
     const form = body.querySelector('form');
     if (preset.file) { const transfer = new DataTransfer(); transfer.items.add(preset.file); form.elements.pdf.files = transfer.files; }
     if (preset.tags) form.elements.tags.value = preset.tags.join(', ');
@@ -1494,6 +1534,72 @@ window.GDHomeAssets = (() => {
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
     let items = [], mode = 'pdf';
+    let cards = [], details = [], rangeAnchor = null, activeDetail = null;
+    const toolbar = body.querySelector('.catalogue-review-toolbar'), detailPanel = body.querySelector('[data-catalogue-details]');
+    const filter = toolbar.querySelector('[data-catalogue-filter]');
+    const include = card => card.querySelector('[data-wood-include]');
+    const selected = () => cards.filter(card => include(card).checked);
+    function refreshSelection() {
+      const chosen = selected();
+      for (const [i,card] of cards.entries()) {
+        card.classList.toggle('is-selected',include(card).checked);
+        card.hidden = (filter.value === 'selected' && !include(card).checked) || (filter.value === 'review' && !items[i].needsReview);
+      }
+      const index = activeDetail ?? (chosen.length === 1 ? cards.indexOf(chosen[0]) : -1);
+      const detail = details[index];
+      if (detail && !cards[index].hidden) {
+        if (detailPanel.firstElementChild !== detail) detailPanel.replaceChildren(detail);
+      } else detailPanel.replaceChildren();
+      detailPanel.hidden = !detailPanel.childElementCount;
+      toolbar.hidden = !cards.length;
+      toolbar.querySelector('[data-catalogue-count]').textContent = 'Đã chọn ' + chosen.length + '/' + cards.length;
+      save.disabled = busy || !chosen.length;
+    }
+    function resetReview() {
+      cards = []; details = []; items = [];
+      rangeAnchor = activeDetail = null;
+      filter.value = 'all';
+      list.replaceChildren();
+      refreshSelection();
+    }
+    function toggleCard(index,checked,shift) {
+      const from = shift && rangeAnchor !== null ? rangeAnchor : index;
+      for (let i=Math.min(from,index); i<=Math.max(from,index); i++) {
+        if (!cards[i].hidden) include(cards[i]).checked = shift ? true : checked;
+      }
+      rangeAnchor = index;
+      activeDetail = null;
+      refreshSelection();
+    }
+    filter.onchange = () => { activeDetail = null; refreshSelection(); };
+    toolbar.querySelectorAll('[data-catalogue-select]').forEach(button => button.onclick = () => {
+      for (const [i,card] of cards.entries()) {
+        const box = include(card);
+        box.checked = button.dataset.catalogueSelect === 'invert' ? !box.checked : button.dataset.catalogueSelect === 'qr' && box.checked && !!items[i].qr;
+      }
+      activeDetail = rangeAnchor = null;
+      refreshSelection();
+    });
+    toolbar.querySelector('[data-catalogue-assign]').onclick = () => {
+      for (const card of selected()) for (const key of ['collection','finish']) {
+        const value = toolbar.querySelector('[data-batch-' + key + ']').value.trim();
+        if (value) details[cards.indexOf(card)].querySelector('[data-catalogue-field=' + key + ']').value = value;
+      }
+    };
+    dialog.onkeydown = event => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'a' && cards.length &&
+          !event.target.matches('input:not([type=checkbox]),textarea,select,[contenteditable]')) {
+        event.preventDefault();
+        for (const card of cards.filter(card => !card.hidden)) include(card).checked = true;
+        activeDetail = null;
+        refreshSelection();
+      }
+    };
+    wireMarquee(list,'.wood-catalogue-card',(intersecting,subtract) => {
+      for (const card of intersecting) include(card).checked = !subtract;
+      activeDetail = null;
+      refreshSelection();
+    });
     for (const tab of body.querySelectorAll('[data-catalogue-tab]')) tab.onclick = () => {
       if (busy) return;
       mode = tab.dataset.catalogueTab;
@@ -1504,8 +1610,7 @@ window.GDHomeAssets = (() => {
       form.elements.pdf.required = mode === 'pdf';
       form.elements.urls.required = mode === 'web';
       read.textContent = mode === 'web' ? 'Đọc website' : 'Đọc PDF';
-      save.disabled = true;
-      list.replaceChildren();
+      resetReview();
     };
     body.querySelector('[data-catalogue-cancel]').onclick = () => controller?.abort();
     const loadPageImage = async source => {
@@ -1519,7 +1624,7 @@ window.GDHomeAssets = (() => {
       if (busy) return;
       busy = read.disabled = save.disabled = true;
       controller = new AbortController();
-      list.replaceChildren();
+      resetReview();
       for (const source of sources) URL.revokeObjectURL(source);
       sources.clear();
       try {
@@ -1556,11 +1661,14 @@ window.GDHomeAssets = (() => {
         if (warning) toast('Dùng mẫu mã vì AI không đọc được: ' + warning);
         for (const item of items) sources.add(item.source);
         status.textContent = items.length ? 'Nhận diện ' + items.length + ' mẫu. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mẫu có ảnh.';
-        list.innerHTML = items.map(item => '<article class="wood-catalogue-card" tabindex="0">' +
-          '<canvas aria-label="Ảnh swatch"></canvas><small>' + (item.web ? 'Website' : 'Trang ' + item.page) + ' · ' + Math.round(item.confidence*100) + '%</small>' +
-          '<label><input type="checkbox" data-wood-include' + (item.needsReview ? '> Cần kiểm tra' : ' checked> Lưu mã này') + '</label>' +
-          '<label>Mã <input data-wood-code-input maxlength="80" value="' + esc(item.code) + '"></label>' +
-          '<label>Tên <input data-wood-name-input maxlength="160" value="' + esc(item.name) + '"></label>' +
+        list.innerHTML = items.map(item => '<article class="wood-catalogue-card' + (item.needsReview ? ' needs-review' : '') + '" tabindex="0">' +
+          '<canvas aria-label="Ảnh swatch"></canvas><small title="' + (item.needsReview ? 'Cần kiểm tra' : '') + '">' +
+          (item.web ? 'Web' : 'T' + item.page) + ' · ' + Math.round(item.confidence*100) + '%</small>' +
+          '<input type="checkbox" aria-label="Chọn ' + esc(item.code || item.name) + '" data-wood-include' + (item.needsReview ? '' : ' checked') + '>' +
+          '<button type="button" data-show-catalogue-detail aria-label="Chi tiết ' + esc(item.code || item.name) + '">⋯</button>' +
+          '<input aria-label="Mã" data-wood-code-input maxlength="80" value="' + esc(item.code) + '">' +
+          '<input aria-label="Tên" data-wood-name-input maxlength="160" value="' + esc(item.name) + '">' +
+          '<div data-catalogue-detail-fields>' +
           (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.brand) + '"></label>' : '') +
           (form.elements.layout.value === 'kitchen' ? '<datalist id="catalogue-kitchen-' + esc(item.code) + '">' +
             kitchenSubgroups.map(name => '<option>' + esc(name) + '</option>').join('') + '</datalist>' +
@@ -1570,8 +1678,13 @@ window.GDHomeAssets = (() => {
               ' value="' + esc(item[key]) + '"></label>').join('') : '') +
           ['size','finish','collection','material','tone','grain'].map(key => '<label>' + ({size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân'})[key] +
             '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
-          '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></article>').join('');
-        const cards = [...list.children];
+          '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></div></article>').join('');
+        cards = [...list.children];
+        details = cards.map(card => {
+          const fields = card.querySelector('[data-catalogue-detail-fields]');
+          fields.remove();
+          return fields;
+        });
         const syncIdentity = (item,patch) => {
           Object.assign(item,patch);
           const card = cards[items.indexOf(item)];
@@ -1588,6 +1701,14 @@ window.GDHomeAssets = (() => {
           if (lastSource !== item.source) { image = await loadPageImage(item.source); lastSource = item.source; }
           const canvas = cards[i].querySelector('canvas');
           drawSwatch(canvas,image,item.crop);
+          cards[i].onclick = event => {
+            if (!event.target.closest('input,button,label,.asset-identity-editor')) toggleCard(i,!include(cards[i]).checked,event.shiftKey);
+          };
+          include(cards[i]).onclick = event => toggleCard(i,event.target.checked,event.shiftKey);
+          cards[i].querySelector('[data-show-catalogue-detail]').onclick = () => {
+            activeDetail = activeDetail === i ? null : i;
+            refreshSelection();
+          };
           cards[i].ondblclick = event => {
             if (event.target.closest('input,button,label,.asset-identity-editor')) return;
             editView(readIdentity(item),{sequence:items.filter((_,index) => !cards[index].hidden).map(readIdentity),onSave:syncIdentity,
@@ -1602,25 +1723,26 @@ window.GDHomeAssets = (() => {
             event.preventDefault();
             editAssetIdentity(cards[i],readIdentity(item),patch => syncIdentity(item,patch));
           };
-          cards[i].querySelector('[data-catalogue-merge]').onclick = () => {
+          details[i].querySelector('[data-catalogue-merge]').onclick = () => {
             const code = cards[i].querySelector('[data-wood-code-input]').value.trim().toUpperCase();
             const duplicate = cards.find((card,index) => index !== i && card.querySelector('[data-wood-include]').checked &&
               card.querySelector('[data-wood-code-input]').value.trim().toUpperCase() === code);
             if (!duplicate) return toast('Không có thẻ đang chọn cùng mã.');
-            for (const field of cards[i].querySelectorAll('[data-catalogue-field]')) {
-              if (!field.value) field.value = duplicate.querySelector('[data-catalogue-field="' + field.dataset.catalogueField + '"]').value;
+            for (const field of details[i].querySelectorAll('[data-catalogue-field]')) {
+              if (!field.value) field.value = details[cards.indexOf(duplicate)].querySelector('[data-catalogue-field="' + field.dataset.catalogueField + '"]').value;
             }
             duplicate.querySelector('[data-wood-include]').checked = false;
+            refreshSelection();
           };
-          cards[i].querySelector('[data-edit-wood-crop]').onclick = async () => {
+          details[i].querySelector('[data-edit-wood-crop]').onclick = async () => {
             const image = await loadPageImage(item.source);
             editWoodCrop(image,item.crop,crop => { item.crop = crop; drawSwatch(canvas,image,crop); });
           };
         }
-        save.disabled = !items.length;
       } catch (error) { status.textContent = error.message; }
       finally {
         busy = read.disabled = false;
+        refreshSelection();
         if (!dialog.open) GDHomeShell.aiNotice('asset-catalogue-job',{state:'done',body:esc(status.textContent),label:'Mở kết quả',onAction:() => dialog.showModal()});
       }
     };
@@ -1633,12 +1755,12 @@ window.GDHomeAssets = (() => {
       const brand = form.elements.brand.value.trim();
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
       if (mode === 'pdf' && (!brand || !collection)) { status.textContent = 'Nhập hãng và tên catalogue.'; return; }
-      const selected = [...list.children].flatMap(card => {
+      const selection = selected().flatMap(card => {
         const code = card.querySelector('[data-wood-code-input]').value.trim();
         return card.querySelector('[data-wood-include]').checked && (code || mode === 'web') ?
           [{card,code,name:card.querySelector('[data-wood-name-input]').value.trim()}] : [];
       });
-      if (!selected.length) { status.textContent = 'Chọn ít nhất một thẻ có mã.'; return; }
+      if (!selection.length) { status.textContent = 'Chọn ít nhất một thẻ có mã.'; return; }
       busy = read.disabled = save.disabled = true;
       let added = 0, skipped = 0, batch = [];
       const savedCrops = new Map();
@@ -1652,11 +1774,11 @@ window.GDHomeAssets = (() => {
           skipped += result.skipped || 0;
           batch = [];
         };
-        for (const {card,code,name} of selected) {
+        for (const {card,code,name} of selection) {
           if (!dialog.open) break;
-          const item = items[[...list.children].indexOf(card)];
-          const itemBrand = card.querySelector('[data-catalogue-brand]')?.value.trim() || brand || (categoryId === 'ancuong-wood' ? 'An Cường' : '');
-          const itemSuppliers = [...new Set([...suppliers,...listValues(card.querySelector('[data-catalogue-supplier]')?.value || '')])];
+          const i = cards.indexOf(card), item = items[i], detail = details[i];
+          const itemBrand = detail.querySelector('[data-catalogue-brand]')?.value.trim() || brand || (categoryId === 'ancuong-wood' ? 'An Cường' : '');
+          const itemSuppliers = [...new Set([...suppliers,...listValues(detail.querySelector('[data-catalogue-supplier]')?.value || '')])];
           const key = code ? catalogueKey({brand:itemBrand,code}) : item.source;
           const previous = existing.get(key);
           if (previous && !itemSuppliers.some(value => !previous.suppliers?.includes(value)) && !tags.some(value => !previous.tags?.includes(value))) {
@@ -1673,7 +1795,7 @@ window.GDHomeAssets = (() => {
             return {full:key,thumb:thumb === full ? key : await storeAsset(thumb)};
           })();
           savedCrops.set(cropKey,image);
-          const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
+          const fields = Object.fromEntries([...detail.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
           if (form.elements.layout.value === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
           const record = {full:image.full,thumb:image.thumb,display:form.elements.display.value,view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
@@ -1686,7 +1808,7 @@ window.GDHomeAssets = (() => {
         status.textContent = 'Đã lưu ' + added + ' mã · bỏ qua ' + skipped + ' mã trùng.';
         onSaved?.();
       } catch (error) { status.textContent = (added ? 'Đã lưu ' + added + ' mã. ' : '') + error.message; }
-      finally { busy = read.disabled = save.disabled = false; }
+      finally { busy = read.disabled = false; refreshSelection(); }
     };
   }
 
@@ -1789,6 +1911,15 @@ window.GDHomeAssets = (() => {
         const range = event.shiftKey && from >= 0 ? ids.slice(Math.min(from,to),Math.max(from,to)+1) : [id];
         for (const entry of range) box.checked ? selected.add(entry) : selected.delete(entry);
         rangeAnchor = id;
+        paint();
+      });
+      const managedGrid = body.querySelector('.asset-grid-managed');
+      if (managedGrid) wireMarquee(managedGrid,'.asset-card',(intersecting,subtract) => {
+        for (const card of intersecting) {
+          const id = card.dataset.assetId;
+          if (subtract) selected.delete(id);
+          else selected.add(id);
+        }
         paint();
       });
       dialog.onkeydown = event => {

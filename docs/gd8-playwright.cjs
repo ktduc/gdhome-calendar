@@ -1829,7 +1829,8 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
     if (withGuide) assert.ok(Math.abs(entry.ratio-2) < .02);
     assert.ok(entry.rgb.every((value,ch) => Math.abs(value-colors[i][ch]) < 12),JSON.stringify(entry));
   }
-  await cards.first().locator('[data-edit-wood-crop]').click();
+  await cards.first().locator('[data-show-catalogue-detail]').click();
+  await modal.locator('[data-edit-wood-crop]').click();
   const crop = page.locator('.wood-crop-dialog');
   const frame = crop.locator('.wood-crop-frame');
   const before = await frame.boundingBox();
@@ -2253,8 +2254,8 @@ cases['19.8'] = async page => {
   await card.waitFor({timeout:15000});
   assert.equal(await card.locator('[data-wood-code-input]').inputValue(),'MS 461');
   assert.equal(await card.locator('[data-wood-name-input]').inputValue(),'SONOMA OAK');
-  assert.equal(await card.locator('[data-catalogue-field=finish]').inputValue(),'SC01');
-  assert.equal(await card.locator('[data-catalogue-field=material]').inputValue(),'MFC');
+  assert.equal(await modal.locator('[data-catalogue-field=finish]').inputValue(),'SC01');
+  assert.equal(await modal.locator('[data-catalogue-field=material]').inputValue(),'MFC');
   await page.waitForFunction(() => !document.querySelector('[data-save-wood]').disabled);
   assert.ok(await card.locator('canvas').evaluate(anCuongCropContainsCard),'Khung gồm ô vân, dòng mã và QR');
 };
@@ -2287,6 +2288,52 @@ cases['20.1'] = async page => {
   assert.ok(saved?.view?.y < .45,'Vùng nhìn mặc định đặt vào ô vân');
 };
 
+cases['20.5'] = async page => {
+  await page.setViewportSize({width:1440,height:900});
+  const pdf = await require('pdf-lib').PDFDocument.create();
+  const sheet = pdf.addPage([450,861]);
+  for (let i=0; i<9; i++) await drawAnCuongTile(pdf,sheet,(i%3)*150,Math.floor(i/3)*287,800+i);
+  const modal = await openAnCuongReview(page,pdf);
+  const cards = modal.locator('.wood-catalogue-card');
+  assert.equal(await cards.count(),9);
+  await modal.locator('[data-catalogue-select=clear]').click();
+  await cards.first().scrollIntoViewIfNeeded();
+  const a = await cards.first().locator('canvas').boundingBox();
+  const c = await cards.nth(2).locator('canvas').boundingBox();
+  const f = await cards.nth(5).locator('canvas').boundingBox();
+  assert.equal(a.y,f.y,'Ít nhất 6 thẻ cùng hàng');
+  assert.ok((await cards.first().boundingBox()).height <= 122);
+  async function marquee(from,to) {
+    await page.mouse.move(from.x+18,from.y+30);
+    await page.mouse.down();
+    await page.mouse.move(to.x+42,to.y+58,{steps:5});
+    await page.mouse.up();
+  }
+  await marquee(a,c);
+  assert.equal(await modal.locator('[data-catalogue-count]').textContent(),'Đã chọn 3/9');
+  await page.keyboard.down('Alt');
+  await marquee(a,a);
+  await page.keyboard.up('Alt');
+  assert.equal(await modal.locator('[data-catalogue-count]').textContent(),'Đã chọn 2/9');
+  await modal.locator('[data-catalogue-filter]').selectOption('selected');
+  assert.equal(await modal.locator('.wood-catalogue-card:visible').count(),2);
+  await modal.locator('[data-catalogue-filter]').selectOption('all');
+  await cards.first().focus();
+  await page.keyboard.press('Control+a');
+  assert.equal(await modal.locator('[data-catalogue-count]').textContent(),'Đã chọn 9/9');
+  await modal.locator('[data-batch-collection]').fill('Dòng vân mới');
+  await modal.locator('[data-catalogue-assign]').click();
+  await cards.first().locator('[data-show-catalogue-detail]').click();
+  assert.equal(await modal.locator('[data-catalogue-field=collection]').inputValue(),'Dòng vân mới');
+  await cards.first().locator('canvas').dblclick({position:{x:35,y:40}});
+  const preview = page.locator('.asset-view-dialog');
+  await preview.waitFor();
+  await page.keyboard.press('ArrowRight');
+  await preview.locator('[data-view=previous]:enabled').waitFor();
+  await page.keyboard.press('Escape');
+  await preview.waitFor({state:'detached'});
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');
@@ -2312,7 +2359,7 @@ cases['19.9'] = async page => {
   const card = modal.locator('.wood-catalogue-card');
   await card.waitFor({timeout:15000});
   assert.equal(await card.locator('[data-wood-code-input]').inputValue(),'KT1210');
-  assert.equal(await card.locator('[data-catalogue-field=size]').inputValue(),'30x120');
+  assert.equal(await modal.locator('[data-catalogue-field=size]').inputValue(),'30x120');
   assert.equal(await modal.locator('[name=display]').inputValue(),'pad');
   await modal.locator('[data-save-wood]').click();
   await modal.getByText(/Đã lưu 1 mã/).waitFor();
@@ -2428,8 +2475,9 @@ cases['19.10'] = async page => {
   const cards = modal.locator('.wood-catalogue-card');
   await cards.last().waitFor({timeout:15000});
   assert.equal(await cards.count(),3);
-  assert.equal(await cards.first().locator('[data-catalogue-field=spec]').inputValue(),'R664*S265*C550');
-  assert.equal(await cards.first().locator('[data-catalogue-field=cabinetWidth]').inputValue(),'700');
+  await cards.first().locator('[data-show-catalogue-detail]').click();
+  assert.equal(await modal.locator('[data-catalogue-field=spec]').inputValue(),'R664*S265*C550');
+  assert.equal(await modal.locator('[data-catalogue-field=cabinetWidth]').inputValue(),'700');
   await modal.locator('[data-save-wood]').click();
   await modal.getByText(/Đã lưu 3 mã/).waitFor();
   const library = await page.request.get('/api/library').then(r => r.json());
