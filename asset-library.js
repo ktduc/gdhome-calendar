@@ -71,8 +71,8 @@ window.GDHomeAssets = (() => {
       try { img.src = await assetUrl(img.dataset.libAsset); } catch { img.alt = 'Ảnh chưa tải được'; }
     }));
   }
-  async function uploadImage(file) {
-    const {full,thumb} = await GDHomeImages.compress(file);
+  async function uploadImage(file,options) {
+    const {full,thumb} = await GDHomeImages.compress(file,null,options);
     const fullName = await storeAsset(full);
     const thumbName = thumb === full ? fullName : await storeAsset(thumb);
     return {full:fullName,thumb:thumbName,reduction:GDHomeImages.reduction(file,full)};
@@ -232,7 +232,7 @@ window.GDHomeAssets = (() => {
     let skipped = 0;
     for (const item of items) {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
-      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,createdAt:Date.now(),
+      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,square:item.square,originalFull:item.originalFull,originalThumb:item.originalThumb,createdAt:Date.now(),
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
     data.items.unshift(...added);
@@ -245,6 +245,7 @@ window.GDHomeAssets = (() => {
       for (const key of ['brand','size','tags','suppliers']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
       if (patch.hex) item.hex = patch.hex;
+      if (typeof patch.square === 'boolean') for (const key of ['square','full','thumb','originalFull','originalThumb']) item[key] = patch[key];
       if (patch.categoryId) item.categoryId = patch.categoryId;
       if (patch.used) item.used = (item.used || 0) + 1;
     }
@@ -403,6 +404,7 @@ window.GDHomeAssets = (() => {
       (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '" alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
       (item.size || item.brand ? '<span class="asset-card-badge">' + esc([item.size?.replace('x','×'),item.brand].filter(Boolean).join(' · ')) + '</span>' : '') +
       '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish].filter(Boolean).join(' · '))) + '</figcaption>' +
+      (removable && item.full ? '<button type="button" data-asset-square aria-pressed="' + !!item.square + '">' + (item.square ? 'Dùng ảnh gốc' : 'Lấp đầy ô vuông') + '</button>' : '') +
       (removable && item.builtin ? '<button type="button" data-asset-hide>' + (item.hidden ? 'Hiện' : 'Ẩn') + '</button>' : '') +
       (removable ? '<button type="button" class="asset-remove" data-asset-remove aria-label="Xoá ảnh">×</button>' : '') + '</figure>').join('') + '</div>';
   }
@@ -795,17 +797,19 @@ window.GDHomeAssets = (() => {
     });
   }
 
-  async function uploadToLibrary(categoryId,files,onStatus = toast) {
+  async function uploadToLibrary(categoryId,files,onStatus = toast,square = false) {
     const images = files.filter(file => file.type?.startsWith('image/'));
     if (!images.length) throw new Error('Chọn file ảnh.');
     const uploaded = [];
     let before = 0, after = 0;
     for (const [index,file] of images.entries()) {
       onStatus?.('Đang nén và tải ' + (index+1) + '/' + images.length + '…');
-      const {full,thumb} = await GDHomeImages.compress(file);
+      const {full,thumb} = await GDHomeImages.compress(file,null,{square});
       before += file.size; after += full.size;
       const fullName = await storeAsset(full);
-      uploaded.push({full:fullName,thumb:thumb === full ? fullName : await storeAsset(thumb),name:(file.name || '').replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').slice(0,160)});
+      const image = {full:fullName,thumb:thumb === full ? fullName : await storeAsset(thumb)};
+      const original = square ? await uploadImage(file) : image;
+      uploaded.push({full:image.full,thumb:image.thumb,...(square ? {square:true,originalFull:original.full,originalThumb:original.thumb} : {}),name:(file.name || '').replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').slice(0,160)});
     }
     for (let index = 0; index < uploaded.length; index += 50) await addItems(categoryId,uploaded.slice(index,index+50));
     const sized = bytes => bytes >= 1048576 ? (bytes/1048576).toFixed(1).replace('.',',') + ' MB' : Math.max(1,Math.round(bytes/1024)) + ' KB';
@@ -953,7 +957,7 @@ window.GDHomeAssets = (() => {
           const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === item.code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
           const record = {...item,source,crop:item.bbox,confidence:match ? Math.max(.85,item.confidence) : item.confidence};
-          if (layout === 'ancuong') {
+          if (['phao','ancuong'].includes(layout)) {
             if (match) {
               const detected = results[index];
               results[index] = {...record,...detected,grain:item.grain || detected.grain};
@@ -989,6 +993,10 @@ window.GDHomeAssets = (() => {
             const name = labels.filter(other => other.y > label.y && other.y-label.y < label.height*3 &&
               Math.abs(other.x-label.x) < label.height*2 && !anCuongCode.test(other.text)).sort((a,b) => a.y-b.y)[0]?.text || '';
             return [{...label,material:parsed[1].toUpperCase(),code:parsed[2].toUpperCase(),finish:parsed[3]?.toUpperCase() || '',name}];
+          }
+          if (layout === 'phao') {
+            const code = label.text.match(/\b[A-Z]{1,4}\d{3,8}[A-Z0-9]*\b/i)?.[0];
+            return code ? [{...label,code:code.toUpperCase(),name:code}] : [];
           }
           const match = regexes.map(regex => label.text.match(regex)).filter(Boolean)
             .sort((a,b) => a.index-b.index || b[0].length-a[0].length)[0];
@@ -1031,6 +1039,21 @@ window.GDHomeAssets = (() => {
             if (!box) continue;
             results.push({code:label.code,name:label.name,material:label.material,finish:label.finish,tone:box.tone,grain:'Gỗ',
               page:number,source,confidence:.9,crop:{x:box.x/canvas.width,y:box.y/canvas.height,w:box.w/canvas.width,h:box.h/canvas.height}});
+            continue;
+          }
+          if (layout === 'phao') {
+            const left = Math.max(0,label.x-dx*.45);
+            const right = Math.min(canvas.width,left+dx);
+            const top = matches.filter(other => other.y < label.y && Math.abs(other.x-label.x) < dx*.5)
+              .reduce((value,other) => Math.max(value,other.y+other.height),0);
+            const bottom = Math.min(canvas.height,label.y+label.height);
+            const numbers = labels.filter(other => other.y >= top && other.y <= label.y && other.x >= left && other.x <= right);
+            const combined = numbers.map(other => other.text).find(text => /\b\d{2,4}\s*[×x*]\s*\d{2,4}\b/i.test(text));
+            const split = numbers.filter(other => /^\d{2,4}$/.test(other.text)).sort((a,b) => a.y-b.y).map(other => other.text);
+            const size = combined?.match(/\d{2,4}\s*[×x*]\s*\d{2,4}/i)?.[0].replace(/\s+/g,'').replace(/[×*]/,'x') ||
+              (split.length >= 2 ? split.slice(0,2).join('x') : '');
+            results.push({code:label.code,name:label.name,size,page:number,source,confidence:.85,
+              crop:{x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height}});
             continue;
           }
           results.push({code:label.code,name:label.name,page:number,source,confidence:.6,
@@ -1079,7 +1102,8 @@ window.GDHomeAssets = (() => {
       '<label><input type="checkbox" name="useAi"' + (categoryId !== 'ancuong-wood' && window.GDHomeAI ? ' checked' : '') + '> Dùng AI để đọc PDF</label>' +
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
       '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea></label>' +
-      '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option></select></label>' +
+      '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option><option value="phao">Phào chỉ</option></select></label>' +
+      '<label><input type="checkbox" name="square"> Lấp đầy ô vuông</label>' +
       '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
       '<label>Hãng <input name="brand" list="wood-brands" value="' + (categoryId === 'ancuong-wood' ? 'An Cường' : '') + '" maxlength="80"></label>' +
       '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
@@ -1093,6 +1117,7 @@ window.GDHomeAssets = (() => {
     const form = body.querySelector('form');
     if (preset.file) { const transfer = new DataTransfer(); transfer.items.add(preset.file); form.elements.pdf.files = transfer.files; }
     if (preset.tags) form.elements.tags.value = preset.tags.join(', ');
+    form.elements.layout.onchange = () => { if (form.elements.layout.value === 'phao') form.elements.square.checked = true; };
     const status = body.querySelector('[role=status]');
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
@@ -1236,14 +1261,20 @@ window.GDHomeAssets = (() => {
           status.textContent = 'Đang lưu ' + code + '…';
           const crop = item.crop;
           const image = previous || await (async () => {
-            const {full,thumb} = await GDHomeImages.compress(await fetch(item.source).then(response => response.blob()),
-              [crop.x,crop.y,crop.x+crop.w,crop.y+crop.h]);
-            const fullKey = await storeAsset(full);
-            return {full:fullKey,thumb:thumb === full ? fullKey : await storeAsset(thumb)};
+            const source = await fetch(item.source).then(response => response.blob());
+            const bounds = [crop.x,crop.y,crop.x+crop.w,crop.y+crop.h];
+            async function saveCrop(square) {
+              const {full,thumb} = await GDHomeImages.compress(source,bounds,{square});
+              const key = await storeAsset(full);
+              return {full:key,thumb:thumb === full ? key : await storeAsset(thumb)};
+            }
+            const original = await saveCrop(false);
+            if (!form.elements.square.checked) return original;
+            return {...await saveCrop(true),square:true,originalFull:original.full,originalThumb:original.thumb};
           })();
           const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
-          const record = {full:image.full,thumb:image.thumb,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
+          const record = {full:image.full,thumb:image.thumb,square:image.square,originalFull:image.originalFull,originalThumb:image.originalThumb,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
             kind:categoryId === 'ancuong-wood' && code ? 'wood' : 'image',...fields};
           existing.set(key,record);
           batch.push(record);
@@ -1296,6 +1327,7 @@ window.GDHomeAssets = (() => {
   function openLibrary({groupName,categoryId,onPick} = {}) {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
     let current = categoryId || null, query = '', status = '';
+    let squareUploads = false;
     const facets = {}, selected = new Set();
     let rangeAnchor, dragged, undoToken, guestUndo;
     async function bulk(patch) {
@@ -1342,6 +1374,7 @@ window.GDHomeAssets = (() => {
           (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
+          '<label><input type="checkbox" data-library-square> Lấp đầy ô vuông khi tải ảnh</label>' +
           '<label>Chọn thư mục <input type="file" webkitdirectory multiple data-folder-input></label>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' + facetMarkup(candidates,facets) +
           '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + bulkControls() + grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'}) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
@@ -1467,9 +1500,14 @@ window.GDHomeAssets = (() => {
       });
       const search = body.querySelector('input[type=search]');
       if (search) search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = body.querySelector('input[type=search]'); s?.focus(); s?.setSelectionRange(query.length,query.length); }); },250); };
+      const squareOption = body.querySelector('[data-library-square]');
+      if (squareOption) {
+        squareOption.checked = squareUploads;
+        squareOption.onchange = () => { squareUploads = squareOption.checked; };
+      }
       const drop = body.querySelector('.asset-drop');
       const upload = async files => {
-        try { await uploadToLibrary(current,files,message => { status = message; const s = body.querySelector('.asset-status'); if (s) s.textContent = message; }); }
+        try { await uploadToLibrary(current,files,message => { status = message; const s = body.querySelector('.asset-status'); if (s) s.textContent = message; },squareUploads); }
         catch (error) { status = error.message; }
         paint();
       };
@@ -1497,6 +1535,15 @@ window.GDHomeAssets = (() => {
         event.preventDefault();
         upload(files);
       };
+      body.querySelectorAll('[data-asset-square]').forEach(button => button.onclick = async () => {
+        const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
+        const originalFull = item.originalFull || item.full, originalThumb = item.originalThumb || item.thumb;
+        button.disabled = true;
+        try {
+          const image = item.square ? {full:originalFull,thumb:originalThumb} : await uploadImage(await readAsset(originalFull),{square:true});
+          await updateItem({id:item.id,...image,originalFull,originalThumb,square:!item.square});
+        } catch (error) { toast(error.message); button.disabled = false; }
+      });
       body.querySelectorAll('[data-asset-hide]').forEach(button => button.onclick = () => {
         const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
         updateItem({id:item.id,hidden:!item.hidden}).catch(error => toast(error.message));

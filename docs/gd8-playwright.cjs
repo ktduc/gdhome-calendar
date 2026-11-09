@@ -2206,6 +2206,28 @@ cases['19.8'] = async page => {
   assert.ok(pixels.every(red => red > 100 && red < 210),'Crop không chứa chữ, QR hoặc nền trắng');
 };
 
+cases['19.9'] = async page => {
+  await openMaterials(page);
+  const metrics = await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:100,height:50});
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#115588';
+    ctx.fillRect(0,0,100,50);
+    ctx.fillStyle = '#ff0000';
+    ctx.fillRect(40,15,20,20);
+    const {full} = await GDHomeImages.compress(await new Promise(resolve => canvas.toBlob(resolve)),null,{square:true});
+    const bitmap = await createImageBitmap(full);
+    canvas.width = bitmap.width; canvas.height = bitmap.height;
+    ctx.drawImage(bitmap,0,0);
+    return {width:bitmap.width,height:bitmap.height,edge:[...ctx.getImageData(50,5,1,1).data],
+      center:[...ctx.getImageData(50,50,1,1).data],above:[...ctx.getImageData(50,36,1,1).data]};
+  });
+  assert.equal(metrics.width,100);
+  assert.equal(metrics.height,100);
+  assert.ok(metrics.edge[2] > 120 && metrics.above[2] > 120);
+  assert.ok(metrics.center[0] > 225 && metrics.center[2] < 30);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

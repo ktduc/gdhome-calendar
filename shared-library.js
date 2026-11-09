@@ -78,6 +78,8 @@ function normalize(data) {
       categoryId: ids.has(item.categoryId) ? item.categoryId : (categories[0]?.id || ''),
       ...itemMetadata(item),
       kind:kindOf(item),
+      ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb} : {}),
+      ...(item.square ? {square:true} : {}),
       ...(Number.isFinite(item.order) ? {order:item.order} : {}),
       ...(item.builtin || item.id?.startsWith?.('ancuong-seed-') ? {builtin:true} : {}),
       ...(item.hidden ? {hidden:true} : {}),
@@ -176,7 +178,8 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         }
         if (existing) { added.push(existing); continue; }
         const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
-          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb}),createdAt: Date.now(),...itemMetadata(item),...metadata };
+          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb}),createdAt: Date.now(),...itemMetadata(item),...metadata,
+          ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb,square:!!item.square} : {}) };
         data.items.unshift(entry);
         added.push(entry);
       }
@@ -229,6 +232,10 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const item = data.items.find(entry => entry.id === body.id);
       if (!item) fail(404, 'Không tìm thấy ảnh.');
       if (typeof body.name === 'string') item.name = text(body.name, 160);
+      if (typeof body.square === 'boolean') {
+        if (![body.full,body.thumb,body.originalFull,body.originalThumb].every(imageName)) fail(400,'Ảnh gốc hoặc ảnh vuông không hợp lệ.');
+        Object.assign(item,{square:body.square,full:body.full,thumb:body.thumb,originalFull:body.originalFull,originalThumb:body.originalThumb});
+      }
       if (typeof body.hidden === 'boolean') item.hidden = body.hidden;
       if (item.kind === 'paint' && validHex(body.hex)) item.hex = body.hex.toLowerCase();
       for (const field of ['brand','size','tags','suppliers']) {
