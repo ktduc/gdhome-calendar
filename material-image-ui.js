@@ -349,6 +349,8 @@ document.addEventListener('drop',event => {
 if (window.GDHomeAssets) GDHomeAssets.configure({
   headers:() => authHeaders(),
   guest:() => materialGuest,
+  pickerWidth:() => materialView.pickerWidth,
+  savePickerWidth:pickerWidth => setMaterialView({pickerWidth}),
   mergeGuestReferences:(removed,target,undo) => mergeGuestLibraryReferences(removed,target,undo),
   storeAsset:blob => storeMaterialImage(blob),
   readAsset:name => readMaterialAsset(name)

@@ -786,6 +786,15 @@ window.GDHomeAssets = (() => {
 
   let openPopover = null;
   function closePicker() { openPopover?.close(); }
+  const pickerWidthKey = 'gdhome-asset-picker-width';
+  function savedPickerWidth() {
+    if (hooks.pickerWidth) return hooks.pickerWidth();
+    try { return Number(localStorage.getItem(pickerWidthKey)) || undefined; } catch { return undefined; }
+  }
+  function rememberPickerWidth(width) {
+    if (hooks.savePickerWidth) hooks.savePickerWidth(width);
+    else try { localStorage.setItem(pickerWidthKey,String(width)); } catch { /* Layout still works without local storage. */ }
+  }
   function popover(anchor,build) {
     closePicker();
     const panel = document.createElement('div');
@@ -793,21 +802,59 @@ window.GDHomeAssets = (() => {
     panel.className = 'asset-popover';
     panel.setAttribute('role','dialog');
     document.body.append(panel);
+    let preferredWidth = savedPickerWidth();
+    const margin = 12;
+    const limits = width => Math.round(Math.min(1100,innerWidth-margin*2,Math.max(720,width)));
+    function resizeHandle(side) {
+      let handle = panel.querySelector('[data-picker-resize]');
+      if (!handle) {
+        handle = document.createElement('button');
+        handle.type = 'button';
+        handle.dataset.pickerResize = '';
+        handle.setAttribute('aria-label','Đổi chiều rộng bảng chọn');
+        panel.append(handle);
+        let drag;
+        handle.onpointerdown = event => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          drag = {id:event.pointerId,x:event.clientX,width:panel.getBoundingClientRect().width,side:panel.dataset.direction};
+          handle.setPointerCapture(event.pointerId);
+        };
+        handle.onpointermove = event => {
+          if (drag?.id !== event.pointerId) return;
+          preferredWidth = limits(drag.width + (event.clientX-drag.x)*(drag.side === 'right' ? -1 : 1));
+          place();
+        };
+        handle.onlostpointercapture = () => {
+          if (!drag) return;
+          drag = null;
+          if (preferredWidth) rememberPickerWidth(preferredWidth);
+        };
+        handle.onkeydown = event => {
+          if (!['ArrowLeft','ArrowRight'].includes(event.key)) return;
+          event.preventDefault();
+          const delta = event.key === 'ArrowRight' ? 24 : -24;
+          preferredWidth = limits(panel.getBoundingClientRect().width + delta*(panel.dataset.direction === 'right' ? -1 : 1));
+          place();
+          rememberPickerWidth(preferredWidth);
+        };
+      }
+      handle.hidden = side === 'full';
+    }
     const place = () => {
       const rect = anchor.getBoundingClientRect();
-      const width = Math.min(560,innerWidth-16);
-      panel.style.width = width + 'px';
-      const below = innerHeight - rect.bottom - 12;
-      const above = rect.top - 12;
-      const direction = below >= 420 ? 'below' : above >= 420 ? 'above' : 'center';
-      const limit = Math.min(560,innerHeight*.8,direction === 'below' ? below : direction === 'above' ? above : innerHeight-16);
-      const left = direction === 'center' ? (innerWidth-width)/2 : Math.min(innerWidth-width-8,Math.max(8,rect.left));
-      panel.dataset.direction = direction;
-      panel.style.left = left + 'px';
-      panel.style.top = direction === 'below' ? rect.bottom+4+'px' : direction === 'center' ? (innerHeight-limit)/2+'px' : '';
-      panel.style.bottom = direction === 'above' ? innerHeight-rect.top+4+'px' : '';
-      panel.style.height = limit + 'px';
-      panel.style.maxHeight = limit + 'px';
+      const full = innerWidth <= 900;
+      const side = full ? 'full' : rect.left+rect.width/2 < innerWidth/2 ? 'right' : 'left';
+      const header = document.querySelector('.material-header,.app-header');
+      const top = full ? 0 : Math.max(0,header?.getBoundingClientRect().bottom || 0);
+      const height = full ? innerHeight : Math.max(0,innerHeight-top-margin);
+      const available = side === 'right' ? innerWidth-margin-rect.right-8 : rect.left-margin-8;
+      const desired = limits(preferredWidth || innerWidth*.65);
+      const width = full ? innerWidth : available >= 720 ? Math.min(desired,available) : desired;
+      const left = full ? 0 : side === 'right' ? innerWidth-margin-width : margin;
+      panel.dataset.direction = side;
+      Object.assign(panel.style,{width:width+'px',height:height+'px',maxHeight:height+'px',top:top+'px',left:left+'px'});
+      resizeHandle(side);
     };
     const outside = event => {
       if (!panel.contains(event.target) && !event.target.closest?.('dialog[open]')) close();
@@ -825,6 +872,9 @@ window.GDHomeAssets = (() => {
     setTimeout(() => { if (panel.isConnected) document.addEventListener('pointerdown',outside,true); });
     document.addEventListener('keydown',key,true);
     addEventListener('resize',place);
+    addEventListener('scroll',event => {
+      if (event.target === document || event.target.contains?.(anchor)) place();
+    },{capture:true,signal:lifetime.signal});
     openPopover = {panel,close};
     place();
     build(panel,close,place,lifetime.signal);

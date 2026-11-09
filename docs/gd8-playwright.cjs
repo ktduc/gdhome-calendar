@@ -1488,7 +1488,7 @@ cases['16.7'] = async page => {
   await popover.waitFor();
 
   const box = await popover.boundingBox();
-  assert.ok(box.width >= 550 && box.width <= 570, 'Chiều rộng popover ~560px (thực tế: ' + box.width + ')');
+  assert.ok(box.width >= 720 && box.width <= 1100, 'Chiều rộng bảng chọn 720–1100 px (thực tế: ' + box.width + ')');
   const bg = await popover.evaluate(el => getComputedStyle(el).backgroundColor);
   assert.ok(bg.includes('244, 241, 236') || bg.includes('#f4f1ec'), 'Màu nền popover là be-ghi nhạt #f4f1ec');
 
@@ -1883,7 +1883,7 @@ cases['18.2'] = async page => {
   await panel.waitFor();
   const bounds = await panel.boundingBox();
   const {height,width} = page.viewportSize();
-  assert.equal(await panel.getAttribute('data-direction'),'above');
+  assert.equal(await panel.getAttribute('data-direction'),'left');
   assert.ok(bounds.y >= 0 && bounds.y+bounds.height <= height && bounds.height >= 400);
   assert.ok(bounds.x >= 0 && bounds.x+bounds.width <= width);
 };
@@ -2773,6 +2773,46 @@ cases['20.12'] = async page => {
   const own = data.items.find(item => item.code === 'WEB-B');
   assert.deepEqual([own.categoryId,own.brand,own.suppliers],['cat-5','Hãng riêng',['Kho riêng']]);
   assert.equal(data.imports.filter(entry => entry.status === 'done').length,5);
+};
+
+cases['20.13'] = async page => {
+  await page.setViewportSize({width:1600,height:900});
+  await openMaterials(page);
+  const open = left => page.evaluate(left => {
+    let anchor = document.getElementById('test-picker-anchor');
+    if (!anchor) {
+      anchor = document.createElement('button');
+      anchor.id = 'test-picker-anchor';
+      document.body.append(anchor);
+    }
+    anchor.style.cssText = 'position:fixed;top:260px;left:'+left+'px;width:84px;height:30px';
+    GDHomeAssets.pickLibrary(anchor,{groupName:'Gạch ốp lát'});
+  },left);
+  await open(160);
+  const panel = page.locator('.asset-popover');
+  const handle = panel.locator('[data-picker-resize]');
+  await handle.waitFor();
+  const initial = await panel.boundingBox();
+  const header = await page.locator('.material-header').boundingBox();
+  assert.ok(initial.height >= 900-(header.y+header.height)-24);
+  assert.ok(initial.x >= 244 && initial.width >= 720 && initial.width <= 1100);
+  assert.equal(await panel.getAttribute('data-direction'),'right');
+  const grip = await handle.boundingBox();
+  await page.mouse.move(grip.x+grip.width/2,grip.y+150);
+  await page.mouse.down();
+  await page.mouse.move(grip.x+grip.width/2+100,grip.y+150,{steps:5});
+  await page.mouse.up();
+  const resized = await panel.boundingBox();
+  assert.ok(resized.width < initial.width-70);
+  await page.waitForFunction(async width => (await fetch('/api/materials/preferences').then(r => r.json())).viewSettings.pickerWidth === width,Math.round(resized.width));
+  await page.keyboard.press('Escape');
+  await open(1320);
+  await panel.locator('input[type=search]').waitFor();
+  assert.equal(await panel.getAttribute('data-direction'),'left');
+  assert.equal(Math.round((await panel.boundingBox()).width),Math.round(resized.width));
+  await page.setViewportSize({width:850,height:720});
+  const mobile = await panel.boundingBox();
+  assert.deepEqual([mobile.x,mobile.y,mobile.width,mobile.height],[0,0,850,720]);
 };
 
 cases['19.9'] = async page => {

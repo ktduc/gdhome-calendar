@@ -1,6 +1,23 @@
 /* Thư viện ảnh dùng chung · GD HOME Tools */
 .asset-popover{position:fixed;z-index:1200;display:flex;flex-direction:column;box-sizing:border-box;background:#f4f1ec;border:1px solid #d8d2c8;
-  border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.18);overflow:hidden;font-size:13px}
+  border-radius:10px;box-shadow:0 12px 32px rgba(15,23,42,.18);overflow:hidden;font-size:13px;container:assetpicker / inline-size}
+.asset-popover[data-direction=full]{border-radius:0}
+.asset-popover .asset-body :is(.asset-grid,.asset-paint-grid,.asset-wood-grid){grid-template-columns:repeat(5,minmax(0,1fr))}
+@container assetpicker (min-width:900px){
+  .asset-popover .asset-body :is(.asset-grid,.asset-paint-grid,.asset-wood-grid){grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+@container assetpicker (min-width:1030px){
+  .asset-popover .asset-body :is(.asset-grid,.asset-paint-grid,.asset-wood-grid){grid-template-columns:repeat(7,minmax(0,1fr))}
+}
+@container assetpicker (max-width:600px){
+  .asset-popover .asset-body :is(.asset-grid,.asset-paint-grid,.asset-wood-grid){grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+.asset-popover [data-picker-resize]:not([hidden]){position:absolute;z-index:8;top:0;bottom:0;width:7px;max-height:none;height:auto;min-height:0;
+  padding:0;border:0;border-radius:0;background:transparent;cursor:ew-resize;touch-action:none}
+.asset-popover [data-picker-resize][hidden]{display:none}
+.asset-popover[data-direction=right] [data-picker-resize]{left:0}
+.asset-popover[data-direction=left] [data-picker-resize]{right:0}
+.asset-popover [data-picker-resize]:is(:hover,:focus-visible){background:#60a5fa55}
 .asset-popover>header,.asset-popover>footer{display:flex;align-items:center;gap:8px;padding:8px 10px;background:#f6f8fb}
 .asset-popover>header{justify-content:space-between;border-bottom:1px solid #e5e9f0}
 .asset-popover>footer{border-top:1px solid #e5e9f0;justify-content:space-between}
