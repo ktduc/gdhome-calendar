@@ -174,10 +174,13 @@ window.GDHomeAssets = (() => {
     .replace(/\(.*?\)/g,' ').replace(/[^a-z0-9]+/g,' ').trim();
   const woodCategory = category => ['ancuong-wood','cat-1','cat-11'].includes(category?.id) ||
     /\b(?:ma go|mau (?:anh )?go|san go|van go|wood)\b/.test(fold(category?.name));
+  const primarySize = size => String((Array.isArray(size) ? size[0] : size) || '').split(/[,;]/,1)[0].trim()
+    .replace(/\s*[×xX*]\s*/g,'x');
   function guestLibrary() {
     try {
       const stored = JSON.parse(localStorage.getItem(guestLibraryKey) || 'null');
       if (stored?.categories) {
+        for (const item of stored.items || []) item.size = primarySize(item.size);
         const genericWood = stored.categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
         if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
         const wood = stored.categories.find(c => c.id === 'ancuong-wood');
@@ -238,7 +241,7 @@ window.GDHomeAssets = (() => {
     let skipped = 0;
     for (const item of items) {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
-      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,createdAt:Date.now(),
+      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,size:primarySize(item.size),createdAt:Date.now(),
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
     data.items.unshift(...added);
@@ -250,6 +253,7 @@ window.GDHomeAssets = (() => {
       if (typeof patch.name === 'string') item.name = patch.name;
       for (const key of ['code','view']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       for (const key of ['brand','size','tags','suppliers','display']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
+      if (Object.hasOwn(patch,'size')) item.size = primarySize(patch.size);
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
       if (patch.hex) item.hex = patch.hex;
       if (typeof patch.square === 'boolean') for (const key of ['square','full','thumb','originalFull','originalThumb']) item[key] = patch[key];
@@ -478,7 +482,7 @@ window.GDHomeAssets = (() => {
 
   // ---------------------------------------------------------------- Giao diện chung
   const facetLabels = {subgroup:'Nhóm phụ kiện',cabinetWidth:'Rộng tủ',size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',finish:'Bề mặt',tone:'Tông màu',grain:'Vân',collection:'Bộ sưu tập',tags:'Tag'};
-  const facetValues = (item,key) => [...new Set([item[key],...(key === 'brand' ? item.brands || [] : [])].flat().filter(Boolean).map(String))];
+  const facetValues = (item,key) => [...new Set([key === 'size' ? primarySize(item.size) : item[key],...(key === 'brand' ? item.brands || [] : [])].flat().filter(Boolean).map(String))];
   const matchFacets = (item,facets,except) => Object.entries(facets).every(([key,values]) =>
     key === except || !values.size || facetValues(item,key).some(value => values.has(value)));
   function clearFacets(facets) {
@@ -500,7 +504,8 @@ window.GDHomeAssets = (() => {
       }
       for (const value of facets[key] || []) if (!counts.has(value)) counts.set(value,0);
       if (!counts.size) return '';
-      return '<div><strong>' + label + '</strong> ' + [...counts].map(([value,count]) =>
+      return '<div><strong>' + label + '</strong> ' + (key === 'size' ?
+        '<button type="button" data-facet="size" data-value="" aria-pressed="' + !facets.size?.size + '">Tất cả</button> ' : '') + [...counts].map(([value,count]) =>
         '<button type="button" data-facet="' + key + '" data-value="' + esc(value) + '" aria-pressed="' +
         !!facets[key]?.has(value) + '">' + esc(key === 'size' ? value.replace('x','×') : key === 'cabinetWidth' ? 'Tủ '+value : value) + ' (' + count + ')</button>').join(' ') + '</div>';
     }).join('') + '</div>';
@@ -511,7 +516,10 @@ window.GDHomeAssets = (() => {
     root.querySelectorAll('[data-facet]').forEach(button => button.onclick = () => {
       const values = facets[button.dataset.facet] ||= new Set();
       const value = button.dataset.value;
-      if (values.has(value)) values.delete(value);
+      if (button.dataset.facet === 'size') {
+        values.clear();
+        if (value) values.add(value);
+      } else if (values.has(value)) values.delete(value);
       else values.add(value);
       paint();
     });

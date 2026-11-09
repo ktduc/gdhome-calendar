@@ -31,8 +31,10 @@ const woodItemKey = item => text(item.brand || 'An Cường',80).toLowerCase() +
 const woodMeta = item => ({brand:text(item.brand,80) || 'An Cường',code:text(item.code,80),collection:text(item.collection,120),finish:text(item.finish,120),material:text(item.material,80),tone:text(item.tone,40),grain:text(item.grain,40)});
 
 const stringList = values => [...new Set((Array.isArray(values) ? values : []).map(value => text(value,80)).filter(Boolean))].slice(0,30);
-function materialSize(value) {
-  const match = String(value || '').match(/\b(\d{2,4})(?:\s*(cm|mm))?(?:\s*[x×*]\s*|\s+)(\d{2,4})(?:\s*(cm|mm))?\b/i);
+function materialSize(value,firstOnly = true) {
+  const first = Array.isArray(value) ? value[0] : value;
+  const label = String(first || '');
+  const match = (firstOnly ? label.split(/[,;]/,1)[0] : label).match(/\b(\d{2,4})(?:\s*(cm|mm))?(?:\s*[x×*]\s*|\s+)(\d{2,4})(?:\s*(cm|mm))?\b/i);
   if (!match) return '';
   const unit = match[4] || match[2];
   const factor = unit ? (unit.toLowerCase() === 'cm' ? 10 : 1) : (+match[1] < 100 && +match[3] < 100 ? 10 : 1);
@@ -42,7 +44,7 @@ function itemMetadata(item) {
   const number = (value,max) => Math.min(max,Math.max(0,Math.round(Number(String(value || '').replace(/[.,\s]/g,'')) || 0)));
   const cabinetWidth = number(item.cabinetWidth,20000);
   const tags = stringList([...(Array.isArray(item.tags) ? item.tags : []),...(cabinetWidth ? ['Tủ '+cabinetWidth] : [])]);
-  return {brand:text(item.brand,80),size:materialSize(item.size || item.name),tags,suppliers:stringList(item.suppliers),
+  return {brand:text(item.brand,80),size:materialSize(item.size || item.name,!!item.size),tags,suppliers:stringList(item.suppliers),
     ...(Array.isArray(item.brands) ? {brands:stringList(item.brands)} : {}),
     ...(item.spec ? {spec:text(item.spec,160)} : {}),...(item.subgroup ? {subgroup:text(item.subgroup,80)} : {}),
     ...(cabinetWidth ? {cabinetWidth} : {}),...(item.innerWidth ? {innerWidth:number(item.innerWidth,20000)} : {}),

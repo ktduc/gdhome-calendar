@@ -73,6 +73,18 @@ test('Vùng nhìn ảnh: giữ x/y/z hợp lệ, bỏ giá trị mặc định',
   assert.equal(render[1].view,undefined);
 });
 
+test('GĐ20.17 chỉ lưu kích thước đầu tiên của mỗi mẫu', async () => {
+  const {call} = harness();
+  const added = await call('/api/library/items',{categoryId:'cat-6',items:[
+    {name:'Gạch A',full:a,thumb:a,size:['600×600','300x600']},
+    {name:'Gạch B',full:b,thumb:b,size:'300x600, 600x600'}
+  ]});
+  assert.equal(added.status,200);
+  assert.deepEqual(added.data.added.map(item => item.size),['600x600','300x600']);
+  assert.equal((await call('/api/library/items/update',{id:added.data.added[0].id,size:'60cm x 30cm; 300x300'})).data.items
+    .find(item => item.id === added.data.added[0].id).size,'600x300');
+});
+
 test('Màu sơn trong PA được giữ khi lưu, mã màu sai bị bỏ', () => {
   const sheet = cleanSheet({ groups:[{ id:'g',name:'SƠN TƯỜNG',rows:[{ id:'r',name:'Sơn tường',render:[],
     options:[{ code:'30YY 72/107',paint:{kind:'paint',brand:'Dulux',code:'30YY 72/107',name:'Ivory Lace',hex:'#F5F0E1',x:'<b>'},images:[] },

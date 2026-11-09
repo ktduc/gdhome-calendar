@@ -2499,6 +2499,28 @@ cases['20.15'] = async page => {
   assert.equal(await picker.locator('.asset-card').count(),2);
 };
 
+cases['20.17'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',[
+      {name:'Gạch A',size:['600x600','300x600'],full:'a'.repeat(64)+'.webp',thumb:'a'.repeat(64)+'.webp'},
+      {name:'Gạch B',size:'300x600, 600x600',full:'b'.repeat(64)+'.webp',thumb:'b'.repeat(64)+'.webp'}
+    ]);
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog');
+  const choose = value => library.locator('[data-facet=size][data-value="' + value + '"]').click();
+  await choose('600x600');
+  assert.equal(await library.locator('.asset-card').count(),1);
+  await library.locator('.asset-card').getByText('Gạch A').waitFor();
+  await choose('300x600');
+  assert.equal(await library.locator('.asset-card').count(),1);
+  await library.locator('.asset-card').getByText('Gạch B').waitFor();
+  await choose('');
+  assert.equal(await library.locator('.asset-card').count(),2);
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');

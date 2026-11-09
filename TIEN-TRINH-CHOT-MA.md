@@ -589,3 +589,7 @@ Lượt hồi quy đầu phát hiện ca 19.6 còn trỏ ô nhà cung cấp vào
 | 20.8 | Đạt |
 
 XONG GĐ20
+
+## GĐ20 bổ sung lần 3
+
+- 20.17. Khi đọc kích thước cũ dạng mảng hoặc danh sách phân tách bằng dấu phẩy/chấm phẩy, thư viện chỉ dùng giá trị đầu tiên. Kích thước được lưu thành một chuỗi. Mục chưa có kích thước hợp lệ để trống.
