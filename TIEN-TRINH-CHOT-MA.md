@@ -314,3 +314,4 @@ XONG GĐ18-GPT
 ## GĐ19
 
 - 19.1: Ẩn gợi ý thao tác trong ô ảnh trống khi xuất.
+- 19.2: Lưu mã gỗ và màu sơn dưới dạng item thư viện.

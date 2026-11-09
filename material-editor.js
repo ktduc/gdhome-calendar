@@ -832,6 +832,8 @@ function removeMaterialImage(list,index,pa) {
   delete pa.autoColor;
 }
 function libraryPicked(row,slot,item) {
+  if (item.kind === 'paint') return paintPicked(row,slot,item);
+  if (item.kind === 'wood') return woodPicked(row,slot,item);
   const pa = row.options[Number(slot)];
   addPickedImage(row,slot,item,() => { if (pa && !pa.code && (item.code || item.name)) { pa.code = item.code || item.name; pa.autoName = true; pa.autoNameAsset = item.full; } });
 }
@@ -977,7 +979,8 @@ function paintPicked(row,slot,paint) {
     pa.code = paint.code;
     pa.color = paint.name;
   });
-  savePaintToSharedLibrary(paint);
+  if (!paint.id) savePaintToSharedLibrary(paint);
+  else GDHomeAssets.updateItem({id:paint.id,used:true}).catch(showError);
 }
 
 async function savePaintToSharedLibrary(paint) {
@@ -986,25 +989,8 @@ async function savePaintToSharedLibrary(paint) {
     const data = await GDHomeAssets.loadLibrary();
     const cat = GDHomeAssets.categoryFor(data, 'SƠN') || data.categories[0];
     if (!cat) return;
-    const label = paint.brand + ' ' + paint.code + ' – ' + paint.name;
-    const existing = data.items.find(item => item.categoryId === cat.id && item.name === label);
-    if (existing) {
-      await GDHomeAssets.updateItem({ id: existing.id, used: true });
-      return;
-    }
-    const canvas = document.createElement('canvas');
-    canvas.width = 64; canvas.height = 64;
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = paint.hex || '#ffffff';
-    ctx.fillRect(0, 0, 64, 64);
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/webp', 0.8));
-    if (!blob) return;
-    const assetName = await GDHomeAssets.storeAsset(blob);
-    await GDHomeAssets.addItems(cat.id, [{
-      full: assetName,
-      thumb: assetName,
-      name: label
-    }]);
+    const {added} = await GDHomeAssets.addItems(cat.id,[paint]);
+    if (added[0]) await GDHomeAssets.updateItem({id:added[0].id,used:true});
   } catch (err) {
     console.warn('savePaintToSharedLibrary:', err);
   }

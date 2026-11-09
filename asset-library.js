@@ -192,7 +192,20 @@ window.GDHomeAssets = (() => {
   let libraryError = null;
   async function loadLibrary(force = false) {
     if (library && !force) return visibleLibrary(library);
-    if (isGuest()) return (library = guestLibrary());
+    if (isGuest()) {
+      const data = guestLibrary();
+      if (!data.builtinSeeded) {
+        const presets = await Promise.all(['paint-dulux','paint-jotun','wood-ancuong'].map(name => fetch('/data/' + name + '.json').then(r => r.json())));
+        for (const preset of presets) for (const item of preset.colors || preset.woods || []) {
+          const kind = preset.colors ? 'paint' : 'wood';
+          const entry = {...item,kind,brand:preset.brand || 'An Cường',categoryId:kind === 'paint' ? 'cat-3' : 'ancuong-wood',builtin:true,id:uid()};
+          if (!data.items.some(other => other.code && catalogueKey(other) === catalogueKey(entry))) data.items.push(entry);
+        }
+        data.builtinSeeded = true;
+        saveGuest(data);
+      }
+      return (library = data);
+    }
     if (!force && libraryError && Date.now()-libraryError.at < 30000) throw libraryError.error;
     libraryLoading ||= api('/api/library').then(data => { libraryError = null; if (!library || data._version >= library._version) library = data; return library; })
       .catch(error => { libraryError = {error,at:Date.now()}; throw error; })
@@ -218,7 +231,7 @@ window.GDHomeAssets = (() => {
     let skipped = 0;
     for (const item of items) {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
-      added.push({id:uid(),categoryId,name:item.name || '',note:'',full:item.full,thumb:item.thumb,createdAt:Date.now(),
+      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,createdAt:Date.now(),
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
     data.items.unshift(...added);
@@ -228,6 +241,8 @@ window.GDHomeAssets = (() => {
     const item = data.items.find(entry => entry.id === patch.id);
     if (item) {
       if (typeof patch.name === 'string') item.name = patch.name;
+      if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
+      if (patch.hex) item.hex = patch.hex;
       if (patch.categoryId) item.categoryId = patch.categoryId;
       if (patch.used) item.used = (item.used || 0) + 1;
     }
@@ -356,8 +371,9 @@ window.GDHomeAssets = (() => {
     if (!items.length) return '<p class="asset-empty">' + esc(empty) + '</p>';
     return '<div class="asset-grid">' + items.map(item => '<figure class="asset-card" data-asset-id="' + esc(item.id) + '">' +
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
-      (item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '" alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
+      (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '" alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
       '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish].filter(Boolean).join(' · '))) + '</figcaption>' +
+      (removable && item.builtin ? '<button type="button" data-asset-hide>' + (item.hidden ? 'Hiện' : 'Ẩn') + '</button>' : '') +
       (removable ? '<button type="button" class="asset-remove" data-asset-remove aria-label="Xoá ảnh">×</button>' : '') + '</figure>').join('') + '</div>';
   }
   function filePicker(accept,multiple = true) {
@@ -477,7 +493,7 @@ window.GDHomeAssets = (() => {
         try { data = await loadLibrary(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
         if (!panel.isConnected) return;
         categoryId ||= categoryFor(data,groupName)?.id || 'all';
-        const items = data.items.filter(item => item.full && (categoryId === 'all' || item.categoryId === categoryId) &&
+        const items = data.items.filter(item => !item.hidden && (item.full || item.kind === 'paint' || item.kind === 'wood') && (categoryId === 'all' || item.categoryId === categoryId) &&
           (!query || fold(item.name).includes(fold(query)))).sort((a,b) => (b.used || 0)-(a.used || 0));
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters"><select aria-label="Hạng mục"><option value="all">Tất cả hạng mục</option>' +
@@ -502,7 +518,7 @@ window.GDHomeAssets = (() => {
         panel.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
           const item = data.items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
           close();
-          updateItem({id:item.id,used:true}).catch(() => {});
+          if (item.kind !== 'paint') updateItem({id:item.id,used:true}).catch(() => {});
           onPick?.(item);
         });
         await hydrate(panel);
@@ -610,16 +626,10 @@ window.GDHomeAssets = (() => {
   }
   const localAssetPhotos = items => items.length ? '<div class="asset-specialized-photos">' + grid(items) + '</div>' : '';
 
-  const paintCache = {};
   async function loadPaintData(brand = 'Dulux') {
-    const key = brand.toLowerCase();
-    if (!paintCache[key]) {
-      const file = key.includes('jotun') ? '/data/paint-jotun.json' : '/data/paint-dulux.json';
-      const res = await fetch(file);
-      if (!res.ok) throw new Error('Không tải được bảng màu ' + brand);
-      paintCache[key] = await res.json();
-    }
-    return paintCache[key];
+    const data = await loadLibrary();
+    return {source:'Dữ liệu dùng chung',colors:data.items.filter(item => item.kind === 'paint' && !item.hidden && item.brand === brand)};
+
   }
 
   function pickPaint(anchor, { groupName, onPick, title = 'Chọn màu sơn' } = {}) {
@@ -653,7 +663,7 @@ window.GDHomeAssets = (() => {
           button.onclick = () => {
             const c = colors.find(entry => entry.code === button.dataset.paintCode);
             close();
-            if (c) onPick?.({ kind: 'paint', brand, code: c.code, name: c.name, hex: c.hex });
+            if (c) onPick?.(c);
           };
         });
         const custom = panel.querySelector('.asset-paint-custom');
@@ -683,13 +693,7 @@ window.GDHomeAssets = (() => {
 
   async function loadWoodData() {
     const library = await loadLibrary();
-    if (isGuest()) {
-      const response = await fetch('/data/wood-ancuong.json');
-      const seed = response.ok ? (await response.json()).woods : [];
-      const imported = library.items.filter(item => item.categoryId === 'ancuong-wood' && item.code);
-      return {woods:[...imported,...seed.filter(item => !imported.some(entry => catalogueKey(entry) === catalogueKey(item)))].map(withWoodBrand),source:'Dữ liệu dùng chung'};
-    }
-    return {woods:library.items.filter(item => item.categoryId === 'ancuong-wood' && item.code).map(withWoodBrand),source:'Dữ liệu dùng chung'};
+    return {woods:library.items.filter(item => item.kind === 'wood' && !item.hidden).map(withWoodBrand),source:'Dữ liệu dùng chung'};
   }
 
   const withWoodBrand = item => ({...item,brand:item.brand || 'An Cường'});
@@ -998,7 +1002,7 @@ window.GDHomeAssets = (() => {
       try { data = await loadLibrary(); } catch (error) { body.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
       current ||= categoryFor(data,groupName)?.id || data.categories[0]?.id || null;
       const category = data.categories.find(c => c.id === current);
-      const items = data.items.filter(item => item.categoryId === current && (!query || fold([item.code,item.name,item.brand,item.collection].join(' ')).includes(fold(query))));
+      const items = data.items.filter(item => item.categoryId === current && (!onPick || !item.hidden) && (!query || fold([item.code,item.name,item.brand,item.collection].join(' ')).includes(fold(query))));
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
@@ -1045,6 +1049,10 @@ window.GDHomeAssets = (() => {
         event.preventDefault();
         upload(files);
       };
+      body.querySelectorAll('[data-asset-hide]').forEach(button => button.onclick = () => {
+        const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
+        updateItem({id:item.id,hidden:!item.hidden}).catch(error => toast(error.message));
+      });
       body.querySelectorAll('[data-asset-remove]').forEach(button => button.onclick = async () => {
         if (!confirm('Xoá ảnh khỏi dữ liệu dùng chung? Các bảng đã dùng ảnh này vẫn giữ ảnh.')) return;
         try { await deleteItems([button.closest('[data-asset-id]').dataset.assetId]); } catch (error) { toast(error.message); }
@@ -1052,8 +1060,8 @@ window.GDHomeAssets = (() => {
       body.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
         const item = data.items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
         dialog.close();
-        updateItem({id:item.id,used:true}).catch(() => {});
-        if (item.full) onPick(item);
+        if (item.kind !== 'paint') updateItem({id:item.id,used:true}).catch(() => {});
+        if (item.full || item.kind === 'paint' || item.kind === 'wood') onPick(item);
       });
       body.querySelectorAll('.asset-card figcaption').forEach(caption => {
         caption.title = 'Nháy đúp để đổi tên';

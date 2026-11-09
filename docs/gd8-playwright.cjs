@@ -2018,6 +2018,19 @@ cases['19.1'] = async page => {
   assert.equal(await paper.locator('.image-empty-hint').count(),0);
 };
 
+cases['19.2'] = async page => {
+  await openMaterials(page);
+  const library = () => page.request.get('/api/library').then(r => r.json());
+  const seeded = await library();
+  const paint = seeded.items.find(item => item.kind === 'paint' && item.code === '30YY 72/107');
+  assert.ok(paint.builtin && !paint.full);
+  assert.equal((await library()).items.length,seeded.items.length);
+  await page.evaluate(() => modify(() => { sheet.groups[0].name = 'SƠN TƯỜNG'; }));
+  await page.locator('[data-row=g1-r1] [data-slot="0"]').click();
+  await page.locator('[data-paint-code="30YY 72/107"]').click();
+  await page.waitForFunction(async id => (await fetch('/api/library').then(r => r.json())).items.find(item => item.id === id)?.used === 1,paint.id);
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

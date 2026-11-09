@@ -10,8 +10,15 @@ const shortName = name => text(name.replace(/\s*\(.*\)\s*$/, ''), 80) || text(na
 const queues = new Map();
 const woodCategory = {id:'ancuong-wood',name:'Mã gỗ'};
 const woodSeed = require('./data/wood-ancuong.json').woods.map((wood,i) => ({
-  ...wood,id:'ancuong-seed-' + i,categoryId:woodCategory.id,brand:'An Cường',finish:'',createdAt:1
+  ...wood,id:'ancuong-seed-' + i,categoryId:woodCategory.id,brand:'An Cường',finish:'',kind:'wood',builtin:true,createdAt:1
 }));
+const paintCategory = {id:'cat-3',name:'SƠN TƯỜNG / TRẦN'};
+const paintSeed = ['dulux','jotun'].flatMap(key => {
+  const {brand,colors} = require('./data/paint-' + key + '.json');
+  return colors.map((color,index) => ({...color,id:'paint-' + key + '-' + index,categoryId:paintCategory.id,kind:'paint',brand,builtin:true,createdAt:1}));
+});
+const validHex = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+const kindOf = item => item.kind || (item.code ? 'wood' : 'image');
 const woodKey = code => text(code,80).toUpperCase().replace(/\s+/g,'');
 const woodItemKey = item => text(item.brand || 'An Cường',80).toLowerCase() + ':' + woodKey(item.code);
 const woodMeta = item => ({brand:text(item.brand,80) || 'An Cường',code:text(item.code,80),collection:text(item.collection,120),finish:text(item.finish,120)});
@@ -46,12 +53,17 @@ function normalize(data) {
   const wood = categories.find(c => c.id === woodCategory.id);
   if (wood) wood.name = woodCategory.name;
   else categories.push({...woodCategory});
+  if (!categories.some(c => c.id === paintCategory.id)) categories.push({...paintCategory});
   const ids = new Set(categories.map(c => c.id));
   const items = (Array.isArray(base.items) ? base.items : [])
-    .filter(item => item && ((imageName(item.full) && imageName(item.thumb)) || (item.categoryId === woodCategory.id && woodKey(item.code))))
+    .filter(item => item && (kindOf(item) === 'paint' ? validHex(item.hex) && woodKey(item.code) : (imageName(item.full) && imageName(item.thumb)) || (kindOf(item) === 'wood' && woodKey(item.code))))
     .slice(0, 5000).map(item => ({
       id: String(item.id || crypto.randomUUID()).slice(0, 60),
       categoryId: ids.has(item.categoryId) ? item.categoryId : (categories[0]?.id || ''),
+      kind:kindOf(item),
+      ...(item.builtin || item.id?.startsWith?.('ancuong-seed-') ? {builtin:true} : {}),
+      ...(item.hidden ? {hidden:true} : {}),
+      ...(kindOf(item) === 'paint' ? {hex:item.hex.toLowerCase()} : {}),
       name: text(item.name, 160),
       note: text(item.note, 500),
       ...(imageName(item.full) && imageName(item.thumb) ? {full:item.full,thumb:item.thumb} : {}),
@@ -63,7 +75,11 @@ function normalize(data) {
     const keys = new Set(items.filter(item => item.categoryId === woodCategory.id).map(woodItemKey));
     items.push(...woodSeed.filter(item => !keys.has(woodItemKey(item))));
   }
-  return { _version: Number(base._version) || 0, categories, items,woodSeeded:true };
+  if (!base.paintSeeded) {
+    const keys = new Set(items.filter(item => item.kind === 'paint').map(woodItemKey));
+    items.push(...paintSeed.filter(item => !keys.has(woodItemKey(item))));
+  }
+  return { _version: Number(base._version) || 0, categories, items,woodSeeded:true,paintSeeded:true };
 }
 
 // Ghép tên nhóm vật liệu (vd "GẠCH ỐP LÁT (sảnh, WC, logia)") với một hạng mục thư viện.
@@ -103,7 +119,11 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   const key = libraryKey(dataKey);
   if (urlPath === '/api/library' && req.method === 'GET') {
     const stored = await store.get(key);
-    return sendJson(res, 200, normalize(stored || defaultLibrary()));
+    if (!stored?.paintSeeded || !stored?.woodSeeded) {
+      const {data} = await mutate(store,key,() => {});
+      return sendJson(res,200,data);
+    }
+    return sendJson(res,200,normalize(stored));
   }
   if (req.method !== 'POST') fail(405, 'Phương thức không hỗ trợ.');
   const body = await readJsonBody(req);
@@ -121,13 +141,14 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const added = [];
       let skipped = 0;
       for (const item of list) {
-        if (!imageName(item.full) || !imageName(item.thumb)) fail(400, 'Ảnh không hợp lệ.');
-        const metadata = categoryId === woodCategory.id ? woodMeta(item) : {};
+        const kind = item.kind || (item.code && categoryId === woodCategory.id ? 'wood' : 'image');
+        if (!['image','wood','paint'].includes(kind)) fail(400,'Loại mẫu không hợp lệ.');
+        if (kind === 'paint' ? !validHex(item.hex) || !woodKey(item.code) : !imageName(item.full) || !imageName(item.thumb)) fail(400,'Mẫu vật liệu không hợp lệ.');
+        const metadata = kind === 'image' ? {} : woodMeta(item);
         const key = woodKey(metadata.code);
-        const existing = data.items.find(entry => entry.categoryId === categoryId &&
-          (key ? woodItemKey(entry) === woodItemKey(metadata) : !entry.code && entry.full === item.full));
+        const existing = data.items.find(entry => (key ? entry.kind === kind && woodItemKey(entry) === woodItemKey(metadata) : entry.categoryId === categoryId && entry.kind === 'image' && entry.full === item.full));
         if (key && existing) {
-          if (!existing.full) {
+          if (kind === 'wood' && !existing.full) {
             Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb});
             added.push(existing);
           } else skipped++;
@@ -135,7 +156,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         }
         if (existing) { added.push(existing); continue; }
         const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
-          full: item.full, thumb: item.thumb, createdAt: Date.now(),...metadata };
+          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb}),createdAt: Date.now(),...metadata };
         data.items.unshift(entry);
         added.push(entry);
       }
@@ -149,6 +170,8 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const item = data.items.find(entry => entry.id === body.id);
       if (!item) fail(404, 'Không tìm thấy ảnh.');
       if (typeof body.name === 'string') item.name = text(body.name, 160);
+      if (typeof body.hidden === 'boolean') item.hidden = body.hidden;
+      if (item.kind === 'paint' && validHex(body.hex)) item.hex = body.hex.toLowerCase();
       if (typeof body.note === 'string') item.note = text(body.note, 500);
       if (data.categories.some(c => c.id === body.categoryId)) item.categoryId = body.categoryId;
       if (body.used === true) item.used = (item.used || 0) + 1;
