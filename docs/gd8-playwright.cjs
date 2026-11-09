@@ -2199,6 +2199,19 @@ async function openAnCuongReview(page,pdf) {
   return modal;
 }
 
+function anCuongCropContainsCard(canvas) {
+  const {width,height} = canvas;
+  const ctx = canvas.getContext('2d');
+  const [red] = ctx.getImageData(Math.floor(width/2),Math.floor(height/3),1,1).data;
+  const countDark = (left,top,w,h) => {
+    const pixels = ctx.getImageData(left,top,w,h).data;
+    return pixels.filter((value,i) => i%4 === 0 && value < 85).length;
+  };
+  return red > 100 && red < 210 &&
+    countDark(0,Math.floor(height*.80),Math.floor(width*.66),Math.floor(height*.16)) > width*.15 &&
+    countDark(Math.floor(width*.72),Math.floor(height*.83),Math.floor(width*.27),Math.floor(height*.16)) > width;
+}
+
 cases['19.8'] = async page => {
   const pdf = await require('pdf-lib').PDFDocument.create();
   await drawAnCuongTile(pdf,pdf.addPage([150,287]),0,0,461);
@@ -2210,11 +2223,7 @@ cases['19.8'] = async page => {
   assert.equal(await card.locator('[data-catalogue-field=finish]').inputValue(),'SC01');
   assert.equal(await card.locator('[data-catalogue-field=material]').inputValue(),'MFC');
   await page.waitForFunction(() => !document.querySelector('[data-save-wood]').disabled);
-  const pixels = await card.locator('canvas').evaluate(canvas => {
-    const data = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
-    return [...data.filter((_,index) => index%4 === 0)];
-  });
-  assert.ok(pixels.every(red => red > 100 && red < 210),'Crop không chứa chữ, QR hoặc nền trắng');
+  assert.ok(await card.locator('canvas').evaluate(anCuongCropContainsCard),'Khung gồm ô vân, dòng mã và QR');
 };
 
 cases['20.1'] = async page => {
@@ -2237,11 +2246,12 @@ cases['20.1'] = async page => {
     Array.from({length:9},(_,i) => 'MS ' + (461+i)));
   assert.equal(calls,0,'Không gọi AI cho trang chứng chỉ hoặc trang có lớp văn bản');
   assert.equal(await cards.locator('[data-wood-include]:checked').count(),9);
-  const crops = await cards.locator('canvas').evaluateAll(canvases => canvases.map(canvas => {
-    const pixels = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
-    return pixels.every((value,i) => i%4 !== 0 || (value > 100 && value < 210));
-  }));
-  assert.ok(crops.every(Boolean),'Các khung cắt không chứa chữ, QR hoặc nền trắng');
+  for (const canvas of await cards.locator('canvas').all()) assert.ok(await canvas.evaluate(anCuongCropContainsCard));
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 9 mã/).waitFor();
+  const data = await page.request.get('/api/library').then(r => r.json());
+  const saved = data.items.find(item => item.code === 'MS 461' && item.full);
+  assert.ok(saved?.view?.y < .45,'Vùng nhìn mặc định đặt vào ô vân');
 };
 
 cases['19.9'] = async page => {

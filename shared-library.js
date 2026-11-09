@@ -93,6 +93,7 @@ function normalize(data) {
       kind:kindOf(item),
       ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb} : {}),
       ...(item.square ? {square:true} : {}),
+      ...(cleanView(item.view) ? {view:cleanView(item.view)} : {}),
       ...(Number.isFinite(item.order) ? {order:item.order} : {}),
       ...(item.builtin || item.id?.startsWith?.('ancuong-seed-') ? {builtin:true} : {}),
       ...(item.hidden ? {hidden:true} : {}),
@@ -184,14 +185,14 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
           existing.suppliers = stringList([...(existing.suppliers || []),...stringList(item.suppliers)]);
           existing.tags = stringList([...(existing.tags || []),...stringList(item.tags)]);
           if (kind !== 'paint' && !existing.full) {
-            Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb});
+            Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb,view:cleanView(item.view)});
             added.push(existing);
           } else skipped++;
           continue;
         }
         if (existing) { added.push(existing); continue; }
         const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
-          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb}),createdAt: Date.now(),...itemMetadata(item),...metadata,
+          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb,view:cleanView(item.view)}),createdAt: Date.now(),...itemMetadata(item),...metadata,
           ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb,square:!!item.square} : {}) };
         data.items.unshift(entry);
         added.push(entry);

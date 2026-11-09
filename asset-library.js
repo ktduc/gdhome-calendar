@@ -232,7 +232,7 @@ window.GDHomeAssets = (() => {
     let skipped = 0;
     for (const item of items) {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
-      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,square:item.square,originalFull:item.originalFull,originalThumb:item.originalThumb,createdAt:Date.now(),
+      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,square:item.square,originalFull:item.originalFull,originalThumb:item.originalThumb,view:item.view,createdAt:Date.now(),
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
     data.items.unshift(...added);
@@ -1038,14 +1038,15 @@ window.GDHomeAssets = (() => {
         else lines.push({y:part.y,parts:[part]});
       }
       const [text='',name=''] = lines.map(line => line.parts.sort((a,b) => a.x-b.x).map(part => part.text).join(' '));
-      return [{box,label:anCuongLabel(text,name)}];
+      const bottom = Math.min(height,qr.y+qr.h+box.h*.02);
+      return [{box,bottom,label:anCuongLabel(text,name)}];
     });
-    const ratios = candidates.map(({box}) => box.h/box.w).sort((a,b) => a-b);
+    const ratios = candidates.map(({box,bottom}) => (bottom-box.y)/box.w).sort((a,b) => a-b);
     const ratio = (ratios[Math.floor((ratios.length-1)/2)]+ratios[Math.floor(ratios.length/2)])/2;
-    return candidates.map(({box,label}) => {
-      // Center a common-aspect crop inside the detected bounds to avoid the white border.
-      const w = Math.min(box.w-2,(box.h-2)/ratio), h = w*ratio;
-      return {...label,qr:true,tone:box.tone,grain:'Gỗ',crop:{x:(box.x+(box.w-w)/2)/width,y:(box.y+(box.h-h)/2)/height,w:w/width,h:h/height}};
+    return candidates.map(({box,bottom,label}) => {
+      const w = box.w, h = Math.min(height-box.y,Math.max(bottom-box.y,Math.round(w*ratio)));
+      return {...label,qr:true,tone:box.tone,grain:'Gỗ',view:clampView({x:.5,y:box.h/(2*h),z:1},w/h),
+        crop:{x:box.x/width,y:box.y/height,w:w/width,h:h/height}};
     });
   }
 
@@ -1436,7 +1437,7 @@ window.GDHomeAssets = (() => {
           const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
           if (form.elements.layout.value === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
-          const record = {full:image.full,thumb:image.thumb,square:image.square,originalFull:image.originalFull,originalThumb:image.originalThumb,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
+          const record = {full:image.full,thumb:image.thumb,square:image.square,originalFull:image.originalFull,originalThumb:image.originalThumb,view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
             kind:categoryId === 'ancuong-wood' && code ? 'wood' : 'image',...fields};
           existing.set(key,record);
           batch.push(record);

@@ -1006,7 +1006,7 @@ function woodPicked(row,slot,wood) {
     pa.autoNameAsset = wood.full;
     if (wood.finish) pa.finish = wood.finish;
     if (wood.full && pa.images.length < 8 && !pa.images.some(img => (typeof img === 'string' ? img : img.full) === wood.full)) {
-      pa.images.push({full:wood.full,thumb:wood.thumb});
+      pa.images.push({full:wood.full,thumb:wood.thumb,...(wood.view ? {view:wood.view} : {})});
     }
     if (!pa.color) { pa.color = wood.name; pa.autoColor = wood.full ? wood.name : undefined; }
     if (!row.spec) row.spec = wood.collection;
