@@ -2047,6 +2047,30 @@ cases['19.3'] = async page => {
   assert.match(await dialog.locator('.asset-card').textContent(),/600×600.*Hãng A/s);
 };
 
+cases['19.4'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  const ids = await page.evaluate(async () => {
+    const {added} = await GDHomeAssets.addItems('cat-6',['a','b','c'].map(letter => ({
+      name:letter,full:letter.repeat(64)+'.webp',thumb:letter.repeat(64)+'.webp'
+    })));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+    return added.map(item => item.id);
+  });
+  const dialog = page.locator('.asset-library-dialog');
+  await dialog.locator('[data-bulk-select]').first().click();
+  await dialog.locator('[data-bulk-select]').last().click({modifiers:['Shift']});
+  assert.equal(await dialog.locator('[data-bulk-select]:checked').count(),3);
+  page.once('dialog',prompt => prompt.accept('mờ'));
+  await dialog.locator('[data-bulk=addTags]').click();
+  await dialog.locator('[data-facet=tags][data-value="mờ"]').waitFor();
+  const read = () => page.request.get('/api/library').then(r => r.json()).then(data => data.items.filter(item => ids.includes(item.id)));
+  assert.ok((await read()).every(item => item.tags.includes('mờ')));
+  await dialog.locator('[data-bulk=undo]').click();
+  await dialog.locator('[data-facet=tags][data-value="mờ"]').waitFor({state:'detached'});
+  assert.ok((await read()).every(item => !item.tags.includes('mờ')));
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

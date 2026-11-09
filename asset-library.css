@@ -137,3 +137,8 @@
 .asset-facets:empty{display:none}
 .asset-facets button[aria-pressed=true]{background:#dbeafe;border-color:#2563eb}
 .asset-thumb .asset-paint-swatch{display:block;width:100%;height:100%}
+
+.asset-card-check{position:absolute;top:4px;left:4px;z-index:1;background:#fff;border-radius:4px}
+.asset-card:has(.asset-card-check) .asset-card-badge{top:26px}
+.asset-drop-mark{box-shadow:inset 0 3px #2563eb}
+.asset-bulk-controls{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}

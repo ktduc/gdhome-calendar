@@ -393,9 +393,10 @@ window.GDHomeAssets = (() => {
       paint();
     });
   }
-  function grid(items,{selectable = true,removable = false,empty = 'Chưa có ảnh.'} = {}) {
+  function grid(items,{selectable = true,removable = false,selected = null,empty = 'Chưa có ảnh.'} = {}) {
     if (!items.length) return '<p class="asset-empty">' + esc(empty) + '</p>';
-    return '<div class="asset-grid">' + items.map(item => '<figure class="asset-card" data-asset-id="' + esc(item.id) + '">' +
+    return '<div class="asset-grid">' + items.map(item => '<figure class="asset-card" data-asset-id="' + esc(item.id) + '"' + (selected ? ' draggable="true"' : '') + '>' +
+      (selected ? '<label class="asset-card-check"><input type="checkbox" data-bulk-select aria-label="Chọn ' + esc(item.name || item.code) + '"' + (selected.has(item.id) ? ' checked' : '') + '></label>' : '') +
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
       (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '" alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
       (item.size || item.brand ? '<span class="asset-card-badge">' + esc([item.size?.replace('x','×'),item.brand].filter(Boolean).join(' · ')) + '</span>' : '') +
@@ -1027,15 +1028,45 @@ window.GDHomeAssets = (() => {
   function openLibrary({groupName,categoryId,onPick} = {}) {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
     let current = categoryId || null, query = '', status = '';
-    const facets = {};
+    const facets = {}, selected = new Set();
+    let rangeAnchor, dragged, undoToken, guestUndo;
+    async function bulk(patch) {
+      const result = await libraryCall('items/bulk',patch,data => {
+        if (patch.undo && guestUndo) { data.items = guestUndo; guestUndo = null; return {}; }
+        guestUndo = structuredClone(data.items);
+        const ids = new Set(patch.ids);
+        if (patch.delete) data.items = data.items.filter(item => !ids.has(item.id));
+        for (const item of data.items.filter(item => ids.has(item.id))) {
+          Object.assign(item,patch.set || {});
+          if (patch.categoryId) item.categoryId = patch.categoryId;
+          if (patch.order) item.order = patch.order.indexOf(item.id);
+          item.tags = [...new Set([...(item.tags || []),...(patch.addTags || [])])].filter(tag => !patch.removeTags?.includes(tag));
+          item.suppliers = [...new Set([...(item.suppliers || []),...(patch.addSuppliers || [])])].filter(name => !patch.removeSuppliers?.includes(name));
+        }
+        return {undoToken:'guest'};
+      });
+      undoToken = result.undoToken;
+      selected.clear();
+      rangeAnchor = null;
+      await paint();
+    }
+    const applyBulk = patch => bulk(patch).catch(error => toast(error.message));
+    function bulkControls() {
+      if (onPick) return '';
+      return '<div class="asset-bulk-controls">' + (selected.size ? '<strong>' + selected.size + ' đã chọn</strong> ' +
+        [['addTags','Gắn tag'],['removeTags','Bỏ tag'],['brand','Đặt hãng'],['addSuppliers','Thêm đơn vị cung cấp'],
+          ['removeSuppliers','Bỏ đơn vị cung cấp'],['size','Đặt kích thước'],['categoryId','Chuyển hạng mục'],['delete','Xoá đã chọn']]
+          .map(([key,label]) => '<button type="button" data-bulk="' + key + '">' + label + '</button>').join(' ') : '') +
+        (undoToken ? '<button type="button" data-bulk="undo">Hoàn tác</button>' : '') + '</div>';
+    }
     async function paint() {
       let data;
       try { data = await loadLibrary(); } catch (error) { body.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
       current ||= categoryFor(data,groupName)?.id || data.categories[0]?.id || null;
       const category = data.categories.find(c => c.id === current);
       const candidates = data.items.filter(item => item.categoryId === current && (!onPick || !item.hidden) && (!query || fold([item.code,item.name,item.brand,item.collection].join(' ')).includes(fold(query))));
-      const items = candidates.filter(item => matchFacets(item,facets));
-      body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" data-cat="' + esc(c.id) + '"' +
+      const items = candidates.filter(item => matchFacets(item,facets)).sort((a,b) => (a.order ?? Infinity)-(b.order ?? Infinity));
+      body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<button type="button" draggable="true" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></button>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
         '<section class="asset-library-main">' + (category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
@@ -1044,9 +1075,96 @@ window.GDHomeAssets = (() => {
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' + facetMarkup(candidates,facets) +
-          '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + grid(items,{selectable:!!onPick,removable:true,empty:'Chưa có ảnh trong hạng mục này.'}) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
+          '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + bulkControls() + grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'}) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       wireFacets(body,facets,paint);
+      body.querySelectorAll('[data-bulk-select]').forEach(box => box.onclick = event => {
+        const id = box.closest('[data-asset-id]').dataset.assetId;
+        const ids = items.map(item => item.id);
+        const from = ids.indexOf(rangeAnchor), to = ids.indexOf(id);
+        const range = event.shiftKey && from >= 0 ? ids.slice(Math.min(from,to),Math.max(from,to)+1) : [id];
+        for (const entry of range) box.checked ? selected.add(entry) : selected.delete(entry);
+        rangeAnchor = id;
+        paint();
+      });
+      dialog.onkeydown = event => {
+        if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'a' || event.target.matches('input[type=search],textarea')) return;
+        if (onPick) return;
+        event.preventDefault();
+        items.forEach(item => selected.add(item.id));
+        paint();
+      };
+      body.querySelectorAll('[data-bulk]').forEach(button => button.onclick = () => {
+        const key = button.dataset.bulk;
+        const ids = [...selected];
+        if (key === 'undo') return applyBulk({undo:undoToken});
+        if (key === 'delete') {
+          if (confirm('Xoá các mẫu đã chọn?')) applyBulk({ids,delete:true});
+          return;
+        }
+        const hint = key === 'categoryId' ? '\n' + data.categories.map((item,index) => (index+1) + '. ' + item.name).join('\n') : '';
+        const value = prompt(button.textContent + hint);
+        if (value === null) return;
+        if (key === 'categoryId') {
+          const categoryId = data.categories[Number(value)-1]?.id;
+          if (categoryId) applyBulk({ids,categoryId});
+        } else if (['brand','size'].includes(key)) applyBulk({ids,set:{[key]:value}});
+        else applyBulk({ids,[key]:value.split(',').map(value => value.trim()).filter(Boolean)});
+      });
+      const changeCategoryOrder = order => libraryCall('categories/order',{order},guest => {
+        const positions = new Map(order.map((id,index) => [id,index]));
+        guest.categories.sort((a,b) => positions.get(a.id)-positions.get(b.id));
+        return {};
+      }).catch(error => toast(error.message));
+      body.ondragstart = event => {
+        const card = event.target.closest('[data-asset-id]');
+        const cat = event.target.closest('[data-cat]');
+        if (card && !onPick) {
+          const id = card.dataset.assetId;
+          dragged = {ids:selected.has(id) ? [...selected] : [id],id};
+        } else if (cat) dragged = {categoryId:cat.dataset.cat};
+        else return;
+        event.dataTransfer.setData('application/x-gdhome-library','1');
+      };
+      const targetOf = event => event.target.closest('[data-cat],[data-asset-id],[data-facet=tags],[data-facet=suppliers]');
+      const clearMark = () => body.querySelectorAll('.asset-drop-mark').forEach(el => el.classList.remove('asset-drop-mark'));
+      body.ondragover = event => {
+        const target = targetOf(event);
+        if (!dragged || !target) return;
+        event.preventDefault();
+        clearMark();
+        target.classList.add('asset-drop-mark');
+      };
+      body.ondragend = () => { dragged = null; clearMark(); };
+      body.ondrop = event => {
+        const target = targetOf(event), source = dragged;
+        if (!source || !target) return;
+        event.preventDefault();
+        dragged = null;
+        clearMark();
+        const categoryId = target.dataset.cat;
+        if (source.categoryId && categoryId && source.categoryId !== categoryId) {
+          const order = data.categories.map(item => item.id).filter(id => id !== source.categoryId);
+          order.splice(order.indexOf(categoryId),0,source.categoryId);
+          changeCategoryOrder(order);
+        } else if (source.ids && categoryId) applyBulk({ids:source.ids,categoryId});
+        else if (source.ids && target.dataset.facet) applyBulk({ids:source.ids,[target.dataset.facet === 'tags' ? 'addTags' : 'addSuppliers']:[target.dataset.value]});
+        else if (source.ids && target.dataset.assetId && !source.ids.includes(target.dataset.assetId)) {
+          const order = items.map(item => item.id).filter(id => !source.ids.includes(id));
+          order.splice(order.indexOf(target.dataset.assetId),0,...source.ids);
+          applyBulk({ids:order,order});
+        }
+      };
+      body.querySelectorAll('[data-cat]').forEach(button => button.onkeydown = event => {
+        if (!event.altKey || !['ArrowUp','ArrowDown'].includes(event.key)) return;
+        const order = data.categories.map(item => item.id);
+        const index = order.indexOf(button.dataset.cat);
+        const next = index + (event.key === 'ArrowUp' ? -1 : 1);
+        if (next < 0 || next >= order.length) return;
+        event.preventDefault();
+        [order[index],order[next]] = [order[next],order[index]];
+        changeCategoryOrder(order);
+      });
       body.querySelector('[data-manage-suppliers]')?.addEventListener('click',async () => {
         const previousName = prompt('Chọn tên để sửa hoặc để trống để thêm: ' + (data.suppliers || []).map(item => item.name).join(', '));
         if (previousName === null) return;
@@ -1159,7 +1277,7 @@ window.GDHomeAssets = (() => {
       try {
         const items = await loadRenders(projectId,force);
         if (!list.isConnected) return;
-        list.innerHTML = grid(items,{selectable:!!onPick,removable:true,empty:'Dự án chưa có phối cảnh 3D.'});
+        list.innerHTML = bulkControls() + grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Dự án chưa có phối cảnh 3D.'});
         list.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
           const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
           body.closest('dialog').close();

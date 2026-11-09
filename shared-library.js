@@ -8,6 +8,7 @@ const libraryKey = dataKey => 'lib-v1-' + crypto.createHash('sha256').update(dat
 const text = (value, max = 160) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
 const shortName = name => text(name.replace(/\s*\(.*\)\s*$/, ''), 80) || text(name, 80);
 const queues = new Map();
+const bulkUndo = new Map();
 const woodCategory = {id:'ancuong-wood',name:'Mã gỗ'};
 const woodSeed = require('./data/wood-ancuong.json').woods.map((wood,i) => ({
   ...wood,id:'ancuong-seed-' + i,categoryId:woodCategory.id,brand:'An Cường',finish:'',kind:'wood',builtin:true,createdAt:1
@@ -77,6 +78,7 @@ function normalize(data) {
       categoryId: ids.has(item.categoryId) ? item.categoryId : (categories[0]?.id || ''),
       ...itemMetadata(item),
       kind:kindOf(item),
+      ...(Number.isFinite(item.order) ? {order:item.order} : {}),
       ...(item.builtin || item.id?.startsWith?.('ancuong-seed-') ? {builtin:true} : {}),
       ...(item.hidden ? {hidden:true} : {}),
       ...(kindOf(item) === 'paint' ? {hex:item.hex.toLowerCase()} : {}),
@@ -180,6 +182,44 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       return {added,skipped};
     });
     return sendJson(res, 200, { ...data, ...result });
+  }
+  if (urlPath === '/api/library/items/bulk') {
+    const {data,result} = await mutate(store,key,data => {
+      if (body.undo) {
+        const previous = bulkUndo.get(key);
+        if (!previous || previous.token !== body.undo || previous.version !== data._version || previous.expires < Date.now()) {
+          fail(409,'Thư viện đã thay đổi hoặc đã hết thời gian hoàn tác.');
+        }
+        data.items = previous.items;
+        return {undoToken:null};
+      }
+      const ids = new Set(stringList(Array.isArray(body.ids) ? body.ids.slice(0,5000) : []));
+      // Selections can contain an entire category.
+      if (Array.isArray(body.ids)) for (const id of body.ids.slice(0,5000)) if (typeof id === 'string') ids.add(id);
+      const original = structuredClone(data.items);
+      const categoryId = body.categoryId;
+      if (categoryId && !data.categories.some(category => category.id === categoryId)) fail(400,'Hạng mục không hợp lệ.');
+      const set = body.set || {};
+      for (const item of data.items) {
+        if (!ids.has(item.id)) continue;
+        if (categoryId) item.categoryId = categoryId;
+        for (const field of ['brand','size']) if (Object.hasOwn(set,field)) item[field] = itemMetadata(set)[field];
+        item.tags = stringList([...(item.tags || []),...stringList(body.addTags)]).filter(tag => !stringList(body.removeTags).includes(tag));
+        item.suppliers = stringList([...(item.suppliers || []),...stringList(body.addSuppliers)]).filter(name => !stringList(body.removeSuppliers).includes(name));
+      }
+      if (body.delete === true) data.items = data.items.filter(item => !ids.has(item.id));
+      if (Array.isArray(body.order)) {
+        const ordered = new Map(body.order.slice(0,5000).map((id,index) => [id,index]));
+        for (const item of data.items) if (ids.has(item.id) && ordered.has(item.id)) item.order = ordered.get(item.id);
+      }
+      return {undoToken:crypto.randomUUID(),items:original};
+    });
+    if (result.undoToken) {
+      const snapshot = {token:result.undoToken,version:data._version,items:result.items,expires:Date.now()+300000};
+      bulkUndo.set(key,snapshot);
+      setTimeout(() => { if (bulkUndo.get(key) === snapshot) bulkUndo.delete(key); },300000).unref();
+    } else bulkUndo.delete(key);
+    return sendJson(res,200,{...data,undoToken:result.undoToken});
   }
   if (urlPath === '/api/library/items/update') {
     const { data } = await mutate(store, key, data => {
