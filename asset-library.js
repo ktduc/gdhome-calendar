@@ -1939,6 +1939,7 @@ window.GDHomeAssets = (() => {
       url = result.next;
       if (url && budget.pages && budget.items) await catalogueDelay(1200,signal);
     }
+    if (url && !signal.aborted && (!budget.pages || !budget.items)) failures.push('Đã tới giới hạn 30 trang hoặc 600 mẫu.');
     if (failures.length) onWarning(failures.join(' · '));
     return items;
   }
@@ -2301,6 +2302,7 @@ window.GDHomeAssets = (() => {
               }
               scans[index] = imported.map(item => ({...item,originImport:entry}));
               for (const item of imported) sources.add(item.source);
+              entry.incomplete = signal.aborted || !!warning;
               entry.status = imported.length || signal.aborted ? 'partial' : warning ? 'error' : 'done';
               setProgress(entry,signal.aborted ? 'stopped' : entry.status === 'error' ? 'error' : 'done',
                 signal.aborted ? 'Đã dừng · ' + imported.length + ' mẫu' : entry.status === 'error' ? 'Lỗi · ' + warning : 'Xong · ' + imported.length + ' mẫu');
@@ -2317,14 +2319,18 @@ window.GDHomeAssets = (() => {
         await saveImportRows(activeImports);
         if (warnings.length) toast(warnings.join(' · '));
         if (signal.aborted && !items.length) { status.textContent = 'Đã dừng xử lý.'; return; }
+        let saveWarning = '';
         if (mode !== 'pdf' && form.elements.autoSave.checked && items.length) {
           const automatic = items.filter(item => !item.needsReview && (item.code || item.web || item.fileImage));
-          if (automatic.length) await persistSelection(automatic.map(item => ({item,code:item.code || '',name:item.name})),{auto:true});
-          items = items.filter(item => !automatic.includes(item));
+          if (automatic.length && await persistSelection(automatic.map(item => ({item,code:item.code || '',name:item.name})),{auto:true})) {
+            const saved = new Set(automatic);
+            items = items.filter(item => !saved.has(item));
+          } else if (automatic.length) saveWarning = status.textContent;
           if (!items.length) return;
         }
         for (const item of items) sources.add(item.source);
-        status.textContent = items.length ? 'Nhận diện ' + items.length + ' mẫu. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mẫu có ảnh.';
+        const resultMessage = items.length ? 'Nhận diện ' + items.length + ' mẫu. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mẫu có ảnh.';
+        status.textContent = [saveWarning,resultMessage].filter(Boolean).join(' · ');
         list.innerHTML = items.map(item => '<article class="wood-catalogue-card' + (item.needsReview ? ' needs-review' : '') + '" tabindex="0">' +
           '<canvas aria-label="Ảnh swatch"></canvas><small title="' + (item.needsReview ? 'Cần kiểm tra' : '') + '">' +
           (item.web ? 'Web' : item.fileImage ? 'Ảnh' : 'T' + item.page) + ' · ' + Math.round(item.confidence*100) + '%</small>' +
@@ -2422,12 +2428,17 @@ window.GDHomeAssets = (() => {
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
       let added = 0, skipped = 0, batch = [], batchCategory;
       const savedCrops = new Map();
+      const reviewed = new Map();
+      const finishHistory = (complete = false) => {
+        for (const [entry,metadata] of reviewed) Object.assign(entry,{...metadata,
+          status:complete && !entry.incomplete ? 'done' : 'partial',count:entry.itemIds.length});
+        return saveImportRows([...reviewed.keys()]);
+      };
       try {
         const data = await loadLibrary();
         const existing = new Map(data.items.filter(item => item.code && item.full).map(item => [catalogueKey(item),item]));
         const savedCodes = new Set(data.items.filter(item => item.full && item.code).map(item => duplicateCode(item.code)));
         const savedHashes = new Set(data.items.flatMap(item => [item.full,item.originalFull]).filter(Boolean).map(name => name.split('.')[0]));
-        const reviewed = new Map();
         const flush = async () => {
           if (!batch.length) return;
           const result = await addItems(batchCategory,batch.map(({record}) => record));
@@ -2489,11 +2500,15 @@ window.GDHomeAssets = (() => {
           if (batch.length === 50) await flush();
         }
         await flush();
-        for (const [entry,metadata] of reviewed) Object.assign(entry,{...metadata,status:'done',count:entry.itemIds.length});
-        await saveImportRows([...reviewed.keys()]);
+        await finishHistory(auto || dialog.open);
         status.textContent = 'Đã lưu ' + added + ' mã · bỏ qua ' + skipped + ' mã trùng.';
         onSaved?.();
-      } catch (error) { status.textContent = (added ? 'Đã lưu ' + added + ' mã. ' : '') + error.message; }
+        return true;
+      } catch (error) {
+        await finishHistory().catch(historyError => toast(historyError.message));
+        status.textContent = (added ? 'Đã lưu ' + added + ' mã. ' : '') + error.message;
+        return false;
+      }
     }
     save.onclick = async () => {
       if (busy || !form.reportValidity()) return;

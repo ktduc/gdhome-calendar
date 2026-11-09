@@ -2678,10 +2678,11 @@ cases['20.10'] = async page => {
   await page.route('**/api/catalogue/web',route => {
     const [url] = route.request().postDataJSON().urls;
     requests.push(url);
-    const n = Number(new URL(url).searchParams.get('page') || 1);
+    const parsed = new URL(url), n = Number(parsed.searchParams.get('page') || 1);
+    const prefix = parsed.pathname === '/stop' ? 'Y' : 'X';
     const row = code => ({code,name:code,image:'https://example.com/' + code + '.png'});
-    return route.fulfill({json:{items:[row('X'+n),...(n > 1 ? [row('X1')] : [])],total:3,
-      next:n < 3 ? 'https://example.com/gach?page=' + (n+1) : null}});
+    return route.fulfill({json:{items:[row(prefix+n),...(n > 1 ? [row(prefix+'1')] : [])],total:3,
+      next:n < 3 ? parsed.origin+parsed.pathname+'?page='+(n+1) : null}});
   });
   await page.route('**/api/catalogue/image',route => {
     images.push(route.request().postDataJSON().url);
@@ -2712,6 +2713,16 @@ cases['20.10'] = async page => {
   await library.getByLabel('Chưa duyệt (3)').waitFor({state:'detached'});
   const saved = await page.request.get('/api/library').then(r => r.json());
   assert.ok(saved.items.filter(item => /^X[1-3]$/.test(item.code || '')).every(item => !item.tags.includes('chua-duyet')));
+  await library.locator('[data-import-wood]').click();
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=urls]').fill('https://example.com/stop');
+  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.locator('[role=status]').filter({hasText:/Trang 1\/3 · 1 mẫu/}).waitFor();
+  await modal.locator('[data-catalogue-cancel]').click();
+  await modal.getByText(/Đã lưu 1 mã/).waitFor();
+  assert.equal(requests.filter(url => new URL(url).pathname === '/stop').length,1);
+  const partial = (await page.request.get('/api/library/imports').then(r => r.json())).imports.find(entry => entry.source.endsWith('/stop'));
+  assert.deepEqual([partial.status,partial.count],['partial',1]);
 };
 
 cases['20.12'] = async page => {
