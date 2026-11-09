@@ -94,6 +94,20 @@
   }
 
   const canMergeCategory = id => !['ancuong-wood','cat-3','kitchen-accessories'].includes(id);
+  const removedSystemCategories = data => new Set(Array.isArray(data.removedSystemCategories) ?
+    data.removedSystemCategories.filter(id => !canMergeCategory(id)) : []);
+
+  function removeCategory(data,id) {
+    if (!data.categories.some(category => category.id === id)) return;
+    if (data.items.some(item => item.categoryId === id)) fail(409,'Hạng mục còn mẫu. Chuyển hoặc xoá mẫu trước.');
+    data.categories = data.categories.filter(category => category.id !== id);
+    if (!canMergeCategory(id)) {
+      const removed = removedSystemCategories(data);
+      removed.add(id);
+      data.removedSystemCategories = [...removed];
+    }
+  }
+
   function mergeCategories(data,{sourceId,targetId}) {
     if (!sourceId || !targetId || sourceId === targetId) fail(400,'Chọn hai hạng mục khác nhau.');
     if (!canMergeCategory(sourceId)) fail(400,'Hạng mục hệ thống chỉ có thể dùng làm đích gộp.');
@@ -112,7 +126,7 @@
     data.categories = data.categories.filter(category => category.id !== sourceId);
   }
 
-  const api = {labels,normalize,view,change,canMergeCategory,mergeCategories};
+  const api = {labels,normalize,view,change,canMergeCategory,removedSystemCategories,removeCategory,mergeCategories};
   if (typeof module !== 'undefined') module.exports = api;
   else window.GDHomeLibraryAttributes = api;
 })();

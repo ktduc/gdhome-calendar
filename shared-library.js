@@ -81,20 +81,22 @@ function cleanView(view) {
 
 function normalize(data) {
   const base = data && typeof data === 'object' ? data : defaultLibrary();
+  const removed = attributes.removedSystemCategories(base);
   const categories = (Array.isArray(base.categories) ? base.categories : [])
-    .filter(c => c && typeof c.id === 'string' && text(c.name))
+    .filter(c => c && typeof c.id === 'string' && text(c.name) && !removed.has(c.id))
     .slice(0, 200).map(c => ({ id: c.id.slice(0, 60), name: text(c.name, 80), ...(c.source ? { source: text(c.source, 160) } : {}),
       ...(Array.isArray(c.aliases) ? {aliases:[...new Set(c.aliases.map(alias => text(alias,160)).filter(Boolean))].slice(0,200)} : {})
     }));
-  const genericWood = categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
-  if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
   const wood = categories.find(c => c.id === woodCategory.id);
-  if (wood) wood.name = woodCategory.name;
-  else categories.push({...woodCategory});
-  if (!categories.some(c => c.id === paintCategory.id)) categories.push({...paintCategory});
+  if (!removed.has(woodCategory.id) && (!wood || wood.name.toLocaleLowerCase('vi') === 'mã gỗ')) {
+    const genericWood = categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
+    if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
+    if (!wood) categories.push({...woodCategory});
+  }
+  if (!removed.has(paintCategory.id) && !categories.some(c => c.id === paintCategory.id)) categories.push({...paintCategory});
   const kitchen = categories.find(c => c.id === kitchenCategory.id);
   if (kitchen) kitchen.subgroups = [...kitchenCategory.subgroups];
-  else categories.push({...kitchenCategory});
+  else if (!removed.has(kitchenCategory.id)) categories.push({...kitchenCategory});
   const ids = new Set(categories.map(c => c.id));
   const items = (Array.isArray(base.items) ? base.items : [])
     .filter(item => item && (kindOf(item) === 'paint' ? validHex(item.hex) && woodKey(item.code) : (imageName(item.full) && imageName(item.thumb)) || (kindOf(item) === 'wood' && woodKey(item.code))))
@@ -120,15 +122,16 @@ function normalize(data) {
       ...(Number.isFinite(item.lastUsedAt) && item.lastUsedAt > 0 ? {lastUsedAt:item.lastUsedAt} : {}),
       ...(Number(item.used) > 0 ? { used: Math.min(1e6, Math.floor(Number(item.used))) } : {})
     }));
-  if (!base.woodSeeded) {
+  if (!removed.has(woodCategory.id) && !base.woodSeeded) {
     const keys = new Set(items.filter(item => item.categoryId === woodCategory.id).map(woodItemKey));
     items.push(...woodSeed.filter(item => !keys.has(woodItemKey(item))));
   }
-  if (!base.paintSeeded) {
+  if (!removed.has(paintCategory.id) && !base.paintSeeded) {
     const keys = new Set(items.filter(item => item.kind === 'paint').map(woodItemKey));
     items.push(...paintSeed.filter(item => !keys.has(woodItemKey(item))));
   }
   return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
+    ...(removed.size ? {removedSystemCategories:[...removed]} : {}),
     attributes:attributes.normalize({...base,categories}),imports:(Array.isArray(base.imports) ? base.imports : [])
       .slice(0,200).map(importHistory.normalize).filter(Boolean),woodSeeded:true,paintSeeded:true };
 }
@@ -262,15 +265,10 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     const {data} = await mutate(store,key,data => attributes.change(data,body,{size:materialSize}));
     return sendJson(res,200,data);
   }
-  const ensure = async data => {
-    if (!data.categories.length) Object.assign(data, defaultLibrary(), { _version: data._version, items: data.items });
-  };
-
   if (urlPath === '/api/library/items') {
     const list = Array.isArray(body.items) ? body.items : [body];
     if (!list.length || list.length > 50) fail(400, 'Mỗi lần thêm từ 1 đến 50 ảnh.');
-    const { data, result } = await mutate(store, key, async data => {
-      await ensure(data);
+    const { data, result } = await mutate(store, key, data => {
       const categoryId = data.categories.some(c => c.id === body.categoryId) ? body.categoryId : null;
       if (!categoryId) fail(400, 'Chọn hạng mục cho ảnh.');
       const added = [];
@@ -404,8 +402,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   if (urlPath === '/api/library/categories') {
     const name = text(body.name, 80);
     if (!name) fail(400, 'Nhập tên hạng mục.');
-    const { data, result } = await mutate(store, key, async data => {
-      await ensure(data);
+    const { data, result } = await mutate(store, key, data => {
       if (body.id) {
         const category = data.categories.find(c => c.id === body.id);
         if (!category) fail(404, 'Không tìm thấy hạng mục.');
@@ -428,11 +425,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     return sendJson(res,200,data);
   }
   if (urlPath === '/api/library/categories/delete') {
-    if (body.id === woodCategory.id) fail(400,'Không thể xoá hạng mục Mã gỗ.');
-    const { data } = await mutate(store, key, data => {
-      if (data.items.some(item => item.categoryId === body.id)) fail(409, 'Hạng mục còn ảnh. Chuyển hoặc xoá ảnh trước.');
-      data.categories = data.categories.filter(c => c.id !== body.id);
-    });
+    const {data} = await mutate(store,key,data => attributes.removeCategory(data,body.id));
     return sendJson(res, 200, data);
   }
   if (urlPath === '/api/library/categories/order') {

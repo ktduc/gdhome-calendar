@@ -2628,6 +2628,53 @@ cases['20-library-ui'] = async page => {
   await library.getByRole('table').waitFor();
 };
 
+cases['20-category-merge-target'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  const {sourceId,itemId} = await page.evaluate(async () => {
+    const {category} = await GDHomeAssets.saveCategory('Kho gỗ cũ');
+    const {added} = await GDHomeAssets.addItems(category.id,[{
+      name:'Mẫu kho gỗ cũ',full:'a'.repeat(64)+'.webp',thumb:'a'.repeat(64)+'.webp'
+    }]);
+    GDHomeAssets.openLibrary({categoryId:category.id});
+    return {sourceId:category.id,itemId:added[0].id};
+  });
+  const library = page.locator('.asset-library-dialog');
+  const menu = library.locator('.asset-library-context');
+  const target = library.locator('[data-cat=ancuong-wood]');
+  await library.locator('[data-cat="' + sourceId + '"]').click({button:'right'});
+  await menu.getByRole('button',{name:'Gộp vào hạng mục…'}).click();
+  const merge = page.locator('.asset-attribute-editor');
+  await merge.locator('[name=target]').selectOption('ancuong-wood');
+  await merge.getByRole('button',{name:'Gộp',exact:true}).click();
+  await library.locator('[data-asset-id="' + itemId + '"]').waitFor();
+  assert.ok(await library.locator('[data-cat-rename]').isVisible());
+  assert.ok(await library.locator('[data-cat-delete]').isVisible());
+
+  await target.click({button:'right'});
+  await menu.getByRole('button',{name:'Xoá hạng mục'}).waitFor();
+  page.once('dialog',prompt => prompt.accept('Kho gỗ hợp nhất'));
+  await menu.getByRole('button',{name:'Sửa tên hạng mục'}).click();
+  await target.getByText('Kho gỗ hợp nhất',{exact:true}).waitFor();
+  page.once('dialog',confirm => confirm.accept());
+  await library.locator('[data-cat-delete]').click();
+  await page.getByText(/Hạng mục còn mẫu/).waitFor();
+
+  const data = await page.request.get('/api/library').then(response => response.json());
+  assert.equal(data.categories.find(category => category.id === 'ancuong-wood').name,'Kho gỗ hợp nhất');
+  const ids = data.items.filter(item => item.categoryId === 'ancuong-wood').map(item => item.id);
+  const moved = await page.request.post('/api/library/items/bulk',{data:{ids,categoryId:'cat-5'}});
+  assert.ok(moved.ok());
+  await page.evaluate(() => GDHomeAssets.loadLibrary(true));
+  await target.click({button:'right'});
+  page.once('dialog',confirm => confirm.accept());
+  await menu.getByRole('button',{name:'Xoá hạng mục'}).click();
+  await target.waitFor({state:'detached'});
+  const reloaded = await page.request.get('/api/library').then(response => response.json());
+  assert.equal(reloaded.categories.some(category => category.id === 'ancuong-wood'),false);
+  assert.equal(reloaded.items.find(item => item.id === itemId).categoryId,'cat-5');
+};
+
 cases['20.17'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));

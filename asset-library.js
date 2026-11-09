@@ -178,11 +178,13 @@ window.GDHomeAssets = (() => {
       const stored = JSON.parse(localStorage.getItem(guestLibraryKey) || 'null');
       if (stored?.categories) {
         for (const item of stored.items || []) item.size = primarySize(item.size);
-        const genericWood = stored.categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
-        if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
         const wood = stored.categories.find(c => c.id === 'ancuong-wood');
-        if (wood) wood.name = 'Mã gỗ';
-        else stored.categories.push({id:'ancuong-wood',name:'Mã gỗ'});
+        if (!attributeCatalog().removedSystemCategories(stored).has('ancuong-wood') &&
+            (!wood || wood.name.toLocaleLowerCase('vi') === 'mã gỗ')) {
+          const genericWood = stored.categories.find(c => c.id === 'cat-1' && c.name.toLocaleLowerCase('vi') === 'mã gỗ');
+          if (genericWood) genericWood.name = 'Mẫu ảnh gỗ';
+          if (!wood) stored.categories.push({id:'ancuong-wood',name:'Mã gỗ'});
+        }
         return stored;
       }
     } catch { /* Dữ liệu khách hỏng thì tạo lại. */ }
@@ -205,7 +207,8 @@ window.GDHomeAssets = (() => {
         for (const preset of presets) for (const item of preset.colors || preset.woods || []) {
           const kind = preset.colors ? 'paint' : 'wood';
           const entry = {...item,kind,brand:preset.brand || 'An Cường',categoryId:kind === 'paint' ? 'cat-3' : 'ancuong-wood',builtin:true,id:uid()};
-          if (!data.items.some(other => other.code && catalogueKey(other) === catalogueKey(entry))) data.items.push(entry);
+          if (data.categories.some(category => category.id === entry.categoryId) &&
+              !data.items.some(other => other.code && catalogueKey(other) === catalogueKey(entry))) data.items.push(entry);
         }
         data.builtinSeeded = true;
         saveGuest(data);
@@ -292,8 +295,7 @@ window.GDHomeAssets = (() => {
     return {category};
   });
   const deleteCategory = id => libraryCall('categories/delete',{id},data => {
-    if (data.items.some(item => item.categoryId === id)) throw new Error('Hạng mục còn ảnh. Chuyển hoặc xoá ảnh trước.');
-    data.categories = data.categories.filter(c => c.id !== id);
+    attributeCatalog().removeCategory(data,id);
     return {};
   });
   function categoryFor(data,groupName) {
@@ -838,15 +840,15 @@ window.GDHomeAssets = (() => {
     menu.style.top = Math.max(6,Math.min(event.clientY || anchor.bottom,innerHeight-menu.offsetHeight-6)) + 'px';
     menu.firstElementChild.focus();
   }
-  function wireLibraryContext(root,data,{renameCategory,mergeCategory,showAttributes,attributeKey}) {
+  function wireLibraryContext(root,data,{renameCategory,mergeCategory,removeManagedCategory,showAttributes,attributeKey}) {
     const {labels,view,canMergeCategory} = attributeCatalog();
     root.oncontextmenu = event => {
       const categoryId = event.target.closest('[data-cat]')?.dataset.cat;
       if (categoryId) {
         const category = data.categories.find(entry => entry.id === categoryId);
-        const actions = [];
-        if (categoryId !== 'ancuong-wood') actions.push(['Sửa tên hạng mục',() => renameCategory(category)]);
+        const actions = [['Sửa tên hạng mục',() => renameCategory(category)]];
         if (canMergeCategory(categoryId) && data.categories.length > 1) actions.push(['Gộp vào hạng mục…',() => mergeCategory(category,data)]);
+        actions.push(['Xoá hạng mục',() => removeManagedCategory(category)]);
         return showLibraryContext(root,event,actions);
       }
       const choice = event.target.closest('.asset-facet-choice')?.querySelector('[data-facet]');
@@ -1182,7 +1184,7 @@ window.GDHomeAssets = (() => {
     if (!query.trim()) return [];
     const data = await loadLibrary().catch(() => null);
     if (!data) return [];
-    const category = categoryId || categoryFor(data,groupName)?.id;
+    const category = data.categories.find(category => category.id === categoryId)?.id || categoryFor(data,groupName)?.id;
     return data.items.filter(item => item.full && item.kind === 'image' && !item.hidden && item.categoryId === category && fold(item.name).includes(fold(query)));
   }
   function wireLocalAssetPhotos(panel,items,onPick) {
@@ -2963,6 +2965,14 @@ window.GDHomeAssets = (() => {
       if (!name?.trim()) return;
       try { await saveCategory(name.trim(),category.id); } catch (error) { toast(error.message); }
     }
+    async function removeManagedCategory(category) {
+      if (!confirm('Xoá hạng mục "' + category.name + '"?')) return;
+      try {
+        await deleteCategory(category.id);
+        undoToken = guestUndo = null;
+        if (current === category.id) changeCategory(null);
+      } catch (error) { toast(error.message); }
+    }
     function mergeCategory(category,data) {
       const targets = data.categories.filter(entry => entry.id !== category.id).map(entry => [entry.id,entry.name]);
       openLibraryMerge(category.name,targets,async targetId => {
@@ -3039,7 +3049,7 @@ window.GDHomeAssets = (() => {
         '<section class="asset-library-main">' + facetMarkup(candidates,facets) + (attributes ? '' : category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
           '<button type="button" data-import-wood>Nhập catalogue</button>' +
           (!onPick ? '<button type="button" data-find-duplicates>Tìm mã trùng</button>' : '') +
-          (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
+          '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>' +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
           '<label>Kiểu hiển thị khi tải ảnh ' + displaySelect(uploadDisplay || categoryDisplay(category),'data-library-display') + '</label>' +
@@ -3061,7 +3071,7 @@ window.GDHomeAssets = (() => {
         if (!name?.trim()) return;
         try { const result = await saveCategory(name.trim()); changeCategory(result.category?.id || current); } catch (error) { toast(error.message); }
       };
-      if (!onPick) wireLibraryContext(body,data,{renameCategory,mergeCategory,attributeKey:viewState.attributeKey || 'size',showAttributes:key => {
+      if (!onPick) wireLibraryContext(body,data,{renameCategory,mergeCategory,removeManagedCategory,attributeKey:viewState.attributeKey || 'size',showAttributes:key => {
         viewState.attributeKey = key;
         viewState.attributeMessage = '';
         showTab('attributes');
@@ -3196,10 +3206,7 @@ window.GDHomeAssets = (() => {
       });
       body.querySelector('[data-import-wood]')?.addEventListener('click',() => openWoodCatalogue(category.id,paint));
       body.querySelector('[data-cat-rename]')?.addEventListener('click',() => renameCategory(category));
-      body.querySelector('[data-cat-delete]')?.addEventListener('click',async () => {
-        if (!confirm('Xoá hạng mục "' + category.name + '"?')) return;
-        try { await deleteCategory(category.id); changeCategory(null); } catch (error) { toast(error.message); }
-      });
+      body.querySelector('[data-cat-delete]')?.addEventListener('click',() => removeManagedCategory(category));
       const search = body.querySelector('input[type=search]');
       if (search) search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = body.querySelector('input[type=search]'); s?.focus(); s?.setSelectionRange(query.length,query.length); }); },250); };
       const displayOption = body.querySelector('[data-library-display]');

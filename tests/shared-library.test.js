@@ -82,6 +82,26 @@ test('Gộp hạng mục giữ ID mẫu, lịch sử nhập và phạm vi thuộ
   assert.equal(categoryForGroup(data,'GẠCH ỐP LÁT (sảnh, WC, logia)').id,targetId);
 });
 
+test('Hạng mục hệ thống nhận mẫu gộp, lưu tên mới và có thể xoá khi rỗng', async () => {
+  const {call} = harness();
+  const sourceId = 'cat-6', targetId = 'ancuong-wood';
+  const added = await call('/api/library/items',{categoryId:sourceId,items:[{full:a,thumb:b,name:'Mẫu gộp'}]});
+  const itemId = added.data.added[0].id;
+  assert.equal((await call('/api/library/categories/merge',{sourceId,targetId})).status,200);
+  assert.equal((await call('/api/library/categories',{id:targetId,name:'Gỗ đã phân loại'})).status,200);
+  const {data} = await call('/api/library');
+  assert.equal(data.categories.find(category => category.id === targetId).name,'Gỗ đã phân loại');
+  assert.equal(data.items.find(item => item.id === itemId).categoryId,targetId);
+  assert.equal((await call('/api/library/categories/delete',{id:targetId})).status,409);
+
+  const ids = data.items.filter(item => item.categoryId === targetId).map(item => item.id);
+  assert.equal((await call('/api/library/items/bulk',{ids,categoryId:'cat-5'})).status,200);
+  assert.equal((await call('/api/library/categories/delete',{id:targetId})).status,200);
+  const reloaded = (await call('/api/library')).data;
+  assert.equal(reloaded.categories.some(category => category.id === targetId),false);
+  assert.ok(ids.every(id => reloaded.items.some(item => item.id === id && item.categoryId === 'cat-5')));
+});
+
 test('Cùng mã và hãng vẫn có thể lưu riêng ở hạng mục đích đã chọn', async () => {
   const {call} = harness();
   const item = {code:'G-161',brand:'Hãng mẫu',name:'Gạch',full:a,thumb:b};
