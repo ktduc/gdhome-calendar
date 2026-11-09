@@ -2228,6 +2228,46 @@ cases['19.9'] = async page => {
   assert.ok(metrics.center[0] > 225 && metrics.center[2] < 30);
 };
 
+cases['19.10'] = async page => {
+  const {PDFDocument,rgb} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const sheet = pdf.addPage([400,500]);
+  sheet.drawRectangle({x:10,y:155,width:380,height:330,color:rgb(.5,.65,.7)});
+  sheet.drawText('Ma dat hang    Quy cach    Kich thuoc tu    Don gia',{x:12,y:132,size:10});
+  for (let i=0;i<3;i++) {
+    const width = 700+i*100;
+    sheet.drawText('GL06.'+(70+i*10)+'AG   R'+(width-36)+'*S265*C550   '+width+'   '+(width-36)+'   Bo   15.390.000',
+      {x:12,y:104-i*25,size:10});
+  }
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  await openMaterials(page);
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'kitchen-accessories'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=useAi]').uncheck();
+  await modal.locator('[name=brand]').fill('Garis');
+  await modal.locator('[name=collection]').fill('Mẫu bếp');
+  await modal.locator('[name=pdf]').setInputFiles({name:'bep.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  const cards = modal.locator('.wood-catalogue-card');
+  await cards.last().waitFor({timeout:15000});
+  assert.equal(await cards.count(),3);
+  assert.equal(await cards.first().locator('[data-catalogue-field=spec]').inputValue(),'R664*S265*C550');
+  assert.equal(await cards.first().locator('[data-catalogue-field=cabinetWidth]').inputValue(),'700');
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 3 mã/).waitFor();
+  const library = await page.request.get('/api/library').then(r => r.json());
+  const items = library.items.filter(item => item.categoryId === 'kitchen-accessories');
+  assert.equal(items.length,3);
+  assert.equal(new Set(items.map(item => item.full)).size,1);
+  const item = items.find(item => item.code === 'GL06.70AG');
+  assert.equal(item.price,15390000);
+  assert.equal(item.innerWidth,664);
+  assert.ok(item.tags.includes('Tủ 700'));
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });

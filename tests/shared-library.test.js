@@ -25,7 +25,7 @@ test('Dữ liệu dùng chung: hạng mục mặc định, thêm/xoá ảnh, tá
   const { call } = harness();
   const first = await call('/api/library');
   assert.equal(first.status,200);
-  assert.equal(first.data.categories.length,18);
+  assert.equal(first.data.categories.length,19);
   assert.equal(first.data.categories[5].name,'GẠCH ỐP LÁT');
 
   const category = first.data.categories[5].id;

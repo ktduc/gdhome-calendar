@@ -13,6 +13,10 @@ const woodCategory = {id:'ancuong-wood',name:'Mã gỗ'};
 const woodSeed = require('./data/wood-ancuong.json').woods.map((wood,i) => ({
   ...wood,id:'ancuong-seed-' + i,categoryId:woodCategory.id,brand:'An Cường',finish:'',kind:'wood',builtin:true,createdAt:1
 }));
+const kitchenCategory = {id:'kitchen-accessories',name:'PHỤ KIỆN BẾP',subgroups:[
+  'Giá bát đĩa nâng hạ','Giá bát đĩa','Giá xoong nồi','Giá dao thớt gia vị','Thùng gạo','Thùng rác',
+  'Tủ đồ khô','Góc liên hoàn','Ray / bản lề','Tay nâng'
+]};
 const paintCategory = {id:'cat-3',name:'SƠN TƯỜNG / TRẦN'};
 const paintSeed = ['dulux','jotun'].flatMap(key => {
   const {brand,colors} = require('./data/paint-' + key + '.json');
@@ -33,7 +37,13 @@ function materialSize(value) {
   return (+match[1]*factor) + 'x' + (+match[3]*factor);
 }
 function itemMetadata(item) {
-  return {brand:text(item.brand,80),size:materialSize(item.size || item.name),tags:stringList(item.tags),suppliers:stringList(item.suppliers)};
+  const number = (value,max) => Math.min(max,Math.max(0,Math.round(Number(String(value || '').replace(/[.,\s]/g,'')) || 0)));
+  const cabinetWidth = number(item.cabinetWidth,20000);
+  const tags = stringList([...(Array.isArray(item.tags) ? item.tags : []),...(cabinetWidth ? ['Tủ '+cabinetWidth] : [])]);
+  return {brand:text(item.brand,80),size:materialSize(item.size || item.name),tags,suppliers:stringList(item.suppliers),
+    ...(item.spec ? {spec:text(item.spec,160)} : {}),...(item.subgroup ? {subgroup:text(item.subgroup,80)} : {}),
+    ...(cabinetWidth ? {cabinetWidth} : {}),...(item.innerWidth ? {innerWidth:number(item.innerWidth,20000)} : {}),
+    ...(item.unit ? {unit:text(item.unit,30)} : {}),...(item.price ? {price:number(item.price,1e10)} : {})};
 }
 function supplierRecord(item) {
   return {name:text(item?.name,80),phone:text(item?.phone,40),note:text(item?.note,300)};
@@ -70,6 +80,9 @@ function normalize(data) {
   if (wood) wood.name = woodCategory.name;
   else categories.push({...woodCategory});
   if (!categories.some(c => c.id === paintCategory.id)) categories.push({...paintCategory});
+  const kitchen = categories.find(c => c.id === kitchenCategory.id);
+  if (kitchen) kitchen.subgroups = [...kitchenCategory.subgroups];
+  else categories.push({...kitchenCategory});
   const ids = new Set(categories.map(c => c.id));
   const items = (Array.isArray(base.items) ? base.items : [])
     .filter(item => item && (kindOf(item) === 'paint' ? validHex(item.hex) && woodKey(item.code) : (imageName(item.full) && imageName(item.thumb)) || (kindOf(item) === 'wood' && woodKey(item.code))))
