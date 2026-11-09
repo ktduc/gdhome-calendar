@@ -2621,6 +2621,54 @@ cases['20.11'] = async page => {
   assert.equal(attrs.attributes.finish.find(row => row.name === 'Bề mặt mới').count,1);
 };
 
+cases['20.9'] = async page => {
+  await openMaterials(page);
+  const secondImage = await page.evaluate(() => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:32,height:18});
+    const context = canvas.getContext('2d');
+    context.fillStyle = '#65a643';
+    context.fillRect(0,0,32,18);
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  let reads = 0;
+  await page.route('**/api/catalogue/web',route => {
+    reads++;
+    const row = (code,image) => ({code,name:code,image:'https://example.com/' + image + '.png',brand:'Hãng lịch sử'});
+    return route.fulfill({json:{items:reads === 1 ? [row('G-01','a')] :
+      [row('g 01','b'),row('G-02','a'),row('G-03','b')]}});
+  });
+  await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',
+    body:Buffer.from(route.request().postDataJSON().url.endsWith('a.png') ? imageFixture : secondImage,'base64')}));
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=urls]').fill('https://example.com/gach/?utm_source=a#anh');
+  const read = modal.getByRole('button',{name:'Đọc website'});
+  await read.click();
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 1 mã/).waitFor();
+  await modal.getByRole('tab',{name:'Đã nhập'}).click();
+  await modal.getByRole('button',{name:'Xem kết quả'}).click();
+  const result = page.locator('.catalogue-history-result');
+  await result.getByText(/G-01/).waitFor();
+  await result.locator('.close-dialog').click();
+  await modal.getByRole('button',{name:'Nhập lại'}).click();
+  assert.equal(await modal.locator('[name=urls]').inputValue(),'https://example.com/gach');
+  await read.click();
+  const duplicate = page.locator('.catalogue-duplicate-dialog');
+  await duplicate.locator('[data-choice=cancel]').click();
+  await modal.getByText('Đã huỷ nhập.').waitFor();
+  assert.equal(reads,1);
+  await read.click();
+  await duplicate.locator('[data-choice=new]').click();
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText('Đã lưu 1 mã · bỏ qua 2 mã trùng.').waitFor();
+  const data = await page.request.get('/api/library').then(r => r.json());
+  assert.deepEqual(data.items.filter(item => item.brand === 'Hãng lịch sử').map(item => item.code).sort(),['G-01','G-03']);
+  assert.ok(data.imports.every(entry => entry.status === 'done' && entry.count === 1));
+};
+
 cases['19.9'] = async page => {
   await openMaterials(page);
   const {PDFDocument,rgb} = require('pdf-lib');

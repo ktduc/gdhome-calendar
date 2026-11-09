@@ -4,6 +4,7 @@ const crypto = require('node:crypto');
 const materialTemplate = require('./material-template');
 const { imageName } = require('./material-assets');
 const attributes = require('./library-attributes');
+const importHistory = require('./catalogue-import-history');
 
 const libraryKey = dataKey => 'lib-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
 const text = (value, max = 160) => typeof value === 'string' ? value.trim().replace(/\s+/g, ' ').slice(0, max) : '';
@@ -126,7 +127,8 @@ function normalize(data) {
     items.push(...paintSeed.filter(item => !keys.has(woodItemKey(item))));
   }
   return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
-    attributes:attributes.normalize({...base,categories}),woodSeeded:true,paintSeeded:true };
+    attributes:attributes.normalize({...base,categories}),imports:(Array.isArray(base.imports) ? base.imports : [])
+      .slice(0,200).map(importHistory.normalize).filter(Boolean),woodSeeded:true,paintSeeded:true };
 }
 
 // Ghép tên nhóm vật liệu (vd "GẠCH ỐP LÁT (sảnh, WC, logia)") với một hạng mục thư viện.
@@ -230,6 +232,10 @@ async function mergeWithMaterials(store,key,dataKey,body) {
 
 async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, sendJson }) {
   const key = libraryKey(dataKey);
+  if (urlPath === '/api/library/imports' && req.method === 'GET') {
+    const data = normalize(await store.get(key));
+    return sendJson(res,200,{imports:data.imports});
+  }
   if (urlPath === '/api/library/attributes' && req.method === 'GET') {
     const data = normalize(await store.get(key));
     return sendJson(res,200,{categories:data.categories,attributes:Object.fromEntries(Object.keys(attributes.labels).map(key => [key,attributes.view(data,key)]))});
@@ -244,6 +250,10 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   }
   if (req.method !== 'POST') fail(405, 'Phương thức không hỗ trợ.');
   const body = await readJsonBody(req);
+  if (urlPath === '/api/library/imports') {
+    const {data} = await mutate(store,key,data => importHistory.apply(data,body));
+    return sendJson(res,200,data);
+  }
   if (urlPath === '/api/library/attributes') {
     const {data} = await mutate(store,key,data => attributes.change(data,body,{size:materialSize}));
     return sendJson(res,200,data);

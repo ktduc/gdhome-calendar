@@ -105,6 +105,18 @@ test('GĐ20.11 đổi tên, gộp và xoá giá trị theo tài khoản', async 
   assert.equal(result.data.attributes.finish.find(row => row.name === 'Mờ').count,1);
 });
 
+test('GĐ20.9 chuẩn hoá và lưu lịch sử nhập riêng theo tài khoản', async () => {
+  const {call} = harness();
+  const entry = {id:'import-1',source:'https://example.com/gach/?utm_source=a&p=2#anh',name:'Gạch',
+    categoryId:'cat-6',status:'partial',count:0};
+  assert.equal((await call('/api/library/imports',{imports:[entry]})).status,200);
+  const completed = await call('/api/library/imports',{imports:[{...entry,status:'done',count:1,itemIds:['one']}]});
+  assert.equal(completed.data.imports.length,1);
+  assert.equal(completed.data.imports[0].source,'https://example.com/gach?p=2');
+  assert.equal((await call('/api/library/imports',null,'other@example.com')).data.imports.length,0);
+  assert.equal((await call('/api/library/imports',{deleteId:entry.id})).data.imports.length,0);
+});
+
 test('Màu sơn trong PA được giữ khi lưu, mã màu sai bị bỏ', () => {
   const sheet = cleanSheet({ groups:[{ id:'g',name:'SƠN TƯỜNG',rows:[{ id:'r',name:'Sơn tường',render:[],
     options:[{ code:'30YY 72/107',paint:{kind:'paint',brand:'Dulux',code:'30YY 72/107',name:'Ivory Lace',hex:'#F5F0E1',x:'<b>'},images:[] },

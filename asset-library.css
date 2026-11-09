@@ -226,6 +226,9 @@
 .asset-bulk-controls{display:flex;flex-wrap:wrap;gap:5px;margin:6px 0}
 
 .wood-catalogue-controls [hidden]{display:none}
+.wood-catalogue-controls[hidden],.catalogue-review[hidden]{display:none}
+[data-catalogue-history] table{width:100%;border-collapse:collapse}
+[data-catalogue-history] :is(th,td){padding:6px;border-bottom:1px solid #d8d2c8;text-align:left;overflow-wrap:anywhere}
 [data-catalogue-guide]{flex:1 1 100%;min-width:0;display:flex;flex-wrap:wrap;align-items:end;gap:8px}
 [data-guide-previews]{display:flex;flex-wrap:wrap;gap:8px;flex-basis:100%}
 [data-guide-previews]>div{display:grid;gap:3px}
