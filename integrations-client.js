@@ -16,12 +16,50 @@ window.GDHomeConnections = (() => {
     const response = await fetch(url,patch ? {method:'POST',headers,body:JSON.stringify(patch)} : {headers});
     const result = await response.json();
     if (!response.ok) throw new Error(result.message || 'Không đọc được kết nối.');
-    if (patch) document.dispatchEvent(new CustomEvent('gdhome:connections',{detail:result}));
+    if (patch && url === endpoint) document.dispatchEvent(new CustomEvent('gdhome:connections',{detail:result}));
     return result;
   }
 
   function option(value,label,selected) {
     return '<option value="' + html(value) + '"' + (value === selected ? ' selected' : '') + '>' + html(label) + '</option>';
+  }
+
+  function wireDriveBackup(root) {
+    const section = root.querySelector('[data-drive-backup]');
+    const endpoint = '/api/drive-backup';
+    let timer, revision = 0;
+    async function refresh(action) {
+      const current = ++revision;
+      clearTimeout(timer);
+      try {
+        const data = await settings(action ? {} : undefined,endpoint+(action ? '/'+action : ''));
+        if (!section.isConnected || current !== revision) return;
+        if (action === 'connect') { location.assign(data.url); return; }
+        const last = data.lastAt ? 'Lần gần nhất: ' + new Date(data.lastAt).toLocaleString('vi-VN') +
+          ' · ' + data.files + ' tệp' + (data.missing ? ' · thiếu ' + data.missing + ' tệp ở nguồn' : '') : 'Chưa có bản sao.';
+        section.innerHTML = '<p role="status">' + html(!data.available ? 'Sao lưu Drive cần cấu hình OAuth trên máy chủ.' :
+          data.linked ? (data.busy ? 'Đang sao lưu lên Drive…' : last) : 'Chưa liên kết thư mục Drive.') + '</p>' +
+          (data.error || data.notice ? '<p role="alert">' + html(data.error || data.notice) + '</p>' : '') +
+          (data.linked ? '<div class="connection-actions"><a href="' + html(data.folderUrl) + '" target="_blank" rel="noopener">Mở thư mục Drive</a>' +
+          '<button type="button" data-drive-action="run"' + (data.busy ? ' disabled' : '') + '>Sao lưu ngay</button>' +
+          '<button type="button" data-drive-action="unlink">Hủy liên kết</button></div>' :
+          '<button type="button" data-drive-action="connect"' + (!data.available ? ' disabled' : '') + '>Liên kết thư mục Drive</button>');
+        if (data.busy && data.linked) timer = setTimeout(() => refresh(),3000);
+      } catch (error) {
+        if (!section.isConnected || current !== revision) return;
+        section.querySelector('[role=status]').textContent = error.message;
+        section.querySelectorAll('button').forEach(button => { button.disabled = false; });
+      }
+    }
+    section.onclick = event => {
+      const button = event.target.closest('[data-drive-action]');
+      if (!button) return;
+      const action = button.dataset.driveAction;
+      if (action === 'unlink' && !confirm('Dừng sao lưu hằng ngày và hủy liên kết thư mục Drive?')) return;
+      button.disabled = true;
+      refresh(action);
+    };
+    refresh();
   }
 
   function render(root,data,focus,message = '') {
@@ -58,7 +96,11 @@ window.GDHomeConnections = (() => {
       '</select></label><label>API key<input type="password" name="imageSearchKey" autocomplete="off" placeholder="Để trống để giữ key đã lưu"></label>' +
       '<label data-image-search-cx>Google Search Engine ID (cx)<input name="imageSearchCx" value="' + html(data.imageSearch?.cx || '') + '"></label>' +
       '<div class="connection-actions"><button class="btn btn-primary">Lưu kết nối</button>' +
-      '<button type="button" class="btn btn-outline" data-clear-connection="imageSearch">Gỡ kết nối</button></div></form></section>';
+      '<button type="button" class="btn btn-outline" data-clear-connection="imageSearch">Gỡ kết nối</button></div></form></section>' +
+      '<section data-connection-section="backup"><h3>Sao lưu Google Drive</h3>' +
+      '<p>Bản sao hằng ngày gồm dữ liệu tài khoản, ảnh và tài liệu. Lịch chạy từ 02:00 giờ Việt Nam.</p>' +
+      '<div data-drive-backup><p role="status">Đang kiểm tra liên kết…</p></div></section>';
+    wireDriveBackup(root);
     const mapButton = root.querySelector('[data-profile-map]');
     mapButton.onclick = async () => {
       const panel = root.querySelector('[data-profile-map-panel]');
@@ -131,7 +173,8 @@ window.GDHomeConnections = (() => {
     };
     const date = root.querySelector('[name=notionDateProp]');
     if (date) date.onchange = () => save({notionDateProp:date.value},'notion');
-    if (focus) root.querySelector('[data-connection-section="' + focus + '"] :is(input,select)')?.focus();
+    if (focus === 'backup') root.querySelector('[data-connection-section="backup"]').scrollIntoView({block:'start'});
+    else if (focus) root.querySelector('[data-connection-section="' + focus + '"] :is(input,select)')?.focus();
   }
 
   // Gọi thử 1 câu ngắn để biết AI có chạy không, model nào và mất bao lâu.
@@ -154,13 +197,14 @@ window.GDHomeConnections = (() => {
     dialog = document.createElement('dialog');
     const root = dialog;
     root.className = 'connection-dialog';
-    root.setAttribute('aria-label','Kết nối Notion và AI');
+    root.setAttribute('aria-label','Kết nối');
     document.body.append(root);
     GDHomeShell.dialog(root,'<h2>⚙ Kết nối</h2><p role="status">Đang tải cấu hình…</p>');
     root.addEventListener('close',() => root.remove(),{once:true});
     try {
       const data = await settings();
-      if (root.open) render(root,data,section);
+      if (root.open) render(root,data,section,section === 'backup' && new URLSearchParams(location.search).get('drive-backup') === 'error' ?
+        'Chưa liên kết được Drive. Hãy dùng đúng tài khoản Google đăng nhập GD HOME rồi thử lại.' : '');
     } catch (error) {
       root.querySelector('[role=status]').textContent = error.message;
     }
@@ -174,5 +218,8 @@ window.GDHomeConnections = (() => {
     if (details) details.open = false;
     open(button.dataset.openConnections);
   });
+  if (new URLSearchParams(location.search).has('drive-backup')) {
+    document.addEventListener('DOMContentLoaded',() => open('backup'),{once:true});
+  }
   return {settings,open,testAi};
 })();

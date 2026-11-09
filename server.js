@@ -27,6 +27,7 @@ const {projectList,writeProjectProfile,withScheduleWrite} = require('./project-p
 const { handlePublicReview } = require('./material-review');
 const { handleProjectHub } = require('./project-hub');
 const { getStorageKind } = require('./object-storage');
+const { driveBackup } = require('./drive-backup');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -45,6 +46,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET ||
   crypto.createHash('sha256').update(`gdhome|${GOOGLE_CLIENT_ID}|${GITHUB_TOKEN}|${APP_PASSWORD}|${ROOT_DIR}`).digest('hex');
 const SESSION_DAYS = 30;
 integrations.setSecret(SESSION_SECRET);
+const backups = driveBackup({secret:SESSION_SECRET,dataDir:DATA_DIR});
 const SHARED_KEY = 'shared'; // dữ liệu chung (khi không bật đăng nhập) = data.json cũ
 
 // Chỉ cho phép tải các file giao diện, KHÔNG cho tải data.json / backups / server.js / .bat qua trình duyệt
@@ -317,7 +319,14 @@ async function initStore() {
 }
 
 function connectStore() {
-  initStore().then(ready => console.log('[STORE] Sẵn sàng:',ready.kind)).catch(error => {
+  initStore().then(ready => {
+    console.log('[STORE] Sẵn sàng:',ready.kind);
+    if (AUTH_MODE === 'google' && backups.available) {
+      const tick = () => backups.tick(ready).catch(() => console.error('[DRIVE] Không chạy được lịch sao lưu.'));
+      setInterval(tick,15*60000).unref();
+      tick();
+    }
+  }).catch(error => {
     console.error('[STORE] Khởi tạo thất bại. Thử lại sau 10 giây:',error);
     clearTimeout(storeRetry);
     storeRetry = setTimeout(connectStore,10000);
@@ -509,7 +518,7 @@ async function handleApi(req, res, urlPath) {
       googleClientId: GOOGLE_CLIENT_ID || null,
       storage: store ? store.kind : 'file',
       objectStorage: getStorageKind(),
-      features: integrations.features()
+      features: {...integrations.features(),driveBackup:AUTH_MODE === 'google' && backups.available}
     });
     return;
   }
@@ -537,10 +546,37 @@ async function handleApi(req, res, urlPath) {
     return handlePublicReview(req,urlPath,{ res,store,MaterialStore,readJsonBody,sendJson,dataDir:DATA_DIR,secret:SESSION_SECRET });
   }
 
+  if (urlPath === '/api/drive-backup/callback' && req.method === 'GET') {
+    let linked = false;
+    try {
+      if (AUTH_MODE === 'google') linked = await backups.callback(store,new URL(req.url,'http://localhost').searchParams);
+    } catch { console.error('[DRIVE] Không hoàn tất được liên kết OAuth.'); }
+    res.writeHead(303,{Location:'/tools?drive-backup=' + (linked ? 'linked' : 'error'),
+      'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
+    return res.end();
+  }
+
   const dataKey = resolveDataKey(req);
   if (!dataKey) {
     sendJson(res, 401, { success: false, message: AUTH_MODE === 'google' ? 'Cần đăng nhập Google' : 'Cần mật khẩu', authMode: AUTH_MODE });
     return;
+  }
+  if (urlPath === '/api/drive-backup' && req.method === 'GET') {
+    return sendJson(res,200,await backups.status(store,dataKey));
+  }
+  if (urlPath.startsWith('/api/drive-backup/')) {
+    if (AUTH_MODE !== 'google') return sendJson(res,403,{message:'Đăng nhập Google để dùng sao lưu Drive.'});
+    if (req.method === 'POST' && urlPath === '/api/drive-backup/connect') {
+      return sendJson(res,200,{url:backups.connect(dataKey)});
+    }
+    if (req.method === 'POST' && urlPath === '/api/drive-backup/run') {
+      await backups.runNow(store,dataKey);
+      return sendJson(res,202,await backups.status(store,dataKey));
+    }
+    if (req.method === 'POST' && urlPath === '/api/drive-backup/unlink') {
+      const notice = await backups.unlink(store,dataKey);
+      return sendJson(res,200,{...await backups.status(store,dataKey),notice});
+    }
   }
 
   if (urlPath === '/api/projects') {

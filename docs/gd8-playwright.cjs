@@ -2532,6 +2532,32 @@ cases['20.15'] = async page => {
   assert.equal(await picker.locator('.asset-card').count(),2);
 };
 
+cases['20-drive-menu'] = async page => {
+  await openMaterials(page);
+  let linked = true, manual = 0;
+  const status = () => ({available:true,linked,folderUrl:linked ? 'https://drive.google.com/drive/folders/test-folder' : undefined,
+    lastAt:manual ? '2026-11-09T19:00:00Z' : undefined,files:4});
+  await page.route('**/api/drive-backup',route => route.fulfill({json:status()}));
+  await page.route('**/api/drive-backup/run',route => {
+    manual++;
+    return route.fulfill({json:status()});
+  });
+  await page.route('**/api/drive-backup/unlink',route => {
+    linked = false;
+    return route.fulfill({json:status()});
+  });
+  await page.evaluate(() => GDHomeConnections.open('backup'));
+  const section = page.locator('[data-drive-backup]');
+  await section.getByRole('button',{name:'Sao lưu ngay'}).click();
+  await section.getByText(/Lần gần nhất.*4 tệp/).waitFor();
+  assert.equal(manual,1);
+  assert.equal(await section.getByRole('link',{name:'Mở thư mục Drive'}).getAttribute('href'),'https://drive.google.com/drive/folders/test-folder');
+  page.once('dialog',dialog => dialog.accept());
+  await section.getByRole('button',{name:'Hủy liên kết'}).click();
+  await section.getByRole('button',{name:'Liên kết thư mục Drive'}).waitFor();
+  assert.equal(linked,false);
+};
+
 cases['20-library-ui'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
