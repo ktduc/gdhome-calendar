@@ -481,7 +481,8 @@ window.GDHomeAssets = (() => {
   }
 
   // ---------------------------------------------------------------- Giao diện chung
-  const facetLabels = {subgroup:'Nhóm phụ kiện',cabinetWidth:'Rộng tủ',size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',finish:'Bề mặt',tone:'Tông màu',grain:'Vân',collection:'Bộ sưu tập',tags:'Tag'};
+  const facetLabels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',finish:'Bề mặt',
+    collection:'Bộ sưu tập',subgroup:'Nhóm phụ kiện',cabinetWidth:'Rộng tủ',tone:'Tông màu',grain:'Vân',tags:'Tag'};
   const facetValues = (item,key) => [...new Set([key === 'size' ? primarySize(item.size) : item[key],...(key === 'brand' ? item.brands || [] : [])].flat().filter(Boolean).map(String))];
   const matchFacets = (item,facets,except) => Object.entries(facets).every(([key,values]) =>
     key === except || !values.size || facetValues(item,key).some(value => values.has(value)));
@@ -496,6 +497,7 @@ window.GDHomeAssets = (() => {
   }
   const facetEmpty = (items,facets) => !items.length && Object.values(facets).some(values => values.size) ?
     '<p class="asset-empty">Không có mẫu khớp bộ lọc · <button type="button" data-clear-facets>Bỏ lọc</button></p>' : '';
+  const filterGroup = (key,label,content) => '<details data-filter-group="' + key + '" open><summary>' + label + '</summary>' + content + '</details>';
   function facetMarkup(items,facets) {
     return '<div class="asset-facets">' + Object.entries(facetLabels).map(([key,label]) => {
       const counts = new Map();
@@ -504,11 +506,57 @@ window.GDHomeAssets = (() => {
       }
       for (const value of facets[key] || []) if (!counts.has(value)) counts.set(value,0);
       if (!counts.size) return '';
-      return '<div><strong>' + label + '</strong> ' + (key === 'size' ?
-        '<button type="button" data-facet="size" data-value="" aria-pressed="' + !facets.size?.size + '">Tất cả</button> ' : '') + [...counts].map(([value,count]) =>
-        '<button type="button" data-facet="' + key + '" data-value="' + esc(value) + '" aria-pressed="' +
-        !!facets[key]?.has(value) + '">' + esc(key === 'size' ? value.replace('x','×') : key === 'cabinetWidth' ? 'Tủ '+value : value) + ' (' + count + ')</button>').join(' ') + '</div>';
+      const choice = (value,caption,checked) => '<label class="asset-facet-choice"><input type="' + (key === 'size' ? 'radio' : 'checkbox') +
+        '" data-facet="' + key + '" data-value="' + esc(value) + '"' + (checked ? ' checked' : '') + '> <span>' + esc(caption) + '</span></label>';
+      return filterGroup(key,label,(key === 'size' ? choice('','Tất cả',!facets.size?.size) : '') + [...counts].map(([value,count]) =>
+        choice(value,(key === 'size' ? value.replace('x','×') : key === 'cabinetWidth' ? 'Tủ '+value : value) + ' (' + count + ')',facets[key]?.has(value))).join(''));
     }).join('') + '</div>';
+  }
+  function arrangeFilterSidebar(root,state) {
+    const facets = root.querySelector('.asset-facets');
+    let sidebar = root.querySelector('.asset-categories');
+    const controls = root.querySelector('.asset-filters,.asset-library-head');
+    if (!facets || !controls) return;
+    if (!sidebar) {
+      const grid = root.querySelector('.asset-body');
+      const layout = document.createElement('div'), main = document.createElement('div');
+      layout.className = 'asset-picker-layout';
+      main.className = 'asset-picker-main';
+      sidebar = document.createElement('aside');
+      sidebar.innerHTML = filterGroup('category','Hạng mục','');
+      sidebar.querySelector('details').append(...controls.querySelectorAll('select'));
+      controls.before(layout);
+      layout.append(sidebar,main);
+      main.append(controls,grid);
+    } else {
+      const category = sidebar.querySelector('.asset-cat-list');
+      const group = document.createElement('details');
+      group.dataset.filterGroup = 'category';
+      group.innerHTML = '<summary>Hạng mục</summary>';
+      sidebar.prepend(group);
+      group.append(category);
+    }
+    sidebar.classList.add('asset-filter-sidebar');
+    sidebar.setAttribute('aria-label','Bộ lọc vật liệu');
+    sidebar.append(facets);
+    state.radioName ||= 'asset-size-' + uid();
+    for (const input of sidebar.querySelectorAll('[data-facet=size]')) input.name = state.radioName;
+    for (const group of sidebar.querySelectorAll('[data-filter-group]')) {
+      const key = group.dataset.filterGroup;
+      group.open = state.groups[key] ?? true;
+      group.ontoggle = () => { state.groups[key] = group.open; };
+    }
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.dataset.assetFilterToggle = '';
+    toggle.textContent = 'Bộ lọc';
+    const paintDrawer = () => {
+      sidebar.classList.toggle('is-drawer-open',!!state.drawer);
+      toggle.setAttribute('aria-expanded',!!state.drawer);
+    };
+    toggle.onclick = () => { state.drawer = !state.drawer; paintDrawer(); };
+    controls.prepend(toggle);
+    paintDrawer();
   }
   function wireFacets(root,facets,paint) {
     const clear = root.querySelector('[data-clear-facets]');
@@ -653,6 +701,7 @@ window.GDHomeAssets = (() => {
     return popover(anchor,async (panel,close,place,signal) => {
       let data, categoryId, query = '';
       const facets = {};
+      const sidebarState = {groups:{}};
       async function paint() {
         try { data = await loadLibrary(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
         if (!panel.isConnected) return;
@@ -670,6 +719,7 @@ window.GDHomeAssets = (() => {
             grid(items,{empty:query ? 'Không tìm thấy ảnh cho "' + query + '".' : 'Hạng mục này chưa có ảnh.'})) + onlineSlot + '</div>' +
           '<footer><button type="button" data-upload>⬆ Tải lên hạng mục này</button><button type="button" data-full>Quản lý dữ liệu</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
+        arrangeFilterSidebar(panel,sidebarState);
         wireFacets(panel,facets,paint);
         panel.querySelector('select').onchange = event => { categoryId = event.target.value; clearFacets(facets); paint(); };
         const search = panel.querySelector('input[type=search]');
@@ -806,6 +856,7 @@ window.GDHomeAssets = (() => {
   function pickPaint(anchor, { groupName, onPick, title = 'Chọn màu sơn' } = {}) {
     return popover(anchor, async (panel, close, place, signal) => {
       const facets = {};
+      const sidebarState = {groups:{}};
       let brand = 'Dulux', query = '', paintData = null;
       async function paint() {
         try { paintData = await loadPaintData(brand); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
@@ -831,6 +882,7 @@ window.GDHomeAssets = (() => {
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(paintData.source || '') + ' (' + colors.length + ' màu)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
+        arrangeFilterSidebar(panel,sidebarState);
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('select').onchange = event => { brand = event.target.value; clearFacets(facets); paint(); };
         wireFacets(panel,facets,paint);
@@ -879,6 +931,7 @@ window.GDHomeAssets = (() => {
   function pickWood(anchor, { groupName, onPick, title = 'Mã gỗ' } = {}) {
     return popover(anchor, async (panel, close, place, signal) => {
       const facets = {};
+      const sidebarState = {groups:{}};
       let brand = '', collection = 'all', query = '', revision = 0;
       async function paint() {
         const current = ++revision;
@@ -912,6 +965,7 @@ window.GDHomeAssets = (() => {
           '</div>' +
           '<footer><small class="asset-hint">Nguồn: ' + esc(woodData.source || '') + ' (' + woods.length + ' mã)</small><button type="button" data-close>Đóng</button></footer>';
         panel.querySelector('.asset-x').onclick = close;
+        arrangeFilterSidebar(panel,sidebarState);
         panel.querySelector('[data-close]').onclick = close;
         panel.querySelector('[aria-label=Hãng]').onchange = event => { brand = event.target.value; collection = 'all'; clearFacets(facets); paint(); };
         panel.querySelector('[aria-label="Dòng sản phẩm"]').onchange = event => { collection = event.target.value; clearFacets(facets); paint(); };
@@ -2035,6 +2089,7 @@ window.GDHomeAssets = (() => {
     let current = categoryId || null, query = '', status = '';
     let uploadDisplay;
     const facets = {}, selected = new Set();
+    const sidebarState = {groups:{}};
     let rangeAnchor, dragged, undoToken, guestUndo;
     function changeCategory(id) {
       if (current !== id) {
@@ -2103,6 +2158,7 @@ window.GDHomeAssets = (() => {
           '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + bulkControls() +
           (facetEmpty(items,facets) || grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'})) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
+      arrangeFilterSidebar(body,sidebarState);
       wireFacets(body,facets,paint);
       const findDuplicates = body.querySelector('[data-find-duplicates]');
       if (findDuplicates) findDuplicates.onclick = openDuplicateLibrary;
@@ -2164,7 +2220,8 @@ window.GDHomeAssets = (() => {
         else return;
         event.dataTransfer.setData('application/x-gdhome-library','1');
       };
-      const targetOf = event => event.target.closest('[data-cat],[data-asset-id],[data-facet=tags],[data-facet=suppliers]');
+      const targetOf = event => event.target.closest('[data-cat],[data-asset-id]') ||
+        event.target.closest('.asset-facet-choice')?.querySelector('[data-facet=tags],[data-facet=suppliers]');
       const clearMark = () => body.querySelectorAll('.asset-drop-mark').forEach(el => el.classList.remove('asset-drop-mark'));
       body.ondragover = event => {
         const target = targetOf(event);

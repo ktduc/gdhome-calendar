@@ -2111,8 +2111,8 @@ cases['19.3'] = async page => {
     GDHomeAssets.openLibrary({categoryId:'cat-6'});
   });
   const dialog = page.locator('.asset-library-dialog');
-  await dialog.getByRole('button',{name:'600×600 (1)'}).click();
-  await dialog.getByRole('button',{name:'Kho A (1)'}).click();
+  await dialog.getByLabel('600×600 (1)').check();
+  await dialog.getByLabel('Kho A (1)').check();
   assert.equal(await dialog.locator('.asset-card').count(),1);
   assert.match(await dialog.locator('.asset-card').textContent(),/600×600.*Hãng A/s);
 };
@@ -2519,6 +2519,31 @@ cases['20.17'] = async page => {
   await library.locator('.asset-card').getByText('Gạch B').waitFor();
   await choose('');
   assert.equal(await library.locator('.asset-card').count(),2);
+};
+
+cases['20.16'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',[{name:'Mẫu có lọc',brand:'Hãng A',size:'600x600',tags:['bóng'],
+      full:'a'.repeat(64)+'.webp',thumb:'a'.repeat(64)+'.webp'}]);
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog'), sidebar = library.locator('.asset-filter-sidebar');
+  const brand = sidebar.locator('[data-filter-group=brand]');
+  assert.ok(await sidebar.locator('[data-filter-group=category]').count());
+  await brand.getByLabel('Hãng A (1)').waitFor();
+  await brand.locator('summary').click();
+  assert.equal(await brand.getByLabel('Hãng A (1)').isVisible(),false);
+  await page.setViewportSize({width:850,height:740});
+  await sidebar.waitFor({state:'hidden'});
+  const toggle = library.locator('[data-asset-filter-toggle]');
+  await toggle.click();
+  await sidebar.waitFor();
+  await sidebar.getByLabel('600×600 (1)').check();
+  assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+  await toggle.click();
+  await sidebar.waitFor({state:'hidden'});
 };
 
 cases['19.9'] = async page => {
