@@ -1,7 +1,7 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const {importCatalogueUrls} = require('../catalogue-web');
+const {importCatalogueUrls,cataloguePagination} = require('../catalogue-web');
 
 test('Nhập catalogue lấy Product, og:image, ảnh lưới và tôn trọng robots.txt', async t => {
   const seen = [];
@@ -42,4 +42,17 @@ test('Nhập catalogue lấy Product, og:image, ảnh lưới và tôn trọng r
   assert.ok(!seen.includes('/private/a'));
   const blocked = await importCatalogueUrls([local+'/products']);
   assert.match(blocked.warnings[0],/nội bộ/);
+});
+
+test('GĐ20.10 dò phân trang theo rel, nhãn, rồi mẫu URL', () => {
+  const url = 'https://catalogue.test/gach?loai=op';
+  assert.deepEqual(cataloguePagination(
+    '<link rel="next" href="?loai=op&page=2"><button data-href="?loai=op&page=4">Tiếp</button>' +
+    '<a href="?loai=op&page=9">9</a>',url),{next:'https://catalogue.test/gach?loai=op&page=2',total:9});
+  assert.equal(cataloguePagination('<link rel="next" href="http://127.0.0.1/admin">' +
+    '<a href="?loai=op&p=3" aria-label="Trang sau">→</a><a href="?loai=op&p=2">2</a>',url).next,
+  'https://catalogue.test/gach?loai=op&p=3');
+  assert.equal(cataloguePagination('<a href="/gach/page/3?loai=op">3</a><a href="/gach/page/9?loai=op">9</a>',
+    'https://catalogue.test/gach/page/2?loai=op').next,'https://catalogue.test/gach/page/3?loai=op');
+  assert.equal(cataloguePagination('<a href="https://other.test/page/2">Next</a>',url).next,null);
 });

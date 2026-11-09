@@ -956,7 +956,7 @@ async function handleIntegrations(req, res, urlPath, ctx) {
         }
       } catch (error) { result.warnings.push('Giữ dữ liệu HTML vì AI chưa đọc được: ' + error.message); }
     }
-    sendJson(res,200,{items:result.items,warnings:result.warnings});
+    sendJson(res,200,{items:result.items,warnings:result.warnings,next:result.next,total:result.total});
     return true;
   }
   if (urlPath === '/api/catalogue/image' && req.method === 'POST') {

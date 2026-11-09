@@ -2175,6 +2175,7 @@ cases['19.6'] = async page => {
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
   await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=autoSave]').uncheck();
   await modal.locator('[name=urls]').fill('https://example.com/gach');
   await modal.getByRole('button',{name:'Đọc website'}).click();
   const card = modal.locator('.wood-catalogue-card');
@@ -2643,6 +2644,7 @@ cases['20.9'] = async page => {
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
   await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=autoSave]').uncheck();
   await modal.locator('[name=urls]').fill('https://example.com/gach/?utm_source=a#anh');
   const read = modal.getByRole('button',{name:'Đọc website'});
   await read.click();
@@ -2667,6 +2669,48 @@ cases['20.9'] = async page => {
   const data = await page.request.get('/api/library').then(r => r.json());
   assert.deepEqual(data.items.filter(item => item.brand === 'Hãng lịch sử').map(item => item.code).sort(),['G-01','G-03']);
   assert.ok(data.imports.every(entry => entry.status === 'done' && entry.count === 1));
+};
+
+cases['20.10'] = async page => {
+  await openMaterials(page);
+  const requests = [], images = [];
+  await page.route('**/api/catalogue/web',route => {
+    const [url] = route.request().postDataJSON().urls;
+    requests.push(url);
+    const n = Number(new URL(url).searchParams.get('page') || 1);
+    const row = code => ({code,name:code,image:'https://example.com/' + code + '.png'});
+    return route.fulfill({json:{items:[row('X'+n),...(n > 1 ? [row('X1')] : [])],total:3,
+      next:n < 3 ? 'https://example.com/gach?page=' + (n+1) : null}});
+  });
+  await page.route('**/api/catalogue/image',route => {
+    images.push(route.request().postDataJSON().url);
+    return route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')});
+  });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=urls]').fill('https://example.com/gach');
+  assert.ok(await modal.locator('[name=autoSave]').isChecked());
+  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.locator('[role=status]').filter({hasText:/Trang 2\/3 · [12] mẫu/}).waitFor();
+  await modal.getByText('Đã lưu 3 mã · bỏ qua 0 mã trùng.').waitFor();
+  assert.equal(requests.length,3);
+  assert.equal(images.length,3);
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),0);
+  const data = await page.request.get('/api/library').then(r => r.json());
+  const items = data.items.filter(item => /^X[1-3]$/.test(item.code || ''));
+  assert.equal(items.length,3);
+  assert.ok(items.every(item => item.tags.includes('chua-duyet') && item.tags.includes('example.com')));
+  await modal.locator('.close-dialog').click();
+  const library = page.locator('.asset-library-dialog');
+  await library.getByLabel('Chưa duyệt (3)').check();
+  await library.locator('[data-bulk-select]').first().focus();
+  await page.keyboard.press('Control+a');
+  await library.locator('[data-bulk=reviewed]').click();
+  await library.getByLabel('Chưa duyệt (3)').waitFor({state:'detached'});
+  const saved = await page.request.get('/api/library').then(r => r.json());
+  assert.ok(saved.items.filter(item => /^X[1-3]$/.test(item.code || '')).every(item => !item.tags.includes('chua-duyet')));
 };
 
 cases['19.9'] = async page => {

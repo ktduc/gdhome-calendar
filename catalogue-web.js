@@ -113,21 +113,69 @@ function extractProducts(html,url,validateUrl = checkSsrfUrl) {
   return {items,structured};
 }
 
+function cataloguePagination(html,url,validate = checkSsrfUrl) {
+  const page = new URL(url);
+  const number = value => {
+    const raw = value.searchParams.get('page') || value.searchParams.get('p') || value.pathname.match(/\/page\/(\d+)\/?$/i)?.[1];
+    const n = Number(raw);
+    return Number.isSafeInteger(n) && n > 0 ? n : null;
+  };
+  const current = number(page) || 1;
+  const base = value => {
+    const copy = new URL(value);
+    copy.pathname = copy.pathname.replace(/\/page\/\d+\/?$/i,'').replace(/\/$/,'');
+    copy.searchParams.delete('page');
+    copy.searchParams.delete('p');
+    copy.searchParams.sort();
+    return copy.origin + copy.pathname + copy.search;
+  };
+  function destination(href) {
+    if (!href || href.startsWith('#')) return null;
+    try {
+      const candidate = validate(new URL(href,page).href);
+      candidate.hash = '';
+      return candidate.origin === page.origin && candidate.href !== page.href ? candidate : null;
+    } catch { return null; }
+  }
+  let explicit;
+  for (const match of html.matchAll(/<link\b[^>]*>/gi)) {
+    const attrs = attributes(match[0]);
+    if (attrs.rel?.toLowerCase().split(/\s+/).includes('next')) explicit ||= destination(attrs.href);
+  }
+  let named;
+  const numbered = [];
+  for (const match of html.matchAll(/<(a|button)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi)) {
+    const attrs = attributes(match[2]), candidate = destination(attrs.href || attrs['data-href'] || attrs.formaction);
+    if (!candidate) continue;
+    const caption = decode(match[3].replace(/<[^>]*>/g,'')).toLocaleLowerCase('vi').replace(/\s+/g,' ');
+    const isNext = /^(?:›|»|next(?: page)?|tiếp(?: theo)?|trang tiếp(?: theo)?|sau|trang sau)$/i;
+    if (isNext.test(caption) || isNext.test(attrs['aria-label'] || '')) named ||= candidate;
+    const n = number(candidate);
+    if (n && Number(caption) === n && base(candidate) === base(page)) numbered.push({candidate,n});
+  }
+  const inferred = numbered.filter(({n}) => n === current+1)[0]?.candidate;
+  const total = numbered.length ? Math.max(current,...numbered.map(({n}) => n)) : null;
+  return {next:(explicit || named || inferred)?.href || null,total};
+}
+
 async function importCatalogueUrls(urls,options = {}) {
   const load = catalogueDownloader(options);
   const validate = options.validateUrl || checkSsrfUrl;
   const items = [], warnings = [];
   let needsAi = false;
+  let pagination;
   for (const url of urls) {
     try {
       const page = await load(url,'html');
-      const result = extractProducts(page.buffer.toString('utf8'),page.url,validate);
+      const html = page.buffer.toString('utf8');
+      const result = extractProducts(html,page.url,validate);
+      if (urls.length === 1) pagination = cataloguePagination(html,page.url,validate);
       needsAi ||= !result.structured;
       items.push(...result.items.filter(candidate => !items.some(item => item.image === candidate.image && item.code === candidate.code)));
       if (items.length >= 60) break;
     } catch (error) { warnings.push(error.message); }
   }
-  return {items:items.slice(0,60),warnings,needsAi};
+  return {items:items.slice(0,60),warnings,needsAi,...(pagination || {})};
 }
 
-module.exports = {importCatalogueUrls,catalogueDownloader};
+module.exports = {importCatalogueUrls,catalogueDownloader,cataloguePagination};
