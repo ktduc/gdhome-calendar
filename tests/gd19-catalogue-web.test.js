@@ -55,4 +55,27 @@ test('GĐ20.10 dò phân trang theo rel, nhãn, rồi mẫu URL', () => {
   assert.equal(cataloguePagination('<a href="/gach/page/3?loai=op">3</a><a href="/gach/page/9?loai=op">9</a>',
     'https://catalogue.test/gach/page/2?loai=op').next,'https://catalogue.test/gach/page/3?loai=op');
   assert.equal(cataloguePagination('<a href="https://other.test/page/2">Next</a>',url).next,null);
+  assert.equal(cataloguePagination('<a class="next page-numbers" href="/gach/page/6">&rarr;</a>',
+    'https://catalogue.test/gach/page/5/').next,'https://catalogue.test/gach/page/6');
+});
+
+test('Đọc tên, kích thước và mã gạch từ HTML sản phẩm sau lỗi nguồn tạm thời', async () => {
+  let attempts = 0;
+  const options = {dnsResolver:async () => [{address:'8.8.8.8'}],fetchFn:async url => {
+    if (url.endsWith('/robots.txt')) return new Response('User-agent: *',{headers:{'Content-Type':'text/plain'}});
+    if (++attempts === 1) return new Response('',{status:429,headers:{'Retry-After':'0'}});
+    return new Response('<title>Danh mục</title><img alt="Logo" src="/logo.png">' +
+      '<a href="/san-pham/gach-a/"><img data-lazy-src="/a.jpg" src="/placeholder.png"></a>' +
+      '<a href="/san-pham/gach-a/"><strong>Gạch bông</strong> 30&times;30 G7B30316</a>' +
+      '<a href="/san-pham/gach-b/"><img src="/b.jpg" alt="Gạch men 20x20 G7-30866"></a>' +
+      '<a rel="next" href="/gach/page/6/">→</a>',{headers:{'Content-Type':'text/html'}});
+  }};
+  const result = await importCatalogueUrls(['https://catalogue.test/gach/page/5/'],options);
+  assert.equal(attempts,2);
+  assert.deepEqual(result.items.map(({code,name,size,image}) => [code,name,size,image]),[
+    ['G7B30316','Gạch bông 30×30 G7B30316','30×30','https://catalogue.test/a.jpg'],
+    ['G7-30866','Gạch men 20x20 G7-30866','20x20','https://catalogue.test/b.jpg']
+  ]);
+  assert.equal(result.next,'https://catalogue.test/gach/page/6/');
+  assert.equal(result.needsAi,false);
 });

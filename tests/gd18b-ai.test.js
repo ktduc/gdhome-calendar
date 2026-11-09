@@ -93,7 +93,8 @@ test('GĐ18B.4: Giả lập lỗi 429 (hết hạn mức tạm thời) -> tự t
   global.fetch = async () => {
     calls++;
     return new Response(JSON.stringify({
-      error: { message: 'Quota exceeded', status: 'RESOURCE_EXHAUSTED' }
+      error: { message: 'Quota exceeded. Check plan and billing details.', status: 'RESOURCE_EXHAUSTED',
+        details:[{violations:[{quotaId:'GenerateRequestsPerMinutePerProjectPerModel'}]}] }
     }), { status: 429, headers: { 'Content-Type': 'application/json' } });
   };
 
@@ -103,6 +104,7 @@ test('GĐ18B.4: Giả lập lỗi 429 (hết hạn mức tạm thời) -> tự t
       assert.equal(err.aiCode, 'quota');
       assert.match(err.message, /Gemini/);
       assert.match(err.message, /hết hạn mức/i);
+      assert.match(err.message, /theo phút/);
       assert.match(err.message, /Thử lại/i);
       return true;
     }

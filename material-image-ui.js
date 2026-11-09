@@ -11,7 +11,7 @@ async function uploadImage(file,crop = null,onCompressed) {
   return {full:original,thumb:small};
 }
 
-async function attachImages(row, slot, files, render = false) {
+async function attachImages(row, slot, files, render = false, libraryGroup = '') {
   const source = sheet;
   const pa = slot === 'render' ? null : row.options[Number(slot)];
   const list = pa ? pa.images : row.render;
@@ -22,15 +22,29 @@ async function attachImages(row, slot, files, render = false) {
   let reduction;
   for (const file of selected) uploaded.push(await uploadImage(file,null,message => { reduction = message; }));
   if (sheet !== source || !sheet.groups.some(g => g.rows.includes(row))) return;
+  const next = uploaded.slice(0,Math.max(0,8-list.length));
+  if (!next.length) return;
   modify(() => {
-    const next = uploaded.slice(0,Math.max(0,8-list.length));
-    if (!next.length) return;
     if (pa?.imageSource === 'library') list.unshift(...next);
     else list.push(...next);
     if (pa) pa.imageSource = 'manual';
   },render);
   byId('notice').textContent = '';
-  GDHomeShell.toast(reduction,byId('material-toast'));
+  let libraryMessage;
+  if (pa && libraryGroup) {
+    try {
+      const library = await GDHomeAssets.loadLibrary();
+      const category = GDHomeAssets.categoryFor(library,libraryGroup) || (await GDHomeAssets.saveCategory(libraryGroup)).category;
+      await GDHomeAssets.addItems(category.id,next.map((image,index) => ({
+        ...image,name:row.name?.trim() || selected[index].name?.replace(/\.[^.]+$/,'') || 'Ảnh vật liệu'
+      })));
+      libraryMessage = 'Đã lưu vào Dữ liệu dùng chung · ' + category.name;
+    } catch (error) {
+      showError(new Error('Ảnh đã dán vào bảng. Chưa lưu được vào Dữ liệu dùng chung. ' + error.message));
+      return;
+    }
+  }
+  GDHomeShell.toast([reduction,libraryMessage].filter(Boolean).join(' · '),byId('material-toast'));
 }
 
 function openMaterialLightbox(row,slot,initialIndex = 0) {
@@ -256,13 +270,14 @@ document.addEventListener('paste', event => {
   if (!cell || (plainText && !files.length && !sources.length)) return;
   event.preventDefault();
   window.GDHomeAssets?.closePicker?.();
-  const {row,slot} = context(cell);
-  if (files.length) attachImages(row,slot,files,true).catch(showError);
+  const {group,row,slot} = context(cell);
+  const libraryGroup = group?.name?.trim();
+  if (files.length) attachImages(row,slot,files,true,libraryGroup).catch(showError);
   else {
     const sourceSheet = sheet;
     readClipboardImages(sources).then(images => {
       if (sheet !== sourceSheet || !images.length) return;
-      return attachImages(row,slot,images,true);
+      return attachImages(row,slot,images,true,libraryGroup);
     }).catch(showError);
   }
 });

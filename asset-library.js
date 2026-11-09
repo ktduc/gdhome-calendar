@@ -238,6 +238,7 @@ window.GDHomeAssets = (() => {
     let skipped = 0;
     for (const item of items) {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
+      if (!item.code && item.full && data.items.some(entry => entry.categoryId === categoryId && entry.kind === 'image' && entry.full === item.full)) { skipped++; continue; }
       const metadata = Object.fromEntries(['brand','suppliers','tags','material','finish','collection','subgroup'].filter(key => Object.hasOwn(item,key)).map(key => [key,item[key]]));
       added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,size:primarySize(item.size),createdAt:Date.now(),...metadata,
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
@@ -1768,14 +1769,18 @@ window.GDHomeAssets = (() => {
     return rows;
   }
 
-  async function scanWoodCatalogue(file,patterns,direction,onPage,{useAi,signal,onWarning,layout,guide,includeCode = true} = {}) {
+  async function scanWoodCatalogue(file,patterns,direction,onPage,{ai,signal,onWarning,layout,guide,includeCode = true} = {}) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
     if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
     const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
-    let results = [];
+    const results = [];
     const sources = new Map(), pageAspects = new Map(), batch = [];
+    const localPages = new Set(), scannedPages = new Set();
+    const guided = !!(guide?.prompt || guide?.examples?.length);
+    let aiWarning = '';
+    const useAi = () => ai.pdf && ai.available && !aiWarning;
     const guideRatio = catalogueGuideRatio(guide);
     const example = guide?.examples?.find(example => example.crop && example.codeBox);
     function guidedCodeBox(crop) {
@@ -1791,12 +1796,13 @@ window.GDHomeAssets = (() => {
     async function flush() {
       if (!batch.length) return;
       const pages = batch.splice(0);
+      if (!useAi()) return;
       try {
-        const ai = await GDHomeAI.startJob({kind:'catalogue',pages,includeCode,...(guide?.prompt || guide?.examples?.length ? {guide} : {})},{signal});
-        for (const item of ai.items || []) {
+        const recognized = await GDHomeAI.startJob({kind:'catalogue',pages,includeCode,...(guided ? {guide} : {})},{signal});
+        for (const item of recognized.items || []) {
           const source = sources.get(item.page);
           if (!source) continue;
-          if (layout === 'ancuong') {
+          if (layout === 'ancuong' && localPages.has(item.page)) {
             if (!item.bbox) continue;
             const {x,y,w,h} = item.bbox;
             const match = results.find(row => row.page === item.page && row.needsReview &&
@@ -1810,7 +1816,7 @@ window.GDHomeAssets = (() => {
           const match = index >= 0;
           const record = {...item,source,crop:guideCrop(item.bbox,item.page,results[index]?.codeBox || item.codeBBox),
             confidence:match ? Math.max(.85,item.confidence) : item.confidence};
-          if (['phao','kitchen'].includes(layout)) {
+          if (['phao','kitchen'].includes(layout) && localPages.has(item.page)) {
             if (match) {
               const detected = results[index];
               results[index] = {...record,...detected,grain:item.grain || detected.grain};
@@ -1822,8 +1828,8 @@ window.GDHomeAssets = (() => {
         }
       } catch (error) {
         signal?.throwIfAborted();
-        useAi = false;
-        onWarning?.(error.message);
+        if (['quota','shared_quota','bad_key','no_key'].includes(error.code)) ai.available = false;
+        aiWarning = 'Đã tiếp tục đọc PDF cục bộ. ' + error.message;
       }
     }
     try {
@@ -1853,7 +1859,7 @@ window.GDHomeAssets = (() => {
               !regexes.some(regex => regex.test(other.text)))?.text || '';
           return [{...label,code:match[0].trim().toUpperCase(),name}];
         });
-        if (layout !== 'ancuong' && !matches.length && !useAi) { page.cleanup(); continue; }
+        if (layout !== 'ancuong' && labels.length && !matches.length && !useAi()) { page.cleanup(); continue; }
         const canvas = document.createElement('canvas');
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
@@ -1862,7 +1868,9 @@ window.GDHomeAssets = (() => {
         signal?.throwIfAborted();
         const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels,includeCode) : [];
         if (results.length + matches.length + swatches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
-        if (layout === 'ancuong' && !swatches.length) {
+        const needsAi = layout === 'ancuong' ? !labels.length || (guided && swatches.length) :
+          guided || ai.pdfMode === 'enrich' || !matches.length;
+        if (layout === 'ancuong' && labels.length && !swatches.length && !(needsAi && useAi())) {
           canvas.width = canvas.height = 0;
           page.cleanup();
           continue;
@@ -1871,7 +1879,9 @@ window.GDHomeAssets = (() => {
         const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
         sources.set(number,source);
         pageAspects.set(number,canvas.width/canvas.height);
-        if (useAi && (layout !== 'ancuong' || !labels.length)) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
+        if (!labels.length) scannedPages.add(number);
+        if (matches.length || swatches.length) localPages.add(number);
+        if (needsAi && useAi()) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
         for (const swatch of swatches) results.push({...swatch,page:number,source});
         if (layout === 'kitchen') {
@@ -1924,6 +1934,14 @@ window.GDHomeAssets = (() => {
         if (batch.length === 4 || number === pdf.numPages) await flush();
       }
       await flush();
+      const recognizedPages = new Set(results.map(item => item.page));
+      const manualPages = [...scannedPages].filter(page => !recognizedPages.has(page));
+      for (const page of manualPages) {
+        results.push({page,source:sources.get(page),code:'',name:'Trang scan ' + page,crop:{x:0,y:0,w:1,h:1},confidence:0,needsReview:true});
+      }
+      const manualWarning = manualPages.length ? 'Có ' + manualPages.length + ' trang scan cần cắt và nhập mã thủ công.' : '';
+      const warning = [aiWarning,manualWarning].filter(Boolean).join(' · ');
+      if (warning) onWarning?.(warning,!!manualPages.length || !results.length);
       const retained = new Set(results.map(item => item.source));
       for (const source of sources.values()) if (!retained.has(source)) URL.revokeObjectURL(source);
     } catch (error) {
@@ -2006,33 +2024,57 @@ window.GDHomeAssets = (() => {
       else signal.addEventListener('abort',done,{once:true});
     });
   }
-  async function scanCatalogueWeb(url,{useAi,signal,onProgress,onSource,onWarning,budget}) {
-    const items = [], failures = [], visited = new Set(), seen = new Set();
-    let page = 0, total;
+  async function scanCatalogueWeb(url,{ai,signal,onProgress,onSource,onWarning,budget}) {
+    const items = [], failures = new Set(), visited = new Set(), seen = new Set();
+    let total, resume = '', aiWarning = '', missingImages = 0, limitReached = false;
     while (url && !signal.aborted && budget.pages && budget.items) {
       const key = importHistory().sourceKey(url);
-      if (!key || visited.has(key)) break;
+      if (!key || visited.has(key)) {
+        failures.add('Trang nguồn trả đường dẫn phân trang không hợp lệ hoặc bị lặp.');
+        url = '';
+        break;
+      }
       visited.add(key);
       budget.pages--;
-      page++;
+      const parsed = new URL(url);
+      const page = parsed.searchParams.get('page') || parsed.searchParams.get('p') ||
+        parsed.pathname.match(/\/page\/(\d+)\/?$/i)?.[1] || visited.size;
       const progress = () => onProgress('Trang ' + page + '/' + (total || '?') + ' · ' + items.length + ' mẫu');
       progress();
       let result;
       try {
-        result = await api('/api/catalogue/web',{method:'POST',signal,body:JSON.stringify({urls:[url],useAi})});
+        result = await api('/api/catalogue/web',{method:'POST',signal,body:JSON.stringify({urls:[url],useAi:ai.available && ai.web})});
       } catch (error) {
-        if (!signal.aborted) failures.push(error.message);
+        if (!signal.aborted) {
+          failures.add(error.message);
+          resume = url;
+        }
         break;
       }
       total = result.total || total;
-      failures.push(...(result.warnings || []));
-      const pageIdentities = new Set();
+      if (result.aiWarning) {
+        ai.available = false;
+        aiWarning ||= 'Đã tiếp tục đọc HTML. ' + result.aiWarning;
+      }
+      for (const warning of result.warnings || []) failures.add(warning);
+      if (result.warnings?.length && !result.items?.length && !result.next) {
+        resume = url;
+        break;
+      }
+      const products = [], pageIdentities = new Set();
       for (const product of result.items || []) {
-        if (signal.aborted || !budget.items) break;
-        const identities = ['image:' + product.image,...(product.code ? ['code:' + fold(product.brand) + ':' + duplicateCode(product.code)] : [])];
-        if (identities.some(identity => seen.has(identity))) continue;
-        identities.forEach(identity => pageIdentities.add(identity));
-        budget.items--;
+        const identity = product.code ? 'code:' + fold(product.brand) + ':' + duplicateCode(product.code) : 'image:' + product.image;
+        if (seen.has(identity) || pageIdentities.has(identity)) continue;
+        pageIdentities.add(identity);
+        products.push(product);
+      }
+      if (products.length > budget.items) {
+        limitReached = true;
+        break;
+      }
+      budget.items -= products.length;
+      for (const product of products) {
+        if (signal.aborted) break;
         try {
           const response = await fetch('/api/catalogue/image',{method:'POST',signal,
             headers:{...hooks.headers(),'Content-Type':'application/json'},body:JSON.stringify({url:product.image})});
@@ -2041,14 +2083,26 @@ window.GDHomeAssets = (() => {
           onSource(source);
           items.push({...product,source,crop:{x:0,y:0,w:1,h:1},confidence:.7,web:true});
           progress();
-        } catch (error) { if (!signal.aborted) failures.push(error.message); }
+        } catch (error) {
+          if (!signal.aborted) {
+            missingImages++;
+            failures.add(error.message);
+          }
+        }
       }
       for (const identity of pageIdentities) seen.add(identity);
       url = result.next;
       if (url && budget.pages && budget.items) await catalogueDelay(1200,signal);
     }
-    if (url && !signal.aborted && (!budget.pages || !budget.items)) failures.push('Đã tới giới hạn 30 trang hoặc 600 mẫu.');
-    if (failures.length) onWarning([...new Set(failures)].join(' · '));
+    if (url && !signal.aborted && !resume && (limitReached || !budget.pages || !budget.items)) {
+      failures.add('Đã tới giới hạn 30 trang hoặc 600 mẫu cho một lượt nhập.');
+      resume = url;
+    }
+    if (resume) failures.add('Link nhập tiếp ' + resume);
+    if (missingImages) failures.add('Có ' + missingImages + ' ảnh tải chưa thành công.');
+    if (!items.length && !failures.size && !signal.aborted) failures.add('Không tìm thấy ảnh mẫu trong HTML của nguồn này.');
+    const notices = [aiWarning,...failures].filter(Boolean);
+    if (notices.length) onWarning(notices.join(' · '),failures.size > 0);
     return items;
   }
 
@@ -2130,10 +2184,14 @@ window.GDHomeAssets = (() => {
       ((library.suppliers || []).length ? '<label>Chọn nhiều đơn vị <select name="supplierChoices" multiple>' +
         library.suppliers.map(item => '<option>' + esc(item.name) + '</option>').join('') + '</select></label>' : '') +
       '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
-      '<label><input type="checkbox" name="useAi"' + (categoryId !== 'ancuong-wood' && window.GDHomeAI ? ' checked' : '') + '> <span data-catalogue-ai-label>Dùng AI để đọc PDF</span></label>' +
+      '<label data-catalogue-pdf-ai><input type="checkbox" name="useAi"> Dùng AI hỗ trợ đọc PDF</label>' +
+      '<label data-catalogue-pdf-ai-mode hidden>Cách dùng AI <select name="pdfAiMode">' +
+      '<option value="needed">Chỉ khi cần nhận dạng thêm</option><option value="enrich">Bổ sung thuộc tính mẫu</option></select></label>' +
+      '<label data-catalogue-web-ai hidden><input type="checkbox" name="useWebAi"> Dùng AI bổ sung tên / mã khi HTML thiếu</label>' +
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" multiple></label>' +
       '<label data-catalogue-pdf-code><input type="checkbox" name="includeCode" checked> Giữ dòng mã trong ảnh PDF</label>' +
-      '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea></label>' +
+      '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea>' +
+      '<small>Tự đọc HTML, tải ảnh và theo trang kế tiếp.</small></label>' +
       '<label data-catalogue-autosave hidden><input type="checkbox" name="autoSave" checked> Tự lưu tất cả, lọc lại sau</label>' +
       '<div data-catalogue-mixed hidden><label>Thư mục <input type="file" name="folder" webkitdirectory multiple></label>' +
       '<label>Ảnh <input type="file" name="images" accept="image/*" multiple></label>' +
@@ -2186,6 +2244,10 @@ window.GDHomeAssets = (() => {
     const read = form.querySelector('[type=submit]');
     let items = [], mode = 'pdf';
     let activeImports = [];
+    const showPdfAiMode = () => {
+      form.querySelector('[data-catalogue-pdf-ai-mode]').hidden = mode === 'web' || !form.elements.useAi.checked;
+    };
+    form.elements.useAi.onchange = showPdfAiMode;
     const setProgress = (entry,state,message) => {
       entry.row.dataset.sourceState = state;
       entry.row.querySelector('[data-source-progress]').textContent = message;
@@ -2362,9 +2424,9 @@ window.GDHomeAssets = (() => {
       form.querySelector('[data-catalogue-pdf-code]').hidden = mode === 'web';
       form.querySelector('[data-catalogue-guide]').hidden = mode === 'web';
       form.querySelector('[data-catalogue-mixed]').hidden = mode !== 'mixed';
-      form.querySelector('[data-catalogue-ai-label]').textContent = ({
-        pdf:'Dùng AI để đọc PDF',web:'Dùng AI để đọc thông tin mẫu khi cần',mixed:'Dùng AI khi đọc PDF hoặc website'
-      })[mode];
+      form.querySelector('[data-catalogue-pdf-ai]').hidden = mode === 'web';
+      form.querySelector('[data-catalogue-web-ai]').hidden = mode === 'pdf';
+      showPdfAiMode();
       read.textContent = ({web:'Đọc website',pdf:'Đọc PDF',mixed:'Xử lý hàng đợi'})[mode];
       queue.render(mode);
       refreshSelection();
@@ -2410,25 +2472,26 @@ window.GDHomeAssets = (() => {
         if (!activeImports.length) { status.textContent = 'Đã huỷ nhập.'; return; }
         await saveImportRows(activeImports);
         const guide = readGuide(), budget = {pages:30,items:600};
-        const useAi = form.elements.useAi.checked && !!window.GDHomeAI;
+        const ai = {available:!!window.GDHomeAI,pdf:form.elements.useAi.checked,
+          pdfMode:form.elements.pdfAiMode.value,web:form.elements.useWebAi.checked};
         const scans = new Array(activeImports.length);
         let next = 0;
         async function worker() {
           while (next < activeImports.length && !signal.aborted) {
             const index = next++, entry = activeImports[index];
-            let warning = '';
+            let warning = '', incomplete = false;
             const onProgress = message => {
               status.textContent = message;
               setProgress(entry,'running',message);
             };
-            const onWarning = message => { warning = message; };
+            const onWarning = (message,failed = true) => { warning = message; incomplete = failed; };
             onProgress('Đang chạy…');
             try {
               let imported;
-              if (entry.type === 'web') imported = await scanCatalogueWeb(entry.url,{useAi,signal,onProgress,onWarning,budget,onSource:source => sources.add(source)});
+              if (entry.type === 'web') imported = await scanCatalogueWeb(entry.url,{ai,signal,onProgress,onWarning,budget,onSource:source => sources.add(source)});
               else if (entry.type === 'pdf') imported = await scanWoodCatalogue(entry.file,form.elements.patterns.value,form.elements.direction.value,
                 (page,total) => onProgress('Đang đọc trang ' + page + '/' + total + '…'),
-                {useAi,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked});
+                {ai,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked});
               else {
                 const source = URL.createObjectURL(entry.file);
                 const image = new Image();
@@ -2439,8 +2502,8 @@ window.GDHomeAssets = (() => {
               }
               scans[index] = imported.map(item => ({...item,originImport:entry}));
               for (const item of imported) sources.add(item.source);
-              entry.incomplete = signal.aborted || !!warning;
-              entry.status = imported.length || signal.aborted ? 'partial' : warning ? 'error' : 'done';
+              entry.incomplete = signal.aborted || incomplete;
+              entry.status = imported.length || signal.aborted ? 'partial' : incomplete ? 'error' : 'done';
               setProgress(entry,signal.aborted ? 'stopped' : entry.status === 'error' ? 'error' : 'done',
                 signal.aborted ? 'Đã dừng · ' + imported.length + ' mẫu' : entry.status === 'error' ? 'Lỗi' : 'Xong · ' + imported.length + ' mẫu');
               if (warning) {

@@ -130,7 +130,9 @@ async function downloadPublicResource(targetUrl, {
     }
     if (!res.ok) {
       await res.body?.cancel?.().catch(() => {});
-      throw httpError(res.status, 'Không tải được nội dung từ trang nguồn (' + res.status + ').');
+      throw Object.assign(httpError(res.status, 'Không tải được nội dung từ trang nguồn (' + res.status + ').'),{
+        retryAfter:res.headers.get('retry-after')
+      });
     }
     const contentType = (res.headers.get('content-type') || '').toLowerCase().split(';')[0].trim();
     const valid = type === 'image' ? contentType.startsWith('image/') : type === 'html' ?

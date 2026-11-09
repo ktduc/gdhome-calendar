@@ -120,6 +120,15 @@ cases['8.5'] = async page => {
   await (cell.locator('.image-plus').or(cell)).first().click();
   assert.equal(await pasteFixture(page,'items'),true,'paste vào ô đã focus');
   await cell.locator('img').waitFor().catch(async error => { throw new Error((await page.locator('#notice').textContent()) || error.message); });
+  await page.getByText(/Đã lưu vào Dữ liệu dùng chung/).waitFor();
+  const pasted = await page.evaluate(async () => {
+    const group = sheet.groups[0], row = group.rows[0];
+    const library = await GDHomeAssets.loadLibrary();
+    const category = GDHomeAssets.categoryFor(library,group.name);
+    const item = library.items.find(entry => entry.full === row.options[0].images[0].full && entry.categoryId === category?.id);
+    return {name:item?.name,rowName:row.name};
+  });
+  assert.equal(pasted.name,pasted.rowName);
   await pasteFixture(page,'html');
   await cell.locator('.material-image-thumbs img[src]').waitFor();
 
@@ -1789,6 +1798,7 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
   await modal.locator('[name=finish]').fill('Mờ');
   if (useAi) {
     await modal.locator('[name=useAi]').check();
+    if (!withGuide) await modal.locator('[name=pdfAiMode]').selectOption('enrich');
     await modal.locator('[name=suppliers]').fill('Kho A');
   }
   if (withGuide) {
@@ -2768,14 +2778,16 @@ cases['20.9'] = async page => {
 
 cases['20.10'] = async page => {
   await openMaterials(page);
-  const requests = [], images = [];
+  const requests = [], aiRequests = [], images = [];
   await page.route('**/api/catalogue/web',route => {
-    const [url] = route.request().postDataJSON().urls;
+    const {urls:[url],useAi} = route.request().postDataJSON();
     requests.push(url);
+    aiRequests.push(useAi);
     const parsed = new URL(url), n = Number(parsed.searchParams.get('page') || 1);
     const prefix = parsed.pathname === '/stop' ? 'Y' : 'X';
     const row = code => ({code,name:code,image:'https://example.com/' + code + '.png'});
-    return route.fulfill({json:{items:[row(prefix+n),...(n > 1 ? [row(prefix+'1')] : [])],total:3,
+    const aiWarning = useAi ? 'Google Gemini · Đã hết hạn mức API. Model gemini-2.5-flash.' : undefined;
+    return route.fulfill({json:{items:[row(prefix+n),...(n > 1 ? [row(prefix+'1')] : [])],total:3,aiWarning,
       next:n < 3 ? parsed.origin+parsed.pathname+'?page='+(n+1) : null}});
   });
   await page.route('**/api/catalogue/image',route => {
@@ -2788,13 +2800,20 @@ cases['20.10'] = async page => {
   await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=urls]').fill('https://example.com/gach');
   assert.ok(await modal.locator('[name=autoSave]').isChecked());
+  assert.equal(await modal.locator('[name=useWebAi]').isChecked(),false);
+  await modal.locator('[name=useWebAi]').check();
   await modal.getByRole('button',{name:'Đọc website'}).click();
   await modal.locator('[role=status]').filter({hasText:/Trang 2\/3 · [12] mẫu/}).waitFor();
   await modal.getByText('Đã lưu 3 mã · bỏ qua 0 mã trùng.').waitFor();
   assert.equal(requests.length,3);
+  assert.deepEqual(aiRequests,[true,false,false]);
   assert.equal(images.length,3);
   assert.equal(await modal.locator('.wood-catalogue-card').count(),0);
   const data = await page.request.get('/api/library').then(r => r.json());
+  assert.equal(data.imports.find(entry => entry.source.endsWith('/gach')).status,'done');
+  const fallbackNotice = modal.locator('[data-source-warning]');
+  await fallbackNotice.waitFor();
+  assert.match(await fallbackNotice.textContent(),/Đã tiếp tục đọc HTML/);
   const items = data.items.filter(item => /^X[1-3]$/.test(item.code || ''));
   assert.equal(items.length,3);
   assert.ok(items.every(item => item.tags.includes('chua-duyet') && item.tags.includes('example.com')));
@@ -2835,14 +2854,15 @@ cases['20.12'] = async page => {
     const url = route.request().postDataJSON().urls[0];
     if (url.endsWith('/loi')) return route.fulfill({status:502,json:{message:'Nguồn kiểm thử bị lỗi'}});
     const code = url.endsWith('/a') ? 'WEB-A' : 'WEB-B';
-    const warnings = code === 'WEB-A' ? ['Giữ dữ liệu HTML vì AI chưa đọc được: Gemini · Đã hết hạn mức API.'] : [];
-    return route.fulfill({json:{items:[{code,name:code,image:url+'.png'}],warnings}});
+    const aiWarning = code === 'WEB-A' ? 'Gemini · Đã hết hạn mức API.' : undefined;
+    return route.fulfill({json:{items:[{code,name:code,image:url+'.png'}],aiWarning}});
   });
   await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')}));
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'ancuong-wood'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
   await modal.getByRole('tab',{name:'Nhiều nguồn'}).click();
+  await modal.locator('[name=useWebAi]').check();
   await modal.locator('[name=autoSave]').uncheck();
   await modal.locator('[name=layout]').selectOption('ancuong');
   await modal.locator('[name=collection]').fill('Catalogue thử');
@@ -2883,16 +2903,19 @@ cases['20.12'] = async page => {
   const data = await page.request.get('/api/library').then(r => r.json());
   const own = data.items.find(item => item.code === 'WEB-B');
   assert.deepEqual([own.categoryId,own.brand,own.suppliers],['cat-5','Hãng riêng',['Kho riêng']]);
-  assert.equal(data.imports.filter(entry => entry.status === 'done').length,4);
-  assert.equal(data.imports.find(entry => entry.source === 'https://example.com/a').status,'partial');
+  assert.equal(data.imports.filter(entry => entry.status === 'done').length,5);
+  assert.equal(data.imports.find(entry => entry.source === 'https://example.com/a').status,'done');
 };
 
 cases['20.12-bulk'] = async page => {
   await openMaterials(page);
   const png = Buffer.from(imageFixture,'base64');
   let processed = 0, transient = false, allowRetry = false;
+  const aiRequests = [];
   await page.route('**/api/catalogue/web',route => {
-    const url = new URL(route.request().postDataJSON().urls[0]);
+    const {urls:[source],useAi} = route.request().postDataJSON();
+    aiRequests.push(useAi);
+    const url = new URL(source);
     const n = Number(url.searchParams.get('page') || 1), end = Math.min(n*60,161);
     const items = Array.from({length:end-(n-1)*60},(_,i) => {
       const code = 'LOT-' + ((n-1)*60+i+1);
@@ -2919,6 +2942,7 @@ cases['20.12-bulk'] = async page => {
   await modal.locator('[name=urls]').fill('https://example.com/tiles');
   await modal.getByRole('button',{name:'Đọc website'}).click();
   await modal.getByText(/Đã lưu 160 mã.*1 mẫu chưa lưu/).waitFor({timeout:45000});
+  assert.deepEqual(aiRequests,[false,false,false]);
   assert.equal(processed,161);
   assert.ok(transient);
   assert.equal(await modal.locator('.wood-catalogue-card').count(),1);
@@ -2975,6 +2999,40 @@ cases['20.6-code'] = async page => {
   await modal.getByText(/Đã lưu 1 mã/).waitFor();
   const data = await page.request.get('/api/library').then(r => r.json());
   assert.deepEqual(data.items.filter(item => item.code === 'MS 9381' && item.brand === 'Hãng mẫu').map(item => item.categoryId).sort(),['cat-5','cat-6']);
+};
+
+cases['20-pdf-fallback'] = async page => {
+  await openMaterials(page);
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  const {PDFDocument,rgb} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  for (let i=1;i<=7;i++) {
+    const sheet = pdf.addPage([240,240]);
+    sheet.drawRectangle({x:25,y:85,width:160,height:120,color:rgb(.4,.5,.6)});
+    if (i === 1 || i === 7) sheet.drawText('MS 778' + i,{x:30,y:55,size:14});
+  }
+  await page.evaluate(() => {
+    window.pdfAiCalls = [];
+    GDHomeAI.startJob = async ({pages}) => {
+      pdfAiCalls.push(pages.map(page => page.number));
+      throw Object.assign(new Error('Google Gemini · Đã hết hạn mức API. Model gemini-2.5-flash.'),{code:'quota'});
+    };
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  assert.equal(await modal.locator('[name=useAi]').isChecked(),false);
+  await modal.locator('[name=useAi]').check();
+  await modal.locator('[name=pdf]').setInputFiles({name:'text-va-scan.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.locator('[data-save-wood]:enabled').waitFor({timeout:15000});
+  assert.deepEqual(await page.evaluate(() => pdfAiCalls),[[2,3,4,5]]);
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),7);
+  assert.equal(await modal.locator('.wood-catalogue-card.needs-review').count(),5);
+  assert.deepEqual(await modal.locator('[data-wood-code-input]').evaluateAll(inputs => inputs.map(input => input.value).filter(Boolean)),['MS 7781','MS 7787']);
+  assert.match(await modal.locator('[data-source-warning]').textContent(),/đọc PDF cục bộ.*5 trang scan/);
 };
 
 cases['20.13'] = async page => {

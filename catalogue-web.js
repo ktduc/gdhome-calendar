@@ -41,7 +41,18 @@ function allowedPath(rules,url) {
 
 function catalogueDownloader(options = {}) {
   const cache = new Map();
-  const download = (url,type,beforeRequest) => downloadPublicResource(url,{...options,type,beforeRequest});
+  async function download(url,type,beforeRequest) {
+    const request = () => downloadPublicResource(url,{...options,type,beforeRequest});
+    try { return await request(); }
+    catch (error) {
+      if (![429,500,502,503,504].includes(error.status)) throw error;
+      const header = error.retryAfter;
+      const delay = header ? (/^\d+$/.test(header) ? Number(header)*1000 : Date.parse(header)-Date.now()) : 1000;
+      if (delay > 5000) throw error;
+      await new Promise(resolve => setTimeout(resolve,Math.max(750,delay || 0)));
+      return request();
+    }
+  }
   return (url,type) => download(url,type,async parsed => {
     if (!cache.has(parsed.origin)) cache.set(parsed.origin,download(parsed.origin+'/robots.txt','text')
       .then(({buffer}) => robotsRules(buffer.toString('utf8')))
@@ -51,8 +62,8 @@ function catalogueDownloader(options = {}) {
   });
 }
 
-const decode = value => String(value || '').replace(/&(amp|quot|apos|lt|gt|nbsp|#\d+|#x[0-9a-f]+);/gi,(_,entity) => {
-  const names = {amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' '};
+const decode = value => String(value || '').replace(/&(amp|quot|apos|lt|gt|nbsp|times|ndash|mdash|#\d+|#x[0-9a-f]+);/gi,(_,entity) => {
+  const names = {amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' ',times:'×',ndash:'–',mdash:'—'};
   if (names[entity.toLowerCase()]) return names[entity.toLowerCase()];
   const code = entity[1]?.toLowerCase() === 'x' ? parseInt(entity.slice(2),16) : Number(entity.slice(1));
   return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
@@ -62,7 +73,39 @@ function attributes(tag) {
     .map(([,key,double,single,bare]) => [key.toLowerCase(),decode(double ?? single ?? bare)]));
 }
 const first = value => Array.isArray(value) ? value[0] : value;
-function extractProducts(html,url,validateUrl = checkSsrfUrl) {
+const readable = value => decode(String(value || '').replace(/<[^>]*>/g,' ')).replace(/\s+/g,' ').trim();
+const imageSource = attrs => attrs['data-src'] || attrs['data-lazy-src'] || attrs['data-original'] || attrs.src || attrs.srcset?.split(/\s/)[0];
+function productLinks(html,url) {
+  const products = new Map();
+  for (const [,tag,content] of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi)) {
+    const link = attributes(tag);
+    if (!link.href || !(/\/(?:san-pham|products?)\//i.test(link.href) || /woocommerce-loopproduct-link|woocommerce-loop-product__link/i.test(link.class || ''))) continue;
+    let href;
+    try {
+      const product = new URL(link.href,url);
+      href = product.origin + product.pathname.replace(/\/$/,'');
+    } catch { continue; }
+    const record = products.get(href) || {};
+    const img = content.match(/<img\b[^>]*>/i)?.[0];
+    if (img && !record.image) {
+      const attrs = attributes(img);
+      record.image = imageSource(attrs);
+      record.code = attrs['data-sku'] || link['data-sku'];
+      record.size = attrs['data-size'];
+      record.name ||= attrs.alt || attrs.title;
+    }
+    const title = content.match(/<h[2-6]\b[^>]*>([\s\S]*?)<\/h[2-6]\s*>/i)?.[1];
+    record.name ||= readable(title || (!img ? content : ''));
+    products.set(href,record);
+  }
+  return products.values();
+}
+
+function nameCode(name) {
+  const code = name.match(/(?:^|[\s:–—])([A-Z]{1,4}\s+\d{3,}[A-Z0-9]*|(?=[A-Z0-9_-]*\d)(?=[A-Z0-9_-]*[A-Z])[A-Z0-9][A-Z0-9_-]{3,})$/)?.[1] || '';
+  return /^(?:\d+X\d+|\d+(?:CM|MM|KG|ML|L))$/.test(code) ? '' : code;
+}
+function extractProducts(html,url,validateUrl,maxItems) {
   const meta = {};
   for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
@@ -73,19 +116,22 @@ function extractProducts(html,url,validateUrl = checkSsrfUrl) {
   const items = [];
   const seen = new Set();
   function add(record) {
-    if (!record.image || items.length >= 60) return;
+    if (!record.image || items.length >= maxItems) return;
     let image;
     try { image = validateUrl(new URL(record.image,url).href).href; } catch { return; }
-    const key = [image,record.code || ''].join('|');
-    if (seen.has(key) || (!record.code && items.some(item => item.image === image))) return;
+    const name = readable(record.name || title);
+    const code = readable(record.code) || nameCode(name);
+    const size = readable(record.size) || name.match(/\b\d{2,4}\s*(?:cm|mm)?\s*[×x*]\s*\d{2,4}(?:\s*(?:cm|mm))?\b/i)?.[0] || '';
+    const key = [image,code].join('|');
+    if (seen.has(key) || (!code && items.some(item => item.image === image))) return;
     seen.add(key);
-    items.push({name:decode(record.name || title).slice(0,160),code:decode(record.code).slice(0,80),
-      size:decode(record.size).slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image});
+    items.push({name:name.slice(0,160),code:code.slice(0,80),
+      size:size.slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image});
   }
   for (const block of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi)) {
     try {
       const queue = [JSON.parse(block[1])];
-      for (let i=0; i<queue.length && i<2500 && items.length<60; i++) {
+      for (let i=0; i<queue.length && i<2500 && items.length<maxItems; i++) {
         const node = queue[i];
         if (!node || typeof node !== 'object') continue;
         if ([node['@type']].flat().some(type => typeof type === 'string' && /(?:^|\/)Product$/.test(type))) {
@@ -97,11 +143,11 @@ function extractProducts(html,url,validateUrl = checkSsrfUrl) {
       }
     } catch { /* A malformed script does not prevent HTML fallback. */ }
   }
-  const structured = items.length > 0;
-  if (!structured) {
+  if (!items.length) for (const record of productLinks(html,url)) add(record);
+  if (!items.length) {
     for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
       const attrs = attributes(match[0]);
-      const source = attrs['data-src'] || attrs.src || attrs.srcset?.split(/\s/)[0];
+      const source = imageSource(attrs);
       if (!source || /logo|sprite|icon|avatar|pixel|banner/i.test(source) || (attrs.width && Number(attrs.width)<100)) continue;
       if (!attrs.alt && !/product|san-pham/i.test(attrs.class || '')) continue;
       add({name:attrs.alt || attrs.title,code:attrs['data-sku'],size:attrs['data-size'],image:source});
@@ -110,7 +156,7 @@ function extractProducts(html,url,validateUrl = checkSsrfUrl) {
       add({name:title,code:meta['product:retailer_item_id'],image:meta['og:image']});
     }
   }
-  return {items,structured};
+  return items;
 }
 
 function cataloguePagination(html,url,validate = checkSsrfUrl) {
@@ -147,9 +193,11 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
   for (const match of html.matchAll(/<(a|button)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi)) {
     const attrs = attributes(match[2]), candidate = destination(attrs.href || attrs['data-href'] || attrs.formaction);
     if (!candidate) continue;
+    if (attrs.rel?.toLowerCase().split(/\s+/).includes('next')) explicit ||= candidate;
     const caption = decode(match[3].replace(/<[^>]*>/g,'')).toLocaleLowerCase('vi').replace(/\s+/g,' ');
     const isNext = /^(?:›|»|next(?: page)?|tiếp(?: theo)?|trang tiếp(?: theo)?|sau|trang sau)$/i;
-    if (isNext.test(caption) || isNext.test(attrs['aria-label'] || '')) named ||= candidate;
+    if (isNext.test(caption) || isNext.test(attrs['aria-label'] || '') ||
+      /(?:^|\s)next(?:\s|$)/.test(attrs.class || '') && /(?:^|\s)page-numbers(?:\s|$)/.test(attrs.class || '')) named ||= candidate;
     const n = number(candidate);
     if (n && Number(caption) === n && base(candidate) === base(page)) numbered.push({candidate,n});
   }
@@ -161,6 +209,7 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
 async function importCatalogueUrls(urls,options = {}) {
   const load = catalogueDownloader(options);
   const validate = options.validateUrl || checkSsrfUrl;
+  const maxItems = urls.length === 1 ? 600 : 60;
   const items = [], warnings = [];
   let needsAi = false;
   let pagination;
@@ -168,14 +217,14 @@ async function importCatalogueUrls(urls,options = {}) {
     try {
       const page = await load(url,'html');
       const html = page.buffer.toString('utf8');
-      const result = extractProducts(html,page.url,validate);
+      const result = extractProducts(html,page.url,validate,maxItems);
       if (urls.length === 1) pagination = cataloguePagination(html,page.url,validate);
-      needsAi ||= !result.structured;
-      items.push(...result.items.filter(candidate => !items.some(item => item.image === candidate.image && item.code === candidate.code)));
-      if (items.length >= 60) break;
+      needsAi ||= result.some(item => !item.name || !item.code || !item.size);
+      items.push(...result.filter(candidate => !items.some(item => item.image === candidate.image && item.code === candidate.code)));
+      if (items.length >= maxItems) break;
     } catch (error) { warnings.push(error.message); }
   }
-  return {items:items.slice(0,60),warnings,needsAi,...(pagination || {})};
+  return {items:items.slice(0,maxItems),warnings,needsAi,...(pagination || {})};
 }
 
 module.exports = {importCatalogueUrls,catalogueDownloader,cataloguePagination};
