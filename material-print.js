@@ -51,9 +51,10 @@ function printImages(items,base,large = false,interactive = false,codeTag = '') 
     const extra = interactive ? ' type="button" aria-label="Xem ảnh ' + (index+1) + '" data-review-image="' +
       html(base+asset(image,true)) + '"' : '';
     const view = typeof image === 'object' && window.GDHomeAssets ? GDHomeAssets.viewStyle(image.view) : '';
+    const display = window.GDHomeAssets?.displayAttribute(image.display) || '';
     const codeHtml = !index && codeTag ? '<span class="image-code-tag">' + html(codeTag) + '</span>' : '';
     return '<' + tag + ' class="' + cls + '"' + extra + '><img class="print-material" data-print-img="' +
-      html(base+asset(image,large)) + '" alt="Ảnh vật liệu"' + view + '>' + codeHtml + '</' + tag + '>';
+      html(base+asset(image,large)) + '" alt="Ảnh vật liệu"' + view + display + '>' + codeHtml + '</' + tag + '>';
   });
   return slots.length ? slots[0] + (slots.length > 1 ? '<div class="material-image-thumbs">' + slots.slice(1).join('') + '</div>' : '') : '';
 }
@@ -66,6 +67,7 @@ function clearPrintImages(root) {
 async function decodeMaterialThumbnail(image) {
   await image.decode();
   image.dataset.imageAxis = image.naturalWidth >= image.naturalHeight ? 'wide' : 'tall';
+  GDHomeImages.applyPadding(image);
 }
 
 async function loadPrintImages(root, headers = {}) {

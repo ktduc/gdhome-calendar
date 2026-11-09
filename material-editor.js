@@ -50,7 +50,8 @@ function images(list, large = false) {
   return (list || []).map(image => {
     const name = typeof image === 'string' ? image : (large ? image.full : image.thumb);
     const view = typeof image === 'object' && window.GDHomeAssets ? GDHomeAssets.viewStyle(image.view) : '';
-    return GDHomeImages.isAssetName(name) ? '<img data-asset="' + name + '" alt="Ảnh vật liệu"' + view + '>' : '';
+    const display = window.GDHomeAssets?.displayAttribute(image.display) || '';
+    return GDHomeImages.isAssetName(name) ? '<img data-asset="' + name + '" alt="Ảnh vật liệu"' + view + display + '>' : '';
   }).join('');
 }
 
@@ -788,6 +789,9 @@ function setImageView(list,index,view) {
 function materialProjectName() {
   return materials.projects.find(project => project.id === sheet?.projectId)?.name || sheet?.meta?.project || '';
 }
+function pickedLibraryImage(item) {
+  return {full:item.full,thumb:item.thumb,...(item.view ? {view:item.view} : {}),...(item.display ? {display:item.display} : {})};
+}
 function addPickedImage(row,slot,item,extra) {
   if (!item || !sheet?.groups.some(group => group.rows.includes(row))) return;
   const list = slot === 'render' ? row.render : row.options[Number(slot)]?.images;
@@ -795,7 +799,7 @@ function addPickedImage(row,slot,item,extra) {
   if (list.some(image => (typeof image === 'string' ? image : image.full) === item.full)) return say('Ảnh đã có trong ô.');
   if (list.length >= 8) return say('Mỗi ô tối đa 8 ảnh.');
   modify(() => {
-    list.push({full:item.full,thumb:item.thumb});
+    list.push(pickedLibraryImage(item));
     extra?.();
   });
 }
@@ -892,6 +896,12 @@ function openImageCellMenu(anchor, row, group, slot) {
   });
 
   if (hasImage) {
+    for (const [display,label] of GDHomeAssets.displayOptions) addItem('▣','Kiểu hiển thị · ' + label,() => {
+      modify(() => {
+        const item = list[0];
+        list[0] = {...(typeof item === 'string' ? {full:item,thumb:item} : item),display};
+      });
+    });
     addItem('🔍', 'Chỉnh vùng nhìn…', async () => {
       const view = await GDHomeAssets.editView(list[0]);
       if (view) modify(() => { setImageView(list, 0, view); }, false);
@@ -1006,7 +1016,7 @@ function woodPicked(row,slot,wood) {
     pa.autoNameAsset = wood.full;
     if (wood.finish) pa.finish = wood.finish;
     if (wood.full && pa.images.length < 8 && !pa.images.some(img => (typeof img === 'string' ? img : img.full) === wood.full)) {
-      pa.images.push({full:wood.full,thumb:wood.thumb,...(wood.view ? {view:wood.view} : {})});
+      pa.images.push(pickedLibraryImage(wood));
     }
     if (!pa.color) { pa.color = wood.name; pa.autoColor = wood.full ? wood.name : undefined; }
     if (!row.spec) row.spec = wood.collection;

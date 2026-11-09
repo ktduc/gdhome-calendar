@@ -2256,24 +2256,6 @@ cases['20.1'] = async page => {
 
 cases['19.9'] = async page => {
   await openMaterials(page);
-  const metrics = await page.evaluate(async () => {
-    const canvas = Object.assign(document.createElement('canvas'),{width:100,height:50});
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#115588';
-    ctx.fillRect(0,0,100,50);
-    ctx.fillStyle = '#ff0000';
-    ctx.fillRect(40,15,20,20);
-    const {full} = await GDHomeImages.compress(await new Promise(resolve => canvas.toBlob(resolve)),null,{square:true});
-    const bitmap = await createImageBitmap(full);
-    canvas.width = bitmap.width; canvas.height = bitmap.height;
-    ctx.drawImage(bitmap,0,0);
-    return {width:bitmap.width,height:bitmap.height,edge:[...ctx.getImageData(50,5,1,1).data],
-      center:[...ctx.getImageData(50,50,1,1).data],above:[...ctx.getImageData(50,36,1,1).data]};
-  });
-  assert.equal(metrics.width,100);
-  assert.equal(metrics.height,100);
-  assert.ok(metrics.edge[2] > 120 && metrics.above[2] > 120);
-  assert.ok(metrics.center[0] > 225 && metrics.center[2] < 30);
   const {PDFDocument,rgb} = require('pdf-lib');
   const pdf = await PDFDocument.create();
   const sheet = pdf.addPage([360,160]);
@@ -2298,17 +2280,48 @@ cases['19.9'] = async page => {
   await card.waitFor({timeout:15000});
   assert.equal(await card.locator('[data-wood-code-input]').inputValue(),'KT1210');
   assert.equal(await card.locator('[data-catalogue-field=size]').inputValue(),'30x120');
-  assert.ok(await modal.locator('[name=square]').isChecked());
+  assert.equal(await modal.locator('[name=display]').inputValue(),'pad');
   await modal.locator('[data-save-wood]').click();
   await modal.getByText(/Đã lưu 1 mã/).waitFor();
   const item = (await page.request.get('/api/library').then(r => r.json())).items.find(item => item.code === 'KT1210');
   assert.equal(item.size,'30x120');
-  assert.ok(item.square && item.originalFull !== item.full);
+  assert.equal(item.display,'pad');
+  assert.ok(!item.square && !item.originalFull);
   await modal.locator('.close-dialog').click();
   const library = page.locator('.asset-library-dialog');
-  const toggle = library.locator('[data-asset-id="' + item.id + '"] [data-asset-square]');
-  await toggle.click();
-  await page.waitForFunction(async id => !(await fetch('/api/library').then(r => r.json())).items.find(item => item.id === id)?.square,item.id);
+  const saved = library.locator('[data-asset-id="' + item.id + '"]');
+  await saved.locator('summary').click();
+  await saved.locator('[data-asset-display]').selectOption('fit');
+  await page.waitForFunction(async id => (await fetch('/api/library').then(r => r.json())).items.find(item => item.id === id)?.display === 'fit',item.id);
+  assert.equal((await page.request.get('/api/library').then(r => r.json())).items.find(entry => entry.id === item.id).full,item.full);
+};
+
+cases['20.7'] = async page => {
+  await openMaterials(page);
+  const result = await page.evaluate(async () => {
+    const canvas = Object.assign(document.createElement('canvas'),{width:2000,height:1000});
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#115588';
+    ctx.fillRect(0,0,2000,1000);
+    const file = new File([await new Promise(resolve => canvas.toBlob(resolve))],'test-pad.png',{type:'image/png'});
+    const [item] = await GDHomeAssets.uploadToLibrary('cat-4',[file],() => {},'pad');
+    const dimensions = await Promise.all([item.full,item.thumb].map(async name => {
+      const bitmap = await createImageBitmap(await fetch(await GDHomeAssets.assetUrl(name)).then(r => r.blob()));
+      return [bitmap.width,bitmap.height];
+    }));
+    const print = document.createElement('div');
+    print.dataset.imageFit = 'fill';
+    print.innerHTML = printImages([item],'/api/materials/assets/',true);
+    document.body.append(print);
+    const img = print.querySelector('img');
+    img.src = await GDHomeAssets.assetUrl(item.full);
+    await decodeMaterialThumbnail(img);
+    return {dimensions,display:img.dataset.display,fit:getComputedStyle(img).objectFit,pad:img.parentElement.style.getPropertyValue('--pad-color')};
+  });
+  assert.deepEqual(result.dimensions,[[1600,800],[480,240]]);
+  assert.equal(result.display,'pad');
+  assert.equal(result.fit,'contain');
+  assert.ok(result.pad.startsWith('rgb('));
 };
 
 cases['19.10'] = async page => {

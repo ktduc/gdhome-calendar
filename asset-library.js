@@ -68,11 +68,14 @@ window.GDHomeAssets = (() => {
   }
   async function hydrate(root) {
     await Promise.all([...root.querySelectorAll('img[data-lib-asset]')].map(async img => {
-      try { img.src = await assetUrl(img.dataset.libAsset); } catch { img.alt = 'Ảnh chưa tải được'; }
+      try {
+        img.src = await assetUrl(img.dataset.libAsset);
+        if (img.dataset.display === 'pad') { await img.decode(); GDHomeImages.applyPadding(img); }
+      } catch { img.alt = 'Ảnh chưa tải được'; }
     }));
   }
-  async function uploadImage(file,options) {
-    const {full,thumb} = await GDHomeImages.compress(file,null,options);
+  async function uploadImage(file) {
+    const {full,thumb} = await GDHomeImages.compress(file);
     const fullName = await storeAsset(full);
     const thumbName = thumb === full ? fullName : await storeAsset(thumb);
     return {full:fullName,thumb:thumbName,reduction:GDHomeImages.reduction(file,full)};
@@ -232,7 +235,7 @@ window.GDHomeAssets = (() => {
     let skipped = 0;
     for (const item of items) {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
-      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,square:item.square,originalFull:item.originalFull,originalThumb:item.originalThumb,view:item.view,createdAt:Date.now(),
+      added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,createdAt:Date.now(),
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
     data.items.unshift(...added);
@@ -242,7 +245,7 @@ window.GDHomeAssets = (() => {
     const item = data.items.find(entry => entry.id === patch.id);
     if (item) {
       if (typeof patch.name === 'string') item.name = patch.name;
-      for (const key of ['brand','size','tags','suppliers']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
+      for (const key of ['brand','size','tags','suppliers','display']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
       if (patch.hex) item.hex = patch.hex;
       if (typeof patch.square === 'boolean') for (const key of ['square','full','thumb','originalFull','originalThumb']) item[key] = patch[key];
@@ -299,6 +302,15 @@ window.GDHomeAssets = (() => {
     const css = viewCss(view);
     return css ? ' style="--view:' + css + '"' : '';
   };
+  const displayOptions = [['fill','Cắt đầy ô'],['fit','Vừa khung'],['pad','Lấp nền ô vuông']];
+  const displayAttribute = display => displayOptions.some(([value]) => value === display) ? ' data-display="' + display + '"' : '';
+  function categoryDisplay(category) {
+    return /phao|phu kien/.test(fold(category?.name || '')) ? 'pad' : 'fill';
+  }
+  function displaySelect(display,attribute) {
+    return '<select ' + attribute + ' aria-label="Kiểu hiển thị">' + displayOptions.map(([value,label]) =>
+      '<option value="' + value + '"' + (display === value ? ' selected' : '') + '>' + label + '</option>').join('') + '</select>';
+  }
   function clampView(view,ratio) {
     const z = Math.min(6,Math.max(1,view.z || 1));
     const visX = ratio >= 1 ? 1/(z*ratio) : 1/z;
@@ -401,10 +413,10 @@ window.GDHomeAssets = (() => {
     return '<div class="asset-grid">' + items.map(item => '<figure class="asset-card" data-asset-id="' + esc(item.id) + '"' + (selected ? ' draggable="true"' : '') + '>' +
       (selected ? '<label class="asset-card-check"><input type="checkbox" data-bulk-select aria-label="Chọn ' + esc(item.name || item.code) + '"' + (selected.has(item.id) ? ' checked' : '') + '></label>' : '') +
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
-      (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '" alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
+      (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '"' + displayAttribute(item.display) + ' alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
       (item.size || item.brand ? '<span class="asset-card-badge">' + esc([item.size?.replace('x','×'),item.brand].filter(Boolean).join(' · ')) + '</span>' : '') +
       '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish,item.spec,item.cabinetWidth && 'Tủ '+item.cabinetWidth,item.subgroup].filter(Boolean).join(' · '))) + '</figcaption>' +
-      (removable && item.full ? '<button type="button" data-asset-square aria-pressed="' + !!item.square + '">' + (item.square ? 'Dùng ảnh gốc' : 'Lấp đầy ô vuông') + '</button>' : '') +
+      (removable && item.full ? '<details class="asset-card-menu"><summary aria-label="Tuỳ chọn ảnh">⋯</summary><label>Kiểu hiển thị' + displaySelect(item.display || 'fill','data-asset-display') + '</label></details>' : '') +
       (removable && item.builtin ? '<button type="button" data-asset-hide>' + (item.hidden ? 'Hiện' : 'Ẩn') + '</button>' : '') +
       (removable ? '<button type="button" class="asset-remove" data-asset-remove aria-label="Xoá ảnh">×</button>' : '') + '</figure>').join('') + '</div>';
   }
@@ -797,19 +809,18 @@ window.GDHomeAssets = (() => {
     });
   }
 
-  async function uploadToLibrary(categoryId,files,onStatus = toast,square = false) {
+  async function uploadToLibrary(categoryId,files,onStatus = toast,display) {
     const images = files.filter(file => file.type?.startsWith('image/'));
     if (!images.length) throw new Error('Chọn file ảnh.');
     const uploaded = [];
     let before = 0, after = 0;
     for (const [index,file] of images.entries()) {
       onStatus?.('Đang nén và tải ' + (index+1) + '/' + images.length + '…');
-      const {full,thumb} = await GDHomeImages.compress(file,null,{square});
+      const {full,thumb} = await GDHomeImages.compress(file);
       before += file.size; after += full.size;
       const fullName = await storeAsset(full);
       const image = {full:fullName,thumb:thumb === full ? fullName : await storeAsset(thumb)};
-      const original = square ? await uploadImage(file) : image;
-      uploaded.push({full:image.full,thumb:image.thumb,...(square ? {square:true,originalFull:original.full,originalThumb:original.thumb} : {}),name:(file.name || '').replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').slice(0,160)});
+      uploaded.push({...image,display,name:(file.name || '').replace(/\.[a-z0-9]+$/i,'').replace(/[_-]+/g,' ').slice(0,160)});
     }
     for (let index = 0; index < uploaded.length; index += 50) await addItems(categoryId,uploaded.slice(index,index+50));
     const sized = bytes => bytes >= 1048576 ? (bytes/1048576).toFixed(1).replace('.',',') + ' MB' : Math.max(1,Math.round(bytes/1024)) + ' KB';
@@ -840,7 +851,7 @@ window.GDHomeAssets = (() => {
     for (const entry of entries) await walk(entry);
     return files;
   }
-  function reviewFolders(categoryId,files,square = false) {
+  function reviewFolders(categoryId,files,display) {
     const groups = new Map();
     let images = 0;
     for (const {file,path} of files) {
@@ -875,11 +886,8 @@ window.GDHomeAssets = (() => {
             const original = await uploadImage(file);
             controller.signal.throwIfAborted();
             if (!seen.has(original.full)) {
-              const image = square ? await uploadImage(file,{square:true}) : original;
-              controller.signal.throwIfAborted();
               seen.add(original.full);
-              await addItems(categoryId,[{...image,name:file.name.replace(/\.[^.]+$/,''),tags,
-                ...(square ? {square:true,originalFull:original.full,originalThumb:original.thumb} : {})}]);
+              await addItems(categoryId,[{...original,display,name:file.name.replace(/\.[^.]+$/,''),tags}]);
             }
             status.textContent = 'Đã xử lý ' + (++done) + '/' + images + ' ảnh';
           }
@@ -888,7 +896,7 @@ window.GDHomeAssets = (() => {
           dialog.close();
           const next = () => {
             const pdf = pdfs.shift();
-            if (pdf) openWoodCatalogue(categoryId,null,{...pdf,onClose:next});
+            if (pdf) openWoodCatalogue(categoryId,null,{...pdf,display,onClose:next});
           };
           next();
         } else status.textContent = 'Đã xử lý ' + done + '/' + images + ' ảnh. Hoàn tất.';
@@ -1255,7 +1263,7 @@ window.GDHomeAssets = (() => {
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" required></label>' +
       '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea></label>' +
       '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option><option value="phao">Phào chỉ</option><option value="kitchen">Phụ kiện bếp · ảnh và bảng mã</option></select></label>' +
-      '<label><input type="checkbox" name="square"> Lấp đầy ô vuông</label>' +
+      '<label>Kiểu hiển thị ' + displaySelect(preset.display || categoryDisplay(library.categories.find(c => c.id === categoryId)),'name="display"') + '</label>' +
       '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
       '<label>Hãng <input name="brand" list="wood-brands" value="' + (categoryId === 'ancuong-wood' ? 'An Cường' : '') + '" maxlength="80"></label>' +
       '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
@@ -1270,7 +1278,8 @@ window.GDHomeAssets = (() => {
     if (preset.file) { const transfer = new DataTransfer(); transfer.items.add(preset.file); form.elements.pdf.files = transfer.files; }
     if (preset.tags) form.elements.tags.value = preset.tags.join(', ');
     if (categoryId === 'kitchen-accessories') form.elements.layout.value = 'kitchen';
-    form.elements.layout.onchange = () => { if (form.elements.layout.value === 'phao') form.elements.square.checked = true; };
+    form.elements.category.onchange = () => { form.elements.display.value = categoryDisplay(library.categories.find(c => c.id === form.elements.category.value)); };
+    form.elements.layout.onchange = () => { if (['phao','kitchen'].includes(form.elements.layout.value)) form.elements.display.value = 'pad'; };
     const status = body.querySelector('[role=status]');
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
@@ -1420,24 +1429,19 @@ window.GDHomeAssets = (() => {
           }
           status.textContent = 'Đang lưu ' + code + '…';
           const crop = item.crop;
-          const cropKey = JSON.stringify([item.source,crop,form.elements.square.checked]);
+          const cropKey = JSON.stringify([item.source,crop]);
           const image = previous || savedCrops.get(cropKey) || await (async () => {
             const source = await fetch(item.source).then(response => response.blob());
             const bounds = [crop.x,crop.y,crop.x+crop.w,crop.y+crop.h];
-            async function saveCrop(square) {
-              const {full,thumb} = await GDHomeImages.compress(source,bounds,{square});
-              const key = await storeAsset(full);
-              return {full:key,thumb:thumb === full ? key : await storeAsset(thumb)};
-            }
-            const original = await saveCrop(false);
-            if (!form.elements.square.checked) return original;
-            return {...await saveCrop(true),square:true,originalFull:original.full,originalThumb:original.thumb};
+            const {full,thumb} = await GDHomeImages.compress(source,bounds);
+            const key = await storeAsset(full);
+            return {full:key,thumb:thumb === full ? key : await storeAsset(thumb)};
           })();
           savedCrops.set(cropKey,image);
           const fields = Object.fromEntries([...card.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
             .map(field => [field.dataset.catalogueField,field.value.trim()]));
           if (form.elements.layout.value === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
-          const record = {full:image.full,thumb:image.thumb,square:image.square,originalFull:image.originalFull,originalThumb:image.originalThumb,view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
+          const record = {full:image.full,thumb:image.thumb,display:form.elements.display.value,view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,
             kind:categoryId === 'ancuong-wood' && code ? 'wood' : 'image',...fields};
           existing.set(key,record);
           batch.push(record);
@@ -1490,7 +1494,7 @@ window.GDHomeAssets = (() => {
   function openLibrary({groupName,categoryId,onPick} = {}) {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
     let current = categoryId || null, query = '', status = '';
-    let squareUploads = false;
+    let uploadDisplay;
     const facets = {}, selected = new Set();
     let rangeAnchor, dragged, undoToken, guestUndo;
     async function bulk(patch) {
@@ -1537,7 +1541,7 @@ window.GDHomeAssets = (() => {
           (category.id === 'ancuong-wood' ? '' : '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>') +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
           '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
-          '<label><input type="checkbox" data-library-square> Lấp đầy ô vuông khi tải ảnh</label>' +
+          '<label>Kiểu hiển thị khi tải ảnh ' + displaySelect(uploadDisplay || categoryDisplay(category),'data-library-display') + '</label>' +
           '<label>Chọn thư mục <input type="file" webkitdirectory multiple data-folder-input></label>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' + facetMarkup(candidates,facets) +
           '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + bulkControls() + grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'}) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
@@ -1663,14 +1667,12 @@ window.GDHomeAssets = (() => {
       });
       const search = body.querySelector('input[type=search]');
       if (search) search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = body.querySelector('input[type=search]'); s?.focus(); s?.setSelectionRange(query.length,query.length); }); },250); };
-      const squareOption = body.querySelector('[data-library-square]');
-      if (squareOption) {
-        squareOption.checked = squareUploads;
-        squareOption.onchange = () => { squareUploads = squareOption.checked; };
-      }
+      const displayOption = body.querySelector('[data-library-display]');
+      if (displayOption) displayOption.onchange = () => { uploadDisplay = displayOption.value; };
+      const display = () => uploadDisplay || categoryDisplay(category);
       const drop = body.querySelector('.asset-drop');
       const upload = async files => {
-        try { await uploadToLibrary(current,files,message => { status = message; const s = body.querySelector('.asset-status'); if (s) s.textContent = message; },squareUploads); }
+        try { await uploadToLibrary(current,files,message => { status = message; const s = body.querySelector('.asset-status'); if (s) s.textContent = message; },display()); }
         catch (error) { status = error.message; }
         paint();
       };
@@ -1683,12 +1685,12 @@ window.GDHomeAssets = (() => {
           if (!entries.some(entry => entry.isDirectory)) return;
           event.preventDefault();
           event.stopImmediatePropagation();
-          droppedCatalogueFiles(entries).then(files => reviewFolders(current,files,squareUploads)).catch(error => toast(error.message));
+          droppedCatalogueFiles(entries).then(files => reviewFolders(current,files,display())).catch(error => toast(error.message));
         },true);
       }
       const folder = body.querySelector('[data-folder-input]');
       if (folder) folder.onchange = () => {
-        try { reviewFolders(current,[...folder.files].map(file => ({file,path:file.webkitRelativePath.split('/').slice(0,-1).join('/')})),squareUploads); }
+        try { reviewFolders(current,[...folder.files].map(file => ({file,path:file.webkitRelativePath.split('/').slice(0,-1).join('/')})),display()); }
         catch (error) { toast(error.message); }
         folder.value = '';
       };
@@ -1698,14 +1700,9 @@ window.GDHomeAssets = (() => {
         event.preventDefault();
         upload(files);
       };
-      body.querySelectorAll('[data-asset-square]').forEach(button => button.onclick = async () => {
-        const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
-        const originalFull = item.originalFull || item.full, originalThumb = item.originalThumb || item.thumb;
-        button.disabled = true;
-        try {
-          const image = item.square ? {full:originalFull,thumb:originalThumb} : await uploadImage(await readAsset(originalFull),{square:true});
-          await updateItem({id:item.id,...image,originalFull,originalThumb,square:!item.square});
-        } catch (error) { toast(error.message); button.disabled = false; }
+      body.querySelectorAll('[data-asset-display]').forEach(select => select.onchange = async () => {
+        try { await updateItem({id:select.closest('[data-asset-id]').dataset.assetId,display:select.value}); }
+        catch (error) { toast(error.message); paint(); }
       });
       body.querySelectorAll('[data-asset-hide]').forEach(button => button.onclick = () => {
         const item = items.find(entry => entry.id === button.closest('[data-asset-id]').dataset.assetId);
@@ -1812,6 +1809,6 @@ window.GDHomeAssets = (() => {
   if (location.hash === '#library') addEventListener('load',() => setTimeout(() => openLibrary(),300));
 
   return {configure,libraryItemMatches:(full,code) => !!library?.items.some(item => item.full === full && (item.code === code || item.name === code)),invalidateRenders,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
-    categoryFor,openLibrary,openRenders,pickRender,pickLibrary,pickPaint,pickWood,loadPaintData,loadWoodData,storeAsset,closePicker,editView,viewCss,viewStyle,clampView,hydrate,assetUrl,
+    categoryFor,openLibrary,openRenders,pickRender,pickLibrary,pickPaint,pickWood,loadPaintData,loadWoodData,storeAsset,closePicker,editView,viewCss,viewStyle,clampView,hydrate,assetUrl,displayAttribute,displayOptions,
     filePicker,isPdf,pdfPages};
 })();

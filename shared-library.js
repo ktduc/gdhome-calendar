@@ -23,6 +23,7 @@ const paintSeed = ['dulux','jotun'].flatMap(key => {
   return colors.map((color,index) => ({...color,id:'paint-' + key + '-' + index,categoryId:paintCategory.id,kind:'paint',brand,builtin:true,createdAt:1}));
 });
 const validHex = value => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+const cleanDisplay = value => ['fill','fit','pad'].includes(value) ? value : undefined;
 const kindOf = item => ['image','paint','wood'].includes(item.kind) ? item.kind : (item.code ? 'wood' : 'image');
 const woodKey = code => text(code,80).toUpperCase().replace(/\s+/g,'');
 const woodItemKey = item => text(item.brand || 'An Cường',80).toLowerCase() + ':' + woodKey(item.code);
@@ -93,6 +94,7 @@ function normalize(data) {
       kind:kindOf(item),
       ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb} : {}),
       ...(item.square ? {square:true} : {}),
+      ...(cleanDisplay(item.display) ? {display:item.display} : {}),
       ...(cleanView(item.view) ? {view:cleanView(item.view)} : {}),
       ...(Number.isFinite(item.order) ? {order:item.order} : {}),
       ...(item.builtin || item.id?.startsWith?.('ancuong-seed-') ? {builtin:true} : {}),
@@ -185,14 +187,14 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
           existing.suppliers = stringList([...(existing.suppliers || []),...stringList(item.suppliers)]);
           existing.tags = stringList([...(existing.tags || []),...stringList(item.tags)]);
           if (kind !== 'paint' && !existing.full) {
-            Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb,view:cleanView(item.view)});
+            Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb,view:cleanView(item.view),display:cleanDisplay(item.display)});
             added.push(existing);
           } else skipped++;
           continue;
         }
         if (existing) { added.push(existing); continue; }
         const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
-          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb,view:cleanView(item.view)}),createdAt: Date.now(),...itemMetadata(item),...metadata,
+          kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb,view:cleanView(item.view),display:cleanDisplay(item.display)}),createdAt: Date.now(),...itemMetadata(item),...metadata,
           ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb,square:!!item.square} : {}) };
         data.items.unshift(entry);
         added.push(entry);
@@ -246,6 +248,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const item = data.items.find(entry => entry.id === body.id);
       if (!item) fail(404, 'Không tìm thấy ảnh.');
       if (typeof body.name === 'string') item.name = text(body.name, 160);
+      if (cleanDisplay(body.display)) item.display = body.display;
       if (typeof body.square === 'boolean') {
         if (![body.full,body.thumb,body.originalFull,body.originalThumb].every(imageName)) fail(400,'Ảnh gốc hoặc ảnh vuông không hợp lệ.');
         Object.assign(item,{square:body.square,full:body.full,thumb:body.thumb,originalFull:body.originalFull,originalThumb:body.originalThumb});
@@ -317,4 +320,4 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   fail(404, 'API thư viện không tồn tại.');
 }
 
-module.exports = { handleLibrary, libraryKey, defaultLibrary, normalize, categoryForGroup, cleanView, materialSize };
+module.exports = { handleLibrary, libraryKey, defaultLibrary, normalize, categoryForGroup, cleanView, cleanDisplay, materialSize };
