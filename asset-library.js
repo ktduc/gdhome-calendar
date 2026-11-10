@@ -3043,19 +3043,22 @@ window.GDHomeAssets = (() => {
       const facetScroll = sameCategory ? body.querySelector('.asset-facets')?.scrollTop || 0 : 0;
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<label draggable="' + !attributes + '" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><input type="radio" data-category-check' + (c.id === current ? ' checked' : '') +
-        '><span>' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
+        '><span title="' + esc(c.name) + '">' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
         '</small></label>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
         '<div class="asset-library-navigation">' + (!onPick ? libraryTabs(viewState.tab) : '') + '</div>' +
-        '<section class="asset-library-main">' + facetMarkup(candidates,facets) + (attributes ? '' : category ? '<div class="asset-library-head"><strong>' + esc(category.name) + '</strong>' +
+        '<section class="asset-library-main">' + facetMarkup(candidates,facets) + (attributes ? '' : category ? '<div class="asset-library-head"><div class="asset-category-toolbar"><strong title="' + esc(category.name) + '">' + esc(category.name) + '</strong>' +
           '<button type="button" data-import-wood>Nhập catalogue</button>' +
           (!onPick ? '<button type="button" data-find-duplicates>Tìm mã trùng</button>' : '') +
+          '<details class="asset-category-menu"><summary aria-label="Thao tác hạng mục">⋯</summary><div>' +
           '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>' +
+          '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button></div></details></div>' +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
-          '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh vào đây, bấm để chọn file, hoặc Ctrl+V để dán · ảnh tự nén WebP 1600 px</div>' +
-          '<label>Kiểu hiển thị khi tải ảnh ' + displaySelect(uploadDisplay || categoryDisplay(category),'data-library-display') + '</label>' +
-          '<label>Chọn thư mục <input type="file" webkitdirectory multiple data-folder-input></label>' +
+          '<details class="asset-upload-strip"' + (sidebarState.uploadOpen === false ? '' : ' open') + '><summary>Thêm ảnh</summary>' +
+          '<div><button type="button" class="asset-drop" title="Kéo thả hoặc Ctrl+V để dán ảnh">Chọn tệp / kéo thả</button>' +
+          '<button type="button" data-folder-choose>Chọn thư mục</button><input type="file" webkitdirectory multiple data-folder-input hidden>' +
+          '<label>Kiểu hiển thị ' + displaySelect(uploadDisplay || categoryDisplay(category),'data-library-display') + '</label></div></details>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' +
-          '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button>' + bulkControls() +
+          bulkControls() +
           (facetEmpty(items,facets) || grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'})) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       arrangeFilterSidebar(body,sidebarState);
@@ -3205,6 +3208,10 @@ window.GDHomeAssets = (() => {
         }); } catch (error) { toast(error.message); }
       });
       body.querySelector('[data-import-wood]')?.addEventListener('click',() => openWoodCatalogue(category.id,paint));
+      const categoryMenu = body.querySelector('.asset-category-menu');
+      if (categoryMenu) categoryMenu.addEventListener('click',event => {
+        if (event.target.closest('button')) categoryMenu.open = false;
+      });
       body.querySelector('[data-cat-rename]')?.addEventListener('click',() => renameCategory(category));
       body.querySelector('[data-cat-delete]')?.addEventListener('click',() => removeManagedCategory(category));
       const search = body.querySelector('input[type=search]');
@@ -3220,7 +3227,6 @@ window.GDHomeAssets = (() => {
       };
       if (drop) {
         drop.onclick = async () => { const files = await filePicker('image/*'); if (files.length) upload(files); };
-        drop.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); drop.click(); } };
         enableDrop(drop,upload);
         drop.addEventListener('drop',event => {
           const entries = [...event.dataTransfer.items].map(item => item.webkitGetAsEntry?.()).filter(Boolean);
@@ -3231,6 +3237,9 @@ window.GDHomeAssets = (() => {
         },true);
       }
       const folder = body.querySelector('[data-folder-input]');
+      const strip = body.querySelector('.asset-upload-strip');
+      if (strip) strip.ontoggle = () => { sidebarState.uploadOpen = strip.open; };
+      body.querySelector('[data-folder-choose]')?.addEventListener('click',() => folder.click());
       if (folder) folder.onchange = () => {
         try { reviewFolders(current,[...folder.files].map(file => ({file,path:file.webkitRelativePath.split('/').slice(0,-1).join('/')})),display()); }
         catch (error) { toast(error.message); }

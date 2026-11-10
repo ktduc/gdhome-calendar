@@ -2648,14 +2648,17 @@ cases['20-category-merge-target'] = async page => {
   await merge.locator('[name=target]').selectOption('ancuong-wood');
   await merge.getByRole('button',{name:'Gộp',exact:true}).click();
   await library.locator('[data-asset-id="' + itemId + '"]').waitFor();
+  await library.getByLabel('Thao tác hạng mục').click();
   assert.ok(await library.locator('[data-cat-rename]').isVisible());
   assert.ok(await library.locator('[data-cat-delete]').isVisible());
+  await library.getByLabel('Thao tác hạng mục').click();
 
   await target.click({button:'right'});
   await menu.getByRole('button',{name:'Xoá hạng mục'}).waitFor();
   page.once('dialog',prompt => prompt.accept('Kho gỗ hợp nhất'));
   await menu.getByRole('button',{name:'Sửa tên hạng mục'}).click();
   await target.getByText('Kho gỗ hợp nhất',{exact:true}).waitFor();
+  await library.getByLabel('Thao tác hạng mục').click();
   page.once('dialog',confirm => confirm.accept());
   await library.locator('[data-cat-delete]').click();
   await page.getByText(/Hạng mục còn mẫu/).waitFor();
@@ -2673,6 +2676,45 @@ cases['20-category-merge-target'] = async page => {
   const reloaded = await page.request.get('/api/library').then(response => response.json());
   assert.equal(reloaded.categories.some(category => category.id === 'ancuong-wood'),false);
   assert.equal(reloaded.items.find(item => item.id === itemId).categoryId,'cat-5');
+};
+
+cases['21.6'] = async page => {
+  await page.setViewportSize({width:1280,height:720});
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  const empty = await page.evaluate(async () => {
+    const {category} = await GDHomeAssets.saveCategory('Hạng mục kiểm thử với tên rất dài trên một dòng');
+    await GDHomeAssets.addItems('cat-6',Array.from({length:24},(_,i) => {
+      const file = i.toString(16).padStart(64,'a')+'.webp';
+      return {name:'Mẫu '+i,full:file,thumb:file};
+    }));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+    return category.id;
+  });
+  const library = page.locator('.asset-library-dialog');
+  const option = id => library.locator('[data-cat="'+id+'"]');
+  await library.locator('.asset-card').first().waitFor();
+  for (const [width,height] of [[1280,720],[1440,900],[1920,1080],[1100,720]]) {
+    await page.setViewportSize({width,height});
+    const dimensions = await library.evaluate(dialog => {
+      const column = dialog.querySelector('.asset-category-column'), add = column.querySelector('[data-cat-add]');
+      const row = dialog.querySelector('.asset-grid');
+      return {fit:dialog.scrollHeight <= dialog.clientHeight,
+        bottom:column.getBoundingClientRect().bottom-add.getBoundingClientRect().bottom,
+        columns:getComputedStyle(row).gridTemplateColumns.split(' ').length};
+    });
+    assert.ok(dimensions.fit);
+    assert.ok(dimensions.bottom <= 2);
+    assert.ok(dimensions.columns >= 4);
+  }
+  assert.match(await option(empty).locator('span').getAttribute('title'),/rất dài/);
+  const strip = library.locator('.asset-upload-strip');
+  await strip.locator('summary').click();
+  await strip.locator('.asset-drop').waitFor({state:'hidden'});
+  await option(empty).click();
+  await library.getByText('Chưa có ảnh trong hạng mục này.').waitFor();
+  assert.ok(await library.locator('.asset-library-main').evaluate(main => main.scrollHeight <= main.clientHeight));
+  assert.ok(await library.locator('.asset-facets').evaluate(facets => facets.scrollHeight <= facets.clientHeight));
 };
 
 cases['20.17'] = async page => {

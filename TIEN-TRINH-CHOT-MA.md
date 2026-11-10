@@ -590,6 +590,12 @@ Lượt hồi quy đầu phát hiện ca 19.6 còn trỏ ô nhà cung cấp vào
 
 XONG GĐ20
 
+## GĐ21
+
+| Bước | Thay đổi và kiểm thử |
+| --- | --- |
+| 21.6 | Hộp thư viện cao cố định. Danh sách hạng mục cuộn riêng, nút thêm ở đáy, các thao tác quản lý nằm trong menu ⋯ và dải thêm ảnh có thể gập. Node 78/78. Edge 21.6, 20-category-merge-target, 20-library-ui, 20.16, 17.0 đạt. |
+
 ## GĐ20 bổ sung lần 3
 
 - 20.17. Khi đọc kích thước cũ dạng mảng hoặc danh sách phân tách bằng dấu phẩy/chấm phẩy, thư viện chỉ dùng giá trị đầu tiên. Kích thước được lưu thành một chuỗi. Mục chưa có kích thước hợp lệ để trống.
