@@ -326,7 +326,19 @@ window.GDHomeShell = (() => {
   // Rời menu bằng phím Tab cũng đóng; chuột thì đã xử lý ở sự kiện click.
   let pointerFocus = false;
   document.addEventListener('pointerdown',() => { pointerFocus = true; setTimeout(() => { pointerFocus = false; },0); },true);
-  document.addEventListener('keydown',event => { if (event.key === 'Tab') pointerFocus = false; },true);
+  document.addEventListener('keydown',event => {
+    if (event.key !== 'Tab') return;
+    pointerFocus = false;
+    const overlay = [...document.querySelectorAll('.modal-overlay.active')].at(-1);
+    if (!overlay || document.querySelector('dialog[open]')) return;
+    const controls = [...overlay.querySelectorAll('button,a[href],input,select,textarea,summary,[tabindex]')]
+      .filter(control => control.tabIndex >= 0 && !control.matches(':disabled') && control.getClientRects().length);
+    const edge = event.shiftKey ? controls[0] : controls.at(-1);
+    if (edge && (document.activeElement === edge || !overlay.contains(document.activeElement))) {
+      event.preventDefault();
+      (event.shiftKey ? controls.at(-1) : controls[0]).focus();
+    }
+  },true);
   document.addEventListener('focusin',event => {
     if (!pointerFocus && event.target !== document.body && event.target.ownerDocument?.hasFocus()) {
       if (event.target.matches?.(':focus-visible')) closeOutside(event.target);

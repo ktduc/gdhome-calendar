@@ -525,6 +525,9 @@
 
 .shell-dialog{border:1px solid #aab7c6;border-radius:9px;max-width:min(95vw,900px);font-family:var(--gd-font)}
 .shell-dialog::backdrop{background:#18202b88}
+:is(dialog,.modal-overlay.active,.app-header) :is(button,a,summary,input,select,textarea):focus-visible{
+  outline:2px solid var(--gd-primary,#1a73e8);outline-offset:2px
+}
 .shell-dialog .close-dialog{float:right}
 .shell-dialog.shell-lightbox{max-width:none}
 .shell-dialog.shell-lightbox::backdrop{background:#0d1119df}

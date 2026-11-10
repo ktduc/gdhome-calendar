@@ -1274,6 +1274,20 @@ body {
   flex: 1;
 }
 
+:is(#task-modal,#calendar-category-modal) .modal-card {
+  box-sizing: border-box;
+  max-width: min(500px, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  display: flex;
+  flex-direction: column;
+}
+:is(#task-modal,#calendar-category-modal) .modal-header { flex: none; }
+:is(#task-modal,#calendar-category-modal) .modal-body { min-height: 0; overflow: auto; }
+:is(#task-modal,#calendar-category-modal) :is(.form-row .col, input, select) { min-width: 0; max-width: 100%; }
+@media (max-width: 480px) {
+  #hdr-image-dropdown .hdr-dropdown-menu { left: 0; right: auto; }
+}
+
 .color-palette {
   display: flex;
   align-items: center;

@@ -720,3 +720,4 @@ XONG GĐ20
 | 21.3 | Chọn ảnh Product, OG, gallery và srcset lớn. Đọc kích thước ảnh thật và lọc SHA-256 trùng trước khi nén. Node 81/81. Edge 21.3 và 5 ca nhập web đạt. |
 | 21.5 | Cấu hình nhóm lọc theo hạng mục, tìm trong nhóm, thêm thuộc tính riêng. Node 82/82. Edge 9/9. |
 | 21.4 | Giá nội bộ, ẩn mặc định theo tài khoản, lọc/sắp xếp, đặt giá hàng loạt. Nhận giá PDF/web khi đọc được và đưa vào Excel mua hàng khi chọn cột giá. Node 83/83. Edge 8/8. |
+| 21.7 | Rà soát 4 trang và các hộp chính ở 4 chiều rộng, sửa tràn và focus, lưu ảnh trước/sau. 720 mẫu, mở 105,3 ms, lọc 61 ms, tìm 70,1 ms. Node 83/83. Edge 9/9 sau sửa. |

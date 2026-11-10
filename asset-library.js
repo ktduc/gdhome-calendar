@@ -63,13 +63,25 @@ window.GDHomeAssets = (() => {
     if (!urlCache.has(name)) urlCache.set(name,readAsset(name).then(URL.createObjectURL).catch(error => { urlCache.delete(name); throw error; }));
     return urlCache.get(name);
   }
+  async function hydrateImage(img) {
+    try {
+      const src = await assetUrl(img.dataset.libAsset);
+      img.src = src;
+      if (img.dataset.display === 'pad') { await img.decode(); GDHomeImages.applyPadding(img); }
+    } catch { img.alt = 'Ảnh chưa tải được'; }
+  }
   async function hydrate(root) {
-    await Promise.all([...root.querySelectorAll('img[data-lib-asset]')].map(async img => {
-      try {
-        img.src = await assetUrl(img.dataset.libAsset);
-        if (img.dataset.display === 'pad') { await img.decode(); GDHomeImages.applyPadding(img); }
-      } catch { img.alt = 'Ảnh chưa tải được'; }
-    }));
+    await Promise.all([...root.querySelectorAll('img[data-lib-asset]')].map(hydrateImage));
+  }
+  function observeLibraryImages(main) {
+    const observer = new IntersectionObserver(entries => {
+      for (const {target,isIntersecting} of entries) if (isIntersecting) {
+        observer.unobserve(target);
+        if (target.isConnected) hydrateImage(target);
+      }
+    },{root:main,rootMargin:'160px'});
+    for (const image of main.querySelectorAll('img[loading=lazy]')) observer.observe(image);
+    return observer;
   }
   async function uploadImage(file) {
     const {full,thumb} = await GDHomeImages.compress(file);
@@ -991,20 +1003,22 @@ window.GDHomeAssets = (() => {
       showLibraryContext(root,event,actions);
     };
   }
-  function grid(items,{selectable = true,removable = false,selected = null,showPrices = false,empty = 'Chưa có ảnh.'} = {}) {
+  function grid(items,{selectable = true,removable = false,selected = null,showPrices = false,lazy = false,empty = 'Chưa có ảnh.'} = {}) {
     if (!items.length) return '<p class="asset-empty">' + esc(empty) + '</p>';
     return '<div class="asset-grid' + (selected ? ' asset-grid-managed' : '') + '">' + items.map(item => '<figure class="asset-card' + (selected?.has(item.id) ? ' is-selected' : '') +
       '" data-asset-id="' + esc(item.id) + '"' + (selected ? ' draggable="true"' : '') + '>' +
       (selected ? '<label class="asset-card-check"><input type="checkbox" data-bulk-select aria-label="Chọn ' + esc(item.name || item.code) + '"' + (selected.has(item.id) ? ' checked' : '') + '></label>' : '') +
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
-      (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ? '<img data-lib-asset="' + esc(item.thumb) + '"' + displayAttribute(item.display) + ' alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
+      (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ?
+        '<img data-lib-asset="' + esc(item.thumb) + '"' + (lazy ? ' loading="lazy"' : '') + displayAttribute(item.display) +
+        ' alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
       (item.size || item.brand ? '<span class="asset-card-badge">' + esc([item.size?.replace('x','×'),item.brand].filter(Boolean).join(' · ')) + '</span>' : '') +
       (selected ? '<figcaption title="' + esc([item.code,item.name,item.collection,item.finish,item.spec].filter(Boolean).join(' · ')) + '"><strong>' +
         esc(item.code || item.name) + '</strong><span>' + esc(item.code ? item.name : item.collection) + '</span></figcaption>' :
         '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish,item.spec,item.cabinetWidth && 'Tủ '+item.cabinetWidth,item.subgroup].filter(Boolean).join(' · '))) + '</figcaption>') +
       (showPrices && item.price != null ? '<small class="asset-card-price" title="' + esc(item.priceNote) + '">' +
         esc(displayPrice.format(item.price) + (item.priceUnit ? '/' + item.priceUnit : '')) + '</small>' : '') +
-      (removable && item.full ? '<details class="asset-card-menu"><summary aria-label="Tuỳ chọn ảnh">⋯</summary><label>Kiểu hiển thị' + displaySelect(item.display || 'fill','data-asset-display') + '</label></details>' : '') +
+      (removable && item.full ? '<details class="asset-card-menu" data-popup><summary aria-label="Tuỳ chọn ảnh">⋯</summary><label>Kiểu hiển thị' + displaySelect(item.display || 'fill','data-asset-display') + '</label></details>' : '') +
       ((selectable || removable) ? assetItemActions(item) : '') +
       (removable && item.builtin ? '<button type="button" data-asset-hide>' + (item.hidden ? 'Hiện' : 'Ẩn') + '</button>' : '') +
       (removable ? '<button type="button" class="asset-remove" data-asset-remove aria-label="Xoá ảnh">×</button>' : '') + '</figure>').join('') + '</div>';
@@ -3252,11 +3266,11 @@ window.GDHomeAssets = (() => {
   function openLibrary({groupName,categoryId,onPick} = {}) {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
     let current = categoryId || null, query = '', status = '';
-    let uploadDisplay;
+    let uploadDisplay, imageObserver, searchTimer;
     const priceRange = {min:'',max:''};
     const facets = {}, selected = new Set();
     const sidebarState = {groups:{}};
-    const viewState = {tab:'items'};
+    const viewState = {tab:'items',page:1};
     let rangeAnchor, dragged, undoToken, guestUndo;
     function changeCategory(id) {
       if (current !== id) {
@@ -3265,6 +3279,7 @@ window.GDHomeAssets = (() => {
         selected.clear();
         rangeAnchor = null;
         uploadDisplay = undefined;
+        viewState.page = 1;
         priceRange.min = priceRange.max = '';
       }
       status = '';
@@ -3332,6 +3347,29 @@ window.GDHomeAssets = (() => {
     async function paint() {
       let data;
       try { data = await loadLibrary(); } catch (error) { body.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
+      if (!dialog.open) return;
+      imageObserver?.disconnect();
+      const focused = document.activeElement;
+      const focusKey = body.contains(focused) && (
+        (focused.matches('.asset-library-head input[type=search]') && '.asset-library-head input[type=search]') ||
+        (focused.matches('.asset-sort-controls select') && '.asset-sort-controls select') ||
+        ['libraryTab','priceRange','pageDir','showPrices','assetFilterToggle'].map(key => {
+          if (!Object.hasOwn(focused.dataset,key)) return '';
+          const attr = key.replace(/[A-Z]/g,letter => '-'+letter.toLowerCase());
+          return '[data-' + attr + '="' + CSS.escape(focused.dataset[key]) + '"]';
+        }).find(Boolean) ||
+        (focused.matches('[data-category-check]') && '[data-cat="' + CSS.escape(focused.closest('[data-cat]').dataset.cat) + '"] input') ||
+        (focused.matches('[data-facet]') && '[data-facet="' + CSS.escape(focused.dataset.facet) + '"][data-value="' +
+          CSS.escape(focused.dataset.value) + '"]'));
+      const caret = focused === body.querySelector('.asset-library-head input[type=search]') ? focused?.selectionStart : null;
+      const restoreFocus = () => {
+        if (!focusKey) return;
+        const next = body.querySelector(focusKey);
+        if (next && !next.disabled) {
+          next.focus({preventScroll:true});
+          if (caret != null) next.setSelectionRange(caret,caret);
+        }
+      };
       const showTab = tab => {
         viewState.tab = tab;
         sidebarState.drawer = false;
@@ -3349,10 +3387,20 @@ window.GDHomeAssets = (() => {
       for (const group of config || []) if (!group.visible) delete facets[group.key];
       const scoped = data.items.filter(item => item.categoryId === current && (!onPick || !item.hidden));
       pruneFacets(scoped,facets);
-      const candidates = scoped.filter(item => !query || fold([item.code,item.name,...facetValues(item,'brand'),item.collection].join(' ')).includes(fold(query)));
+      const needle = fold(query);
+      const candidates = needle ? scoped.filter(item => fold([item.code,item.name,...facetValues(item,'brand'),item.collection].join(' ')).includes(needle)) : scoped;
       const filterPrice = showPrices && (priceRange.min !== '' || priceRange.max !== '');
-      const items = sortLibrary(candidates.filter(item => matchFacets(item,facets) &&
+      const items = attributes ? [] : sortLibrary(candidates.filter(item => matchFacets(item,facets) &&
         (!filterPrice || (item.price != null && item.price >= (priceRange.min || 0) && item.price <= (priceRange.max || Infinity)))),sidebarState.sort);
+      const pageSize = 96;
+      const pageCount = items.length > 300 ? Math.ceil(items.length/pageSize) : 1;
+      viewState.page = Math.min(viewState.page,pageCount);
+      const start = (viewState.page-1)*pageSize;
+      const visibleItems = pageCount === 1 ? items : items.slice(start,start+pageSize);
+      const paging = pageCount > 1 ? '<nav class="asset-library-pages" aria-label="Trang mẫu vật liệu">' +
+        '<button type="button" data-page-dir="-1"' + (viewState.page === 1 ? ' disabled' : '') + '>Trước</button>' +
+        '<span aria-live="polite">' + (start+1) + '–' + (start+visibleItems.length) + ' / ' + items.length + ' mẫu</span>' +
+        '<button type="button" data-page-dir="1"' + (viewState.page === pageCount ? ' disabled' : '') + '>Sau</button></nav>' : '';
       const previousMain = body.querySelector('.asset-library-main');
       const sameCategory = previousMain?.dataset.libraryCategory === current;
       const viewKey = attributes ? viewState.attributeKey || 'size' : 'items';
@@ -3360,15 +3408,17 @@ window.GDHomeAssets = (() => {
       const categoryPaneScroll = body.querySelector('.asset-category-column')?.scrollTop || 0;
       const categoryScroll = body.querySelector('.asset-cat-list')?.scrollTop || 0;
       const facetScroll = sameCategory ? body.querySelector('.asset-facets')?.scrollTop || 0 : 0;
+      const categoryCounts = new Map();
+      for (const item of data.items) categoryCounts.set(item.categoryId,(categoryCounts.get(item.categoryId) || 0)+1);
       body.innerHTML = '<aside class="asset-categories"><div class="asset-cat-list">' + data.categories.map(c => '<label draggable="' + !attributes + '" data-cat="' + esc(c.id) + '"' +
         (c.id === current ? ' aria-current="true"' : '') + '><input type="radio" data-category-check' + (c.id === current ? ' checked' : '') +
-        '><span title="' + esc(c.name) + '">' + esc(c.name) + '</span><small>' + data.items.filter(item => item.categoryId === c.id).length +
+        '><span title="' + esc(c.name) + '">' + esc(c.name) + '</span><small>' + (categoryCounts.get(c.id) || 0) +
         '</small></label>').join('') + '</div><button type="button" data-cat-add>＋ Thêm hạng mục</button></aside>' +
         '<div class="asset-library-navigation">' + (!onPick ? libraryTabs(viewState.tab) : '') + '</div>' +
         '<section class="asset-library-main">' + facetMarkup(candidates,facets,config) + (attributes ? '' : category ? '<div class="asset-library-head"><div class="asset-category-toolbar"><strong title="' + esc(category.name) + '">' + esc(category.name) + '</strong>' +
           '<button type="button" data-import-wood>Nhập catalogue</button>' +
           (!onPick ? '<button type="button" data-find-duplicates>Tìm mã trùng</button>' : '') +
-          '<details class="asset-category-menu"><summary aria-label="Thao tác hạng mục">⋯</summary><div>' +
+          '<details class="asset-category-menu" data-popup><summary aria-label="Thao tác hạng mục">⋯</summary><div>' +
           '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>' +
           '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button></div></details></div>' +
           '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '">' +
@@ -3380,8 +3430,8 @@ window.GDHomeAssets = (() => {
           '<button type="button" data-folder-choose>Chọn thư mục</button><input type="file" webkitdirectory multiple data-folder-input hidden>' +
           '<label>Kiểu hiển thị ' + displaySelect(uploadDisplay || categoryDisplay(category),'data-library-display') + '</label></div></details>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' +
-          bulkControls(showPrices) +
-          (facetEmpty(items,facets) || grid(items,{selectable:!!onPick,removable:true,showPrices,selected:onPick ? null : selected,
+          bulkControls(showPrices) + paging +
+          (facetEmpty(items,facets) || grid(visibleItems,{selectable:!!onPick,removable:true,showPrices,lazy:!onPick,selected:onPick ? null : selected,
             empty:filterPrice ? 'Không có mẫu trong khoảng giá.' : 'Chưa có ảnh trong hạng mục này.'})) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       arrangeFilterSidebar(body,sidebarState);
@@ -3406,16 +3456,23 @@ window.GDHomeAssets = (() => {
       body.querySelector('.asset-category-column').scrollTop = categoryPaneScroll;
       body.querySelector('.asset-cat-list').scrollTop = categoryScroll;
       body.querySelector('.asset-facets').scrollTop = facetScroll;
-      wireFacets(body,facets,paint);
+      const resetPage = () => { viewState.page = 1; return paint(); };
+      wireFacets(body,facets,resetPage);
       if (attributes) {
         dialog.onkeydown = dialog.onpaste = null;
         body.ondragstart = body.ondragover = body.ondragend = body.ondrop = null;
         renderLibraryAttributes(main,data,viewState,paint);
         main.scrollTop = mainScroll;
+        restoreFocus();
         return;
       }
       main.scrollTop = mainScroll;
-      wireLibraryActions(body,sidebarState,paint,{manual:!onPick,showPrices});
+      wireLibraryActions(body,sidebarState,resetPage,{manual:!onPick,showPrices});
+      body.querySelectorAll('[data-page-dir]').forEach(button => button.onclick = () => {
+        viewState.page += Number(button.dataset.pageDir);
+        main.scrollTop = 0;
+        paint();
+      });
       const showPricesToggle = body.querySelector('[data-show-prices]');
       if (showPricesToggle) showPricesToggle.onchange = async () => {
         const value = showPricesToggle.checked;
@@ -3426,7 +3483,7 @@ window.GDHomeAssets = (() => {
       };
       body.querySelectorAll('[data-price-range]').forEach(input => input.onchange = () => {
         priceRange[input.dataset.priceRange] = input.value;
-        paint();
+        resetPage();
       });
       const findDuplicates = body.querySelector('[data-find-duplicates]');
       if (findDuplicates) findDuplicates.onclick = openDuplicateLibrary;
@@ -3566,7 +3623,11 @@ window.GDHomeAssets = (() => {
       body.querySelector('[data-cat-rename]')?.addEventListener('click',() => renameCategory(category));
       body.querySelector('[data-cat-delete]')?.addEventListener('click',() => removeManagedCategory(category));
       const search = body.querySelector('.asset-library-head input[type=search]');
-      if (search) search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = body.querySelector('.asset-library-head input[type=search]'); s?.focus(); s?.setSelectionRange(query.length,query.length); }); },250); };
+      if (search) search.oninput = () => {
+        query = search.value;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(resetPage,40);
+      };
       const displayOption = body.querySelector('[data-library-display]');
       if (displayOption) displayOption.onchange = () => { uploadDisplay = displayOption.value; };
       const display = () => uploadDisplay || categoryDisplay(category);
@@ -3649,10 +3710,16 @@ window.GDHomeAssets = (() => {
         categoryId:current,groupName,
         onPickImage:onPick ? entry => { dialog.close(); onPick(entry); } : undefined
       });
-      await hydrate(body);
+      restoreFocus();
+      if (onPick) await hydrate(body);
+      else imageObserver = observeLibraryImages(main);
     }
     document.addEventListener('gdhome:library-changed',paint);
-    dialog.addEventListener('close',() => document.removeEventListener('gdhome:library-changed',paint),{once:true});
+    dialog.addEventListener('close',() => {
+      document.removeEventListener('gdhome:library-changed',paint);
+      clearTimeout(searchTimer);
+      imageObserver?.disconnect();
+    },{once:true});
     body.innerHTML = '<p class="asset-empty">Đang tải…</p>';
     paint();
     return dialog;

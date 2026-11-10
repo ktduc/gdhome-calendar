@@ -3681,6 +3681,202 @@ cases['19.10'] = async page => {
   assert.ok(item.tags.includes('Tủ 700'));
 };
 
+cases['21.7'] = async page => {
+  const phase = process.env.GD21_SCREENSHOTS;
+  const before = phase === 'before';
+  const widths = [1280,1440,1920,390];
+  const dimensions = {};
+  const photo = webPhoto('gd21-ui-fixture',80,80);
+  let reads = 0;
+  await page.route('**/api/materials/assets/*',route => {
+    reads++;
+    return route.fulfill({body:photo,contentType:'image/png'});
+  });
+  const inspect = async (width,key,selector) => {
+    const node = page.locator(selector);
+    await node.waitFor();
+    const state = await node.evaluate(el => {
+      const rect = el.getBoundingClientRect();
+      return {left:Math.round(rect.left),right:Math.round(rect.right),top:Math.round(rect.top),bottom:Math.round(rect.bottom),
+        overflow:el.scrollWidth-el.clientWidth,height:window.innerHeight};
+    });
+    dimensions[width + ' ' + key] = state;
+    if (!before) assert.ok(state.left >= -1 && state.right <= width+1 && state.top >= -1 &&
+      state.bottom <= state.height+1 && state.overflow <= 1,key + ' ' + width + ' ' + JSON.stringify(state));
+  };
+  const close = async selector => {
+    const node = page.locator(selector);
+    const button = node.locator('.close-dialog,.close-modal,[data-close]').first();
+    if (await button.count()) await button.click();
+    else await page.keyboard.press('Escape');
+    await node.waitFor({state:'hidden'});
+  };
+  const save = async (key,width) => {
+    if (['before','after'].includes(phase) && [1280,390].includes(width)) {
+      await page.screenshot({path:path.join(__dirname,'gd21',phase+'-'+key+'-'+width+'.png'),animations:'disabled'});
+    }
+  };
+  for (const width of widths) {
+    await page.setViewportSize({width,height:width === 390 ? 844 : 860});
+    await page.goto('/');
+    await inspect(width,'Lịch','.app-header');
+    await page.locator('.gd-tools-menu summary').click();
+    await inspect(width,'Menu công cụ','.gd-tools-menu[open] nav');
+    await page.keyboard.press('Escape');
+    await page.locator('#btn-add-task').click();
+    await inspect(width,'Thêm việc','#task-modal .modal-card');
+    if (!before) {
+      await page.locator('#btn-save-task').focus();
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement.id),'btn-close-task-modal');
+    }
+    await close('#task-modal .modal-card');
+    await page.locator('#schedule-ai-menu summary').click();
+    await page.locator('#btn-open-ai-planner').click();
+    await inspect(width,'AI lập tiến độ','#ai-planner-modal .modal-card');
+    await close('#ai-planner-modal .modal-card');
+    await page.locator('#schedule-ai-menu summary').click();
+    await page.locator('#btn-ai-review-timeline').click();
+    await inspect(width,'AI soát tiến độ','#ai-timeline-review-dialog');
+    await close('#ai-timeline-review-dialog');
+    await page.locator('#btn-project-settings').click();
+    await inspect(width,'Cài đặt lịch','#settings-modal .modal-card');
+    await close('#settings-modal .modal-card');
+    await page.locator('#btn-open-new-calendar-modal').click();
+    await inspect(width,'Thêm giai đoạn','#calendar-category-modal .modal-card');
+    await close('#calendar-category-modal .modal-card');
+    await page.locator('#btn-image-menu-toggle').click();
+    await inspect(width,'Menu xuất lịch','#hdr-image-dropdown .hdr-dropdown-menu');
+    await page.locator('#btn-open-export-modal').click();
+    await inspect(width,'Tùy chọn xuất lịch','#export-modal .modal-card');
+    await close('#export-modal .modal-card');
+    await page.locator('#hdr-file-dropdown .hdr-dropdown-toggle').click();
+    await page.locator('#btn-open-notion-sync').click();
+    await inspect(width,'Đồng bộ Notion','#notion-sync-modal .modal-card');
+    await close('#notion-sync-modal .modal-card');
+    await openMaterials(page);
+    await inspect(width,'Chốt mã','.app-header');
+    await page.locator('#material-ai').click();
+    const aiMaterials = 'dialog:has(#material-ai-form)';
+    await inspect(width,'AI chốt mã',aiMaterials);
+    await close(aiMaterials);
+    await page.locator('#image-actions .hdr-split-caret').click();
+    await page.locator('#material-export-settings').click();
+    const exportMaterials = 'dialog:has(#material-image-scope)';
+    await inspect(width,'Xuất chốt mã',exportMaterials);
+    await close(exportMaterials);
+    await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+    const library = page.locator('.asset-library-dialog');
+    await library.locator('.asset-card').first().waitFor();
+    await page.waitForFunction(() => document.querySelector('.asset-library-dialog .asset-card img')?.naturalWidth);
+    await inspect(width,'Dữ liệu dùng chung','.asset-library-dialog');
+    await inspect(width,'Cột nội dung thư viện','.asset-library-main');
+    await save('thu-vien',width);
+    if (width === 390 && !before) {
+      const drawer = library.locator('[data-asset-filter-toggle]');
+      await drawer.click();
+      await library.locator('.asset-categories.is-drawer-open').waitFor();
+      await drawer.click();
+      assert.equal(await drawer.getAttribute('aria-expanded'),'false');
+    }
+    await library.getByRole('tab',{name:'Thuộc tính'}).click();
+    await inspect(width,'Bảng thuộc tính','.asset-attributes-panel');
+    if (!before) assert.equal(await page.evaluate(() => document.activeElement.dataset.libraryTab),'attributes');
+    await library.getByRole('tab',{name:'Mẫu vật liệu'}).click();
+    if (width === 390) await library.locator('[data-asset-filter-toggle]').click();
+    await library.getByRole('button',{name:'Tuỳ chỉnh cột lọc'}).click();
+    await inspect(width,'Tùy chỉnh cột lọc','.asset-attribute-editor');
+    await close('.asset-attribute-editor');
+    if (width === 390) await library.locator('[data-asset-filter-toggle]').click();
+    await library.locator('[data-import-wood]').click();
+    await inspect(width,'Nhập catalogue','.wood-catalogue-dialog');
+    await save('catalogue',width);
+    await close('.wood-catalogue-dialog');
+    await library.locator('[data-find-duplicates]').click();
+    await inspect(width,'Tìm mã trùng','.asset-merge-dialog');
+    await close('.asset-merge-dialog');
+    await close('.asset-library-dialog');
+    await page.evaluate(() => GDHomeAssets.openRenders({projectId:'p1'}));
+    await inspect(width,'Phối cảnh 3D','.asset-render-dialog');
+    await close('.asset-render-dialog');
+    for (const picker of ['pickLibrary','pickWood','pickPaint','pickRender']) {
+      await page.evaluate(picker => GDHomeAssets[picker](document.querySelector('.image-cell'),{groupName:'SÀN GỖ',projectId:'p1'}),picker);
+      await inspect(width,picker,'.asset-popover');
+      await page.keyboard.press('Escape');
+      await page.locator('.asset-popover').waitFor({state:'detached'});
+    }
+    await page.goto('/du-an?project=p1');
+    await inspect(width,'Quản lý dự án','.app-header');
+    const fileMenu = page.locator('details[data-shell-slot=file]');
+    await fileMenu.locator('summary').click();
+    await page.locator('#btn-file-new-project').click();
+    await inspect(width,'Tạo dự án','#profile-dialog');
+    await close('#profile-dialog');
+    await page.goto('/tools');
+    await inspect(width,'Tools','.app-header');
+    await page.evaluate(() => GDHomeConnections.open('ai'));
+    await inspect(width,'Kết nối AI','.connection-dialog');
+    await close('.connection-dialog');
+  }
+  if (before) {
+    console.log('21.7 trước '+JSON.stringify(dimensions));
+    return;
+  }
+  await page.setViewportSize({width:1440,height:860});
+  await openMaterials(page);
+  const requestsBeforeOpen = reads;
+  const opening = await page.evaluate(async () => {
+    const start = performance.now();
+    const dialog = GDHomeAssets.openLibrary({categoryId:'cat-6'});
+    await new Promise(resolve => {
+      const observer = new MutationObserver(() => {
+        if (!dialog.querySelector('.asset-card')) return;
+        observer.disconnect();
+        resolve();
+      });
+      observer.observe(dialog,{childList:true,subtree:true});
+      setTimeout(() => { observer.disconnect(); resolve(); },2000);
+    });
+    return {open:performance.now()-start,cards:dialog.querySelectorAll('.asset-card').length,
+      lazy:dialog.querySelectorAll('img[loading=lazy]').length};
+  });
+  assert.ok(opening.open < 300,JSON.stringify(opening));
+  assert.equal(opening.cards,96);
+  assert.equal(opening.lazy,opening.cards);
+  await page.waitForFunction(() => document.querySelector('.asset-library-dialog .asset-card img')?.naturalWidth);
+  const initialReads = reads-requestsBeforeOpen;
+  assert.ok(initialReads > 0 && initialReads < opening.cards,'Chỉ yêu cầu ảnh gần vùng nhìn');
+  const timing = await page.evaluate(async () => {
+    const frame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    const until = async ready => {
+      const deadline = window.performance.now()+2000;
+      while (!ready()) {
+        if (window.performance.now() > deadline) throw new Error('Hết thời gian đo lưới mẫu.');
+        await frame();
+      }
+    };
+    const dialog = document.querySelector('.asset-library-dialog');
+    const first = () => dialog.querySelector('.asset-card figcaption strong')?.textContent;
+    dialog.querySelector('[data-page-dir="1"]').click();
+    await until(() => first() === 'Gạch mẫu 0097');
+    const facetStart = window.performance.now();
+    dialog.querySelector('[data-facet=size][data-value="600x600"]').click();
+    await until(() => first() === 'Gạch mẫu 0002');
+    const filter = window.performance.now()-facetStart;
+    const search = dialog.querySelector('.asset-library-head input[type=search]');
+    search.focus();
+    const queryStart = window.performance.now();
+    search.value = 'Gạch mẫu 0720';
+    search.dispatchEvent(new Event('input'));
+    await until(() => first() === 'Gạch mẫu 0720');
+    return {filter,search:window.performance.now()-queryStart};
+  });
+  assert.ok(timing.filter < 100,JSON.stringify(timing));
+  assert.ok(timing.search < 100,JSON.stringify(timing));
+  await page.waitForFunction(() => document.querySelector('.asset-library-dialog .asset-card img')?.naturalWidth);
+  console.log('21.7 720 mẫu '+JSON.stringify({...opening,...timing,initialReads}));
+};
+
 async function main() {
   const dir = await mkdtemp(path.join(os.tmpdir(),'gdhome-gd8-'));
   Object.assign(process.env,{ DATA_DIR:dir,GIST_TOKEN:'',GOOGLE_CLIENT_ID:'',APP_PASSWORD:'',R2_ACCOUNT_ID:'' });
@@ -3713,7 +3909,13 @@ async function main() {
         caseSchedule.tasks.push({id:'gd17-task',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-03'});
       }
       await getStore().put('shared',caseSchedule);
-      await getStore().put(libraryKey('shared'),defaultLibrary());
+      const library = defaultLibrary();
+      if (key === '21.7') for (let i=1; i<=720; i++) {
+        const file = i.toString(16).padStart(64,'0')+'.webp';
+        library.items.push({id:'gd21-'+i,kind:'image',categoryId:'cat-6',name:'Gạch mẫu '+String(i).padStart(4,'0'),
+          size:i%2 ? '300x300' : '600x600',brand:'Hãng mẫu',tags:['Tag '+(i%30+1)],full:file,thumb:file,createdAt:i});
+      }
+      await getStore().put(libraryKey('shared'),library);
       await repository.update(undefined,data => { data.sheets = [structuredClone(fixture)]; data.viewSettings = {}; return {}; });
       const page = await browser.newPage({ baseURL:'http://127.0.0.1:'+server.address().port,viewport:{width:1050,height:720},acceptDownloads:false });
       page.setDefaultTimeout(4000);
