@@ -715,3 +715,4 @@ Ca 20.14 kiểm tra phiên Google trên máy chủ thử với phản hồi toke
 | 20.18 | Đạt |
 
 XONG GĐ20
+| 21.1 | Dò biên ảnh nhúng và vùng ảnh raster, ghép mã theo vị trí, giữ khung trong biên mẫu và đưa khung mơ hồ vào Cần kiểm tra. AI chỉ nhận trang chưa ghép được ảnh với mã. Node 78/78. Edge 21.1 và 9 ca PDF hồi quy đạt. |

@@ -1760,15 +1760,17 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
       colors.push(color.map(value => Math.round(value*255)));
       const x = 30+(i%3)*190, y = 430-Math.floor(i/3)*190;
       sheet.drawRectangle({x,y,width:150,height:130,color:rgb(...color)});
-      sheet.drawText('MS ' + (3000+id) + ' - Oak ' + (id+1),{x:x+12,y:y-10,size:10,font});
+      sheet.drawText('MS ' + (3000+id) + ' - Oak ' + (id+1) + ' 60x60',{x:x+12,y:y-10,size:10,font});
     }
   }
   if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route => {
     const name = new URL(route.request().url()).pathname.split('/').at(-1);
     return route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,name),contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}});
   });
+  let aiRequests = 0;
   if (useAi) {
     await page.route('**/api/ai/jobs/start',route => {
+      aiRequests++;
       const body = route.request().postDataJSON();
       assert.equal(body.kind,'catalogue');
       assert.equal(body.pages.length,2);
@@ -1798,7 +1800,6 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
   await modal.locator('[name=finish]').fill('Mờ');
   if (useAi) {
     await modal.locator('[name=useAi]').check();
-    if (!withGuide) await modal.locator('[name=pdfAiMode]').selectOption('enrich');
     await modal.locator('[name=suppliers]').fill('Kho A');
   }
   if (withGuide) {
@@ -1833,6 +1834,7 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
   assert.ok(await save.isEnabled(),await modal.getByRole('status').textContent());
   const cards = modal.locator('.wood-catalogue-card');
   assert.equal(await cards.count(),18);
+  assert.equal(aiRequests,0,'Giữ nhận dạng cục bộ khi trang đã ghép ảnh với mã');
   const pixels = await cards.evaluateAll(cards => cards.map(card => {
     const canvas = card.querySelector('canvas'), ctx = canvas.getContext('2d');
     return {code:card.querySelector('[data-wood-code-input]').value,ratio:canvas.width/canvas.height,
@@ -1840,7 +1842,7 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
   }));
   for (const [i,entry] of pixels.entries()) {
     assert.equal(entry.code,'MS ' + (3000+i));
-    if (withGuide) assert.ok(Math.abs(entry.ratio-2) < .02);
+    if (withGuide) assert.ok(Math.abs(entry.ratio-150/130) < .03);
     assert.ok(entry.rgb.every((value,ch) => Math.abs(value-colors[i][ch]) < 12),JSON.stringify(entry));
   }
   await cards.first().locator('[data-show-catalogue-detail]').click();
@@ -3106,7 +3108,7 @@ cases['20.6-code'] = async page => {
   }
   assert.equal(await read(false),false,'Chế độ chỉ ảnh loại vùng chữ đỏ');
   await modal.locator('[data-remove-source]').click();
-  assert.equal(await read(true),true,'Giữ dòng mã đỏ trên khung xuất phát từ trang PDF');
+  assert.equal(await read(true),false,'Bố cục tự động giữ toàn bộ vùng mẫu và tách dòng mã khỏi ảnh');
   await modal.locator('[data-catalogue-destination]').selectOption('cat-5');
   await modal.locator('[data-assign-destination]').click();
   assert.match(await modal.locator('[data-catalogue-destination-label]').textContent(),/ĐÁ ỐP LÁT/);
@@ -3114,6 +3116,58 @@ cases['20.6-code'] = async page => {
   await modal.getByText(/Đã lưu 1 mã/).waitFor();
   const data = await page.request.get('/api/library').then(r => r.json());
   assert.deepEqual(data.items.filter(item => item.code === 'MS 9381' && item.brand === 'Hãng mẫu').map(item => item.categoryId).sort(),['cat-5','cat-6']);
+};
+
+cases['21.1'] = async page => {
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  const {PDFDocument,rgb} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const embedded = await pdf.embedPng(Buffer.from(imageFixture,'base64'));
+  const expected = [];
+  for (const [columns,rows,right,vector] of [[3,3,false,false],[2,2,true,false],[1,1,false,true]]) {
+    const sheet = pdf.addPage([600,600]);
+    for (let row=0;row<rows;row++) for (let col=0;col<columns;col++) {
+      const x = 40+col*(right ? 270 : 180), y = 435-row*(right ? 230 : 170);
+      const width = 125, height = 105, code = 'MS ' + (4100+expected.length);
+      if (vector) sheet.drawRectangle({x,y,width,height,color:rgb(.27,.54,.8)});
+      else sheet.drawImage(embedded,{x,y,width,height});
+      sheet.drawText(code,right ? {x:x+width+12,y:y+height/2,size:12} : {x:x+9,y:y-20,size:12});
+      expected.push({code,x:x/600,y:(600-y-height)/600,w:width/600,h:height/600});
+    }
+  }
+  pdf.addPage([600,600]).drawText('ISO QUALITY CERTIFICATE',{x:70,y:400,size:32});
+  await openMaterials(page);
+  let requests = 0;
+  await page.route('**/api/ai/jobs/start',route => { requests++; return route.abort(); });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  assert.equal(await modal.locator('[name=useAi]').isChecked(),false);
+  await modal.locator('[name=useAi]').check();
+  await modal.locator('[name=pdf]').setInputFiles({name:'bien-anh.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),expected.length);
+  assert.equal(await modal.locator('.wood-catalogue-card.needs-review').count(),0);
+  assert.equal(requests,0);
+  for (const [i,box] of expected.entries()) {
+    const card = modal.locator('.wood-catalogue-card').nth(i);
+    assert.equal(await card.locator('[data-wood-code-input]').inputValue(),box.code);
+    await card.locator('[data-show-catalogue-detail]').click();
+    await modal.locator('[data-edit-wood-crop]').click();
+    const crop = page.locator('.wood-crop-dialog');
+    const actual = await crop.locator('.wood-crop-stage').evaluate(stage => {
+      const src = stage.querySelector('img').getBoundingClientRect(), frame = stage.querySelector('.wood-crop-frame').getBoundingClientRect();
+      return {x:(frame.left-src.left)/src.width,y:(frame.top-src.top)/src.height,w:frame.width/src.width,h:frame.height/src.height};
+    });
+    const tolerance = .002;
+    assert.ok(actual.x >= box.x-tolerance && actual.y >= box.y-tolerance);
+    assert.ok(actual.x+actual.w <= box.x+box.w+tolerance && actual.y+actual.h <= box.y+box.h+tolerance);
+    assert.ok(actual.w*actual.h >= .97*box.w*box.h,JSON.stringify({actual,box}));
+    await page.keyboard.press('Escape');
+  }
 };
 
 cases['20-pdf-fallback'] = async page => {

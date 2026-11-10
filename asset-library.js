@@ -1648,6 +1648,141 @@ window.GDHomeAssets = (() => {
       w:(label.width+2*pad)/canvas.width,h:(label.height+2*pad)/canvas.height};
   }
 
+  const middleValue = values => {
+    const sorted = [...values].sort((a,b) => a-b);
+    return sorted.length ? (sorted[(sorted.length-1)>>1]+sorted[sorted.length>>1])/2 : 0;
+  };
+  function catalogueImageBounds(left,top,right,bottom,width,height) {
+    const x = Math.max(0,left), y = Math.max(0,top);
+    const w = Math.min(right,width)-x, h = Math.min(bottom,height)-y;
+    const ratio = w/h, fraction = w*h/(width*height);
+    return w > 0 && h > 0 && ratio >= .3 && ratio <= 3 && fraction >= .005 && fraction < .85 ? {x,y,w,h} : null;
+  }
+  async function embeddedCatalogueImages(page,viewport,pdfjs) {
+    const {fnArray,argsArray} = await page.getOperatorList();
+    const {OPS,Util} = pdfjs;
+    const stack = [], images = [];
+    let transform = [1,0,0,1,0,0];
+    function add(matrix) {
+      const [a,b,c,d,x,y] = Util.transform(viewport.transform,matrix);
+      const xs = [x,x+a,x+c,x+a+c], ys = [y,y+b,y+d,y+b+d];
+      const box = catalogueImageBounds(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys),viewport.width,viewport.height);
+      if (box) images.push(box);
+    }
+    for (const [i,op] of fnArray.entries()) {
+      const args = argsArray[i];
+      if (op === OPS.save || op === OPS.paintFormXObjectBegin) {
+        stack.push(transform);
+        if (op === OPS.paintFormXObjectBegin && args?.[0]?.length === 6) transform = Util.transform(transform,args[0]);
+      } else if (op === OPS.restore || op === OPS.paintFormXObjectEnd) {
+        transform = stack.pop() || transform;
+      } else if (op === OPS.transform) {
+        transform = Util.transform(transform,args);
+      } else if (op === OPS.paintImageXObject || op === OPS.paintInlineImageXObject) {
+        add(transform);
+      } else if (op === OPS.paintImageXObjectRepeat) {
+        const [,sx,sy,positions] = args;
+        for (let j=0;j<positions.length;j+=2) add(Util.transform(transform,[sx,0,0,sy,positions[j],positions[j+1]]));
+      }
+    }
+    return images;
+  }
+  function rasterCatalogueImages(context,canvas) {
+    const {width,height} = canvas;
+    const pixels = context.getImageData(0,0,width,height).data;
+    const channels = [[],[],[]];
+    function sample(x,y) {
+      const p = (y*width+x)*4;
+      for (let i=0;i<3;i++) channels[i].push(pixels[p+i]);
+    }
+    for (let i=0;i<64;i++) {
+      const x = Math.floor(i*(width-1)/63), y = Math.floor(i*(height-1)/63);
+      sample(x,0); sample(x,height-1); sample(0,y); sample(width-1,y);
+    }
+    const [r,g,b] = channels.map(middleValue);
+    const foreground = new Uint8Array(width*height);
+    for (let i=0,p=0;i<foreground.length;i++,p+=4) {
+      if (pixels[p+3] > 0 && Math.max(Math.abs(pixels[p]-r),Math.abs(pixels[p+1]-g),Math.abs(pixels[p+2]-b)) > 30) foreground[i] = 1;
+    }
+    const queue = new Int32Array(foreground.length), images = [];
+    function push(pixel,index) {
+      if (!foreground[pixel]) return index;
+      foreground[pixel] = 0;
+      queue[index] = pixel;
+      return index+1;
+    }
+    for (let i=0;i<foreground.length;i++) {
+      if (!foreground[i]) continue;
+      let end = push(i,0), left = width, right = 0, top = height, bottom = 0, sum = 0, squares = 0;
+      for (let next=0;next<end;next++) {
+        const p = queue[next], x = p%width, y = Math.floor(p/width), offset = p*4;
+        left = Math.min(left,x); right = Math.max(right,x); top = Math.min(top,y); bottom = Math.max(bottom,y);
+        const value = (pixels[offset]+pixels[offset+1]+pixels[offset+2])/3;
+        sum += value; squares += value*value;
+        if (x > 0) end = push(p-1,end);
+        if (x+1 < width) end = push(p+1,end);
+        if (y > 0) end = push(p-width,end);
+        if (y+1 < height) end = push(p+width,end);
+      }
+      const box = catalogueImageBounds(left,top,right+1,bottom+1,width,height);
+      if (!box) continue;
+      const density = end/(box.w*box.h), variance = squares/end-(sum/end)**2;
+      // A vector swatch can be a single flat colour. Require an almost solid rectangle in that case.
+      if (density >= .85 && (variance >= 16 || density >= .97)) images.push(box);
+    }
+    return images;
+  }
+  const intersection = (a,b) => Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x)) *
+    Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+  const relativeCrop = ({x,y,w,h},canvas) => ({x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height});
+  function catalogueTextBounds(item,viewport,pdfjs,width,height) {
+    const [a,b,c,d,x,y] = pdfjs.Util.transform(viewport.transform,item.transform);
+    const along = Math.hypot(a,b) || 1, up = Math.hypot(c,d) || 1;
+    const dx = a/along*width, dy = b/along*width, ux = c/up*height, uy = d/up*height;
+    const xs = [x-ux*.22,x+ux,x+dx-ux*.22,x+dx+ux], ys = [y-uy*.22,y+uy,y+dy-uy*.22,y+dy+uy];
+    const left = Math.min(...xs), top = Math.min(...ys);
+    return {x:left,y:top,w:Math.max(...xs)-left,h:Math.max(...ys)-top};
+  }
+  async function matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) {
+    const embedded = await embeddedCatalogueImages(page,viewport,pdfjs);
+    const images = [...embedded,...rasterCatalogueImages(context,canvas).filter(box =>
+      !embedded.some(image => intersection(image,box) >= .6*Math.min(image.w*image.h,box.w*box.h)))];
+    const pairs = [];
+    for (const label of matches) {
+      const text = label.box;
+      for (const image of images) {
+        const xOverlap = Math.min(text.x+text.w,image.x+image.w)-Math.max(text.x,image.x);
+        const yOverlap = Math.min(text.y+text.h,image.y+image.h)-Math.max(text.y,image.y);
+        const gaps = [text.y-image.y-image.h,image.y-text.y-text.h,text.x-image.x-image.w];
+        const aligned = [xOverlap >= Math.min(text.w,image.w)*.2,xOverlap >= Math.min(text.w,image.w)*.2,
+          yOverlap >= Math.min(text.h,image.h)*.4];
+        const side = gaps.findIndex((gap,i) => aligned[i] && gap >= -text.h*.4 && gap <= Math.max(text.h*3,(i === 2 ? image.w : image.h)*.35));
+        if (side < 0) continue;
+        const centerDistance = side === 2 ? Math.abs(text.y+text.h/2-image.y-image.h/2) :
+          Math.abs(text.x+text.w/2-image.x-image.w/2);
+        pairs.push({label,image,side,gap:Math.max(0,gaps[side]),centerDistance});
+      }
+    }
+    const offsets = [0,1,2].map(side => middleValue(matches.flatMap(label => {
+      const gaps = pairs.filter(pair => pair.label === label && pair.side === side).map(pair => pair.gap);
+      return gaps.length ? [Math.min(...gaps)] : [];
+    })));
+    const score = pair => pair.gap+Math.abs(pair.gap-offsets[pair.side])*.25+pair.centerDistance*.12;
+    pairs.sort((a,b) => a.side-b.side || score(a)-score(b));
+    const chosen = new Map(), used = new Set();
+    for (const {label,image} of pairs) {
+      if (!chosen.has(label) && !used.has(image)) { chosen.set(label,image); used.add(image); }
+    }
+    return matches.map(label => {
+      const image = chosen.get(label);
+      const size = label.text.match(/\b\d{2,4}\s*[x×*]\s*\d{2,4}(?:\s*(?:cm|mm))?\b/i)?.[0] || '';
+      if (!image) return {code:label.code,name:label.name,size,crop:{x:0,y:0,w:1,h:1},confidence:0,needsReview:true,unmatched:true};
+      const inset = {x:image.x+1,y:image.y+1,w:image.w-2,h:image.h-2};
+      const needsReview = inset.w*inset.h < image.w*image.h*.97 || labels.some(text => intersection(inset,text.box) > 0);
+      return {code:label.code,name:label.name,size,crop:relativeCrop(needsReview ? image : inset,canvas),confidence:needsReview ? .45 : .95,needsReview};
+    });
+  }
+
   function wireCatalogueGuide(form,status) {
     const region = form.querySelector('[data-catalogue-guide]');
     const previews = region.querySelector('[data-guide-previews]');
@@ -1771,7 +1906,7 @@ window.GDHomeAssets = (() => {
     return rows;
   }
 
-  async function scanWoodCatalogue(file,patterns,direction,onPage,{ai,signal,onWarning,layout,guide,includeCode = true} = {}) {
+  async function scanWoodCatalogue(file,patterns,onPage,{ai,signal,onWarning,layout,guide,includeCode = true} = {}) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
@@ -1780,6 +1915,8 @@ window.GDHomeAssets = (() => {
     const results = [];
     const sources = new Map(), pageAspects = new Map(), batch = [];
     const localPages = new Set(), scannedPages = new Set();
+    const generic = !['ancuong','phao','kitchen'].includes(layout);
+    const keepCode = !generic && includeCode;
     const guided = !!(guide?.prompt || guide?.examples?.length);
     let aiWarning = '';
     const useAi = () => ai.pdf && ai.available && !aiWarning;
@@ -1793,14 +1930,14 @@ window.GDHomeAssets = (() => {
     }
     function guideCrop(crop,page,codeBox) {
       const fitted = fitCatalogueCrop(crop,guideRatio/pageAspects.get(page));
-      return includeCode ? includeCatalogueCode(fitted,codeBox || guidedCodeBox(fitted) || crop) : fitted;
+      return keepCode ? includeCatalogueCode(fitted,codeBox || guidedCodeBox(fitted) || crop) : fitted;
     }
     async function flush() {
       if (!batch.length) return;
       const pages = batch.splice(0);
       if (!useAi()) return;
       try {
-        const recognized = await GDHomeAI.startJob({kind:'catalogue',pages,includeCode,...(guided ? {guide} : {})},{signal});
+        const recognized = await GDHomeAI.startJob({kind:'catalogue',pages,includeCode:keepCode,...(guided ? {guide} : {})},{signal});
         for (const item of recognized.items || []) {
           const source = sources.get(item.page);
           if (!source) continue;
@@ -1816,8 +1953,8 @@ window.GDHomeAssets = (() => {
           const code = item.code;
           const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
-          const record = {...item,source,crop:guideCrop(item.bbox,item.page,results[index]?.codeBox || item.codeBBox),
-            confidence:match ? Math.max(.85,item.confidence) : item.confidence};
+          const record = {...item,source,crop:generic ? item.bbox : guideCrop(item.bbox,item.page,results[index]?.codeBox || item.codeBBox),
+            confidence:match ? Math.max(.85,item.confidence) : item.confidence,...(generic ? {needsReview:true} : {})};
           if (['phao','kitchen'].includes(layout) && localPages.has(item.page)) {
             if (match) {
               const detected = results[index];
@@ -1840,12 +1977,14 @@ window.GDHomeAssets = (() => {
         onPage(number,pdf.numPages);
         const page = await pdf.getPage(number);
         const base = page.getViewport({scale:1});
-        const scale = Math.min(3,1600/Math.max(base.width,base.height));
+        const side = Math.max(base.width,base.height);
+        const scale = Math.min(3200/side,Math.max(2,Math.min(3,1600/side)));
         const viewport = page.getViewport({scale});
         const {items} = await page.getTextContent();
         const labels = items.filter(item => item.str?.trim()).map(item => {
           const [x,y] = viewport.convertToViewportPoint(item.transform[4],item.transform[5]);
-          return {text:item.str.trim(),x,y,width:item.width*scale,height:Math.max(1,item.height*scale)};
+          const width = item.width*scale, height = Math.max(1,item.height*scale);
+          return {text:item.str.trim(),x,y,width,height,box:catalogueTextBounds(item,viewport,pdfjs,width,height)};
         });
         const matches = layout === 'ancuong' ? [] : layout === 'kitchen' ? kitchenCatalogueRows(labels) : labels.flatMap(label => {
           if (layout === 'phao') {
@@ -1861,7 +2000,7 @@ window.GDHomeAssets = (() => {
               !regexes.some(regex => regex.test(other.text)))?.text || '';
           return [{...label,code:match[0].trim().toUpperCase(),name}];
         });
-        if (layout !== 'ancuong' && labels.length && !matches.length && !useAi()) { page.cleanup(); continue; }
+        if (layout !== 'ancuong' && labels.length && !matches.length) { page.cleanup(); continue; }
         const canvas = document.createElement('canvas');
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
@@ -1869,10 +2008,10 @@ window.GDHomeAssets = (() => {
         await page.render({canvasContext:context,viewport}).promise;
         signal?.throwIfAborted();
         const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels,includeCode) : [];
+        const detected = generic && matches.length ? await matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) : [];
         if (results.length + matches.length + swatches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
-        const needsAi = layout === 'ancuong' ? !labels.length || (guided && swatches.length) :
-          guided || ai.pdfMode === 'enrich' || !matches.length;
-        if (layout === 'ancuong' && labels.length && !swatches.length && !(needsAi && useAi())) {
+        const needsAi = generic ? !detected.some(item => !item.unmatched) : layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : !matches.length;
+        if (layout === 'ancuong' && labels.length && !swatches.length) {
           canvas.width = canvas.height = 0;
           page.cleanup();
           continue;
@@ -1885,7 +2024,7 @@ window.GDHomeAssets = (() => {
         if (matches.length || swatches.length) localPages.add(number);
         if (needsAi && useAi()) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
-        for (const swatch of swatches) results.push({...swatch,page:number,source});
+        for (const swatch of [...swatches,...detected]) results.push({...swatch,page:number,source});
         if (layout === 'kitchen') {
           const first = matches[0];
           if (first) {
@@ -1902,34 +2041,24 @@ window.GDHomeAssets = (() => {
           if (batch.length === 4 || number === pdf.numPages) await flush();
           continue;
         }
-        const nearest = (values,fallback) => values.length ? Math.min(...values) : fallback;
-        for (const label of matches) {
+        for (const label of layout === 'phao' ? matches : []) {
           const codeBox = pdfLabelCrop(label,canvas);
-          const dx = nearest(matches.filter(o => Math.abs(o.y-label.y) < label.height && Math.abs(o.x-label.x) > label.height*2)
-            .map(o => Math.abs(o.x-label.x)),canvas.width/Math.max(1,new Set(matches.map(m => Math.round(m.x/label.height))).size));
-          const dy = nearest(matches.filter(o => Math.abs(o.y-label.y) > label.height*2)
-            .map(o => Math.abs(o.y-label.y)),canvas.height*.35);
-          const w = Math.min(canvas.width, direction === 'left' ? dx*.58 : dx*.72);
-          const h = Math.min(canvas.height,dy*.66);
-          const x = bounded(direction === 'left' ? label.x-w-label.height*.4 : label.x-dx*.06,0,canvas.width-w);
-          const y = bounded(direction === 'left' ? label.y-h*.55 : label.y-h-label.height*1.2,0,canvas.height-h);
-          if (layout === 'phao') {
-            const left = Math.max(0,label.x-dx*.45);
-            const right = Math.min(canvas.width,left+dx);
-            const top = matches.filter(other => other.y < label.y && Math.abs(other.x-label.x) < dx*.5)
-              .reduce((value,other) => Math.max(value,other.y+other.height),0);
-            const bottom = Math.min(canvas.height,label.y+label.height);
-            const numbers = labels.filter(other => other.y >= top && other.y <= label.y && other.x >= left && other.x <= right);
-            const combined = numbers.map(other => other.text).find(text => /\b\d{2,4}\s*[×x*]\s*\d{2,4}\b/i.test(text));
-            const split = numbers.filter(other => /^\d{2,4}$/.test(other.text)).sort((a,b) => a.y-b.y).map(other => other.text);
-            const size = combined?.match(/\d{2,4}\s*[×x*]\s*\d{2,4}/i)?.[0].replace(/\s+/g,'').replace(/[×*]/,'x') ||
-              (split.length >= 2 ? split.slice(0,2).join('x') : '');
-            results.push({code:label.code,name:label.name,size,page:number,source,confidence:.85,codeBox,
-              crop:guideCrop({x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height},number,codeBox)});
-            continue;
-          }
-          results.push({code:label.code,name:label.name,page:number,source,confidence:.6,codeBox,
-            crop:guideCrop({x:x/canvas.width,y:y/canvas.height,w:w/canvas.width,h:h/canvas.height},number,codeBox)});
+          const distances = matches.filter(o => Math.abs(o.y-label.y) < label.height && Math.abs(o.x-label.x) > label.height*2)
+            .map(o => Math.abs(o.x-label.x));
+          const dx = distances.length ? Math.min(...distances) :
+            canvas.width/Math.max(1,new Set(matches.map(m => Math.round(m.x/label.height))).size);
+          const left = Math.max(0,label.x-dx*.45);
+          const right = Math.min(canvas.width,left+dx);
+          const top = matches.filter(other => other.y < label.y && Math.abs(other.x-label.x) < dx*.5)
+            .reduce((value,other) => Math.max(value,other.y+other.height),0);
+          const bottom = Math.min(canvas.height,label.y+label.height);
+          const numbers = labels.filter(other => other.y >= top && other.y <= label.y && other.x >= left && other.x <= right);
+          const combined = numbers.map(other => other.text).find(text => /\b\d{2,4}\s*[×x*]\s*\d{2,4}\b/i.test(text));
+          const split = numbers.filter(other => /^\d{2,4}$/.test(other.text)).sort((a,b) => a.y-b.y).map(other => other.text);
+          const size = combined?.match(/\d{2,4}\s*[×x*]\s*\d{2,4}/i)?.[0].replace(/\s+/g,'').replace(/[×*]/,'x') ||
+            (split.length >= 2 ? split.slice(0,2).join('x') : '');
+          results.push({code:label.code,name:label.name,size,page:number,source,confidence:.85,codeBox,
+            crop:guideCrop({x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height},number,codeBox)});
         }
         canvas.width = canvas.height = 0;
         page.cleanup();
@@ -2186,12 +2315,10 @@ window.GDHomeAssets = (() => {
       ((library.suppliers || []).length ? '<label>Chọn nhiều đơn vị <select name="supplierChoices" multiple>' +
         library.suppliers.map(item => '<option>' + esc(item.name) + '</option>').join('') + '</select></label>' : '') +
       '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
-      '<label data-catalogue-pdf-ai><input type="checkbox" name="useAi"> Dùng AI hỗ trợ đọc PDF</label>' +
-      '<label data-catalogue-pdf-ai-mode hidden>Cách dùng AI <select name="pdfAiMode">' +
-      '<option value="needed">Chỉ khi cần nhận dạng thêm</option><option value="enrich">Bổ sung thuộc tính mẫu</option></select></label>' +
+      '<label data-catalogue-pdf-ai><input type="checkbox" name="useAi"> Dùng AI cho trang khó</label>' +
       '<label data-catalogue-web-ai hidden><input type="checkbox" name="useWebAi"> Dùng AI bổ sung tên / mã khi HTML thiếu</label>' +
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" multiple></label>' +
-      '<label data-catalogue-pdf-code><input type="checkbox" name="includeCode" checked> Giữ dòng mã trong ảnh PDF</label>' +
+      '<label data-catalogue-pdf-code><input type="checkbox" name="includeCode" checked> Giữ dòng mã trong bố cục chuyên dụng</label>' +
       '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea>' +
       '<small>Tự đọc HTML, tải ảnh và theo trang kế tiếp.</small></label>' +
       '<label data-catalogue-autosave hidden><input type="checkbox" name="autoSave" checked> Tự lưu tất cả, lọc lại sau</label>' +
@@ -2201,7 +2328,6 @@ window.GDHomeAssets = (() => {
       '<ol data-catalogue-queue aria-label="Hàng đợi nguồn nhập"></ol>' +
       '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option><option value="phao">Phào chỉ</option><option value="kitchen">Phụ kiện bếp · ảnh và bảng mã</option></select></label>' +
       '<label>Kiểu hiển thị ' + displaySelect(preset.display || categoryDisplay(library.categories.find(c => c.id === categoryId)),'name="display"') + '</label>' +
-      '<label>Vị trí ảnh so với mã <select name="direction"><option value="above">Phía trên</option><option value="left">Bên trái</option></select></label>' +
       '<label>Hãng <input name="brand" list="wood-brands" value="' + (categoryId === 'ancuong-wood' ? 'An Cường' : '') + '" maxlength="80"></label>' +
       '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
       '<label>Catalogue <input name="collection" list="wood-catalogues" maxlength="120" placeholder="VD: Melamine/MFC"></label>' +
@@ -2246,10 +2372,6 @@ window.GDHomeAssets = (() => {
     const read = form.querySelector('[type=submit]');
     let items = [], mode = 'pdf';
     let activeImports = [];
-    const showPdfAiMode = () => {
-      form.querySelector('[data-catalogue-pdf-ai-mode]').hidden = mode === 'web' || !form.elements.useAi.checked;
-    };
-    form.elements.useAi.onchange = showPdfAiMode;
     const setProgress = (entry,state,message) => {
       entry.row.dataset.sourceState = state;
       entry.row.querySelector('[data-source-progress]').textContent = message;
@@ -2428,7 +2550,6 @@ window.GDHomeAssets = (() => {
       form.querySelector('[data-catalogue-mixed]').hidden = mode !== 'mixed';
       form.querySelector('[data-catalogue-pdf-ai]').hidden = mode === 'web';
       form.querySelector('[data-catalogue-web-ai]').hidden = mode === 'pdf';
-      showPdfAiMode();
       read.textContent = ({web:'Đọc website',pdf:'Đọc PDF',mixed:'Xử lý hàng đợi'})[mode];
       queue.render(mode);
       refreshSelection();
@@ -2474,8 +2595,7 @@ window.GDHomeAssets = (() => {
         if (!activeImports.length) { status.textContent = 'Đã huỷ nhập.'; return; }
         await saveImportRows(activeImports);
         const guide = readGuide(), budget = {pages:30,items:600};
-        const ai = {available:!!window.GDHomeAI,pdf:form.elements.useAi.checked,
-          pdfMode:form.elements.pdfAiMode.value,web:form.elements.useWebAi.checked};
+        const ai = {available:!!window.GDHomeAI,pdf:form.elements.useAi.checked,web:form.elements.useWebAi.checked};
         const scans = new Array(activeImports.length);
         let next = 0;
         async function worker() {
@@ -2491,7 +2611,7 @@ window.GDHomeAssets = (() => {
             try {
               let imported;
               if (entry.type === 'web') imported = await scanCatalogueWeb(entry.url,{ai,signal,onProgress,onWarning,budget,onSource:source => sources.add(source)});
-              else if (entry.type === 'pdf') imported = await scanWoodCatalogue(entry.file,form.elements.patterns.value,form.elements.direction.value,
+              else if (entry.type === 'pdf') imported = await scanWoodCatalogue(entry.file,form.elements.patterns.value,
                 (page,total) => onProgress('Đang đọc trang ' + page + '/' + total + '…'),
                 {ai,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked});
               else {
