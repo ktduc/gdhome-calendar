@@ -15,6 +15,43 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['23.1'] = async page => {
+  await page.setViewportSize({width:690,height:560});
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',Array.from({length:48},(_,i) => {
+      const file = i.toString(16).padStart(64,'0') + '.webp';
+      return {name:'GD23 ' + i,full:file,thumb:file,brand:'GD23',size:'600x600',tags:['GD23']};
+    }));
+  });
+  const anchor = page.locator('[data-row=g2-r15] .image-cell[data-slot="0"]').first();
+  await anchor.scrollIntoViewIfNeeded();
+  const before = await anchor.evaluate(element => {
+    GDHomeAssets.pickLibrary(element,{groupName:'Gạch ốp lát'});
+    return {y:scrollY,top:element.getBoundingClientRect().top};
+  });
+  assert.ok(before.y > 0);
+  const picker = page.locator('.asset-popover');
+  const brand = picker.locator('input[data-facet=brand][data-value=GD23]');
+  await brand.waitFor({state:'attached'});
+  const body = picker.locator('.asset-body');
+  await body.evaluate(element => { element.scrollTop = 100; });
+  const gridScroll = await body.evaluate(element => element.scrollTop);
+  assert.ok(gridScroll > 0);
+  for (const checked of [true,false,true]) {
+    const control = checked ? brand : picker.locator('[data-remove-facet=brand][data-value=GD23]');
+    await control.evaluate(element => element.click());
+    await page.waitForFunction(checked =>
+      document.querySelector('.asset-popover input[data-facet=brand][data-value=GD23]')?.checked === checked &&
+      Boolean(document.querySelector('.asset-popover [data-remove-facet=brand][data-value=GD23]')) === checked,checked);
+    const after = await anchor.evaluate(element => ({y:scrollY,top:element.getBoundingClientRect().top}));
+    assert.ok(Math.abs(after.y-before.y) <= 2);
+    assert.ok(Math.abs(after.top-before.top) <= 2);
+    assert.equal(await body.evaluate(element => element.scrollTop),gridScroll);
+  }
+};
+
 cases['8.1'] = async page => {
   await openMaterials(page);
   const row = page.locator('[data-row="g8-r1"]');

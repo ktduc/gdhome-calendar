@@ -792,3 +792,9 @@ XONG GĐ22
 Trang Tiến độ có hai bộ xử lý cùng bắt một nút nên bật tắt lệch nhau; đã bỏ bản trong app.js. Chốt mã và Tools vẽ thanh bên sau khi tải nên nút không xuất hiện; shell.js nay theo dõi trang và gắn nút ngay khi có thanh bên, nhớ trạng thái từng trang. Kiểm tra bằng Chromium: nút có mặt, bật tắt đúng, vẽ lại thanh bên vẫn hoạt động.
 
 XONG GĐ22.3
+
+## GĐ23
+
+| Bước | Thay đổi | Kiểm thử |
+| --- | --- | --- |
+| 23.1 | Giữ vị trí cuộn trang và vùng kết quả khi lọc trong bảng chọn vật liệu, sơn và gỗ. Focus trong bảng chọn dùng preventScroll. | Node 86/86. Edge 23.1, 21.4, 21.5 đạt. |

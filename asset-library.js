@@ -399,7 +399,7 @@ window.GDHomeAssets = (() => {
     form.elements.name.value = item.name || '';
     form.onkeydown = event => {
       event.stopPropagation();
-      if (event.key === 'Escape') { event.preventDefault(); form.remove(); container.focus(); }
+      if (event.key === 'Escape') { event.preventDefault(); form.remove(); container.focus({preventScroll:true}); }
     };
     form.onsubmit = async event => {
       event.preventDefault();
@@ -407,11 +407,11 @@ window.GDHomeAssets = (() => {
       try {
         await save({code:form.elements.code.value.trim(),name:form.elements.name.value.trim()});
         form.remove();
-        container.focus();
+        container.focus({preventScroll:true});
       } catch (error) { toast(error.message); form.querySelector('button').disabled = false; }
     };
     container.append(form);
-    form.elements.code.focus();
+    form.elements.code.focus({preventScroll:true});
     form.elements.code.select();
   }
   const displayOptions = [['fill','Cắt đầy ô'],['fit','Vừa khung'],['pad','Lấp nền ô vuông']];
@@ -490,7 +490,7 @@ window.GDHomeAssets = (() => {
           view = item.view || {x:.5,y:.5,z:1};
           paint();
           titleForItem();
-          stage.focus();
+          stage.focus({preventScroll:true});
         } catch (error) { toast(error.message); }
         finally { moving = false; }
       }
@@ -556,7 +556,7 @@ window.GDHomeAssets = (() => {
       paint();
       titleForItem();
       dialog.showModal();
-      stage.focus();
+      stage.focus({preventScroll:true});
     });
   }
 
@@ -843,7 +843,7 @@ window.GDHomeAssets = (() => {
       const row = button.closest('li');
       if (button.dataset.moveFilter === '-1') row.previousElementSibling?.before(row);
       else row.nextElementSibling?.after(row);
-      button.focus();
+      button.focus({preventScroll:true});
     };
     async function save(groups) {
       const buttons = form.querySelectorAll('button');
@@ -1067,7 +1067,7 @@ window.GDHomeAssets = (() => {
     const anchor = event.target.getBoundingClientRect();
     menu.style.left = Math.max(6,Math.min(event.clientX || anchor.left,innerWidth-menu.offsetWidth-6)) + 'px';
     menu.style.top = Math.max(6,Math.min(event.clientY || anchor.bottom,innerHeight-menu.offsetHeight-6)) + 'px';
-    menu.firstElementChild.focus();
+    menu.firstElementChild.focus({preventScroll:true});
   }
   function wireLibraryContext(root,data,{renameCategory,mergeCategory,removeManagedCategory,showAttributes,attributeKey}) {
     const {groupLabels,view,canMergeCategory} = attributeCatalog(), labels = groupLabels(data);
@@ -1152,6 +1152,22 @@ window.GDHomeAssets = (() => {
     if (hooks.savePickerWidth) hooks.savePickerWidth(width);
     else try { localStorage.setItem(pickerWidthKey,String(width)); } catch { /* Layout still works without local storage. */ }
   }
+  function preservePickerScroll(panel) {
+    const pageX = window.scrollX, pageY = window.scrollY;
+    const positions = ['.asset-body','.asset-facets','.asset-category-column'].map(selector => {
+      const element = panel.querySelector(selector);
+      return {selector,top:element?.scrollTop || 0,left:element?.scrollLeft || 0};
+    });
+    return () => {
+      if (window.scrollX !== pageX || window.scrollY !== pageY) {
+        window.scrollTo({left:pageX,top:pageY,behavior:'instant'});
+      }
+      for (const {selector,top,left} of positions) {
+        panel.querySelector(selector)?.scrollTo({top,left,behavior:'instant'});
+      }
+    };
+  }
+
   function popover(anchor,build) {
     closePicker();
     const panel = document.createElement('div');
@@ -1297,6 +1313,7 @@ window.GDHomeAssets = (() => {
         pruneFacets(scoped,facets);
         const candidates = searchItems(scoped,query);
         const items = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
+        const restoreScroll = preservePickerScroll(panel);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' + pickerCategorySelect(data.categories,available,categoryId) +
           '<input type="search" list="' + searchId + '" placeholder="Tìm theo tên / mã" value="' + esc(query) + '">' +
@@ -1311,7 +1328,7 @@ window.GDHomeAssets = (() => {
         wireFacets(panel,facets,paint);
         wirePickerCategories(panel,value => { categoryId = value; clearFacets(facets); paint(); });
         const search = panel.querySelector('input[type=search]');
-        search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = panel.querySelector('input[type=search]'); s?.focus(); s?.setSelectionRange(query.length,query.length); }); },250); };
+        search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = panel.querySelector('input[type=search]'); s?.focus({preventScroll:true}); s?.setSelectionRange(query.length,query.length); }); },250); };
         panel.querySelector('[data-full]').onclick = () => { close(); openLibrary({groupName,categoryId:categoryId === 'all' ? null : categoryId,onPick}); };
         panel.querySelector('[data-upload]').onclick = async () => {
           const target = categoryId === 'all' ? categoryFor(data,groupName)?.id || data.categories[0]?.id : categoryId;
@@ -1336,6 +1353,7 @@ window.GDHomeAssets = (() => {
         }
 
         place();
+        restoreScroll();
       }
       panel.innerHTML = '<p class="asset-empty">Đang tải…</p>';
       document.addEventListener('gdhome:library-changed',paint,{signal});
@@ -1352,7 +1370,7 @@ window.GDHomeAssets = (() => {
       field.timer = setTimeout(async () => {
         await paint();
         const replacement = root.querySelector('input[type=search]');
-        replacement?.focus();
+        replacement?.focus({preventScroll:true});
         replacement?.setSelectionRange(getQuery().length,getQuery().length);
       },250);
     };
@@ -1464,6 +1482,7 @@ window.GDHomeAssets = (() => {
         const candidates = searchItems(scoped,query);
         const colors = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
         const matchingPhotos = sortLibrary(photos.filter(item => matchFacets(item,facets)),sidebarState.sort);
+        const restoreScroll = preservePickerScroll(panel);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
           pickerCategorySelect(paintData.categories.filter(category => categories.has(category.id)),available,categoryId) +
@@ -1516,6 +1535,7 @@ window.GDHomeAssets = (() => {
           });
         }
         place();
+        restoreScroll();
       }
       panel.innerHTML = '<p class="asset-empty">Đang tải bảng màu…</p>';
       document.addEventListener('gdhome:library-changed',paint,{signal});
@@ -1567,6 +1587,7 @@ window.GDHomeAssets = (() => {
           '<strong>' + esc(w.code) + '</strong><span class="wood-name">' + esc(w.name) + '</span><span class="wood-badge">' +
           esc([w.brand,w.collection].filter(Boolean).join(' · ')) + '</span></button>' + assetItemActions(w) + '</div>').join('') + '</div>' :
           (facetEmpty(matchingPhotos,facets) || '<p class="asset-empty">Không tìm thấy mã gỗ phù hợp với "' + esc(query) + '".</p>');
+        const restoreScroll = preservePickerScroll(panel);
         panel.innerHTML = '<header><strong>' + esc(title) + '</strong><button type="button" class="asset-x" aria-label="Đóng">×</button></header>' +
           '<div class="asset-filters">' +
           pickerCategorySelect(woodData.categories.filter(category => categories.has(category.id)),available,categoryId) +
@@ -1611,6 +1632,7 @@ window.GDHomeAssets = (() => {
           });
         }
         place();
+        restoreScroll();
       }
       panel.innerHTML = '<p class="asset-empty">Đang tải danh mục mã gỗ…</p>';
       document.addEventListener('gdhome:library-changed',paint,{signal});
