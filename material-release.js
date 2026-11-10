@@ -295,12 +295,14 @@ async function exportStatsImage(copy,watermark = true) {
 async function exportPurchasing() {
   const includePrice = confirm('Thêm cột giá vào bản Excel mua hàng?');
   const XLSX = await loadXlsx();
+  const chosenRows = sheet.groups.flatMap(group => group.rows.filter(row => row.chosen != null && row.decision === 'chosen' &&
+    (!sheetRoom || row.room === sheetRoom)).map(row => ({group,row,pa:row.options[row.chosen]})));
+  const prices = includePrice && chosenRows.some(({pa}) => pa.libraryItemId && !pa.price)
+    ? new Map((await GDHomeAssets.loadLibrary()).items.map(item => [item.id,item.price])) : new Map();
   const lines = [['Nhóm','Hạng mục','Phòng','PA','Hãng','Mã','Màu','Kích thước','Quy cách','Khối lượng','Đơn vị','NCC / Nhà thầu',...(includePrice?['Giá']:[]),'Ghi chú']];
-  for (const group of sheet.groups) for (const row of group.rows) {
-    if (row.chosen == null || row.decision !== 'chosen' || (sheetRoom && row.room !== sheetRoom)) continue;
-    const pa = row.options[row.chosen];
+  for (const {group,row,pa} of chosenRows) {
     lines.push([group.name,row.name,row.room,row.chosen+1,pa.brand,pa.code,pa.color,pa.size,pa.finish || row.spec,row.qty,row.unit,
-      pa.supplier || row.supplier,...(includePrice?[pa.price]:[]),row.note]);
+      pa.supplier || row.supplier,...(includePrice?[pa.price || prices.get(pa.libraryItemId)]:[]),row.note]);
   }
   const book = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(book,XLSX.utils.aoa_to_sheet(lines),'Mua hàng');

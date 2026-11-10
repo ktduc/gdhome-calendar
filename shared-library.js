@@ -53,7 +53,7 @@ function itemMetadata(item) {
     ...(Array.isArray(item.brands) ? {brands:stringList(item.brands)} : {}),
     ...(item.spec ? {spec:text(item.spec,160)} : {}),...(item.subgroup ? {subgroup:text(item.subgroup,80)} : {}),
     ...(cabinetWidth ? {cabinetWidth} : {}),...(item.innerWidth ? {innerWidth:number(item.innerWidth,20000)} : {}),
-    ...(item.unit ? {unit:text(item.unit,30)} : {}),...(item.price ? {price:number(item.price,1e10)} : {})};
+    ...(item.unit ? {unit:text(item.unit,30)} : {}),...attributes.priceFields(item)};
 }
 function supplierRecord(item) {
   return {name:text(item?.name,80),phone:text(item?.phone,40),note:text(item?.note,300)};
@@ -134,7 +134,7 @@ function normalize(data) {
   }
   return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
     ...(removed.size ? {removedSystemCategories:[...removed]} : {}),
-    attributeGroups,filterPreferences:attributes.normalizeFilters({...base,categories}),
+    attributeGroups,filterPreferences:attributes.normalizeFilters({...base,categories}),showPrices:base.showPrices === true,
     attributes:attributes.normalize({...base,categories}),imports:(Array.isArray(base.imports) ? base.imports : [])
       .slice(0,200).map(importHistory.normalize).filter(Boolean),woodSeeded:true,paintSeeded:true };
 }
@@ -277,6 +277,11 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     const {data} = await mutate(store,key,data => attributes.saveFilters(data,body || {}));
     return sendJson(res,200,data);
   }
+  if (urlPath === '/api/library/preferences') {
+    if (typeof body.showPrices !== 'boolean') fail(400,'Thiết lập hiện giá không hợp lệ.');
+    const {data} = await mutate(store,key,data => { data.showPrices = body.showPrices; });
+    return sendJson(res,200,data);
+  }
   if (urlPath === '/api/library/items') {
     const list = Array.isArray(body.items) ? body.items : [body];
     if (!list.length || list.length > 50) fail(400, 'Mỗi lần thêm từ 1 đến 50 ảnh.');
@@ -298,6 +303,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
           existing.tags = stringList([...(existing.tags || []),...stringList(item.tags)]);
           if (kind !== 'paint' && !existing.full) {
             Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb,view:cleanView(item.view),display:cleanDisplay(item.display)});
+            attributes.updatePrice(existing,{...attributes.priceFields(item)});
             added.push(existing);
           } else skipped++;
           continue;
@@ -307,6 +313,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
           kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb,view:cleanView(item.view),display:cleanDisplay(item.display)}),createdAt: Date.now(),...itemMetadata(item),...metadata,
           ...(item.customAttributes ? {customAttributes:attributes.customValues(item.customAttributes,data.attributeGroups)} : {}),
           ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb,square:!!item.square} : {}) };
+        if (entry.price != null || entry.priceUnit || entry.priceNote) entry.priceUpdatedAt = entry.createdAt;
         data.items.unshift(entry);
         added.push(entry);
       }
@@ -337,6 +344,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         if (!ids.has(item.id)) continue;
         if (categoryId) item.categoryId = categoryId;
         for (const field of ['brand','size']) if (Object.hasOwn(set,field)) item[field] = metadata[field];
+        attributes.updatePrice(item,set);
         item.tags = stringList([...(item.tags || []),...addTags]).filter(tag => !removeTags.has(tag));
         item.suppliers = stringList([...(item.suppliers || []),...addSuppliers]).filter(name => !removeSuppliers.has(name));
       }
@@ -381,6 +389,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       if (typeof body.hidden === 'boolean') item.hidden = body.hidden;
       if (item.kind === 'paint' && validHex(body.hex)) item.hex = body.hex.toLowerCase();
       const metadata = itemMetadata(body);
+      attributes.updatePrice(item,body);
       if (Object.hasOwn(body,'customAttributes')) item.customAttributes = attributes.customValues(body.customAttributes,data.attributeGroups);
       for (const field of Object.keys(attributes.labels)) {
         if (Object.hasOwn(body,field)) item[field] = metadata[field];

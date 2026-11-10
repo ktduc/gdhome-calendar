@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { handleLibrary, categoryForGroup, defaultLibrary, cleanView, libraryKey } = require('../shared-library');
 const { MaterialStore } = require('../materials');
-const { cleanSheet } = require('../material-review');
+const { cleanSheet, publicSheet } = require('../material-review');
 
 const a = 'a'.repeat(64) + '.webp', b = 'b'.repeat(64) + '.webp';
 
@@ -60,6 +60,32 @@ test('Dữ liệu dùng chung: ghép nhóm vật liệu với hạng mục', () 
   assert.equal(categoryForGroup(library,'Sàn gỗ').name,'SÀN GỖ');
   assert.equal(categoryForGroup(library,'Thiết bị vệ sinh').name,'THIẾT BỊ VỆ SINH');
   assert.equal(categoryForGroup(library,'Hạng mục lạ'),null);
+});
+
+test('GĐ21.4 giá nội bộ theo tài khoản, sửa hàng loạt và hoàn tác', async () => {
+  const {call} = harness();
+  assert.equal((await call('/api/library')).data.showPrices,false);
+  assert.equal((await call('/api/library/preferences',{showPrices:true})).data.showPrices,true);
+  assert.equal((await call('/api/library',null,'v@example.com')).data.showPrices,false);
+  const items = (await call('/api/library/items',{categoryId:'cat-6',items:[
+    {name:'Gạch A',full:a,thumb:a,price:'123.456',unit:'viên'},
+    {name:'Gạch B',full:b,thumb:b,price:0,priceUnit:'m²'}
+  ]})).data.added;
+  assert.deepEqual(items.map(item => [item.price,item.priceUnit]),[[123456,'viên'],[0,'m²']]);
+  const ids = items.map(item => item.id);
+  const edited = (await call('/api/library/items/bulk',{ids,set:{price:300000,priceUnit:'m²',priceNote:'Nội bộ'}})).data;
+  assert.ok(edited.items.filter(item => ids.includes(item.id)).every(item => item.price === 300000 &&
+    item.priceUnit === 'm²' && item.priceNote === 'Nội bộ' && Number.isSafeInteger(item.priceUpdatedAt)));
+  const restored = (await call('/api/library/items/bulk',{undo:edited.undoToken})).data.items.find(item => item.id === ids[0]);
+  assert.equal(restored.price,123456);
+  const cleared = (await call('/api/library/items/update',{id:ids[0],price:'',priceUnit:''})).data.items.find(item => item.id === ids[0]);
+  assert.equal(cleared.price,undefined);
+  assert.equal(cleared.priceUnit,undefined);
+  const sheet = cleanSheet({id:'bang-gia',groups:[{id:'nhom-gia',name:'Gạch',rows:[{id:'dong-gia',name:'Mẫu',options:[
+    {code:'A01',price:'123456',priceUnit:'viên',priceNote:'Nội bộ',libraryItemId:ids[0]}, {}, {}
+  ]}]}]});
+  assert.equal(sheet.groups[0].rows[0].options[0].price,'123456');
+  assert.deepEqual(Object.keys(publicSheet(sheet).groups[0].rows[0].options[0]).filter(key => /price|libraryItemId/i.test(key)),[]);
 });
 
 test('Gộp hạng mục giữ ID mẫu, lịch sử nhập và phạm vi thuộc tính', async () => {

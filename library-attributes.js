@@ -7,6 +7,31 @@
   const listFields = new Set(['suppliers','tags','brands']);
   const clean = (value,max = 120) => typeof value === 'string' ? value.trim().replace(/\s+/g,' ').slice(0,max) : '';
   const keyFor = name => clean(name).toLocaleLowerCase('vi');
+  function parsePrice(value) {
+    if (typeof value === 'string') {
+      value = value.trim();
+      if (!/^(?:\d+(?:[.,]\d{1,2})?|\d{1,3}(?:[.,\s]\d{3})+)$/.test(value)) return;
+      value = Number(/^[\d]+[.,]\d{1,2}$/.test(value) ? value.replace(',','.') : value.replace(/[.,\s]/g,''));
+    }
+    if (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1e10) return value;
+  }
+  function priceFields(item) {
+    const price = parsePrice(item.price);
+    const priceUnit = clean(item.priceUnit ?? (price !== undefined && !item.priceUpdatedAt ? item.unit : ''),30);
+    const priceNote = clean(item.priceNote,300);
+    return {...(price === undefined ? {} : {price}),...(priceUnit ? {priceUnit} : {}),...(priceNote ? {priceNote} : {}),
+      ...(Number.isSafeInteger(item.priceUpdatedAt) && item.priceUpdatedAt > 0 ? {priceUpdatedAt:item.priceUpdatedAt} : {})};
+  }
+  function updatePrice(item,patch) {
+    const keys = ['price','priceUnit','priceNote'].filter(key => Object.hasOwn(patch,key));
+    const fields = priceFields(patch);
+    for (const key of keys) {
+      if (item[key] === fields[key]) continue;
+      if (fields[key] === undefined) delete item[key];
+      else item[key] = fields[key];
+      item.priceUpdatedAt = Date.now();
+    }
+  }
   const fail = (status,message) => { throw Object.assign(new Error(message),{status}); };
   const fields = key => key === 'brand' ? ['brand','brands'] : [key];
   const isCustom = key => /^custom-[a-z0-9]{8,36}$/.test(key);
@@ -199,7 +224,7 @@
     data.categories = data.categories.filter(category => category.id !== sourceId);
   }
 
-  const api = {labels,facetLabels,groupLabels,normalizeGroups,createGroup,customValues,isCustom,filterConfig,normalizeFilters,saveFilters,
+  const api = {labels,facetLabels,groupLabels,normalizeGroups,createGroup,customValues,isCustom,filterConfig,normalizeFilters,saveFilters,parsePrice,priceFields,updatePrice,
     normalize,view,change,canMergeCategory,removedSystemCategories,removeCategory,mergeCategories};
   if (typeof module !== 'undefined') module.exports = api;
   else window.GDHomeLibraryAttributes = api;

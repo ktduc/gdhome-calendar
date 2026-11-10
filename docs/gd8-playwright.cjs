@@ -2726,6 +2726,51 @@ cases['21.6'] = async page => {
   assert.ok(await library.locator('.asset-facets').evaluate(facets => facets.scrollHeight <= facets.clientHeight));
 };
 
+cases['21.4'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',[{name:'Gạch A',price:320000,priceUnit:'m²'},
+      {name:'Gạch B',price:200000,priceUnit:'viên'},{name:'Gạch C'}].map((item,index) => {
+      const file = String(index).repeat(64)+'.webp';
+      return {...item,full:file,thumb:file};
+    }));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog');
+  const toggle = library.getByLabel('Hiện giá');
+  await toggle.waitFor();
+  assert.equal(await toggle.isChecked(),false);
+  assert.equal(await library.locator('.asset-card-price').count(),0);
+  await toggle.check();
+  await library.locator('.asset-card-price').first().waitFor();
+  await library.getByLabel('Sắp xếp').selectOption('priceUp');
+  assert.deepEqual(await library.locator('.asset-card figcaption strong').allTextContents(),['Gạch B','Gạch A','Gạch C']);
+  const min = library.getByLabel('Giá từ');
+  await min.fill('300000');
+  await min.press('Tab');
+  assert.deepEqual(await library.locator('.asset-card figcaption strong').allTextContents(),['Gạch A']);
+  await min.clear();
+  await min.press('Tab');
+  await library.getByLabel('Chọn Gạch A').click();
+  await library.getByLabel('Chọn Gạch B').click();
+  await library.getByRole('button',{name:'Đặt giá',exact:true}).click();
+  const editor = page.locator('.asset-attribute-editor');
+  await editor.getByLabel('Giá (₫)').fill('100000');
+  await editor.getByLabel('Đơn vị giá').fill('tấm');
+  await editor.getByLabel('Ghi chú giá').fill('Nội bộ');
+  await editor.getByRole('button',{name:'Lưu giá'}).click();
+  await editor.waitFor({state:'detached'});
+  assert.equal(await library.locator('.asset-card-price[title="Nội bộ"]').count(),2);
+  await page.reload();
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await library.locator('.asset-card-price').first().waitFor();
+  assert.equal(await toggle.isChecked(),true);
+  await toggle.uncheck();
+  await library.locator('.asset-card-price').first().waitFor({state:'detached'});
+  assert.equal(await library.getByLabel('Sắp xếp').locator('option[value=priceUp]').count(),0);
+};
+
 cases['21.5'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));

@@ -719,3 +719,4 @@ XONG GĐ20
 | 21.2 | Giới hạn tốc độ theo khóa, đọc RetryInfo, thử lại có jitter, đổi khóa dự phòng và tiếp tục job từ trang chưa xử lý. Kết nối hiển thị số yêu cầu trong ngày và cấu hình model. Node 80/80. Edge 21.2 và 7 ca hồi quy đạt. |
 | 21.3 | Chọn ảnh Product, OG, gallery và srcset lớn. Đọc kích thước ảnh thật và lọc SHA-256 trùng trước khi nén. Node 81/81. Edge 21.3 và 5 ca nhập web đạt. |
 | 21.5 | Cấu hình nhóm lọc theo hạng mục, tìm trong nhóm, thêm thuộc tính riêng. Node 82/82. Edge 9/9. |
+| 21.4 | Giá nội bộ, ẩn mặc định theo tài khoản, lọc/sắp xếp, đặt giá hàng loạt. Nhận giá PDF/web khi đọc được và đưa vào Excel mua hàng khi chọn cột giá. Node 83/83. Edge 8/8. |

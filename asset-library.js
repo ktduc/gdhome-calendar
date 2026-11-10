@@ -243,7 +243,9 @@ window.GDHomeAssets = (() => {
       if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
       if (!item.code && item.full && data.items.some(entry => entry.categoryId === categoryId && entry.kind === 'image' && entry.full === item.full)) { skipped++; continue; }
       const metadata = Object.fromEntries(['brand','suppliers','tags','material','finish','collection','subgroup'].filter(key => Object.hasOwn(item,key)).map(key => [key,item[key]]));
+      const price = attributeCatalog().priceFields(item);
       added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,size:primarySize(item.size),createdAt:Date.now(),...metadata,
+        ...price,...(Object.keys(price).length ? {priceUpdatedAt:Date.now()} : {}),
         ...(item.customAttributes ? {customAttributes:attributeCatalog().customValues(item.customAttributes,data.attributeGroups || [])} : {}),
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
     }
@@ -257,6 +259,7 @@ window.GDHomeAssets = (() => {
       for (const key of ['code','view']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       for (const key of ['brand','size','tags','suppliers','display','material','finish','collection','subgroup']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       if (Object.hasOwn(patch,'customAttributes')) item.customAttributes = attributeCatalog().customValues(patch.customAttributes,data.attributeGroups || []);
+      attributeCatalog().updatePrice(item,patch);
       if (Object.hasOwn(patch,'size')) item.size = primarySize(patch.size);
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
       if (patch.hex) item.hex = patch.hex;
@@ -631,6 +634,8 @@ window.GDHomeAssets = (() => {
     paintDrawer();
   }
   const sortLabels = {used:'Hay dùng',recent:'Mới thêm',name:'Tên A–Z',code:'Mã',manual:'Thứ tự thủ công'};
+  const priceSortLabels = {priceUp:'Giá thấp đến cao',priceDown:'Giá cao đến thấp'};
+  const displayPrice = new Intl.NumberFormat('vi-VN',{style:'currency',currency:'VND',maximumFractionDigits:2});
   const assetCollator = new Intl.Collator('vi',{numeric:true,sensitivity:'base'});
   function sortLibrary(items,mode = 'used') {
     const comparators = {
@@ -638,6 +643,8 @@ window.GDHomeAssets = (() => {
       recent:(a,b) => (b.createdAt || 0)-(a.createdAt || 0),
       name:() => 0,
       code:(a,b) => assetCollator.compare(a.code || '',b.code || ''),
+      priceUp:(a,b) => (a.price ?? Infinity)-(b.price ?? Infinity),
+      priceDown:(a,b) => (b.price ?? -Infinity)-(a.price ?? -Infinity),
       manual:(a,b) => (a.order ?? Infinity)-(b.order ?? Infinity)
     };
     return [...items].sort((a,b) => Number(!!b.favorite)-Number(!!a.favorite) || comparators[mode](a,b) ||
@@ -649,12 +656,12 @@ window.GDHomeAssets = (() => {
       '" aria-label="' + (item.favorite ? 'Bỏ yêu thích' : 'Yêu thích') + ' ' + esc(item.name || item.code) + '">' +
       (item.favorite ? '★' : '☆') + '</button><small class="asset-usage" aria-label="' + (item.used || 0) + ' lượt dùng">' + (item.used || 0) + '</small>';
   }
-  function wireLibraryActions(root,state,paint,{manual = false} = {}) {
+  function wireLibraryActions(root,state,paint,{manual = false,showPrices = false} = {}) {
     const toolbar = root.querySelector('.asset-filters,.asset-library-head');
     if (!toolbar) return;
     const controls = document.createElement('div');
     controls.className = 'asset-sort-controls';
-    controls.innerHTML = '<label>Sắp xếp <select aria-label="Sắp xếp">' + Object.entries(sortLabels).filter(([key]) => manual || key !== 'manual')
+    controls.innerHTML = '<label>Sắp xếp <select aria-label="Sắp xếp">' + Object.entries(showPrices ? {...sortLabels,...priceSortLabels} : sortLabels).filter(([key]) => manual || key !== 'manual')
       .map(([key,label]) => '<option value="' + key + '">' + label + '</option>').join('') + '</select></label>' +
       (state.favoriteUndo ? '<button type="button" data-favorite-undo>Hoàn tác yêu thích</button>' : '');
     toolbar.append(controls);
@@ -817,7 +824,7 @@ window.GDHomeAssets = (() => {
       Object.entries(labels).map(([key,label]) => {
         const value = key.startsWith('custom-') ? item.customAttributes?.[key] : item[key];
         return '<label>' + esc(label) + ' <input name="' + key + '" value="' + esc(Array.isArray(value) ? value.join(', ') : value) + '"></label>';
-      }).join('') + '<button>Lưu mẫu</button><p role="status"></p></form>';
+      }).join('') + (data.showPrices ? libraryPriceInputs(item) : '') + '<button>Lưu mẫu</button><p role="status"></p></form>';
     const form = body.querySelector('form');
     const keys = Object.keys(labels);
     attributeSuggestions(form,data,item.categoryId,Object.fromEntries(keys.map(key => [key,[form.elements[key]]])));
@@ -832,11 +839,16 @@ window.GDHomeAssets = (() => {
         if (key.startsWith('custom-')) patch.customAttributes[key] = value;
         else patch[key] = ['tags','suppliers'].includes(key) ? value.split(',').map(part => part.trim()).filter(Boolean) : value;
       }
-      try { await updateItem(patch); dialog.close(); }
+      try { await updateItem(data.showPrices ? {...patch,...libraryPricePatch(form)} : patch); dialog.close(); }
       catch (error) { form.querySelector('[role=status]').textContent = error.message; }
       finally { button.disabled = false; }
     };
   }
+  const libraryPriceInputs = (item = {}) =>
+    '<label>Giá (₫) <input type="number" name="price" min="0" max="10000000000" step="0.01" value="' + esc(item.price) + '"></label>' +
+    '<label>Đơn vị giá <input name="priceUnit" maxlength="30" placeholder="m², viên, bộ, md, tấm…" value="' + esc(item.priceUnit) + '"></label>' +
+    '<label>Ghi chú giá <input name="priceNote" maxlength="300" value="' + esc(item.priceNote) + '"></label>';
+  const libraryPricePatch = form => Object.fromEntries(['price','priceUnit','priceNote'].map(key => [key,form.elements[key].value.trim()]));
   function wireFacets(root,facets,paint) {
     const clear = root.querySelector('[data-clear-facets]');
     if (clear) clear.onclick = () => { clearFacets(facets); paint(); };
@@ -979,7 +991,7 @@ window.GDHomeAssets = (() => {
       showLibraryContext(root,event,actions);
     };
   }
-  function grid(items,{selectable = true,removable = false,selected = null,empty = 'Chưa có ảnh.'} = {}) {
+  function grid(items,{selectable = true,removable = false,selected = null,showPrices = false,empty = 'Chưa có ảnh.'} = {}) {
     if (!items.length) return '<p class="asset-empty">' + esc(empty) + '</p>';
     return '<div class="asset-grid' + (selected ? ' asset-grid-managed' : '') + '">' + items.map(item => '<figure class="asset-card' + (selected?.has(item.id) ? ' is-selected' : '') +
       '" data-asset-id="' + esc(item.id) + '"' + (selected ? ' draggable="true"' : '') + '>' +
@@ -990,6 +1002,8 @@ window.GDHomeAssets = (() => {
       (selected ? '<figcaption title="' + esc([item.code,item.name,item.collection,item.finish,item.spec].filter(Boolean).join(' · ')) + '"><strong>' +
         esc(item.code || item.name) + '</strong><span>' + esc(item.code ? item.name : item.collection) + '</span></figcaption>' :
         '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish,item.spec,item.cabinetWidth && 'Tủ '+item.cabinetWidth,item.subgroup].filter(Boolean).join(' · '))) + '</figcaption>') +
+      (showPrices && item.price != null ? '<small class="asset-card-price" title="' + esc(item.priceNote) + '">' +
+        esc(displayPrice.format(item.price) + (item.priceUnit ? '/' + item.priceUnit : '')) + '</small>' : '') +
       (removable && item.full ? '<details class="asset-card-menu"><summary aria-label="Tuỳ chọn ảnh">⋯</summary><label>Kiểu hiển thị' + displaySelect(item.display || 'fill','data-asset-display') + '</label></details>' : '') +
       ((selectable || removable) ? assetItemActions(item) : '') +
       (removable && item.builtin ? '<button type="button" data-asset-hide>' + (item.hidden ? 'Hiện' : 'Ẩn') + '</button>' : '') +
@@ -1850,6 +1864,16 @@ window.GDHomeAssets = (() => {
     const left = Math.min(...xs), top = Math.min(...ys);
     return {x:left,y:top,w:Math.max(...xs)-left,h:Math.max(...ys)-top};
   }
+  const cataloguePricePattern = /(?:\b(?:đơn\s+)?giá\s*[:=]?\s*)([\d][\d.,\u00a0 ]*)(?:\s*(?:₫|VNĐ|VND))?|([\d][\d.,\u00a0 ]*)\s*(?:₫|VNĐ|VND)(?=$|[\s/;,])/i;
+  function cataloguePrice(label,labels) {
+    const match = label.text.match(cataloguePricePattern) || labels.find(other => other !== label && other.x > label.x &&
+      other.x-label.x-label.width < label.height*4 && Math.abs(other.y-label.y) <= label.height*.5 &&
+      cataloguePricePattern.test(other.text))?.text.match(cataloguePricePattern);
+    if (!match) return {};
+    const price = attributeCatalog().parsePrice(match[1] || match[2]);
+    const priceUnit = match.input.slice(match.index+match[0].length).match(/^\s*\/\s*(m²|m2|viên|bộ|md|tấm|cái)(?=$|[\s;,])/i)?.[1];
+    return price === undefined ? {} : {price,priceUnit};
+  }
   async function matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) {
     const embedded = await embeddedCatalogueImages(page,viewport,pdfjs);
     const images = [...embedded,...rasterCatalogueImages(context,canvas).filter(box =>
@@ -1883,10 +1907,12 @@ window.GDHomeAssets = (() => {
     return matches.map(label => {
       const image = chosen.get(label);
       const size = label.text.match(/\b\d{2,4}\s*[x×*]\s*\d{2,4}(?:\s*(?:cm|mm))?\b/i)?.[0] || '';
-      if (!image) return {code:label.code,name:label.name,size,crop:{x:0,y:0,w:1,h:1},confidence:0,needsReview:true,unmatched:true};
+      const name = label.name.replace(cataloguePricePattern,'').replace(/\s*\/\s*(?:m²|m2|viên|bộ|md|tấm|cái)\s*$/i,'').trim();
+      const metadata = {code:label.code,name,size,...cataloguePrice(label,labels)};
+      if (!image) return {...metadata,crop:{x:0,y:0,w:1,h:1},confidence:0,needsReview:true,unmatched:true};
       const inset = {x:image.x+1,y:image.y+1,w:image.w-2,h:image.h-2};
       const needsReview = inset.w*inset.h < image.w*image.h*.97 || labels.some(text => intersection(inset,text.box) > 0);
-      return {code:label.code,name:label.name,size,crop:relativeCrop(needsReview ? image : inset,canvas),confidence:needsReview ? .45 : .95,needsReview};
+      return {...metadata,crop:relativeCrop(needsReview ? image : inset,canvas),confidence:needsReview ? .45 : .95,needsReview};
     });
   }
 
@@ -2827,11 +2853,12 @@ window.GDHomeAssets = (() => {
           (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.originImport.override.suppliers ? '' : item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.originImport.override.brand || item.brand) + '"></label>' : '') +
           (item.originImport.layout === 'kitchen' && !item.web && !item.fileImage ? '<datalist id="catalogue-kitchen-' + esc(item.code) + '">' +
             kitchenSubgroups.map(name => '<option>' + esc(name) + '</option>').join('') + '</datalist>' +
-            ['spec','cabinetWidth','innerWidth','unit','price','subgroup'].map(key => '<label>' +
-              ({spec:'Quy cách R*S*C',cabinetWidth:'Rộng tủ',innerWidth:'Lọt lòng',unit:'Đơn vị',price:'Đơn giá nội bộ',subgroup:'Nhóm phụ kiện'})[key] +
+            ['spec','cabinetWidth','innerWidth','unit','subgroup'].map(key => '<label>' +
+              ({spec:'Quy cách R*S*C',cabinetWidth:'Rộng tủ',innerWidth:'Lọt lòng',unit:'Đơn vị',subgroup:'Nhóm phụ kiện'})[key] +
               '<input data-catalogue-field="' + key + '"' + (key === 'subgroup' ? ' list="catalogue-kitchen-' + esc(item.code) + '"' : '') +
               ' value="' + esc(item[key]) + '"></label>').join('') : '') +
-          ['size','finish','collection','material','tone','grain'].map(key => '<label>' + ({size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân'})[key] +
+          ['size','finish','collection','material','tone','grain',...(library.showPrices ? ['price','priceUnit','priceNote'] : [])].map(key => '<label>' +
+            ({size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân',price:'Đơn giá nội bộ',priceUnit:'Đơn vị giá',priceNote:'Ghi chú giá'})[key] +
             '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
           '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></div></article>').join('');
         cards = [...list.children];
@@ -2999,10 +3026,12 @@ window.GDHomeAssets = (() => {
           savedCrops.set(cropKey,image);
           if (codeKey) savedCodes.add(codeKey);
           savedHashes.add(hashKey);
-          const fields = Object.fromEntries(detail ? [...detail.querySelectorAll('[data-catalogue-field]')].filter(field => field.value.trim())
+          const priceFields = attributeCatalog().priceFields(item);
+          const fields = {...priceFields,...Object.fromEntries(detail ? [...detail.querySelectorAll('[data-catalogue-field]')]
+            .filter(field => field.value.trim() || Object.hasOwn(priceFields,field.dataset.catalogueField))
             .map(field => [field.dataset.catalogueField,field.value.trim()]) :
-            ['size','spec','cabinetWidth','innerWidth','unit','price','subgroup','finish','collection','material','tone','grain']
-              .filter(field => item[field]).map(field => [field,item[field]]));
+            ['size','spec','cabinetWidth','innerWidth','unit','subgroup','finish','collection','material','tone','grain']
+              .filter(field => item[field]).map(field => [field,item[field]]))};
           if (entry.layout === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
           const category = library.categories.find(category => category.id === categoryId);
           const record = {full:image.full,thumb:image.thumb,display:item.destinationId || entry.override.categoryId ? categoryDisplay(category) : form.elements.display.value,
@@ -3224,6 +3253,7 @@ window.GDHomeAssets = (() => {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
     let current = categoryId || null, query = '', status = '';
     let uploadDisplay;
+    const priceRange = {min:'',max:''};
     const facets = {}, selected = new Set();
     const sidebarState = {groups:{}};
     const viewState = {tab:'items'};
@@ -3235,6 +3265,7 @@ window.GDHomeAssets = (() => {
         selected.clear();
         rangeAnchor = null;
         uploadDisplay = undefined;
+        priceRange.min = priceRange.max = '';
       }
       status = '';
       paint();
@@ -3273,7 +3304,9 @@ window.GDHomeAssets = (() => {
         const ids = new Set(patch.ids);
         if (patch.delete) data.items = data.items.filter(item => !ids.has(item.id));
         for (const item of data.items.filter(item => ids.has(item.id))) {
-          Object.assign(item,patch.set || {});
+          const {price,priceUnit,priceNote,...fields} = patch.set || {};
+          Object.assign(item,fields);
+          attributeCatalog().updatePrice(item,patch.set || {});
           if (patch.categoryId) item.categoryId = patch.categoryId;
           if (patch.order) item.order = patch.order.indexOf(item.id);
           item.tags = [...new Set([...(item.tags || []),...(patch.addTags || [])])].filter(tag => !patch.removeTags?.includes(tag));
@@ -3287,11 +3320,12 @@ window.GDHomeAssets = (() => {
       await paint();
     }
     const applyBulk = patch => bulk(patch).catch(error => toast(error.message));
-    function bulkControls() {
+    function bulkControls(showPrices) {
       if (onPick) return '';
       return '<div class="asset-bulk-controls">' + (selected.size ? '<strong>' + selected.size + ' đã chọn</strong> ' +
         [['addTags','Gắn tag'],['removeTags','Bỏ tag'],['brand','Đặt hãng'],['addSuppliers','Thêm đơn vị cung cấp'],
-          ['removeSuppliers','Bỏ đơn vị cung cấp'],['size','Đặt kích thước'],['categoryId','Chuyển hạng mục'],['reviewed','Đã duyệt'],['delete','Xoá đã chọn']]
+          ['removeSuppliers','Bỏ đơn vị cung cấp'],['size','Đặt kích thước'],['categoryId','Chuyển hạng mục'],['reviewed','Đã duyệt'],
+          ...(showPrices ? [['price','Đặt giá']] : []),['delete','Xoá đã chọn']]
           .map(([key,label]) => '<button type="button" data-bulk="' + key + '">' + label + '</button>').join(' ') : '') +
         (undoToken ? '<button type="button" data-bulk="undo">Hoàn tác</button>' : '') + '</div>';
     }
@@ -3309,12 +3343,16 @@ window.GDHomeAssets = (() => {
         clearFacets(facets);
       }
       const category = data.categories.find(c => c.id === current);
+      const showPrices = !onPick && data.showPrices === true;
+      if (!showPrices && Object.hasOwn(priceSortLabels,sidebarState.sort)) sidebarState.sort = 'used';
       const config = category ? attributeCatalog().filterConfig(data,current) : undefined;
       for (const group of config || []) if (!group.visible) delete facets[group.key];
       const scoped = data.items.filter(item => item.categoryId === current && (!onPick || !item.hidden));
       pruneFacets(scoped,facets);
       const candidates = scoped.filter(item => !query || fold([item.code,item.name,...facetValues(item,'brand'),item.collection].join(' ')).includes(fold(query)));
-      const items = sortLibrary(candidates.filter(item => matchFacets(item,facets)),sidebarState.sort);
+      const filterPrice = showPrices && (priceRange.min !== '' || priceRange.max !== '');
+      const items = sortLibrary(candidates.filter(item => matchFacets(item,facets) &&
+        (!filterPrice || (item.price != null && item.price >= (priceRange.min || 0) && item.price <= (priceRange.max || Infinity)))),sidebarState.sort);
       const previousMain = body.querySelector('.asset-library-main');
       const sameCategory = previousMain?.dataset.libraryCategory === current;
       const viewKey = attributes ? viewState.attributeKey || 'size' : 'items';
@@ -3333,14 +3371,18 @@ window.GDHomeAssets = (() => {
           '<details class="asset-category-menu"><summary aria-label="Thao tác hạng mục">⋯</summary><div>' +
           '<button type="button" data-cat-rename>Đổi tên</button><button type="button" data-cat-delete>Xoá hạng mục</button>' +
           '<button type="button" data-manage-suppliers>Đơn vị cung cấp</button></div></details></div>' +
-          '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '"></div>' +
+          '<input type="search" placeholder="Tìm theo tên / mã" value="' + esc(query) + '">' +
+          (!onPick ? '<label class="asset-price-toggle"><input type="checkbox" data-show-prices' + (showPrices ? ' checked' : '') + '> Hiện giá</label>' : '') +
+          (showPrices ? '<div class="asset-price-range">' + [['min','Giá từ'],['max','Giá đến']].map(([key,label]) =>
+            '<input type="number" min="0" step="any" data-price-range="' + key + '" aria-label="' + label + '" placeholder="' + label + '" value="' + esc(priceRange[key]) + '">').join('') + '</div>' : '') + '</div>' +
           '<details class="asset-upload-strip"' + (sidebarState.uploadOpen === false ? '' : ' open') + '><summary>Thêm ảnh</summary>' +
           '<div><button type="button" class="asset-drop" title="Kéo thả hoặc Ctrl+V để dán ảnh">Chọn tệp / kéo thả</button>' +
           '<button type="button" data-folder-choose>Chọn thư mục</button><input type="file" webkitdirectory multiple data-folder-input hidden>' +
           '<label>Kiểu hiển thị ' + displaySelect(uploadDisplay || categoryDisplay(category),'data-library-display') + '</label></div></details>' +
           '<p class="asset-status" role="status">' + esc(status) + '</p>' +
-          bulkControls() +
-          (facetEmpty(items,facets) || grid(items,{selectable:!!onPick,removable:true,selected:onPick ? null : selected,empty:'Chưa có ảnh trong hạng mục này.'})) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
+          bulkControls(showPrices) +
+          (facetEmpty(items,facets) || grid(items,{selectable:!!onPick,removable:true,showPrices,selected:onPick ? null : selected,
+            empty:filterPrice ? 'Không có mẫu trong khoảng giá.' : 'Chưa có ảnh trong hạng mục này.'})) + onlineSlot : '<p class="asset-empty">Tạo hạng mục để bắt đầu.</p>') +
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       arrangeFilterSidebar(body,sidebarState);
       wireLibraryFilterSettings(body,category,config);
@@ -3373,7 +3415,19 @@ window.GDHomeAssets = (() => {
         return;
       }
       main.scrollTop = mainScroll;
-      wireLibraryActions(body,sidebarState,paint,{manual:!onPick});
+      wireLibraryActions(body,sidebarState,paint,{manual:!onPick,showPrices});
+      const showPricesToggle = body.querySelector('[data-show-prices]');
+      if (showPricesToggle) showPricesToggle.onchange = async () => {
+        const value = showPricesToggle.checked;
+        showPricesToggle.disabled = true;
+        if (!value) priceRange.min = priceRange.max = '';
+        try { await libraryCall('preferences',{showPrices:value},guest => { guest.showPrices = value; }); }
+        catch (error) { toast(error.message); await paint(); }
+      };
+      body.querySelectorAll('[data-price-range]').forEach(input => input.onchange = () => {
+        priceRange[input.dataset.priceRange] = input.value;
+        paint();
+      });
       const findDuplicates = body.querySelector('[data-find-duplicates]');
       if (findDuplicates) findDuplicates.onclick = openDuplicateLibrary;
       body.querySelectorAll('[data-bulk-select]').forEach(box => box.onclick = event => {
@@ -3407,6 +3461,21 @@ window.GDHomeAssets = (() => {
         const ids = [...selected];
         if (key === 'undo') return applyBulk({undo:undoToken});
         if (key === 'reviewed') return applyBulk({ids,removeTags:['chua-duyet']});
+        if (key === 'price') {
+          const editor = modal('asset-attribute-editor','Đặt giá cho ' + ids.length + ' mẫu');
+          editor.body.innerHTML = '<form class="asset-attribute-form">' + libraryPriceInputs() +
+            '<small>Để trống trường cần xoá.</small><button>Lưu giá</button><p role="status"></p></form>';
+          const form = editor.body.querySelector('form');
+          form.onsubmit = async event => {
+            event.preventDefault();
+            const button = form.querySelector('button');
+            button.disabled = true;
+            try { await bulk({ids,set:libraryPricePatch(form)}); editor.dialog.close(); }
+            catch (error) { form.querySelector('[role=status]').textContent = error.message; }
+            finally { button.disabled = false; }
+          };
+          return;
+        }
         if (key === 'delete') {
           if (confirm('Xoá các mẫu đã chọn?')) applyBulk({ids,delete:true});
           return;

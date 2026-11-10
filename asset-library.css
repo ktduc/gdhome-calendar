@@ -117,6 +117,10 @@
 .asset-library-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:8px}
 .asset-library-head strong{font-size:15px;margin-right:auto}
 .asset-library-head input{width:180px}
+.asset-library-head .asset-price-toggle{display:inline-flex;align-items:center;gap:4px}
+.asset-library-head .asset-price-toggle input{width:auto}
+.asset-price-range{display:flex;flex-wrap:wrap;gap:4px}
+.asset-library-head .asset-price-range input{width:7rem;min-width:0}
 .asset-category-toolbar{display:flex;align-items:center;gap:6px;width:100%;min-width:0}
 .asset-category-toolbar strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .asset-category-toolbar>button{flex:none}
@@ -281,6 +285,7 @@
 
 .asset-card figcaption{white-space:normal;overflow-wrap:anywhere}
 .asset-card-badge{position:absolute;top:4px;left:4px;max-width:calc(100% - 26px);background:#fff;border-radius:4px;padding:2px 4px;font-size:10px;overflow-wrap:anywhere}
+.asset-card-price{display:block;font-weight:600;color:var(--gd-ink,#172039);padding:2px 3px;overflow-wrap:anywhere}
 .asset-facets:empty{display:none}
 .asset-facet-choice:has(:checked){color:#174ea6;font-weight:600}
 .asset-thumb .asset-paint-swatch{display:block;width:100%;height:100%}

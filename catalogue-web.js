@@ -1,4 +1,5 @@
 const {downloadPublicResource,checkSsrfUrl} = require('./google-search');
+const {parsePrice} = require('./library-attributes');
 
 function robotsRules(text) {
   const groups = [];
@@ -118,6 +119,8 @@ function productLinks(html,url) {
     }
     const title = content.match(/<h[2-6]\b[^>]*>([\s\S]*?)<\/h[2-6]\s*>/i)?.[1];
     record.name ||= readable(title || (!img ? content : ''));
+    const price = readable(content).match(/([\d][\d.,\s]*)\s*(?:₫|VNĐ|VND)/i);
+    if (price) record.price ??= parsePrice(price[1]);
     products.set(href,record);
   }
   return products.values();
@@ -160,6 +163,7 @@ function extractProducts(html,url,validateUrl,maxItems) {
     seen.add(key);
     items.push({name:name.slice(0,160),code:code.slice(0,80),
       size:size.slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image,
+      ...(record.price === undefined ? {} : {price:record.price,priceUnit:decode(record.priceUnit).slice(0,30)}),
       ...(imageAlternates.length ? {imageAlternates} : {})});
   }
   const structured = [];
@@ -171,7 +175,12 @@ function extractProducts(html,url,validateUrl,maxItems) {
         if (!node || typeof node !== 'object') continue;
         if ([node['@type']].flat().some(type => typeof type === 'string' && /(?:^|\/)Product$/.test(type))) {
           const brand = first(node.brand);
+          const offer = first(node.offers);
+          const spec = first(offer?.priceSpecification);
+          const currency = offer?.priceCurrency || spec?.priceCurrency;
           structured.push({name:node.name,code:node.sku || node.mpn || node.productID,size:node.size,
+            price:!currency || String(currency).toUpperCase() === 'VND' ? parsePrice(offer?.price ?? spec?.price ?? offer?.lowPrice) : undefined,
+            priceUnit:spec?.unitText || offer?.unitText,
             brand:typeof brand === 'object' ? brand?.name : brand,images:productImages(node.image)});
         }
         for (const child of Object.values(node)) if (child && typeof child === 'object') queue.push(child);
@@ -181,7 +190,9 @@ function extractProducts(html,url,validateUrl,maxItems) {
   const singleProduct = /^(?:og:)?product$/i.test(meta['og:type'] || '') || /\/(?:san-pham|products?)\/[^/]+\/?$/i.test(new URL(url).pathname);
   const gallery = singleProduct || structured.length === 1 ? [meta['og:image'],...galleryImages(html)].filter(Boolean) : [];
   for (const record of structured) add({...record,images:[...record.images,...gallery]});
-  if (!items.length && singleProduct) add({name:title,code:meta['product:retailer_item_id'],images:gallery});
+  if (!items.length && singleProduct) add({name:title,code:meta['product:retailer_item_id'],images:gallery,
+    price:!meta['product:price:currency'] || meta['product:price:currency'].toUpperCase() === 'VND'
+      ? parsePrice(meta['product:price:amount']) : undefined});
   if (!items.length) for (const record of productLinks(html,url)) add(record);
   if (!items.length) {
     for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
