@@ -701,6 +701,7 @@ body.is-sidebar-collapsed .material-sidebar,
   display: none !important;
 }
 body.is-sidebar-collapsed .hub-app-layout .shell-sidebar,
+body.is-sidebar-collapsed .material-workspace > .shell-sidebar,
 .hub-app-layout .shell-sidebar.collapsed {
   display: none !important;
 }

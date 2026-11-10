@@ -2154,13 +2154,7 @@ function closeCalendarCategoryModal() {
 }
 
 function setupSidebarEvents() {
-  const toggleBtn = document.getElementById('btn-toggle-sidebar');
-  const sidebar = document.getElementById('app-sidebar');
-  if (toggleBtn && sidebar) {
-    toggleBtn.addEventListener('click', () => {
-      sidebar.classList.toggle('collapsed');
-    });
-  }
+  // Nút ẩn/hiện thanh bên do shell.js xử lý (nhớ trạng thái từng trang).
 
   // Chọn giao diện Palette màu ở Sidebar -> Tự nhảy màu theo thứ tự Palette
   const sidebarPaletteSelect = document.getElementById('sidebar-palette-select');

@@ -401,31 +401,24 @@ window.GDHomeShell = (() => {
       headerLeft.prepend(toggleBtn);
       icons();
     }
-
     const key = 'gdhome_sidebar_hidden:' + location.pathname;
-    let isHidden = false;
-    try {
-      isHidden = localStorage.getItem(key) === '1';
-    } catch {}
-
     function applyState(hidden) {
       document.body.classList.toggle('is-sidebar-collapsed', hidden);
-      const sidebars = document.querySelectorAll('.app-sidebar, .material-sidebar, .shell-sidebar');
-      sidebars.forEach(sb => sb.classList.toggle('collapsed', hidden));
+      document.querySelectorAll('.app-sidebar, .material-sidebar, .shell-sidebar').forEach(sb => sb.classList.toggle('collapsed', hidden));
       toggleBtn.setAttribute('aria-expanded', String(!hidden));
     }
-
-    applyState(isHidden);
-
-    toggleBtn.onclick = event => {
-      event.preventDefault();
-      const currentHidden = document.body.classList.contains('is-sidebar-collapsed');
-      const nextHidden = !currentHidden;
-      applyState(nextHidden);
-      try {
-        localStorage.setItem(key, nextHidden ? '1' : '0');
-      } catch {}
-    };
+    // Thanh bên được vẽ lại bởi từng trang: áp lại trạng thái đã nhớ, nhưng chỉ gắn sự kiện một lần.
+    if (!toggleBtn.dataset.shellBound) {
+      toggleBtn.dataset.shellBound = '1';
+      let hidden = false;
+      try { hidden = localStorage.getItem(key) === '1'; } catch {}
+      document.body.classList.toggle('is-sidebar-collapsed', hidden);
+      toggleBtn.addEventListener('click', event => {
+        event.preventDefault();
+        toggleSidebar();
+      });
+    }
+    applyState(document.body.classList.contains('is-sidebar-collapsed'));
   }
 
   function toggleSidebar(forcedState) {
@@ -444,11 +437,18 @@ window.GDHomeShell = (() => {
   }
 
   if (typeof window !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => { initHubJobTracker(); initSidebarToggle(); });
-    } else {
+    const start = () => {
       initHubJobTracker(); initSidebarToggle();
-    }
+      // Các trang vẽ thanh bên sau khi tải xong (Chốt mã, Tools...): theo dõi để gắn nút ngay khi có.
+      let queued = false;
+      new MutationObserver(() => {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(() => { queued = false; initSidebarToggle(); });
+      }).observe(document.body,{childList:true,subtree:true});
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',start);
+    else start();
   }
 
   return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders,initSidebarToggle,toggleSidebar };

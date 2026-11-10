@@ -787,3 +787,8 @@ Mã nhận dạng chịu lỗi hơn: cho phép dấu cách, chấm, gạch nối
 Mã chính là phần số (MS 701 SH → 701). Phần còn lại giữ ở tên, rawCode và fullCode. Phân loại có sẵn của nguồn (sourceFacets) vẫn được lấy như cũ. Node 52/67 giống trước khi sửa (15 ca lỗi sẵn do môi trường), riêng gd19-catalogue-web 7/7. Chưa chạy được Edge vì chưa có PDF mẫu; cần anh nhập thử PDF Phào chỉ trang 13–16.
 
 XONG GĐ22
+
+### 22.3 · Nút ☰ ẩn/hiện thanh bên
+Trang Tiến độ có hai bộ xử lý cùng bắt một nút nên bật tắt lệch nhau; đã bỏ bản trong app.js. Chốt mã và Tools vẽ thanh bên sau khi tải nên nút không xuất hiện; shell.js nay theo dõi trang và gắn nút ngay khi có thanh bên, nhớ trạng thái từng trang. Kiểm tra bằng Chromium: nút có mặt, bật tắt đúng, vẽ lại thanh bên vẫn hoạt động.
+
+XONG GĐ22.3
