@@ -1725,8 +1725,11 @@ cases['18.1'] = async page => {
 cases['17.1'] = async page => {
   await page.route('**/api/project-hub/project?id=p1',route => route.fulfill({json:{project:{hub:{documents:[
     {id:'quote',type:'quote',name:'Báo giá.pdf',assetKey:'quote.pdf',size:2048},
-    {id:'drawing',type:'drawing',name:'Bản vẽ.pdf',assetKey:'drawing.pdf',size:3072}
+    {id:'drawing',type:'drawing',name:'Bản vẽ.pdf',assetKey:'drawing.pdf',size:3072},
+    {id:'render',type:'render',name:'Phòng khách.jpg',sourcePdf:'Phối cảnh.pdf',pageNumber:1,assetKey:'render-'+'a'.repeat(64)+'.webp'}
   ]}}}}));
+  await page.route('**/api/materials/assets/'+'a'.repeat(64)+'.webp',route =>
+    route.fulfill({contentType:'image/png',body:webPhoto('render',96,96)}));
   await page.route('**/api/ai/materials',route => {
     const payload = route.request().postDataJSON();
     assert.deepEqual(payload.documentIds,['quote']);
@@ -1739,6 +1742,13 @@ cases['17.1'] = async page => {
   const form = page.locator('#material-ai-form');
   assert.ok(await form.locator('[value=quote]').isChecked());
   assert.ok(!(await form.locator('[value=drawing]').isChecked()));
+  const allRenders = form.getByLabel('Chọn tất cả ảnh 3D');
+  await form.getByRole('heading',{name:'Phối cảnh.pdf'}).waitFor();
+  await page.waitForFunction(() => document.querySelector('.material-ai-render-grid img')?.naturalWidth === 96);
+  await allRenders.check();
+  assert.ok(await form.getByLabel('Phòng khách.jpg').isChecked());
+  await allRenders.uncheck();
+  assert.ok(!(await form.getByLabel('Phòng khách.jpg').isChecked()));
   const send = form.getByRole('button',{name:'Gửi AI đề xuất'});
   await form.locator('[value=quote]').uncheck();
   assert.ok(await send.isDisabled());

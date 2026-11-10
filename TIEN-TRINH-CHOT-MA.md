@@ -798,3 +798,5 @@ XONG GĐ22.3
 | Bước | Thay đổi | Kiểm thử |
 | --- | --- | --- |
 | 23.1 | Giữ vị trí cuộn trang và vùng kết quả khi lọc trong bảng chọn vật liệu, sơn và gỗ. Focus trong bảng chọn dùng preventScroll. | Node 86/86. Edge 23.1, 21.4, 21.5 đạt. |
+| 23.7 (một phần) | Lưới ảnh 3D theo PDF nguồn, chọn tất cả ảnh 3D và thu gọn dòng tài liệu. Còn nút AI theo dòng, gán PA và chạy theo nhóm/bảng. | Node 86/86. Edge 17.1 và 23.1 đạt. |
+| 23.2–23.6 | Chưa triển khai. | Chưa kiểm thử. |

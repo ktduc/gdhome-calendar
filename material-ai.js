@@ -30,14 +30,30 @@ async function openMaterialsAi() {
   ]);
   const docs = (project?.project?.hub?.documents || []).filter(doc => doc.assetKey);
   const labels = {contract:'Hợp đồng',quote:'Báo giá',quantity:'Bảng khối lượng',boq:'Bảng khối lượng',drawing:'Bản vẽ',render:'Phối cảnh'};
-  const docList = project?.error ? '<p>' + html(project.error) + '</p>' : docs.length ? docs.map(doc => {
+  const renders = new Map();
+  const files = docs.filter(doc => {
+    if (doc.type !== 'render') return true;
+    const source = doc.sourcePdf || 'Ảnh phối cảnh';
+    if (!renders.has(source)) renders.set(source,[]);
+    renders.get(source).push(doc);
+    return false;
+  });
+  const docList = project?.error ? '<p>' + html(project.error) + '</p>' : docs.length ? files.map(doc => {
     const name = String(doc.name || '');
     const inferred = doc.type !== 'render' && /hợp đồng|hop[ _-]?dong/i.test(name) ? 'contract' :
       doc.type !== 'render' && /khối lượng|khoi[ _-]?luong|\bboq\b/i.test(name) ? 'boq' : doc.type;
-    return '<label><input type="checkbox" name="documentId" value="' + html(doc.id) + '"' +
+    return '<label class="material-ai-document"><input type="checkbox" name="documentId" value="' + html(doc.id) + '"' +
       (['contract','quote','quantity','boq'].includes(inferred) ? ' checked' : '') + '> ' + html(name) + ' · ' +
       html(labels[inferred] || 'Tài liệu') + ' · ' + Math.ceil((doc.size || 0)/1024) + ' KB</label>';
-  }).join('') : '<p>Dự án chưa có tài liệu – tải lên ở <a href="/du-an?id=' + encodeURIComponent(projectId) + '">Quản lý dự án</a></p>';
+  }).join('') + (renders.size ? '<label class="material-ai-document"><input type="checkbox" data-ai-select-renders> Chọn tất cả ảnh 3D</label>' +
+    [...renders].map(([source,images]) => '<section><h3>' + html(source) + '</h3><div class="material-ai-render-grid">' +
+      images.map(doc => {
+        const name = doc.name || 'Phối cảnh 3D';
+        const asset = String(doc.thumbAssetKey || doc.assetKey).replace(/^render-/,'');
+        return '<label title="' + html(name) + '"><input type="checkbox" name="documentId" data-ai-render value="' + html(doc.id) +
+          '" aria-label="' + html(name) + '"><img loading="lazy" data-lib-asset="' + html(asset) + '" alt=""><span>' +
+          html(doc.pageNumber ? 'Trang ' + doc.pageNumber : name) + '</span></label>';
+      }).join('') + '</div></section>').join('') : '') : '<p>Dự án chưa có tài liệu – tải lên ở <a href="/du-an?id=' + encodeURIComponent(projectId) + '">Quản lý dự án</a></p>';
   const element = dialog('<h2>AI đề xuất hạng mục chốt mã</h2><p>Chọn hợp đồng, báo giá hoặc bảng khối lượng để gửi tới AI của tài khoản.</p>' +
     '<p><button type="button" class="btn btn-outline btn-sm" data-open-connections="ai">⚙ Kết nối AI</button> ' +
     html(settings.ai.providerLabel || 'Chưa cấu hình') + '</p>' +
@@ -50,7 +66,19 @@ async function openMaterialsAi() {
   const notes = byId('material-ai-notes');
   const selectedDocs = () => [...form.querySelectorAll('input[name=documentId]:checked')].map(input => input.value);
   const sync = () => { form.querySelector('button[type=submit]').disabled = !(aiJob.files.length || notes.value.trim() || selectedDocs().length); };
-  form.onchange = sync;
+  const selectRenders = form.querySelector('[data-ai-select-renders]');
+  const renderInputs = [...form.querySelectorAll('[data-ai-render]')];
+  form.onchange = event => {
+    if (event.target === selectRenders) {
+      for (const input of renderInputs) input.checked = selectRenders.checked;
+    } else if (event.target.matches('[data-ai-render]')) {
+      const count = renderInputs.filter(input => input.checked).length;
+      selectRenders.checked = count === renderInputs.length;
+      selectRenders.indeterminate = count > 0 && count < renderInputs.length;
+    }
+    sync();
+  };
+  GDHomeAssets.hydrate(element);
   notes.oninput = sync;
   GDHomeAI.attachments({
     state:aiJob,input:byId('material-ai-files'),drop:element.querySelector('.material-ai-drop'),
