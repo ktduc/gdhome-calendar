@@ -2331,8 +2331,7 @@ window.GDHomeAssets = (() => {
         results.push({page,source:sources.get(page),code:'',name:'Trang scan ' + page,crop:{x:0,y:0,w:1,h:1},confidence:0,needsReview:true});
       }
       const manualWarning = manualPages.length ? 'Có ' + manualPages.length + ' trang scan cần cắt và nhập mã thủ công.' : '';
-      const warning = [aiWarning,manualWarning,...pageWarnings.slice(0,6),
-        pageWarnings.length > 6 && ('Còn ' + (pageWarnings.length-6) + ' trang cần kiểm tra.')].filter(Boolean).join(' · ');
+      const warning = [aiWarning,manualWarning,...pageWarnings].filter(Boolean).join(' · ');
       if (warning) onWarning?.(warning,!!manualPages.length || !!pageWarnings.length || !results.length);
       const retained = new Set(results.map(item => item.source));
       for (const source of sources.values()) if (!retained.has(source)) URL.revokeObjectURL(source);

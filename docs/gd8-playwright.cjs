@@ -3661,6 +3661,7 @@ cases['21.9'] = async page => {
   const scanned = pdf.addPage([700,450]);
   background(scanned);
   scanned.drawRectangle({x:55,y:350,width:230,height:28,color:rgb(.92,.92,.92)});
+  for (let i=4;i<40;i++) pdf.addPage([50,50]);
   const last = pdf.addPage([700,450]);
   background(last);
   last.drawRectangle({x:390,y:330,width:230,height:28,color:rgb(.92,.92,.92)});
@@ -3672,6 +3673,13 @@ cases['21.9'] = async page => {
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
   await modal.locator('[name=useAi]').check();
+  await modal.locator('[role=status]').evaluate(status => {
+    window.gd21ReadPages = [];
+    new MutationObserver(() => {
+      const progress = status.textContent.match(/Đang đọc trang (\d+)\/40/);
+      if (progress) window.gd21ReadPages.push(Number(progress[1]));
+    }).observe(status,{childList:true});
+  });
   await modal.locator('[name=pdf]').setInputFiles({name:'phao-lien-hang.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
   await modal.getByRole('button',{name:'Đọc PDF'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
@@ -3679,8 +3687,10 @@ cases['21.9'] = async page => {
   assert.deepEqual(await cards.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),
     ['KT900','KT901','','NT903']);
   assert.equal(await cards.filter({hasText:'T3 · 55%'}).locator('input[type=checkbox]').isChecked(),false);
-  assert.equal(await cards.filter({hasText:'T4 · 95%'}).count(),1);
+  assert.equal(await cards.filter({hasText:'T40 · 95%'}).count(),1);
+  assert.deepEqual(await page.evaluate(() => [...new Set(window.gd21ReadPages)]),Array.from({length:40},(_,i) => i+1));
   assert.match(await modal.locator('[data-source-warning]').textContent(),/Trang 2 không tách được mẫu/);
+  assert.match(await modal.locator('[data-source-warning]').textContent(),/Trang 39 không tách được mẫu/);
   const ratios = await cards.locator('canvas').evaluateAll(nodes => nodes.map(node => node.width/node.height));
   assert.ok(ratios.every(value => value > 3.6),JSON.stringify(ratios));
   assert.equal(ai,0);

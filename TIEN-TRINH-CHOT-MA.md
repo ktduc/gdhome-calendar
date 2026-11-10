@@ -754,3 +754,4 @@ Toàn bộ Playwright Edge sau bản bổ sung đạt 102/102 ca.
 ### 21.9 · Tách hàng Phào chỉ và đọc hết PDF
 
 Ảnh nhúng chứa nhiều hàng được tách theo dải mã. Mẫu scan có thanh nhận diện được hiện ở Cần nhập mã. Trang trống hoặc lỗi có thông báo riêng và bộ đọc tiếp tục sang trang sau. Node 83/83. Edge 8/8, gồm PDF 4 trang có ảnh nhúng nối hai thanh, một trang trống và một trang scan.
+Bổ sung sau khi đọc đặc tả phần 2. Edge xác nhận đọc đủ 40/40 trang, giữ nhật ký từng trang bỏ qua và vẫn nhận được mẫu ở trang 40.
