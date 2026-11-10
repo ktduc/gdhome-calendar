@@ -742,3 +742,9 @@ XONG GĐ20
 | 21 | 7 | 21.6, 21.4, 21.5, 21.3, 21.1, 21.2, 21.7 |
 
 XONG GĐ21
+
+### Bổ sung 21.8 · Cắt catalogue Phào chỉ
+
+Chọn bố cục Phào chỉ khi mở nhập catalogue từ hạng mục Phào chỉ. Ghép từng thanh dài với mã bên dưới, đọc sơ đồ kích thước cùng cột và giữ mã trên ảnh theo công tắc. Các mã chưa ghép được ảnh mở vùng cắt cục bộ để duyệt.
+
+Node 83/83. Edge đạt 21.8, 21.1, 19.9, 20.7, 20.8 và 20-pdf-fallback. PDF mô phỏng từ ảnh tham chiếu tách đủ 20 khung và đọc đúng 20 kích thước. Thư mục docs/gd21/local chưa có trên máy kiểm thử.

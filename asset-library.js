@@ -1787,13 +1787,14 @@ window.GDHomeAssets = (() => {
     const sorted = [...values].sort((a,b) => a-b);
     return sorted.length ? (sorted[(sorted.length-1)>>1]+sorted[sorted.length>>1])/2 : 0;
   };
-  function catalogueImageBounds(left,top,right,bottom,width,height) {
+  function catalogueImageBounds(left,top,right,bottom,width,height,phao = false) {
     const x = Math.max(0,left), y = Math.max(0,top);
     const w = Math.min(right,width)-x, h = Math.min(bottom,height)-y;
     const ratio = w/h, fraction = w*h/(width*height);
-    return w > 0 && h > 0 && ratio >= .3 && ratio <= 3 && fraction >= .005 && fraction < .85 ? {x,y,w,h} : null;
+    const inRange = phao ? ratio >= .15 && ratio <= 22 && fraction >= .00015 : ratio >= .3 && ratio <= 3 && fraction >= .005;
+    return w > 0 && h > 0 && inRange && fraction < .85 ? {x,y,w,h} : null;
   }
-  async function embeddedCatalogueImages(page,viewport,pdfjs) {
+  async function embeddedCatalogueImages(page,viewport,pdfjs,phao = false) {
     const {fnArray,argsArray} = await page.getOperatorList();
     const {OPS,Util} = pdfjs;
     const stack = [], images = [];
@@ -1801,7 +1802,7 @@ window.GDHomeAssets = (() => {
     function add(matrix) {
       const [a,b,c,d,x,y] = Util.transform(viewport.transform,matrix);
       const xs = [x,x+a,x+c,x+a+c], ys = [y,y+b,y+d,y+b+d];
-      const box = catalogueImageBounds(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys),viewport.width,viewport.height);
+      const box = catalogueImageBounds(Math.min(...xs),Math.min(...ys),Math.max(...xs),Math.max(...ys),viewport.width,viewport.height,phao);
       if (box) images.push(box);
     }
     for (const [i,op] of fnArray.entries()) {
@@ -1822,7 +1823,7 @@ window.GDHomeAssets = (() => {
     }
     return images;
   }
-  function rasterCatalogueImages(context,canvas) {
+  function rasterCatalogueImages(context,canvas,phao = false) {
     const {width,height} = canvas;
     const pixels = context.getImageData(0,0,width,height).data;
     const channels = [[],[],[]];
@@ -1835,9 +1836,12 @@ window.GDHomeAssets = (() => {
       sample(x,0); sample(x,height-1); sample(0,y); sample(width-1,y);
     }
     const [r,g,b] = channels.map(middleValue);
+    const lightOnDark = phao && (r+g+b)/3 < 150;
     const foreground = new Uint8Array(width*height);
     for (let i=0,p=0;i<foreground.length;i++,p+=4) {
-      if (pixels[p+3] > 0 && Math.max(Math.abs(pixels[p]-r),Math.abs(pixels[p+1]-g),Math.abs(pixels[p+2]-b)) > 30) foreground[i] = 1;
+      const different = lightOnDark ? Math.min(pixels[p],pixels[p+1],pixels[p+2]) > 120 :
+        Math.max(Math.abs(pixels[p]-r),Math.abs(pixels[p+1]-g),Math.abs(pixels[p+2]-b)) > 30;
+      if (pixels[p+3] > 0 && different) foreground[i] = 1;
     }
     const queue = new Int32Array(foreground.length), images = [];
     function push(pixel,index) {
@@ -1859,11 +1863,11 @@ window.GDHomeAssets = (() => {
         if (y > 0) end = push(p-width,end);
         if (y+1 < height) end = push(p+width,end);
       }
-      const box = catalogueImageBounds(left,top,right+1,bottom+1,width,height);
+      const box = catalogueImageBounds(left,top,right+1,bottom+1,width,height,phao);
       if (!box) continue;
       const density = end/(box.w*box.h), variance = squares/end-(sum/end)**2;
       // A vector swatch can be a single flat colour. Require an almost solid rectangle in that case.
-      if (density >= .85 && (variance >= 16 || density >= .97)) images.push(box);
+      if (phao ? density >= .35 : density >= .85 && (variance >= 16 || density >= .97)) images.push(box);
     }
     return images;
   }
@@ -1927,6 +1931,74 @@ window.GDHomeAssets = (() => {
       const inset = {x:image.x+1,y:image.y+1,w:image.w-2,h:image.h-2};
       const needsReview = inset.w*inset.h < image.w*image.h*.97 || labels.some(text => intersection(inset,text.box) > 0);
       return {...metadata,crop:relativeCrop(needsReview ? image : inset,canvas),confidence:needsReview ? .45 : .95,needsReview};
+    });
+  }
+
+  async function matchPhaoCrops(page,viewport,pdfjs,context,canvas,matches,labels,includeCode) {
+    const embedded = await embeddedCatalogueImages(page,viewport,pdfjs,true);
+    const components = rasterCatalogueImages(context,canvas,true);
+    const endX = box => box.x+box.w;
+    const endY = box => box.y+box.h;
+    const centerX = box => box.x+box.w/2;
+    const horizontal = box => box.w/box.h >= 2.7 && box.w >= canvas.width*.14;
+    const imageBoxes = embedded.filter(horizontal);
+    for (const box of components.filter(horizontal)) {
+      if (!imageBoxes.some(image => intersection(image,box) >= .6*Math.min(image.w*image.h,box.w*box.h))) imageBoxes.push(box);
+    }
+    const candidates = [];
+    for (const label of matches) for (const image of imageBoxes) {
+      const gap = label.box.y-endY(image), x = centerX(label.box);
+      if (x < image.x || x > endX(image) || gap < -label.height*.25 || gap > Math.max(2*label.height,image.h*.8)) continue;
+      candidates.push({label,image,score:Math.abs(gap)+Math.abs(x-centerX(image))*.25});
+    }
+    candidates.sort((a,b) => a.score-b.score);
+    const paired = new Map(), used = new Set();
+    for (const {label,image} of candidates) {
+      if (paired.has(label) || used.has(image)) continue;
+      paired.set(label,image);
+      used.add(image);
+    }
+    return matches.map(label => {
+      const codeBox = pdfLabelCrop(label,canvas);
+      const image = paired.get(label);
+      const record = {code:label.code,name:label.name,codeBox};
+      if (!image) {
+        const x = centerX(label.box);
+        const otherColumns = matches.filter(other => Math.abs(centerX(other.box)-x) > label.height*4);
+        const span = Math.min(canvas.width,...otherColumns.map(other => Math.abs(centerX(other.box)-x)));
+        const left = bounded(x-span*.45,0,canvas.width-1), right = bounded(x+span*.55,left+1,canvas.width);
+        const bottom = bounded(includeCode ? endY(label.box)+label.height*.2 : label.box.y,1,canvas.height);
+        const top = Math.max(0,bottom-label.height*6);
+        return {...record,crop:relativeCrop({x:left,y:top,w:right-left,h:Math.max(1,bottom-top)},canvas),
+          confidence:0,needsReview:true,unmatched:true};
+      }
+      const sameColumn = other => centerX(other.box) >= image.x && centerX(other.box) <= endX(image);
+      const previous = matches.filter(other => other !== label && sameColumn(other) && endY(other.box) < image.y)
+        .reduce((bottom,other) => Math.max(bottom,other.y+other.height*.08),0);
+      const previousImage = imageBoxes.filter(other => centerX(image) >= other.x && centerX(image) <= endX(other) && endY(other) <= image.y)
+        .reduce((bottom,other) => Math.max(bottom,endY(other)),0);
+      const profileTop = Math.max(previousImage,image.y-Math.max(label.height*2,image.h*.55));
+      const topLimit = Math.max(previous,profileTop);
+      const bottomLimit = includeCode ? Math.min(canvas.height,Math.max(endY(label.box),endY(image))+label.height*.4) :
+        Math.max(endY(image),label.box.y);
+      const nextColumn = imageBoxes.filter(other => other.x > endX(image) && other.y < bottomLimit && endY(other) > topLimit)
+        .reduce((left,other) => Math.min(left,other.x),canvas.width);
+      const rightLimit = Math.min(nextColumn,endX(image)+image.w*.35);
+      const inProfile = (box,top = topLimit) => box.x >= endX(image) && endX(box) <= rightLimit &&
+        box.y >= top && endY(box) <= bottomLimit;
+      const numbers = labels.filter(other => inProfile(other.box,profileTop) && /^\d{1,4}(?:\s*[x×*]\s*\d{1,4})?$/i.test(other.text))
+        .sort((a,b) => a.y-b.y || a.x-b.x);
+      const combined = numbers.find(other => /[x×*]/i.test(other.text));
+      const size = combined ? combined.text.replace(/\s/g,'').replace(/[×*X]/,'x') :
+        numbers.length >= 2 ? numbers.slice(0,2).map(other => other.text).join('x') : '';
+      const profile = [...components,...embedded].filter(box => inProfile(box) && box.h >= image.h*.25);
+      const boxes = [image,...profile,...numbers.map(other => other.box),...(includeCode ? [label.box] : [])];
+      const pad = Math.max(1,label.height*.14);
+      const x = Math.max(0,Math.min(...boxes.map(box => box.x))-pad);
+      const y = Math.max(topLimit,Math.min(...boxes.map(box => box.y))-pad);
+      const right = Math.min(rightLimit,Math.max(...boxes.map(endX))+pad);
+      const bottom = Math.min(bottomLimit,Math.max(...boxes.map(endY))+pad);
+      return {...record,size,crop:relativeCrop({x,y,w:right-x,h:bottom-y},canvas),confidence:.95};
     });
   }
 
@@ -2141,8 +2213,8 @@ window.GDHomeAssets = (() => {
         });
         const matches = layout === 'ancuong' ? [] : layout === 'kitchen' ? kitchenCatalogueRows(labels) : labels.flatMap(label => {
           if (layout === 'phao') {
-            const code = label.text.match(/\b[A-Z]{1,4}\d{3,8}[A-Z0-9]*\b/i)?.[0];
-            return code ? [{...label,code:code.toUpperCase(),name:code}] : [];
+            const code = label.text.match(/\b[A-Z]{1,4}\s*\d{3,8}[A-Z0-9]*\b/i)?.[0]?.replace(/\s/g,'').toUpperCase();
+            return code ? [{...label,code,name:code}] : [];
           }
           const match = regexes.map(regex => label.text.match(regex)).filter(Boolean)
             .sort((a,b) => a.index-b.index || b[0].length-a[0].length)[0];
@@ -2161,9 +2233,12 @@ window.GDHomeAssets = (() => {
         await page.render({canvasContext:context,viewport}).promise;
         signal?.throwIfAborted();
         const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels,includeCode) : [];
-        const detected = generic && matches.length ? await matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) : [];
+        const detected = !matches.length ? [] : layout === 'phao' ?
+          await matchPhaoCrops(page,viewport,pdfjs,context,canvas,matches,labels,includeCode) :
+          generic ? await matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) : [];
         if (results.length + matches.length + swatches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
-        const needsAi = generic ? !detected.some(item => !item.unmatched) : layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : !matches.length;
+        const needsAi = generic || layout === 'phao' ? !detected.some(item => !item.unmatched) :
+          layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : !matches.length;
         if (layout === 'ancuong' && labels.length && !swatches.length) {
           canvas.width = canvas.height = 0;
           page.cleanup();
@@ -2174,7 +2249,7 @@ window.GDHomeAssets = (() => {
         sources.set(number,source);
         pageAspects.set(number,canvas.width/canvas.height);
         if (!labels.length) scannedPages.add(number);
-        if (matches.length || swatches.length) localPages.add(number);
+        if (layout === 'phao' ? !needsAi : matches.length || swatches.length) localPages.add(number);
         if (needsAi && useAi()) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
         for (const swatch of [...swatches,...detected]) results.push({...swatch,page:number,source});
@@ -2193,25 +2268,6 @@ window.GDHomeAssets = (() => {
           page.cleanup();
           if (batch.length === 4 || number === pdf.numPages) await flush();
           continue;
-        }
-        for (const label of layout === 'phao' ? matches : []) {
-          const codeBox = pdfLabelCrop(label,canvas);
-          const distances = matches.filter(o => Math.abs(o.y-label.y) < label.height && Math.abs(o.x-label.x) > label.height*2)
-            .map(o => Math.abs(o.x-label.x));
-          const dx = distances.length ? Math.min(...distances) :
-            canvas.width/Math.max(1,new Set(matches.map(m => Math.round(m.x/label.height))).size);
-          const left = Math.max(0,label.x-dx*.45);
-          const right = Math.min(canvas.width,left+dx);
-          const top = matches.filter(other => other.y < label.y && Math.abs(other.x-label.x) < dx*.5)
-            .reduce((value,other) => Math.max(value,other.y+other.height),0);
-          const bottom = Math.min(canvas.height,label.y+label.height);
-          const numbers = labels.filter(other => other.y >= top && other.y <= label.y && other.x >= left && other.x <= right);
-          const combined = numbers.map(other => other.text).find(text => /\b\d{2,4}\s*[×x*]\s*\d{2,4}\b/i.test(text));
-          const split = numbers.filter(other => /^\d{2,4}$/.test(other.text)).sort((a,b) => a.y-b.y).map(other => other.text);
-          const size = combined?.match(/\d{2,4}\s*[×x*]\s*\d{2,4}/i)?.[0].replace(/\s+/g,'').replace(/[×*]/,'x') ||
-            (split.length >= 2 ? split.slice(0,2).join('x') : '');
-          results.push({code:label.code,name:label.name,size,page:number,source,confidence:.85,codeBox,
-            crop:guideCrop({x:left/canvas.width,y:top/canvas.height,w:(right-left)/canvas.width,h:(bottom-top)/canvas.height},number,codeBox)});
         }
         canvas.width = canvas.height = 0;
         page.cleanup();
@@ -2528,13 +2584,19 @@ window.GDHomeAssets = (() => {
       '<div class="catalogue-review"><div class="wood-catalogue-results"></div><aside data-catalogue-details hidden aria-label="Chi tiết thẻ"></aside></div>';
     const form = body.querySelector('form');
     if (preset.tags) form.elements.tags.value = preset.tags.join(', ');
-    if (categoryId === 'kitchen-accessories') form.elements.layout.value = 'kitchen';
+    const defaultLayout = id => id === 'kitchen-accessories' ? 'kitchen' :
+      /\bphao chi\b/.test(fold(library.categories.find(category => category.id === id)?.name)) ? 'phao' : 'generic';
+    let previousCategory = form.elements.category.value;
+    form.elements.layout.value = defaultLayout(previousCategory);
     const suggest = () => attributeSuggestions(form,library,form.elements.category.value,{
       brand:[form.elements.brand],collection:[form.elements.collection],finish:[form.elements.finish],
       suppliers:[form.elements.suppliers],tags:[form.elements.tags]});
     suggest();
     form.elements.category.onchange = () => {
-      form.elements.display.value = categoryDisplay(library.categories.find(c => c.id === form.elements.category.value));
+      const nextCategory = form.elements.category.value;
+      if (form.elements.layout.value === defaultLayout(previousCategory)) form.elements.layout.value = defaultLayout(nextCategory);
+      previousCategory = nextCategory;
+      form.elements.display.value = categoryDisplay(library.categories.find(c => c.id === nextCategory));
       suggest();
       refreshSelection();
     };

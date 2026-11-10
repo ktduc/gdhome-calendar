@@ -3555,6 +3555,88 @@ cases['19.9'] = async page => {
   assert.equal((await page.request.get('/api/library').then(r => r.json())).items.find(entry => entry.id === item.id).full,item.full);
 };
 
+cases['21.8'] = async page => {
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  const {PDFDocument,StandardFonts,rgb} = require('pdf-lib');
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  const w = 736, h = 1045, white = rgb(.95,.95,.95);
+  const sheet = pdf.addPage([w,h]);
+  const rect = (x,y,width,height,color) => sheet.drawRectangle({x,y:h-y-height,width,height,color});
+  const text = (value,x,y,size = 14) => sheet.drawText(value,{x,y:h-y,size,color:white,font});
+  rect(0,0,w,h,rgb(.06,.31,.55));
+  rect(260,0,165,h,rgb(.10,.37,.61));
+  text('Catalogue',470,38);
+  const expected = new Map();
+  for (let col=0;col<2;col++) for (let row=0;row<10;row++) {
+    const x = 52+col*328, y = 81+row*(col ? 90 : 91)+(row%3)*3+col*7-(col && row === 9 ? 12 : 0);
+    const width = 248, height = 33+(row%4)*3;
+    const code = (col ? 'NC' : 'KT') + (320+row*10) + (row%2 ? 'A' : '');
+    const depth = String(12+row), breadth = String(30+row+col*30);
+    rect(x,y,width,height,white);
+    rect(x+8,y+height*.66,width-18,height*.23,rgb(.75,.76,.77));
+    const profile = x+width+32;
+    rect(profile,y,12,height,white);
+    rect(profile+12,y+4,8,height*.42,white);
+    text(depth,profile-1,y-8,12);
+    text(breadth,profile-20,y+height*.66,12);
+    text(code,x+(width-font.widthOfTextAtSize(code,14))/2,y+height+19);
+    expected.set(code,{x,y,width,height,profileEnd:profile+20,codeBottom:y+height+19,
+      dimensionsTop:y-8-12,size:depth+'x'+breadth});
+  }
+  pdf.addPage([w,h]).drawText('ISO QUALITY CERTIFICATE',{x:90,y:750,size:25});
+  await openMaterials(page);
+  let aiRequests = 0;
+  await page.route('**/api/ai/jobs/start',route => { aiRequests++; return route.abort(); });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-4'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=layout]').waitFor();
+  assert.equal(await modal.locator('[name=layout]').inputValue(),'phao');
+  assert.equal(await modal.locator('[name=includeCode]').isChecked(),true);
+  const run = async filename => {
+    await modal.locator('[name=pdf]').setInputFiles({name:filename,mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+    await modal.getByRole('button',{name:'Đọc PDF'}).click();
+    await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
+    const cards = modal.locator('.wood-catalogue-card');
+    const codes = await cards.locator('[data-wood-code-input]').evaluateAll(inputs => inputs.map(input => input.value));
+    assert.deepEqual([...codes].sort(),[...expected.keys()].sort());
+    assert.equal(await modal.locator('.wood-catalogue-card.needs-review').count(),0);
+    const ratios = await cards.locator('canvas').evaluateAll(images => images.map(img => img.width/img.height));
+    assert.ok(ratios.every(ratio => ratio > 3 && ratio < 8),JSON.stringify(ratios));
+    return cards;
+  };
+  await modal.locator('[name=useAi]').check();
+  const cards = await run('phao-hai-cot.pdf');
+  async function checkCrop(code,includeCode) {
+    const box = expected.get(code);
+    await cards.getByRole('button',{name:'Chi tiết '+code,exact:true}).click();
+    assert.equal(await modal.locator('[data-catalogue-field=size]').inputValue(),box.size);
+    await modal.locator('[data-edit-wood-crop]').click();
+    const crop = page.locator('.wood-crop-dialog');
+    const bounds = await crop.locator('.wood-crop-stage').evaluate((stage,{w,h}) => {
+      const src = stage.querySelector('img').getBoundingClientRect(), frame = stage.querySelector('.wood-crop-frame').getBoundingClientRect();
+      return {left:(frame.left-src.left)/src.width*w,right:(frame.right-src.left)/src.width*w,
+        top:(frame.top-src.top)/src.height*h,bottom:(frame.bottom-src.top)/src.height*h};
+    },{w,h});
+    assert.ok(bounds.left <= box.x+1 && bounds.left >= box.x-5 && bounds.right >= box.profileEnd-1 &&
+      bounds.right <= box.profileEnd+7,JSON.stringify({code,bounds,box}));
+    assert.ok(bounds.top <= box.dimensionsTop+2 && bounds.top >= box.dimensionsTop-8,JSON.stringify({code,bounds,box}));
+    assert.ok(includeCode ? bounds.bottom >= box.codeBottom && bounds.bottom <= box.codeBottom+10 :
+      bounds.bottom >= box.y+box.height-1 && bounds.bottom < box.codeBottom-7,JSON.stringify({code,bounds,box}));
+    await page.keyboard.press('Escape');
+  }
+  for (const code of ['KT320','KT370A','KT410A','NC320','NC410A']) await checkCrop(code,true);
+  pdf.setTitle('Phào bỏ dòng mã');
+  await modal.getByRole('button',{name:'Bỏ nguồn phao-hai-cot.pdf'}).click();
+  await modal.locator('[name=includeCode]').uncheck();
+  await run('phao-khong-dong-ma.pdf');
+  await checkCrop('KT320',false);
+  assert.equal(aiRequests,0);
+};
+
 cases['20.7'] = async page => {
   await openMaterials(page);
   const result = await page.evaluate(async () => {
