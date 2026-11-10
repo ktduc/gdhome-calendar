@@ -750,3 +750,7 @@ Chọn bố cục Phào chỉ khi mở nhập catalogue từ hạng mục Phào 
 Node 83/83. Edge đạt 21.8, 21.1, 19.9, 20.7, 20.8 và 20-pdf-fallback. PDF mô phỏng từ ảnh tham chiếu tách đủ 20 khung và đọc đúng 20 kích thước. Thư mục docs/gd21/local chưa có trên máy kiểm thử.
 
 Toàn bộ Playwright Edge sau bản bổ sung đạt 102/102 ca.
+
+### 21.9 · Tách hàng Phào chỉ và đọc hết PDF
+
+Ảnh nhúng chứa nhiều hàng được tách theo dải mã. Mẫu scan có thanh nhận diện được hiện ở Cần nhập mã. Trang trống hoặc lỗi có thông báo riêng và bộ đọc tiếp tục sang trang sau. Node 83/83. Edge 8/8, gồm PDF 4 trang có ảnh nhúng nối hai thanh, một trang trống và một trang scan.

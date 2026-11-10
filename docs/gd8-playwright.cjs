@@ -3637,6 +3637,55 @@ cases['21.8'] = async page => {
   assert.equal(aiRequests,0);
 };
 
+cases['21.9'] = async page => {
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  const {PDFDocument,StandardFonts,rgb} = require('pdf-lib');
+  const {PNG} = require('pngjs');
+  const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+  const raster = new PNG({width:240,height:109});
+  raster.data.fill(Buffer.from([19,77,125,255]));
+  for (const [x,y,w,h] of [[0,0,223,20],[0,69,223,20],[221,0,2,89]]) {
+    for (let row=y;row<y+h;row++) raster.data.fill(230,(row*240+x)*4,(row*240+x+w)*4);
+  }
+  const image = await pdf.embedPng(PNG.sync.write(raster));
+  const background = sheet => sheet.drawRectangle({x:0,y:0,width:700,height:450,color:rgb(.08,.29,.5)});
+  const first = pdf.addPage([700,450]);
+  background(first);
+  first.drawImage(image,{x:55,y:285,width:240,height:109});
+  for (const [code,y] of [['KT900',356],['KT901',287]]) {
+    first.drawText(code,{x:150,y,size:14,color:rgb(1,1,1),font});
+  }
+  pdf.addPage([700,450]);
+  const scanned = pdf.addPage([700,450]);
+  background(scanned);
+  scanned.drawRectangle({x:55,y:350,width:230,height:28,color:rgb(.92,.92,.92)});
+  const last = pdf.addPage([700,450]);
+  background(last);
+  last.drawRectangle({x:390,y:330,width:230,height:28,color:rgb(.92,.92,.92)});
+  last.drawText('NT903',{x:475,y:310,size:14,color:rgb(1,1,1),font});
+  await openMaterials(page);
+  let ai = 0;
+  await page.route('**/api/ai/jobs/start',route => { ai++; return route.abort(); });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-4'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=useAi]').check();
+  await modal.locator('[name=pdf]').setInputFiles({name:'phao-lien-hang.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
+  const cards = modal.locator('.wood-catalogue-card');
+  assert.deepEqual(await cards.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),
+    ['KT900','KT901','','NT903']);
+  assert.equal(await cards.filter({hasText:'T3 · 55%'}).locator('input[type=checkbox]').isChecked(),false);
+  assert.equal(await cards.filter({hasText:'T4 · 95%'}).count(),1);
+  assert.match(await modal.locator('[data-source-warning]').textContent(),/Trang 2 không tách được mẫu/);
+  const ratios = await cards.locator('canvas').evaluateAll(nodes => nodes.map(node => node.width/node.height));
+  assert.ok(ratios.every(value => value > 3.6),JSON.stringify(ratios));
+  assert.equal(ai,0);
+};
+
 cases['20.7'] = async page => {
   await openMaterials(page);
   const result = await page.evaluate(async () => {

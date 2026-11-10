@@ -1839,7 +1839,8 @@ window.GDHomeAssets = (() => {
     const lightOnDark = phao && (r+g+b)/3 < 150;
     const foreground = new Uint8Array(width*height);
     for (let i=0,p=0;i<foreground.length;i++,p+=4) {
-      const different = lightOnDark ? Math.min(pixels[p],pixels[p+1],pixels[p+2]) > 120 :
+      const different = lightOnDark ? Math.min(pixels[p],pixels[p+1],pixels[p+2]) > 120 &&
+        Math.max(pixels[p],pixels[p+1],pixels[p+2])-Math.min(pixels[p],pixels[p+1],pixels[p+2]) < 80 :
         Math.max(Math.abs(pixels[p]-r),Math.abs(pixels[p+1]-g),Math.abs(pixels[p+2]-b)) > 30;
       if (pixels[p+3] > 0 && different) foreground[i] = 1;
     }
@@ -1941,14 +1942,59 @@ window.GDHomeAssets = (() => {
     const endY = box => box.y+box.h;
     const centerX = box => box.x+box.w/2;
     const horizontal = box => box.w/box.h >= 2.7 && box.w >= canvas.width*.14;
-    const imageBoxes = embedded.filter(horizontal);
-    for (const box of components.filter(horizontal)) {
-      if (!imageBoxes.some(image => intersection(image,box) >= .6*Math.min(image.w*image.h,box.w*box.h))) imageBoxes.push(box);
+    const bars = components.filter(horizontal);
+    const imageBoxes = [...bars,...embedded.filter(image => horizontal(image) && !bars.some(box => intersection(image,box) >= box.w*box.h*.5))];
+    const byColumn = [...matches].sort((a,b) => centerX(a.box)-centerX(b.box));
+    const columns = [];
+    for (const label of byColumn) {
+      const column = columns.at(-1);
+      if (column && centerX(label.box)-centerX(column[0].box) < canvas.width*.11) column.push(label);
+      else columns.push([label]);
+    }
+    const rowFor = new Map();
+    for (const column of columns) {
+      column.sort((a,b) => a.y-b.y);
+      for (const [index,label] of column.entries()) {
+        const previous = column[index-1];
+        const top = previous ? previous.y+previous.height*.08 : 0;
+        rowFor.set(label,{top,bottom:Math.min(canvas.height,endY(label.box)+label.height*.35)});
+      }
+    }
+    let pixels;
+    function rowBar(label) {
+      if (!pixels) return;
+      const row = rowFor.get(label), cx = Math.round(centerX(label.box));
+      const left = Math.max(0,cx-Math.round(canvas.width*.23)), right = Math.min(canvas.width,cx+Math.round(canvas.width*.23));
+      const top = Math.max(Math.ceil(row.top),Math.floor(label.box.y-canvas.height*.12));
+      const bottom = Math.min(canvas.height,Math.ceil(label.box.y+label.height*.25));
+      const minRun = canvas.width*.13;
+      const runs = [];
+      for (let y=top;y<bottom;y++) {
+        let start = left, last = left-10;
+        for (let x=left;x<right;x++) {
+          const p = (y*canvas.width+x)*4;
+          const low = Math.min(pixels[p],pixels[p+1],pixels[p+2]);
+          if (low < 125 || Math.max(pixels[p],pixels[p+1],pixels[p+2])-low > 80) continue;
+          if (x-last > 3) start = x;
+          last = x;
+          if (last-start >= minRun && start <= cx && last >= cx) {
+            const run = runs.at(-1);
+            if (run && y <= run.last+2) {
+              run.last = y;
+              run.left = Math.min(run.left,start);
+              run.right = Math.max(run.right,last+1);
+            } else runs.push({first:y,last:y,left:start,right:last+1});
+          }
+        }
+      }
+      const run = runs.filter(run => run.last-run.first >= label.height*.3).at(-1);
+      if (run) return {x:run.left,y:run.first,w:run.right-run.left,h:run.last-run.first+1};
     }
     const candidates = [];
     for (const label of matches) for (const image of imageBoxes) {
       const gap = label.box.y-endY(image), x = centerX(label.box);
-      if (x < image.x || x > endX(image) || gap < -label.height*.25 || gap > Math.max(2*label.height,image.h*.8)) continue;
+      if (image.y < rowFor.get(label).top-1 || x < image.x || x > endX(image) || gap < -label.height*.35 ||
+          gap > Math.max(2.5*label.height,image.h*1.5)) continue;
       candidates.push({label,image,score:Math.abs(gap)+Math.abs(x-centerX(image))*.25});
     }
     candidates.sort((a,b) => a.score-b.score);
@@ -1958,28 +2004,19 @@ window.GDHomeAssets = (() => {
       paired.set(label,image);
       used.add(image);
     }
-    return matches.map(label => {
+    if (paired.size < matches.length) pixels = context.getImageData(0,0,canvas.width,canvas.height).data;
+    const ordered = columns.flat();
+    const records = ordered.flatMap(label => {
       const codeBox = pdfLabelCrop(label,canvas);
-      const image = paired.get(label);
+      const image = paired.get(label) || rowBar(label);
       const record = {code:label.code,name:label.name,codeBox};
-      if (!image) {
-        const x = centerX(label.box);
-        const otherColumns = matches.filter(other => Math.abs(centerX(other.box)-x) > label.height*4);
-        const span = Math.min(canvas.width,...otherColumns.map(other => Math.abs(centerX(other.box)-x)));
-        const left = bounded(x-span*.45,0,canvas.width-1), right = bounded(x+span*.55,left+1,canvas.width);
-        const bottom = bounded(includeCode ? endY(label.box)+label.height*.2 : label.box.y,1,canvas.height);
-        const top = Math.max(0,bottom-label.height*6);
-        return {...record,crop:relativeCrop({x:left,y:top,w:right-left,h:Math.max(1,bottom-top)},canvas),
-          confidence:0,needsReview:true,unmatched:true};
-      }
-      const sameColumn = other => centerX(other.box) >= image.x && centerX(other.box) <= endX(image);
-      const previous = matches.filter(other => other !== label && sameColumn(other) && endY(other.box) < image.y)
-        .reduce((bottom,other) => Math.max(bottom,other.y+other.height*.08),0);
-      const previousImage = imageBoxes.filter(other => centerX(image) >= other.x && centerX(image) <= endX(other) && endY(other) <= image.y)
+      if (!image) return [];
+      const row = rowFor.get(label);
+      const previousImage = bars.filter(other => centerX(image) >= other.x && centerX(image) <= endX(other) && endY(other) <= image.y)
         .reduce((bottom,other) => Math.max(bottom,endY(other)),0);
       const profileTop = Math.max(previousImage,image.y-Math.max(label.height*2,image.h*.55));
-      const topLimit = Math.max(previous,profileTop);
-      const bottomLimit = includeCode ? Math.min(canvas.height,Math.max(endY(label.box),endY(image))+label.height*.4) :
+      const topLimit = Math.min(image.y,Math.max(row.top,profileTop));
+      const bottomLimit = includeCode ? Math.max(endY(image),row.bottom) :
         Math.max(endY(image),label.box.y);
       const nextColumn = imageBoxes.filter(other => other.x > endX(image) && other.y < bottomLimit && endY(other) > topLimit)
         .reduce((left,other) => Math.min(left,other.x),canvas.width);
@@ -1991,15 +2028,18 @@ window.GDHomeAssets = (() => {
       const combined = numbers.find(other => /[x×*]/i.test(other.text));
       const size = combined ? combined.text.replace(/\s/g,'').replace(/[×*X]/,'x') :
         numbers.length >= 2 ? numbers.slice(0,2).map(other => other.text).join('x') : '';
-      const profile = [...components,...embedded].filter(box => inProfile(box) && box.h >= image.h*.25);
+      const profile = [...components,...embedded].filter(box => inProfile(box) && box.h >= image.h*.25 && box.w <= box.h*1.4);
       const boxes = [image,...profile,...numbers.map(other => other.box),...(includeCode ? [label.box] : [])];
       const pad = Math.max(1,label.height*.14);
       const x = Math.max(0,Math.min(...boxes.map(box => box.x))-pad);
       const y = Math.max(topLimit,Math.min(...boxes.map(box => box.y))-pad);
       const right = Math.min(rightLimit,Math.max(...boxes.map(endX))+pad);
       const bottom = Math.min(bottomLimit,Math.max(...boxes.map(endY))+pad);
-      return {...record,size,crop:relativeCrop({x,y,w:right-x,h:bottom-y},canvas),confidence:.95};
+      return [{...record,size,crop:relativeCrop({x,y,w:right-x,h:bottom-y},canvas),confidence:.95}];
     });
+    if (matches.length) return records;
+    return bars.sort((a,b) => a.y-b.y || a.x-b.x).map(image =>
+      ({code:'',name:'Cần nhập mã',crop:relativeCrop(image,canvas),confidence:.55,needsReview:true}));
   }
 
   function wireCatalogueGuide(form,status) {
@@ -2133,7 +2173,7 @@ window.GDHomeAssets = (() => {
     const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
     const results = [];
     const sources = new Map(), pageAspects = new Map(), batch = [];
-    const localPages = new Set(), scannedPages = new Set();
+    const localPages = new Set(), scannedPages = new Set(), pageWarnings = [];
     const generic = !['ancuong','phao','kitchen'].includes(layout);
     const keepCode = !generic && includeCode;
     const guided = !!(guide?.prompt || guide?.examples?.length);
@@ -2196,11 +2236,10 @@ window.GDHomeAssets = (() => {
         aiWarning = 'Đã tiếp tục đọc PDF cục bộ. ' + error.message;
       }
     }
-    try {
-      for (let number = 1; number <= pdf.numPages; number++) {
-        signal?.throwIfAborted();
-        onPage(number,pdf.numPages);
-        const page = await pdf.getPage(number);
+    async function scanPage(number) {
+      const page = await pdf.getPage(number);
+      let canvas;
+      try {
         const base = page.getViewport({scale:1});
         const side = Math.max(base.width,base.height);
         const scale = Math.min(3200/side,Math.max(2,Math.min(3,1600/side)));
@@ -2225,31 +2264,35 @@ window.GDHomeAssets = (() => {
               !regexes.some(regex => regex.test(other.text)))?.text || '';
           return [{...label,code:match[0].trim().toUpperCase(),name}];
         });
-        if (layout !== 'ancuong' && labels.length && !matches.length) { page.cleanup(); continue; }
-        const canvas = document.createElement('canvas');
+        if (!['ancuong','phao'].includes(layout) && labels.length && !matches.length) return;
+        canvas = document.createElement('canvas');
         canvas.width = Math.ceil(viewport.width);
         canvas.height = Math.ceil(viewport.height);
         const context = canvas.getContext('2d');
         await page.render({canvasContext:context,viewport}).promise;
         signal?.throwIfAborted();
         const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels,includeCode) : [];
-        const detected = !matches.length ? [] : layout === 'phao' ?
+        const detected = layout === 'phao' ?
           await matchPhaoCrops(page,viewport,pdfjs,context,canvas,matches,labels,includeCode) :
-          generic ? await matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) : [];
-        if (results.length + matches.length + swatches.length > 5000) throw new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.');
-        const needsAi = generic || layout === 'phao' ? !detected.some(item => !item.unmatched) :
-          layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : !matches.length;
-        if (layout === 'ancuong' && labels.length && !swatches.length) {
-          canvas.width = canvas.height = 0;
-          page.cleanup();
-          continue;
+          generic && matches.length ? await matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) : [];
+        if (layout === 'phao') {
+          if (!detected.length) {
+            pageWarnings.push('Trang ' + number + ' không tách được mẫu.');
+            return;
+          }
+          if (matches.length > detected.length) pageWarnings.push('Trang ' + number + ' còn ' + (matches.length-detected.length) + ' mã chưa ghép được ảnh.');
         }
+        const count = layout === 'kitchen' ? matches.length : detected.length+swatches.length;
+        if (results.length + count > 5000) throw Object.assign(new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.'),{code:'catalogue_limit'});
+        const needsAi = generic ? !detected.some(item => !item.unmatched) :
+          layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : layout !== 'phao' && !matches.length;
+        if (layout === 'ancuong' && labels.length && !swatches.length) return;
         // Save page as a compressed image and keep only the swatch canvases live.
         const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
         sources.set(number,source);
         pageAspects.set(number,canvas.width/canvas.height);
-        if (!labels.length) scannedPages.add(number);
-        if (layout === 'phao' ? !needsAi : matches.length || swatches.length) localPages.add(number);
+        if (layout !== 'phao' && !labels.length) scannedPages.add(number);
+        if (matches.length || swatches.length) localPages.add(number);
         if (needsAi && useAi()) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
         for (const swatch of [...swatches,...detected]) results.push({...swatch,page:number,source});
@@ -2264,14 +2307,22 @@ window.GDHomeAssets = (() => {
             const framed = guideCrop(crop,number,table);
             for (const {y,height,...row} of matches) results.push({...row,page:number,source,crop:framed,confidence:.9});
           }
-          canvas.width = canvas.height = 0;
-          page.cleanup();
-          if (batch.length === 4 || number === pdf.numPages) await flush();
-          continue;
         }
-        canvas.width = canvas.height = 0;
+      } finally {
+        if (canvas) canvas.width = canvas.height = 0;
         page.cleanup();
-        if (batch.length === 4 || number === pdf.numPages) await flush();
+      }
+    }
+    try {
+      for (let number = 1; number <= pdf.numPages; number++) {
+        signal?.throwIfAborted();
+        onPage(number,pdf.numPages,results.length);
+        try { await scanPage(number); }
+        catch (error) {
+          if (signal?.aborted || error.code === 'catalogue_limit') throw error;
+          pageWarnings.push('Trang ' + number + ' không đọc được. ' + error.message);
+        }
+        if (batch.length === 4) await flush();
       }
       await flush();
       const recognizedPages = new Set(results.map(item => item.page));
@@ -2280,8 +2331,9 @@ window.GDHomeAssets = (() => {
         results.push({page,source:sources.get(page),code:'',name:'Trang scan ' + page,crop:{x:0,y:0,w:1,h:1},confidence:0,needsReview:true});
       }
       const manualWarning = manualPages.length ? 'Có ' + manualPages.length + ' trang scan cần cắt và nhập mã thủ công.' : '';
-      const warning = [aiWarning,manualWarning].filter(Boolean).join(' · ');
-      if (warning) onWarning?.(warning,!!manualPages.length || !results.length);
+      const warning = [aiWarning,manualWarning,...pageWarnings.slice(0,6),
+        pageWarnings.length > 6 && ('Còn ' + (pageWarnings.length-6) + ' trang cần kiểm tra.')].filter(Boolean).join(' · ');
+      if (warning) onWarning?.(warning,!!manualPages.length || !!pageWarnings.length || !results.length);
       const retained = new Set(results.map(item => item.source));
       for (const source of sources.values()) if (!retained.has(source)) URL.revokeObjectURL(source);
     } catch (error) {
@@ -2871,7 +2923,7 @@ window.GDHomeAssets = (() => {
                   hashes:webHashes.get(entry.categoryId),onSource:source => sources.add(source)});
               }
               else if (entry.type === 'pdf') imported = await scanWoodCatalogue(entry.file,form.elements.patterns.value,
-                (page,total) => onProgress('Đang đọc trang ' + page + '/' + total + '…'),
+                (page,total,count) => onProgress('Đang đọc trang ' + page + '/' + total + ' · ' + count + ' mẫu đã tách'),
                 {ai,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked,
                   onPause:job => waitForAiResume(entry,job,signal),
                   onAiProgress:job => { if (job.status === 'running' && job.step) onProgress(job.step); }});
