@@ -102,6 +102,23 @@ test('Hạng mục hệ thống nhận mẫu gộp, lưu tên mới và có th�
   assert.ok(ids.every(id => reloaded.items.some(item => item.id === id && item.categoryId === 'cat-5')));
 });
 
+test('Nhóm thuộc tính tuỳ chỉnh và cấu hình cột lọc giữ riêng theo hạng mục và tài khoản', async () => {
+  const {call} = harness();
+  const key = 'custom-gdhome21';
+  assert.equal((await call('/api/library/attribute-groups',{key,name:'Chống trượt'})).status,200);
+  const item = (await call('/api/library/items',{categoryId:'cat-6',items:[{full:a,thumb:b,customAttributes:{[key]:'R10'}}]})).data.added[0];
+  assert.equal((await call('/api/library/filters',{categoryId:'cat-6',groups:[{key,label:'Độ bám',visible:true},{key:'tags',visible:false}]})).status,200);
+  await call('/api/library/filters',{categoryId:'cat-6',collapsedKey:key,collapsed:true});
+  assert.equal((await call('/api/library/attributes',{key,action:'save',previous:'R10',name:'R11'})).status,200);
+  const {data} = await call('/api/library');
+  assert.deepEqual(data.filterPreferences['cat-6'][0],{key,label:'Độ bám',visible:true,collapsed:true});
+  assert.equal(data.filterPreferences['cat-5'],undefined);
+  assert.equal(data.items.find(entry => entry.id === item.id).customAttributes[key],'R11');
+  assert.deepEqual((await call('/api/library',null,'v@example.com')).data.attributeGroups,[]);
+  await call('/api/library/filters',{categoryId:'cat-6',groups:null});
+  assert.deepEqual((await call('/api/library')).data.filterPreferences,{});
+});
+
 test('Cùng mã và hãng vẫn có thể lưu riêng ở hạng mục đích đã chọn', async () => {
   const {call} = harness();
   const item = {code:'G-161',brand:'Hãng mẫu',name:'Gạch',full:a,thumb:b};

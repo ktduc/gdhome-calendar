@@ -1,16 +1,80 @@
 (() => {
   const labels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',
     finish:'Bề mặt',collection:'Bộ sưu tập',subgroup:'Nhóm con phụ kiện',tags:'Tag'};
+  const facetLabels = {favorite:'★ Yêu thích',review:'Duyệt mẫu',size:labels.size,brand:labels.brand,suppliers:labels.suppliers,
+    material:labels.material,finish:labels.finish,collection:labels.collection,subgroup:'Nhóm phụ kiện',
+    cabinetWidth:'Rộng tủ',tone:'Tông màu',grain:'Vân',tags:labels.tags};
   const listFields = new Set(['suppliers','tags','brands']);
   const clean = (value,max = 120) => typeof value === 'string' ? value.trim().replace(/\s+/g,' ').slice(0,max) : '';
   const keyFor = name => clean(name).toLocaleLowerCase('vi');
   const fail = (status,message) => { throw Object.assign(new Error(message),{status}); };
   const fields = key => key === 'brand' ? ['brand','brands'] : [key];
-  const values = (item,key) => fields(key).flatMap(field => [item[field]].flat()).filter(value => clean(value));
+  const isCustom = key => /^custom-[a-z0-9]{8,36}$/.test(key);
+  const values = (item,key) => (isCustom(key) ? [item.customAttributes?.[key]] :
+    fields(key).flatMap(field => [item[field]].flat())).filter(value => clean(value));
+
+  function normalizeGroups(data) {
+    const names = new Set(Object.values(labels).map(keyFor)), keys = new Set();
+    return (Array.isArray(data.attributeGroups) ? data.attributeGroups : []).slice(0,24).flatMap(group => {
+      const name = clean(group?.name,60), key = group?.key;
+      if (!isCustom(key) || !name || names.has(keyFor(name)) || keys.has(key)) return [];
+      names.add(keyFor(name)); keys.add(key);
+      return [{key,name}];
+    });
+  }
+  const groupLabels = data => ({...labels,...Object.fromEntries(normalizeGroups(data).map(({key,name}) => [key,name]))});
+  function createGroup(data,{key,name}) {
+    const groups = normalizeGroups(data);
+    const group = {key,name:clean(name,60)};
+    if (!isCustom(key) || !group.name || groups.length >= 24) fail(400,'Nhập tên nhóm hợp lệ. Tối đa 24 nhóm tuỳ chỉnh.');
+    if (groups.some(entry => entry.key === key) || Object.values(groupLabels(data)).some(label => keyFor(label) === keyFor(group.name))) {
+      fail(409,'Nhóm thuộc tính đã tồn tại.');
+    }
+    data.attributeGroups = [...groups,group];
+    return group;
+  }
+  function customValues(input,groups) {
+    return Object.fromEntries(groups.flatMap(({key}) => {
+      const value = clean(input?.[key]);
+      return value ? [[key,value]] : [];
+    }));
+  }
+  function filterConfig(data,categoryId,input = data.filterPreferences?.[categoryId]) {
+    const defaults = Object.entries(facetLabels).filter(([key]) => key !== 'favorite').map(([key,label]) =>
+      ({key,label,visible:true,collapsed:false}));
+    for (const {key,name} of normalizeGroups(data)) defaults.push({key,label:name,visible:false,collapsed:false});
+    const available = new Map(defaults.map(group => [group.key,group])), chosen = [];
+    for (const row of Array.isArray(input) ? input : []) {
+      const group = available.get(row?.key);
+      if (!group) continue;
+      available.delete(row.key);
+      chosen.push({key:group.key,label:clean(row.label,60) || group.label,visible:row.visible === true,collapsed:row.collapsed === true});
+    }
+    return [...chosen,...available.values()];
+  }
+  function normalizeFilters(data) {
+    return Object.fromEntries(data.categories.filter(({id}) => Array.isArray(data.filterPreferences?.[id]))
+      .map(({id}) => [id,filterConfig(data,id)]));
+  }
+  function saveFilters(data,{categoryId,groups,collapsedKey,collapsed}) {
+    if (!data.categories.some(category => category.id === categoryId)) fail(404,'Hạng mục không còn tồn tại.');
+    data.filterPreferences = normalizeFilters(data);
+    if (collapsedKey) {
+      const config = filterConfig(data,categoryId);
+      const group = config.find(group => group.key === collapsedKey);
+      if (!group) fail(400,'Nhóm bộ lọc không tồn tại.');
+      group.collapsed = collapsed === true;
+      data.filterPreferences[categoryId] = config;
+    } else if (groups === null) delete data.filterPreferences[categoryId];
+    else {
+      if (!Array.isArray(groups) || groups.length > 40) fail(400,'Cấu hình bộ lọc không hợp lệ.');
+      data.filterPreferences[categoryId] = filterConfig(data,categoryId,groups);
+    }
+  }
 
   function normalize(data) {
     const ids = new Set(data.categories.map(category => category.id));
-    return Object.fromEntries(Object.keys(labels).flatMap(key => {
+    return Object.fromEntries(Object.keys(groupLabels(data)).flatMap(key => {
       if (!Array.isArray(data.attributes?.[key])) return [];
       const seen = new Set();
       return [[key,data.attributes[key].slice(0,5000).flatMap(entry => {
@@ -45,7 +109,7 @@
 
   function change(data,patch,{size = value => value} = {}) {
     const {key,action} = patch || {};
-    if (!Object.hasOwn(labels,key)) fail(400,'Thuộc tính không hợp lệ.');
+    if (!Object.hasOwn(groupLabels(data),key)) fail(400,'Thuộc tính không hợp lệ.');
     const name = value => key === 'size' ? size(clean(value)) : clean(value,key === 'suppliers' || key === 'tags' || key === 'brand' || key === 'material' || key === 'subgroup' ? 80 : 120);
     const rows = view(data,key);
     const find = value => rows.find(row => keyFor(row.name) === keyFor(value));
@@ -77,11 +141,20 @@
       if (next >= 0 && next < rows.length) [rows[index],rows[next]] = [rows[next],rows[index]];
     } else fail(400,'Thao tác thuộc tính không hợp lệ.');
 
-    for (const item of data.items) for (const field of fields(key)) {
-      if (listFields.has(field) && Array.isArray(item[field])) {
-        item[field] = [...new Map(item[field].map(value => replaced.has(keyFor(value)) ? replacement : value)
-          .filter(Boolean).map(value => [keyFor(value),value])).values()];
-      } else if (replaced.has(keyFor(item[field]))) item[field] = replacement;
+    for (const item of data.items) {
+      if (isCustom(key)) {
+        if (replaced.has(keyFor(item.customAttributes?.[key]))) {
+          if (replacement) item.customAttributes[key] = replacement;
+          else delete item.customAttributes[key];
+        }
+        continue;
+      }
+      for (const field of fields(key)) {
+        if (listFields.has(field) && Array.isArray(item[field])) {
+          item[field] = [...new Map(item[field].map(value => replaced.has(keyFor(value)) ? replacement : value)
+            .filter(Boolean).map(value => [keyFor(value),value])).values()];
+        } else if (replaced.has(keyFor(item[field]))) item[field] = replacement;
+      }
     }
     let next = rows.filter(row => !replaced.has(keyFor(row.name)));
     if (result) {
@@ -126,7 +199,8 @@
     data.categories = data.categories.filter(category => category.id !== sourceId);
   }
 
-  const api = {labels,normalize,view,change,canMergeCategory,removedSystemCategories,removeCategory,mergeCategories};
+  const api = {labels,facetLabels,groupLabels,normalizeGroups,createGroup,customValues,isCustom,filterConfig,normalizeFilters,saveFilters,
+    normalize,view,change,canMergeCategory,removedSystemCategories,removeCategory,mergeCategories};
   if (typeof module !== 'undefined') module.exports = api;
   else window.GDHomeLibraryAttributes = api;
 })();

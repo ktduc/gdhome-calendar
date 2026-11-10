@@ -2726,6 +2726,55 @@ cases['21.6'] = async page => {
   assert.ok(await library.locator('.asset-facets').evaluate(facets => facets.scrollHeight <= facets.clientHeight));
 };
 
+cases['21.5'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    await GDHomeAssets.addItems('cat-6',Array.from({length:12},(_,i) => {
+      const file = i.toString(16).padStart(64,'a')+'.webp';
+      return {name:'Mẫu lọc '+(i+1),size:'600x600',tags:['Tag '+(i+1)],full:file,thumb:file};
+    }));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog');
+  await library.getByRole('tab',{name:'Thuộc tính'}).click();
+  page.once('dialog',prompt => prompt.accept('Chống trượt'));
+  await library.getByRole('button',{name:'Thêm nhóm tuỳ chỉnh'}).click();
+  await library.locator('[data-attribute-key] option:checked').filter({hasText:'Chống trượt'}).waitFor({state:'attached'});
+  const custom = await library.locator('[data-attribute-key]').inputValue();
+  await library.getByRole('tab',{name:'Mẫu vật liệu'}).click();
+  await library.locator('figcaption').filter({hasText:/^Mẫu lọc 1$/}).dblclick();
+  const editor = page.locator('.asset-attribute-editor');
+  await editor.getByLabel('Chống trượt').fill('R11');
+  await editor.getByRole('button',{name:'Lưu mẫu'}).click();
+  await editor.waitFor({state:'detached'});
+  await library.getByRole('button',{name:'Tuỳ chỉnh cột lọc'}).click();
+  await editor.getByLabel('Hiện Chống trượt').check();
+  await editor.getByLabel('Hiện Kích thước').uncheck();
+  await editor.getByLabel('Tên nhóm Tag').fill('Nhãn riêng');
+  await editor.locator('[data-filter-key=tags] [draggable]').dragTo(editor.locator('[data-filter-key=review]'),{targetPosition:{x:10,y:1}});
+  await editor.getByRole('button',{name:'Lưu bộ lọc'}).click();
+  const tags = library.locator('[data-filter-group=tags]');
+  await tags.locator('summary').filter({hasText:'Nhãn riêng'}).waitFor();
+  assert.equal(await library.locator('[data-filter-group=size]').count(),0);
+  assert.equal(await tags.locator('[data-filter-value]:visible').count(),8);
+  await tags.getByRole('button',{name:'Xem thêm'}).click();
+  assert.equal(await tags.locator('[data-filter-value]:visible').count(),12);
+  await tags.getByRole('searchbox').fill('Tag 12');
+  assert.equal(await tags.locator('[data-filter-value]:visible').count(),1);
+  await tags.locator('summary').click();
+  await page.waitForFunction(async () => (await fetch('/api/library').then(r => r.json())).filterPreferences['cat-6'][0].collapsed);
+  await library.locator('[data-cat=cat-5]').click();
+  await library.locator('[data-cat=cat-6]').click();
+  assert.equal(await tags.getAttribute('open'),null);
+  await library.locator('[data-filter-group="'+custom+'"]').getByLabel('R11 (1)').check();
+  assert.equal(await library.locator('.asset-card').count(),1);
+  await library.getByRole('button',{name:'Tuỳ chỉnh cột lọc'}).click();
+  await editor.getByRole('button',{name:'Về mặc định'}).click();
+  await library.locator('[data-filter-group=size]').waitFor();
+  assert.equal(await library.locator('[data-filter-group="'+custom+'"]').count(),0);
+};
+
 cases['20.17'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));

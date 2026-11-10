@@ -81,6 +81,7 @@ function cleanView(view) {
 
 function normalize(data) {
   const base = data && typeof data === 'object' ? data : defaultLibrary();
+  const attributeGroups = attributes.normalizeGroups(base);
   const removed = attributes.removedSystemCategories(base);
   const categories = (Array.isArray(base.categories) ? base.categories : [])
     .filter(c => c && typeof c.id === 'string' && text(c.name) && !removed.has(c.id))
@@ -104,6 +105,7 @@ function normalize(data) {
       id: String(item.id || crypto.randomUUID()).slice(0, 60),
       categoryId: ids.has(item.categoryId) ? item.categoryId : (categories[0]?.id || ''),
       ...itemMetadata(item),
+      ...(item.customAttributes ? {customAttributes:attributes.customValues(item.customAttributes,attributeGroups)} : {}),
       kind:kindOf(item),
       ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb} : {}),
       ...(item.square ? {square:true} : {}),
@@ -132,6 +134,7 @@ function normalize(data) {
   }
   return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
     ...(removed.size ? {removedSystemCategories:[...removed]} : {}),
+    attributeGroups,filterPreferences:attributes.normalizeFilters({...base,categories}),
     attributes:attributes.normalize({...base,categories}),imports:(Array.isArray(base.imports) ? base.imports : [])
       .slice(0,200).map(importHistory.normalize).filter(Boolean),woodSeeded:true,paintSeeded:true };
 }
@@ -245,7 +248,8 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   }
   if (urlPath === '/api/library/attributes' && req.method === 'GET') {
     const data = normalize(await store.get(key));
-    return sendJson(res,200,{categories:data.categories,attributes:Object.fromEntries(Object.keys(attributes.labels).map(key => [key,attributes.view(data,key)]))});
+    return sendJson(res,200,{categories:data.categories,groups:data.attributeGroups,
+      attributes:Object.fromEntries(Object.keys(attributes.groupLabels(data)).map(key => [key,attributes.view(data,key)]))});
   }
   if (urlPath === '/api/library' && req.method === 'GET') {
     const stored = await store.get(key);
@@ -263,6 +267,14 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   }
   if (urlPath === '/api/library/attributes') {
     const {data} = await mutate(store,key,data => attributes.change(data,body,{size:materialSize}));
+    return sendJson(res,200,data);
+  }
+  if (urlPath === '/api/library/attribute-groups') {
+    const {data,result:group} = await mutate(store,key,data => attributes.createGroup(data,body || {}));
+    return sendJson(res,200,{...data,group});
+  }
+  if (urlPath === '/api/library/filters') {
+    const {data} = await mutate(store,key,data => attributes.saveFilters(data,body || {}));
     return sendJson(res,200,data);
   }
   if (urlPath === '/api/library/items') {
@@ -293,6 +305,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         if (existing) { added.push(existing); continue; }
         const entry = { id: crypto.randomUUID(), categoryId, name: text(item.name, 160), note: text(item.note, 500),
           kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb,view:cleanView(item.view),display:cleanDisplay(item.display)}),createdAt: Date.now(),...itemMetadata(item),...metadata,
+          ...(item.customAttributes ? {customAttributes:attributes.customValues(item.customAttributes,data.attributeGroups)} : {}),
           ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb,square:!!item.square} : {}) };
         data.items.unshift(entry);
         added.push(entry);
@@ -368,6 +381,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       if (typeof body.hidden === 'boolean') item.hidden = body.hidden;
       if (item.kind === 'paint' && validHex(body.hex)) item.hex = body.hex.toLowerCase();
       const metadata = itemMetadata(body);
+      if (Object.hasOwn(body,'customAttributes')) item.customAttributes = attributes.customValues(body.customAttributes,data.attributeGroups);
       for (const field of Object.keys(attributes.labels)) {
         if (Object.hasOwn(body,field)) item[field] = metadata[field];
       }
