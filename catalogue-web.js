@@ -41,9 +41,26 @@ function allowedPath(rules,url) {
 }
 
 function catalogueDownloader(options = {}) {
-  const cache = new Map();
+  const cache = new Map(), rates = new Map();
+  const minimumIntervalMs = options.minimumIntervalMs || 0;
+  async function reserve(origin) {
+    if (!minimumIntervalMs) return;
+    const slot = rates.get(origin) || {last:0,tail:Promise.resolve()};
+    const scheduled = slot.tail.then(async () => {
+      const delay = slot.last + minimumIntervalMs - Date.now();
+      if (delay > 0) await new Promise(resolve => setTimeout(resolve,delay));
+      slot.last = Date.now();
+    });
+    slot.tail = scheduled;
+    rates.set(origin,slot);
+    await scheduled;
+    setTimeout(() => { if (slot.tail === scheduled) rates.delete(origin); },minimumIntervalMs).unref();
+  }
   async function download(url,type,beforeRequest) {
-    const request = () => downloadPublicResource(url,{...options,type,beforeRequest});
+    const request = () => downloadPublicResource(url,{...options,type,beforeRequest:async parsed => {
+      await beforeRequest?.(parsed);
+      await reserve(parsed.origin);
+    }});
     try { return await request(); }
     catch (error) {
       if (![429,500,502,503,504].includes(error.status)) throw error;
@@ -55,13 +72,23 @@ function catalogueDownloader(options = {}) {
     }
   }
   return (url,type) => download(url,type,async parsed => {
-    if (!cache.has(parsed.origin)) cache.set(parsed.origin,download(parsed.origin+'/robots.txt','text')
-      .then(({buffer}) => robotsRules(buffer.toString('utf8')))
-      .catch(error => { if (error.status === 404 || error.status === 410) return []; throw error; }));
-    const rules = await cache.get(parsed.origin);
+    let cached = cache.get(parsed.origin);
+    if (!cached || cached.expires <= Date.now()) {
+      if (cache.size >= 256) cache.delete(cache.keys().next().value);
+      cached = {expires:Date.now()+15*60*1000,rules:download(parsed.origin+'/robots.txt','text')
+        .then(({buffer}) => robotsRules(buffer.toString('utf8')))
+        .catch(error => {
+          if (error.status === 404 || error.status === 410) return [];
+          if (cache.get(parsed.origin) === cached) cache.delete(parsed.origin);
+          throw error;
+        })};
+      cache.set(parsed.origin,cached);
+    }
+    const rules = await cached.rules;
     if (!allowedPath(rules,parsed)) throw Object.assign(new Error('Trang nguồn chặn đường dẫn này qua robots.txt.'),{status:403});
   });
 }
+const downloadCatalogueResource = catalogueDownloader({minimumIntervalMs:500});
 
 const decode = value => String(value || '').replace(/&(amp|quot|apos|lt|gt|nbsp|times|ndash|mdash|#\d+|#x[0-9a-f]+);/gi,(_,entity) => {
   const names = {amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' ',times:'×',ndash:'–',mdash:'—'};
@@ -382,7 +409,7 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
 }
 
 async function importCatalogueUrls(urls,options = {}) {
-  const load = catalogueDownloader(options);
+  const load = Object.keys(options).length ? catalogueDownloader(options) : downloadCatalogueResource;
   const validate = options.validateUrl || checkSsrfUrl;
   const maxItems = urls.length === 1 && anCuongHost(urls[0]) ? 5000 : urls.length === 1 ? 600 : 60;
   const items = [], warnings = [];
@@ -404,4 +431,4 @@ async function importCatalogueUrls(urls,options = {}) {
   return {items:items.slice(0,maxItems),warnings,needsAi,...(pagination || {}),...(sourceFilterGroups ? {sourceFilterGroups} : {})};
 }
 
-module.exports = {importCatalogueUrls,catalogueDownloader,cataloguePagination};
+module.exports = {importCatalogueUrls,catalogueDownloader,cataloguePagination,downloadCatalogueResource};

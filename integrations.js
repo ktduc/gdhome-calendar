@@ -1071,7 +1071,7 @@ async function handleIntegrations(req, res, urlPath, ctx) {
   if (urlPath === '/api/catalogue/image' && req.method === 'POST') {
     const body = await readJsonBody(req);
     if (typeof body?.url !== 'string' || body.url.length > 2000) throw httpError(400,'URL ảnh không hợp lệ.');
-    const {buffer,contentType} = await require('./catalogue-web').catalogueDownloader()(body.url,'image');
+    const {buffer,contentType} = await require('./catalogue-web').downloadCatalogueResource(body.url,'image');
     if (!/^image\/(jpeg|png|webp|gif|avif|bmp)$/.test(contentType)) throw httpError(400,'Ảnh mẫu cần ở định dạng raster.');
     res.writeHead(200,{'Content-Type':contentType,'Content-Length':buffer.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     res.end(buffer);

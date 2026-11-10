@@ -1,7 +1,22 @@
 const {test} = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
-const {importCatalogueUrls,cataloguePagination} = require('../catalogue-web');
+const {importCatalogueUrls,cataloguePagination,catalogueDownloader} = require('../catalogue-web');
+
+test('GĐ21.10 bộ tải dùng chung robots và giãn các yêu cầu đồng thời theo nguồn', async () => {
+  const starts = [];
+  const download = catalogueDownloader({minimumIntervalMs:30,dnsResolver:async () => [{address:'8.8.8.8'}],
+    fetchFn:async url => {
+      const pathname = new URL(url).pathname;
+      starts.push({pathname,time:Date.now()});
+      const rules = pathname === '/robots.txt';
+      return new Response(rules ? 'User-agent: *' : 'fixture',{headers:{'Content-Type':rules ? 'text/plain' : 'image/png'}});
+    }});
+  await Promise.all(['/a.png','/b.png','/c.png'].map(path => download('https://catalogue.test'+path,'image')));
+  assert.equal(starts[0]?.pathname,'/robots.txt');
+  assert.deepEqual(starts.slice(1).map(({pathname}) => pathname).sort(),['/a.png','/b.png','/c.png']);
+  assert.ok(starts.slice(1).every((entry,index) => entry.time-starts[index].time >= 25),JSON.stringify(starts));
+});
 
 test('GĐ21.10 An Cường đọc cả thẻ ẩn, tách mã và ánh xạ đúng thứ tự web', async () => {
   const groups = [['Loại Sản Phẩm','Melamine'],['Kích Thước (mm)','1220*2440'],['Màu Sắc','Nâu']];

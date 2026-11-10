@@ -763,3 +763,5 @@ Bổ sung sau khi đọc đặc tả phần 2. Edge xác nhận đọc đủ 40/
 ### 21.11 · Tìm và lưu bộ lọc thông minh
 
 Giữ giá trị có số đếm 0, hiển thị chip đang chọn, tìm không dấu theo nhiều từ trong mã, tên, tag và thuộc tính, có gợi ý. Bộ lọc nhanh lưu theo tài khoản và hạng mục. Ảnh tải tay và mẫu PDF được gợi ý màu, tông và vật liệu còn thiếu, có nhãn Tự đoán và có thể sửa từng giá trị. Node 85/85. Edge 13/13, có thêm ca Phào chỉ nối bóng qua khe 3 px và kiểm tra đoán màu từ riêng thanh phào.
+
+21.10 bổ sung sau hồi quy. Dùng chung robots.txt theo nguồn trong 15 phút và giãn yêu cầu ở máy chủ 500 ms theo origin, kể cả khi chuyển hướng. Node 86/86 và 4 ca Edge nhập web đạt.
