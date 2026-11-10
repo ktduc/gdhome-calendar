@@ -721,3 +721,24 @@ XONG GĐ20
 | 21.5 | Cấu hình nhóm lọc theo hạng mục, tìm trong nhóm, thêm thuộc tính riêng. Node 82/82. Edge 9/9. |
 | 21.4 | Giá nội bộ, ẩn mặc định theo tài khoản, lọc/sắp xếp, đặt giá hàng loạt. Nhận giá PDF/web khi đọc được và đưa vào Excel mua hàng khi chọn cột giá. Node 83/83. Edge 8/8. |
 | 21.7 | Rà soát 4 trang và các hộp chính ở 4 chiều rộng, sửa tràn và focus, lưu ảnh trước/sau. 720 mẫu, mở 105,3 ms, lọc 61 ms, tìm 70,1 ms. Node 83/83. Edge 9/9 sau sửa. |
+
+### Toàn bộ Playwright Edge
+
+Đạt 101/101 ca. Trên máy kiểm thử cục bộ, thư viện 720 mẫu mở trong 104.2 ms, lọc trong 60.4 ms và tìm trong 69.1 ms.
+
+| Nhóm | Số ca đạt | Ca kiểm thử |
+| --- | ---: | --- |
+| 8 | 6 | 8.1, 8.2, 8.3, 8.4, 8.5, 8.6 |
+| 9 | 6 | 9.1, 9.2, 9.3, 9.4, 9.5, 9.6 |
+| 10 | 8 | 10.1, 10.2, 10.3, 10.3-guest, 10.4, 10.5, 10.6, 10.6-recovery |
+| 12 | 7 | 12.1, 12.2, 12.3, 12.4, 12.5, 12.6, 12.7 |
+| 13 | 5 | 13.1, 13.2, 13.3, 13.4, 13.5 |
+| 15 | 3 | 15.1, 15.2, 15.3 |
+| 16 | 7 | 16.1, 16.2, 16.3, 16.4, 16.5, 16.6, 16.7 |
+| 17 | 7 | 17.3, 17.2, 17.0, 17.1, 17.4, 17.5, 17.6 |
+| 18 | 10 | 18.6, 18.1, 18.7, 18.2, 18.5, 18.4, 18.3, 18.10, 18.9, 18.8 |
+| 19 | 11 | 19.5, 19.1, 19.2, 19.3, 19.4, 19.7, 19.6, 19.11, 19.8, 19.9, 19.10 |
+| 20 | 24 | 20.6, 20.1, 20.5, 20.2, 20.3, 20.4, 20.15, 20-drive-menu, 20-library-ui, 20-category-merge-target, 20.17, 20.16, 20.18, 20.11, 20.9, 20.10, 20.12, 20.12-bulk, 20.6-code, 20-pdf-fallback, 20.13, 20.14, 20.7, 20.8 |
+| 21 | 7 | 21.6, 21.4, 21.5, 21.3, 21.1, 21.2, 21.7 |
+
+XONG GĐ21
