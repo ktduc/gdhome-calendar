@@ -3170,6 +3170,41 @@ cases['21.1'] = async page => {
   }
 };
 
+cases['21.2'] = async page => {
+  if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
+    route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),
+      contentType:'application/javascript',headers:{'access-control-allow-origin':'*'}}));
+  await openMaterials(page);
+  const pdf = await require('pdf-lib').PDFDocument.create();
+  for (let i=0;i<2;i++) pdf.addPage([180,180]).drawRectangle({x:20,y:40,width:100,height:100});
+  const items = [1,2].map(number => ({page:number,code:'MS '+(4200+number),bbox:{x:.15,y:.25,w:.5,h:.5},confidence:.9}));
+  let starts = 0, resumed = false;
+  await page.route('**/api/ai/jobs/start',route => {
+    starts++;
+    assert.deepEqual(route.request().postDataJSON().pages.map(page => page.number),starts === 1 ? [1,2] : [2]);
+    return route.fulfill({json:{success:true,job:starts === 1 ? {id:'quota21',status:'paused',
+      step:'Đã hết hạn mức AI hôm nay – đã lưu 1/2 trang',result:{items:[items[0]],completedPages:[1],totalPages:2}} :
+      {id:'quota21-restarted',status:'done',result:{items:[items[1]],completedPages:[2],totalPages:1}}}});
+  });
+  await page.route('**/api/ai/jobs/resume',route => {
+    assert.equal(route.request().postDataJSON().jobId,'quota21');
+    resumed = true;
+    return route.fulfill({status:404,json:{message:'Máy chủ đã khởi động lại'}});
+  });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=useAi]').check();
+  await modal.locator('[name=pdf]').setInputFiles({name:'quota.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.locator('[data-source-progress]').filter({hasText:'đã lưu 1/2 trang'}).waitFor();
+  await modal.getByRole('button',{name:'Tiếp tục',exact:true}).click();
+  await modal.locator('.wood-catalogue-card').nth(1).waitFor();
+  assert.ok(resumed);
+  assert.equal(starts,2);
+  assert.deepEqual(await modal.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),['MS 4201','MS 4202']);
+};
+
 cases['20-pdf-fallback'] = async page => {
   await openMaterials(page);
   if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>

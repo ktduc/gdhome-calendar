@@ -1906,7 +1906,7 @@ window.GDHomeAssets = (() => {
     return rows;
   }
 
-  async function scanWoodCatalogue(file,patterns,onPage,{ai,signal,onWarning,layout,guide,includeCode = true} = {}) {
+  async function scanWoodCatalogue(file,patterns,onPage,{ai,signal,onWarning,onPause,onAiProgress,layout,guide,includeCode = true} = {}) {
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
@@ -1936,9 +1936,9 @@ window.GDHomeAssets = (() => {
       if (!batch.length) return;
       const pages = batch.splice(0);
       if (!useAi()) return;
-      try {
-        const recognized = await GDHomeAI.startJob({kind:'catalogue',pages,includeCode:keepCode,...(guided ? {guide} : {})},{signal});
-        for (const item of recognized.items || []) {
+      let applied = 0;
+      function accept(recognized) {
+        for (const item of recognized?.items?.slice(applied) || []) {
           const source = sources.get(item.page);
           if (!source) continue;
           if (layout === 'ancuong' && localPages.has(item.page)) {
@@ -1965,6 +1965,12 @@ window.GDHomeAssets = (() => {
           if (match) results[index] = record;
           else results.push(record);
         }
+        applied = recognized?.items?.length || applied;
+      }
+      try {
+        const recognized = await GDHomeAI.startJob({kind:'catalogue',pages,includeCode:keepCode,...(guided ? {guide} : {})},
+          {signal,onPause,onProgress:job => { accept(job.result); onAiProgress?.(job); }});
+        accept(recognized);
       } catch (error) {
         signal?.throwIfAborted();
         if (['quota','shared_quota','bad_key','no_key'].includes(error.code)) ai.available = false;
@@ -2076,8 +2082,9 @@ window.GDHomeAssets = (() => {
       const retained = new Set(results.map(item => item.source));
       for (const source of sources.values()) if (!retained.has(source)) URL.revokeObjectURL(source);
     } catch (error) {
-      for (const source of sources.values()) URL.revokeObjectURL(source);
-      throw error;
+      const retained = new Set(signal?.aborted ? results.map(item => item.source) : []);
+      for (const source of sources.values()) if (!retained.has(source)) URL.revokeObjectURL(source);
+      if (!signal?.aborted) throw error;
     } finally { await pdf.destroy(); }
     return results;
   }
@@ -2260,7 +2267,7 @@ window.GDHomeAssets = (() => {
           (entry.type === 'pdf' ? '<label>Mẫu bố cục <select data-source-setting="layout">' +
             selectOptions([...form.elements.layout.options].map(option => [option.value,option.text])) + '</select></label>' : '') +
           '</details><button type="button" data-remove-source aria-label="Bỏ nguồn ' + esc(entry.name) + '">×</button>' +
-          '<small data-source-warning hidden></small>';
+          '<small data-source-warning hidden></small><button type="button" data-source-resume hidden>Tiếp tục</button>';
         const settings = overrides.get(entry.key) || {};
         row.querySelectorAll('[data-source-setting]').forEach(input => {
           const key = input.dataset.sourceSetting;
@@ -2376,6 +2383,24 @@ window.GDHomeAssets = (() => {
       entry.row.dataset.sourceState = state;
       entry.row.querySelector('[data-source-progress]').textContent = message;
     };
+    function waitForAiResume(entry,job,signal) {
+      setProgress(entry,'paused',job.step);
+      status.textContent = job.step;
+      const button = entry.row.querySelector('[data-source-resume]');
+      button.hidden = false;
+      return new Promise((resolve,reject) => {
+        function clear() {
+          button.hidden = true;
+          button.onclick = null;
+          signal.removeEventListener('abort',cancel);
+        }
+        function cancel() { clear(); reject(signal.reason); }
+        button.onclick = () => { clear(); resolve(); };
+        if (signal.aborted) cancel();
+        else signal.addEventListener('abort',cancel,{once:true});
+      });
+    }
+    dialog.addEventListener('close',() => controller?.abort(),{once:true});
     form.elements.pdf.onchange = () => {
       queue.add([...form.elements.pdf.files].map(file => ({file})),mode);
       form.elements.pdf.value = '';
@@ -2564,7 +2589,7 @@ window.GDHomeAssets = (() => {
     form.onsubmit = async event => {
       event.preventDefault();
       if (busy) return;
-      const locked = [...form.querySelectorAll('input,textarea,select,button:not([data-catalogue-cancel])')].filter(control => !control.disabled);
+      const locked = [...form.querySelectorAll('input,textarea,select,button:not([data-catalogue-cancel],[data-source-resume])')].filter(control => !control.disabled);
       for (const control of locked) control.disabled = true;
       busy = read.disabled = save.disabled = true;
       controller = new AbortController();
@@ -2613,7 +2638,9 @@ window.GDHomeAssets = (() => {
               if (entry.type === 'web') imported = await scanCatalogueWeb(entry.url,{ai,signal,onProgress,onWarning,budget,onSource:source => sources.add(source)});
               else if (entry.type === 'pdf') imported = await scanWoodCatalogue(entry.file,form.elements.patterns.value,
                 (page,total) => onProgress('Đang đọc trang ' + page + '/' + total + '…'),
-                {ai,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked});
+                {ai,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked,
+                  onPause:job => waitForAiResume(entry,job,signal),
+                  onAiProgress:job => { if (job.status === 'running' && job.step) onProgress(job.step); }});
               else {
                 const source = URL.createObjectURL(entry.file);
                 const image = new Image();

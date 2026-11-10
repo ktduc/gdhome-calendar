@@ -867,7 +867,7 @@ async function splitPdfPages(buf, size = PDF_CHUNK_PAGES) {
   return chunks;
 }
 
-async function runAiAnalysis(ai, drawings, renders, assets, buildingType = 'Chung cư', onProgress = null, signal = null) {
+async function runAiAnalysis(ai, drawings, renders, assets, buildingType = 'Chung cư', onProgress = null, signal = null, userKey) {
   const model = await resolveModel(ai);
   const call = ai.provider === 'openai' ? callOpenAI : ai.provider === 'gemini' ? callGemini : callAnthropic;
   const contextPrompt = getBuildingContextPrompt(buildingType);
@@ -907,6 +907,7 @@ async function runAiAnalysis(ai, drawings, renders, assets, buildingType = 'Chun
     progress();
     const opts = {
       signal,
+      userKey,
       onStep: step => progress(where + ' · ' + step),
       onRetry: ({ attempt, max, error }) => progress(`${where} · ${error.message.split('.')[0]}. Thử lại lần ${attempt}/${max}…`)
     };
@@ -994,11 +995,17 @@ class HubJobManager {
       finishedAt: null,
       error: null,
       result: null,
-      controller
+      controller,
+      runFn
     };
 
     this.jobs.set(jobId, job);
+    this.run(job);
+    return job;
+  }
 
+  run(job) {
+    const {controller,runFn} = job;
     (async () => {
       try {
         const result = await runFn(job, controller.signal);
@@ -1008,12 +1015,22 @@ class HubJobManager {
           job.step = 'Hoàn tất phân tích!';
           job.finishedAt = new Date().toISOString();
           job.result = result;
+          job.runFn = null;
           if (Array.isArray(result?.aiWarnings)) job.warnings = result.aiWarnings;
         }
       } catch (err) {
         if (job.status !== 'cancelled') {
           const aiErr = toAiError(err);
+          if (job.kind === 'catalogue' && ['daily_quota','shared_quota'].includes(aiErr.aiCode)) {
+            job.status = 'paused';
+            job.errorCode = aiErr.aiCode;
+            job.step = 'Đã hết hạn mức AI hôm nay – đã lưu ' + (job.result?.completedPages.length || 0) + '/' +
+              (job.result?.totalPages || 0) + ' trang';
+            job.finishedAt = new Date().toISOString();
+            return;
+          }
           job.status = 'error';
+          job.runFn = null;
           job.error = aiErr.message || 'Lỗi không xác định khi chạy phân tích AI.';
           job.errorCode = aiErr.aiCode || 'unknown';
           job.retryable = !['no_key', 'bad_key'].includes(job.errorCode);
@@ -1022,7 +1039,16 @@ class HubJobManager {
         }
       }
     })();
+  }
 
+  resumeJob(id,dataKey) {
+    const job = this.getJob(id,dataKey);
+    if (!job || job.status !== 'paused' || !job.runFn) return null;
+    job.status = 'running';
+    job.finishedAt = null;
+    job.errorCode = null;
+    job.controller = new AbortController();
+    this.run(job);
     return job;
   }
 
@@ -1034,8 +1060,8 @@ class HubJobManager {
 
   prune() {
     // Bỏ các tiến trình đã xong quá 2 giờ để không giữ kết quả cũ trong bộ nhớ mãi.
-    const limit = Date.now() - 2 * 3600 * 1000;
     for (const [id, job] of this.jobs) {
+      const limit = Date.now()-(job.status === 'paused' ? 48 : 2)*3600000;
       if (job.status !== 'running' && job.finishedAt && Date.parse(job.finishedAt) < limit) this.jobs.delete(id);
     }
   }
@@ -1054,17 +1080,18 @@ class HubJobManager {
 
   cancelJob(jobId, dataKey) {
     const job = this.getJob(jobId, dataKey);
-    if (!job || job.status !== 'running') return false;
+    if (!job || !['running','paused'].includes(job.status)) return false;
     job.status = 'cancelled';
     job.step = 'Đã huỷ tiến trình.';
     job.finishedAt = new Date().toISOString();
+    job.runFn = null;
     try { job.controller.abort(); } catch {}
     return true;
   }
 
   serialize(job) {
     if (!job) return null;
-    const { controller, ...safe } = job;
+    const { controller, runFn, ...safe } = job;
     return safe;
   }
 }
@@ -1099,7 +1126,7 @@ async function executeProjectReview({
     if (!ai) {
       throw aiError('no_key');
     }
-    const analysis = await runAiAnalysis(ai, drawings, renders, assets, buildingType, onProgress, signal);
+    const analysis = await runAiAnalysis(ai, drawings, renders, assets, buildingType, onProgress, signal,dataKey);
     aiWarnings = analysis?.warnings || [];
   }
 
@@ -1370,7 +1397,7 @@ async function suggestProjectProfile({ projectId, project, hubRecord, store, dat
         const promptText = `Tên dự án: ${projectName}\n` +
           (combinedText ? `Nội dung tệp hợp đồng/báo giá:\n${combinedText.slice(0, 25000)}\n` : '') +
           'Hãy trích xuất Tên khách hàng, Địa chỉ, SĐT, Email, Số hợp đồng và trả về JSON.';
-        const res = await callWithFallback(ai, model, call, imageAttachments, pdfAttachments, promptText, PROFILE_AI_SYSTEM);
+        const res = await callWithFallback(ai, model, call, imageAttachments, pdfAttachments, promptText, PROFILE_AI_SYSTEM,{userKey:dataKey});
         const parsed = extractJson(res.raw);
         if (parsed && typeof parsed === 'object') {
           mergeCandidate(parsed,'AI đọc: ' + docs.slice(0,3).map(doc => doc.name).join(', '));

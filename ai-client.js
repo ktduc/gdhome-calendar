@@ -129,30 +129,54 @@ window.GDHomeAI = (() => {
     return headers;
   }
 
-  async function startJob(payload,{onProgress,intervalMs = 2000,signal} = {}) {
-    const startRes = await fetch('/api/ai/jobs/start',{
-      method:'POST',headers:getAuthHeaders(),body:JSON.stringify(payload)
-    });
-    const startJson = await startRes.json().catch(() => ({}));
-    if (!startRes.ok || !startJson.success || !startJson.job?.id) {
-      throw new Error(startJson.message || 'Không khởi tạo được tiến trình AI.');
+  async function startJob(payload,{onProgress,onPause,intervalMs = 2000,signal} = {}) {
+    async function request(url,body) {
+      const headers = getAuthHeaders();
+      const response = await fetch(url,body ? {method:'POST',headers,body:JSON.stringify(body)} : {headers});
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json.job?.id) throw Object.assign(new Error(json.message || 'Không đọc được tiến trình AI.'),{status:response.status,code:json.code});
+      return json.job;
     }
-    const jobId = startJson.job.id;
-    onProgress?.(startJson.job);
-    while (true) {
-      await new Promise(r => setTimeout(r,intervalMs));
-      if (signal?.aborted) {
-        await fetch('/api/project-hub/jobs/cancel',{method:'POST',headers:getAuthHeaders(),body:JSON.stringify({jobId})}).catch(() => {});
-        signal.throwIfAborted();
+    let job = await request('/api/ai/jobs/start',payload);
+    let checkpoint;
+    try {
+      while (true) {
+        signal?.throwIfAborted();
+        const result = checkpoint ? {
+          items:[...checkpoint.items,...(job.result?.items || [])],
+          completedPages:[...checkpoint.completedPages,...(job.result?.completedPages || [])],
+          totalPages:payload.pages.length
+        } : job.result;
+        const progress = {...job,result};
+        if (checkpoint && job.status === 'paused') progress.step = 'Đã hết hạn mức AI hôm nay – đã lưu ' +
+          result.completedPages.length + '/' + result.totalPages + ' trang';
+        onProgress?.(progress);
+        if (job.status === 'done') return result;
+        if (job.status === 'error' || (job.status === 'paused' && !onPause)) {
+          throw Object.assign(new Error(job.error || job.step || 'Lỗi khi chạy AI.'),{code:job.errorCode,retryable:job.retryable});
+        }
+        if (job.status === 'cancelled') throw Object.assign(new Error('Đã huỷ tiến trình AI.'),{code:'cancelled'});
+        if (job.status === 'paused') {
+          await onPause(progress);
+          signal?.throwIfAborted();
+          try { job = await request('/api/ai/jobs/resume',{jobId:job.id}); }
+          catch (error) {
+            if (error.status !== 404 || !result?.completedPages || !payload.pages) throw error;
+            checkpoint = result;
+            const pages = payload.pages.filter(page => !checkpoint.completedPages.includes(page.number));
+            if (!pages.length) return checkpoint;
+            job = await request('/api/ai/jobs/start',{...payload,pages});
+          }
+          continue;
+        }
+        await new Promise(resolve => setTimeout(resolve,intervalMs));
+        signal?.throwIfAborted();
+        job = await request('/api/project-hub/jobs/status?jobId='+encodeURIComponent(job.id));
       }
-      const res = await fetch('/api/project-hub/jobs/status?jobId=' + encodeURIComponent(jobId),{headers:getAuthHeaders()});
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json.job) throw new Error(json.message || 'Tiến trình AI đã kết thúc hoặc bị ngắt.');
-      const job = json.job;
-      onProgress?.(job);
-      if (job.status === 'done') return job.result;
-      if (job.status === 'error') throw Object.assign(new Error(job.error || 'Lỗi khi chạy AI.'),{code:job.errorCode,retryable:job.retryable});
-      if (job.status === 'cancelled') throw Object.assign(new Error('Đã huỷ tiến trình AI.'),{code:'cancelled'});
+    } catch (error) {
+      if (signal?.aborted) await fetch('/api/project-hub/jobs/cancel',{method:'POST',headers:getAuthHeaders(),
+        body:JSON.stringify({jobId:job.id})}).catch(() => {});
+      throw error;
     }
   }
 

@@ -716,3 +716,4 @@ Ca 20.14 kiểm tra phiên Google trên máy chủ thử với phản hồi toke
 
 XONG GĐ20
 | 21.1 | Dò biên ảnh nhúng và vùng ảnh raster, ghép mã theo vị trí, giữ khung trong biên mẫu và đưa khung mơ hồ vào Cần kiểm tra. AI chỉ nhận trang chưa ghép được ảnh với mã. Node 78/78. Edge 21.1 và 9 ca PDF hồi quy đạt. |
+| 21.2 | Giới hạn tốc độ theo khóa, đọc RetryInfo, thử lại có jitter, đổi khóa dự phòng và tiếp tục job từ trang chưa xử lý. Kết nối hiển thị số yêu cầu trong ngày và cấu hình model. Node 80/80. Edge 21.2 và 7 ca hồi quy đạt. |

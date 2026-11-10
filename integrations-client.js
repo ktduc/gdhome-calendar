@@ -63,7 +63,7 @@ window.GDHomeConnections = (() => {
   }
 
   function render(root,data,focus,message = '') {
-    const {ai,notion,providers} = data;
+    const {ai,notion,providers,aiUsage = {}} = data;
     const tokenHint = notion.tokenMasked ? 'Mã hiện tại: ' + notion.tokenMasked : 'Mã Notion';
     const aiHint = ai.keyMasked ? 'Khoá hiện tại: ' + ai.keyMasked : 'API key';
     root.innerHTML = '<form method="dialog"><button class="close-dialog" aria-label="Đóng">×</button></form>' +
@@ -80,10 +80,18 @@ window.GDHomeConnections = (() => {
       html(data.notionCustomerDb) + '" placeholder="Link database Notion"></label><button class="btn btn-outline">Lưu bảng khách hàng</button></form>' +
       '<button type="button" data-profile-map>Mở ánh xạ trường hồ sơ</button><div data-profile-map-panel></div></section>' +
       '<section data-connection-section="ai"><h3>AI</h3><p>' + html(ai.configured ? 'Đã kết nối ' + ai.providerLabel : 'Chưa kết nối AI') +
-      '</p><form data-connection-form="ai"><label>Nhà cung cấp<select name="aiProvider">' +
+      ' · Đã dùng ' + html(aiUsage.today ?? 0) + ' yêu cầu AI hôm nay</p>' +
+      '<p>Gemini API tính hạn mức phút và ngày theo model và dự án của API key. Lượt dùng trong ứng dụng Gemini Pro tính riêng. Xem hạn mức và gói trả theo mức dùng trong <a href="https://aistudio.google.com/docs/rate-limits" target="_blank" rel="noopener">Google AI Studio</a>.</p>' +
+      '<form data-connection-form="ai"><label>Nhà cung cấp<select name="aiProvider">' +
       providers.map(provider => option(provider.id,provider.label,ai.provider)).join('') + '</select></label>' +
       '<label>API key<input type="password" name="aiKey" autocomplete="off" placeholder="' + html(aiHint) + '"></label>' +
       '<label>Model<input name="aiModel" value="' + html(ai.source === 'user' ? ai.model : '') + '" placeholder="Để trống để tự chọn"></label>' +
+      '<label>Số yêu cầu mỗi phút<input type="number" name="aiRpm" min="1" max="60" value="' + html(aiUsage.rpm ?? 8) + '"></label>' +
+      '<label>Model Gemini cho catalogue<select name="catalogueModel"><option value="">Theo model chính</option>' +
+      (aiUsage.catalogueModels || []).map(model => option(model,model,aiUsage.catalogueModel)).join('') + '</select></label>' +
+      '<label>Khóa Gemini dự phòng<input type="password" name="aiBackupKey" autocomplete="off" placeholder="' +
+      html(aiUsage.backupMasked || 'Dùng khi khóa chính hết hạn mức ngày') + '"></label>' +
+      (aiUsage.backupMasked ? '<label><input type="checkbox" name="clearAiBackup"> Bỏ khóa dự phòng</label>' : '') +
       '<div class="connection-actions"><button class="btn btn-primary">Lưu &amp; kiểm tra</button>' +
       '<button type="button" class="btn btn-outline" data-clear-connection="ai">Gỡ kết nối</button>' +
       '<button type="button" class="btn btn-outline" data-test-ai>Kiểm tra kết nối AI</button></div>' +

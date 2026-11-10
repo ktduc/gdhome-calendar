@@ -296,6 +296,8 @@
 [data-catalogue-queue] summary{cursor:pointer}
 [data-catalogue-queue] [data-source-state=error] small{color:#b91c1c}
 [data-catalogue-queue] [data-source-state=done] [data-source-progress]{color:#047857}
+[data-catalogue-queue] [data-source-state=paused] [data-source-progress]{color:#92400e}
+[data-source-resume]:not([hidden]){grid-column:2/-1;justify-self:start}
 [data-source-warning]{grid-column:1/-1;color:#92400e;overflow-wrap:anywhere}
 [data-catalogue-guide]{flex:1 1 100%;min-width:0;display:flex;flex-wrap:wrap;align-items:end;gap:8px}
 [data-guide-previews]{display:flex;flex-wrap:wrap;gap:8px;flex-basis:100%}
