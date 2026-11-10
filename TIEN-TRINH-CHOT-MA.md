@@ -765,3 +765,15 @@ Bổ sung sau khi đọc đặc tả phần 2. Edge xác nhận đọc đủ 40/
 Giữ giá trị có số đếm 0, hiển thị chip đang chọn, tìm không dấu theo nhiều từ trong mã, tên, tag và thuộc tính, có gợi ý. Bộ lọc nhanh lưu theo tài khoản và hạng mục. Ảnh tải tay và mẫu PDF được gợi ý màu, tông và vật liệu còn thiếu, có nhãn Tự đoán và có thể sửa từng giá trị. Node 85/85. Edge 13/13, có thêm ca Phào chỉ nối bóng qua khe 3 px và kiểm tra đoán màu từ riêng thanh phào.
 
 21.10 bổ sung sau hồi quy. Dùng chung robots.txt theo nguồn trong 15 phút và giãn yêu cầu ở máy chủ 500 ms theo origin, kể cả khi chuyển hướng. Node 86/86 và 4 ca Edge nhập web đạt.
+
+### Kiểm thử cuối GĐ21 phần 2
+
+Toàn bộ Playwright Edge trên 7dbf8d1 đạt 105/105 ca. Node đạt 86/86.
+
+| Mục | Kiểm chứng |
+| --- | --- |
+| 21.9 | Duyệt 40/40 trang. Tách hai thanh nối bóng qua khe 3 px. Ghi số trang và lý do bỏ qua. |
+| 21.10 | Đọc 423/423 thẻ từ HTML Melamine công khai. Ca Edge kiểm tra cập nhật ảnh và thuộc tính cùng ID, chỉnh ánh xạ nhóm trước khi lưu. |
+| 21.11 | Tìm oak sh, giữ giá trị đếm 0, bỏ từng chip, khôi phục bộ lọc sau tải lại và sửa màu tự đoán. |
+
+XONG GĐ21
