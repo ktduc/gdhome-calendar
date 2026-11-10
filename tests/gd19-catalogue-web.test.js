@@ -3,6 +3,38 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const {importCatalogueUrls,cataloguePagination} = require('../catalogue-web');
 
+test('GĐ21.10 An Cường đọc cả thẻ ẩn, tách mã và ánh xạ đúng thứ tự web', async () => {
+  const groups = [['Loại Sản Phẩm','Melamine'],['Kích Thước (mm)','1220*2440'],['Màu Sắc','Nâu']];
+  const html = groups.map(([title,value],i) => '<div class="box-filter-search"><div class="dropdown-title"><span>'+title+
+    '</span></div><div class="dropdown-menu-filter"><ul><li><label class="click-filter-search" name=".option-'+(i+1)+'">'+value+
+    '</label></li></ul></div></div>').join('') + Array.from({length:4},(_,i) =>
+    '<div class="product-box" data-page="'+(i+1)+'" data-options="option-3 option-1 option-2"><div class="pic"><div>'+
+    '<img data-src="/products/products-thumb/'+i+'.jpg"></div></div><div class="product-title"><div class="h-group">Melamine</div>'+
+    '<h2>MFC - MS '+(701+i)+' SH</h2><h3>Mẫu kiểm thử '+i+'</h3></div><a class="link-load" href="/melamine/'+i+'.html">Chi tiết</a></div>').join('');
+  const result = await importCatalogueUrls(['https://ancuong.com/melamine.html'],{dnsResolver:async () => [{address:'8.8.8.8'}],
+    fetchFn:async url => new Response(url.endsWith('/robots.txt') ? 'User-agent: *' : html,
+      {headers:{'Content-Type':url.endsWith('/robots.txt') ? 'text/plain' : 'text/html'}})});
+  assert.equal(result.items.length,4);
+  assert.deepEqual(result.items.map(({code}) => code),['MS 701','MS 702','MS 703','MS 704']);
+  const [first] = result.items;
+  assert.deepEqual([first.material,first.finish,first.rawCode],['MFC','SH','MFC - MS 701 SH']);
+  assert.deepEqual(first.sourceFacets.map(({label,values}) => [label,values[0]]),groups);
+  assert.deepEqual(result.sourceFilterGroups.map(({label}) => label),groups.map(([label]) => label));
+  assert.match(first.image,/products-full\/0\.jpg$/);
+  assert.equal(result.needsAi,false);
+});
+
+test('GĐ21.10 website khác nhận dạng thẻ lặp và suy ra bộ lọc theo class', async () => {
+  const html = '<fieldset><legend>Dòng sản phẩm</legend><label><input type="checkbox" value="line-oak">Sồi</label></fieldset>' +
+    Array.from({length:6},(_,i) => '<article class="design-card line-oak" data-sku="Q'+i+'"><h3>Mẫu '+i+
+      '</h3><img src="/'+i+'.png"></article>').join('');
+  const result = await importCatalogueUrls(['https://catalogue.test/products'],{dnsResolver:async () => [{address:'8.8.8.8'}],
+    fetchFn:async url => new Response(url.endsWith('/robots.txt') ? 'User-agent: *' : html,
+      {headers:{'Content-Type':url.endsWith('/robots.txt') ? 'text/plain' : 'text/html'}})});
+  assert.equal(result.items.length,6);
+  assert.deepEqual(result.items[5].sourceFacets[0],{key:'web-dong-san-pham',label:'Dòng sản phẩm',order:0,values:['Sồi']});
+});
+
 test('Nhập catalogue lấy Product, og:image, ảnh lưới và tôn trọng robots.txt', async t => {
   const seen = [];
   const server = http.createServer((req,res) => {

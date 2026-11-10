@@ -39,6 +39,7 @@
 .asset-facet-choice{display:flex;align-items:center;gap:5px;min-width:0;margin:2px 0;font-size:12px}
 .asset-facet-choice input{flex:none;margin:0}
 .asset-facet-choice span{overflow-wrap:anywhere}
+.asset-facet-color{flex:none;width:12px;height:12px;border:1px solid #0003;border-radius:50%}
 .asset-facet-choice[hidden]{display:none}
 .asset-facets [data-edit-filters]{margin-bottom:6px}
 .asset-facets [data-facet-search]{box-sizing:border-box;width:100%;min-width:0;margin:3px 0}

@@ -47,13 +47,17 @@ function itemMetadata(item) {
   const cabinetWidth = number(item.cabinetWidth,20000);
   const tags = stringList([...(Array.isArray(item.tags) ? item.tags : []),...(cabinetWidth ? ['Tủ '+cabinetWidth] : [])]);
   const suppliedSize = Object.hasOwn(item,'size');
+  const sourceFacets = attributes.normalizeSourceFacets(item.sourceFacets);
   return {brand:text(item.brand,80),size:materialSize(suppliedSize ? item.size : item.name,suppliedSize),tags,suppliers:stringList(item.suppliers),
     ...Object.fromEntries(['material','finish','collection','subgroup'].filter(key => Object.hasOwn(item,key))
       .map(key => [key,text(item[key],['finish','collection'].includes(key) ? 120 : 80)])),
     ...(Array.isArray(item.brands) ? {brands:stringList(item.brands)} : {}),
     ...(item.spec ? {spec:text(item.spec,160)} : {}),...(item.subgroup ? {subgroup:text(item.subgroup,80)} : {}),
     ...(cabinetWidth ? {cabinetWidth} : {}),...(item.innerWidth ? {innerWidth:number(item.innerWidth,20000)} : {}),
-    ...(item.unit ? {unit:text(item.unit,30)} : {}),...attributes.priceFields(item)};
+    ...(item.unit ? {unit:text(item.unit,30)} : {}),...(item.rawCode ? {rawCode:text(item.rawCode,100)} : {}),
+    ...(sourceFacets.length ? {sourceFacets} : {}),
+    ...(Number.isSafeInteger(item.sourcePixels) && item.sourcePixels > 0 ? {sourcePixels:item.sourcePixels} : {}),
+    ...attributes.priceFields(item)};
 }
 function supplierRecord(item) {
   return {name:text(item?.name,80),phone:text(item?.phone,40),note:text(item?.note,300)};
@@ -132,10 +136,13 @@ function normalize(data) {
     const keys = new Set(items.filter(item => item.kind === 'paint').map(woodItemKey));
     items.push(...paintSeed.filter(item => !keys.has(woodItemKey(item))));
   }
+  const catalogueFilterGroups = Object.fromEntries(categories.filter(({id}) => Array.isArray(base.catalogueFilterGroups?.[id]))
+    .map(({id}) => [id,attributes.normalizeSourceFacets(base.catalogueFilterGroups[id],200)]));
+  const filterData = {...base,categories,items,catalogueFilterGroups};
   return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
     ...(removed.size ? {removedSystemCategories:[...removed]} : {}),
-    attributeGroups,filterPreferences:attributes.normalizeFilters({...base,categories}),showPrices:base.showPrices === true,
-    attributes:attributes.normalize({...base,categories}),imports:(Array.isArray(base.imports) ? base.imports : [])
+    attributeGroups,catalogueFilterGroups,filterPreferences:attributes.normalizeFilters(filterData),showPrices:base.showPrices === true,
+    attributes:attributes.normalize(filterData),imports:(Array.isArray(base.imports) ? base.imports : [])
       .slice(0,200).map(importHistory.normalize).filter(Boolean),woodSeeded:true,paintSeeded:true };
 }
 
@@ -288,6 +295,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     const { data, result } = await mutate(store, key, data => {
       const categoryId = data.categories.some(c => c.id === body.categoryId) ? body.categoryId : null;
       if (!categoryId) fail(400, 'Chọn hạng mục cho ảnh.');
+      attributes.mergeSourceSchema(data,categoryId,body.sourceFilterGroups);
       const added = [];
       let skipped = 0;
       for (const item of list) {
@@ -297,11 +305,29 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         const metadata = item.code ? {...woodMeta(item),brand:text(item.brand,80) || (kind === 'wood' ? 'An Cường' : '')} : {};
         const key = woodKey(metadata.code);
         const existing = data.items.find(entry => entry.categoryId === categoryId &&
-          (key ? entry.code && woodItemKey(entry) === woodItemKey(metadata) : entry.kind === 'image' && entry.full === item.full));
+          (key ? entry.code && (woodItemKey(entry) === woodItemKey(metadata) ||
+            (item.rawCode && woodItemKey(entry) === woodItemKey({...metadata,code:item.rawCode}))) :
+            entry.kind === 'image' && entry.full === item.full));
         if (key && existing) {
           existing.suppliers = stringList([...(existing.suppliers || []),...stringList(item.suppliers)]);
           existing.tags = stringList([...(existing.tags || []),...stringList(item.tags)]);
-          if (kind !== 'paint' && !existing.full) {
+          const imported = item.rawCode || item.sourceFacets;
+          if (imported) {
+            const incoming = itemMetadata(item);
+            const sourceFacets = attributes.normalizeSourceFacets([...(existing.sourceFacets || []),...(incoming.sourceFacets || [])]);
+            Object.assign(existing,Object.fromEntries(['rawCode','material','finish','collection','size'].filter(key => incoming[key])
+              .map(key => [key,incoming[key]])),{sourceFacets,code:metadata.code});
+            if (metadata.grain) existing.grain = metadata.grain;
+            if (kind !== 'paint' && (!existing.full || (item.full !== existing.full &&
+                (incoming.sourcePixels || 0) > (existing.sourcePixels || 0)))) {
+              Object.assign(existing,{full:item.full,thumb:item.thumb,sourcePixels:incoming.sourcePixels,
+                view:cleanView(item.view),display:cleanDisplay(item.display)});
+              delete existing.originalFull;
+              delete existing.originalThumb;
+              delete existing.square;
+            } else if (item.full === existing.full && (incoming.sourcePixels || 0) > (existing.sourcePixels || 0)) existing.sourcePixels = incoming.sourcePixels;
+            added.push(existing);
+          } else if (kind !== 'paint' && !existing.full) {
             Object.assign(existing,metadata,{name:text(item.name,160) || existing.name,full:item.full,thumb:item.thumb,view:cleanView(item.view),display:cleanDisplay(item.display)});
             attributes.updatePrice(existing,{...attributes.priceFields(item)});
             added.push(existing);
@@ -391,6 +417,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const metadata = itemMetadata(body);
       attributes.updatePrice(item,body);
       if (Object.hasOwn(body,'customAttributes')) item.customAttributes = attributes.customValues(body.customAttributes,data.attributeGroups);
+      if (Object.hasOwn(body,'sourceFacets')) item.sourceFacets = attributes.normalizeSourceFacets(body.sourceFacets);
       for (const field of Object.keys(attributes.labels)) {
         if (Object.hasOwn(body,field)) item[field] = metadata[field];
       }

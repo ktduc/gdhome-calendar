@@ -3637,6 +3637,74 @@ cases['21.8'] = async page => {
   assert.equal(aiRequests,0);
 };
 
+cases['21.10'] = async page => {
+  await openMaterials(page);
+  const source = 'https://ancuong.com/melamine.html';
+  const generic = 'https://catalogue.test/products';
+  let round = 0;
+  const facet = (key,label,order,values) => ({key,label,order,values});
+  const type = facet('ac-loai-san-pham','Loại Sản Phẩm',0,['Melamine']);
+  const shade = facet('ac-mau-sac','Màu Sắc',1,['Nâu','Vàng']);
+  const grain = facet('ac-loai-van-go','Loại Vân Gỗ',2,['Oak']);
+  await page.route('**/api/catalogue/web',route => {
+    const url = route.request().postDataJSON().urls[0];
+    if (url === generic) return route.fulfill({json:{items:[{code:'WEB-701',name:'Mẫu web',image:'https://catalogue.test/test.png',
+      sourceFacets:[facet('web-nhan','Nhãn nguồn',0,['Sồi']),facet('web-bo','Nhóm bỏ',1,['Ẩn'])]}]}});
+    assert.equal(url,source);
+    round++;
+    return route.fulfill({json:{sourceFilterGroups:[type,shade,grain],items:[{
+      code:'MS 7654',rawCode:'MFC - MS 7654 SH',name:'Mẫu thử Sồi',brand:'An Cường',material:'MFC',finish:'SH',
+      sourceFacets:[type,facet(shade.key,shade.label,1,[round === 1 ? 'Nâu' : 'Vàng'])],
+      image:'https://ancuong.com/products/products-full/'+round+'.png'
+    }]}});
+  });
+  await page.route('**/api/catalogue/image',route => {
+    const url = route.request().postDataJSON().url;
+    const size = url.includes('/2.png') ? 480 : 320;
+    return route.fulfill({body:webPhoto(url,size,size),contentType:'image/png'});
+  });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'ancuong-wood'}));
+  const library = page.locator('.asset-library-dialog');
+  await library.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=urls]').fill(source);
+  const start = () => modal.getByRole('button',{name:'Đọc website'}).click();
+  const saved = async () => {
+    await modal.getByRole('button',{name:'Đọc website'}).and(modal.locator(':enabled')).waitFor({timeout:15000});
+    await modal.getByText(/Đã lưu 1 mã/).waitFor({timeout:15000});
+  };
+  const items = async () => (await page.request.get('/api/library').then(r => r.json())).items.filter(item => item.code === 'MS 7654');
+  await start();
+  await saved();
+  const [before] = await items();
+  await start();
+  await page.locator('.catalogue-duplicate-dialog [data-choice=retry]').click();
+  await saved();
+  const after = await items();
+  assert.equal(after.length,1);
+  assert.equal(after[0].id,before.id);
+  assert.notEqual(after[0].full,before.full);
+  assert.deepEqual(after[0].sourceFacets.find(group => group.key === shade.key).values,['Nâu','Vàng']);
+  assert.deepEqual([after[0].material,after[0].finish,after[0].rawCode],['MFC','SH','MFC - MS 7654 SH']);
+  await modal.locator('[name=urls]').fill(generic);
+  await start();
+  await modal.getByRole('button',{name:'Xem trước ánh xạ'}).click();
+  const mapping = page.locator('.asset-attribute-editor');
+  await mapping.locator('[name=web-nhan]').fill('Nhãn đã đổi');
+  await mapping.getByLabel('Giữ nhóm Nhóm bỏ').uncheck();
+  await mapping.getByRole('button',{name:'Áp dụng ánh xạ'}).click();
+  await modal.locator('[data-save-wood]').click();
+  await saved();
+  const web = (await page.request.get('/api/library').then(r => r.json())).items.find(item => item.code === 'WEB-701');
+  assert.deepEqual(web.sourceFacets.map(group => group.label),['Nhãn đã đổi']);
+  await modal.locator('.close-dialog').click();
+  await library.locator('[data-filter-group=ac-mau-sac] .asset-facet-color').first().waitFor();
+  await library.getByRole('tab',{name:'Thuộc tính'}).click();
+  await library.locator('[data-attribute-key]').selectOption('ac-mau-sac');
+  assert.match(await library.locator('.asset-attributes-panel table').textContent(),/Nâu.*Vàng/);
+};
+
 cases['21.9'] = async page => {
   if (process.env.PDFJS_TEST_DIR) await page.route('https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/**',route =>
     route.fulfill({path:path.join(process.env.PDFJS_TEST_DIR,new URL(route.request().url()).pathname.split('/').at(-1)),

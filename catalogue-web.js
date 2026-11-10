@@ -1,5 +1,5 @@
 const {downloadPublicResource,checkSsrfUrl} = require('./google-search');
-const {parsePrice} = require('./library-attributes');
+const {parsePrice,normalizeSourceFacets} = require('./library-attributes');
 
 function robotsRules(text) {
   const groups = [];
@@ -130,7 +130,119 @@ function nameCode(name) {
   const code = name.match(/(?:^|[\s:–—])([A-Z]{1,4}\s+\d{3,}[A-Z0-9]*|(?=[A-Z0-9_-]*\d)(?=[A-Z0-9_-]*[A-Z])[A-Z0-9][A-Z0-9_-]{3,})$/)?.[1] || '';
   return /^(?:\d+X\d+|\d+(?:CM|MM|KG|ML|L))$/.test(code) ? '' : code;
 }
-function extractProducts(html,url,validateUrl,maxItems) {
+function anCuongHost(url) {
+  try { return /^(?:www\.)?ancuong\.com$/i.test(new URL(url).hostname); }
+  catch { return false; }
+}
+function* htmlBlocks(html,accept) {
+  let block;
+  for (const match of html.matchAll(/<\/?([a-z][\w-]*)\b(?:"[^"]*"|'[^']*'|[^>"'])*>/gi)) {
+    const [tag,rawName] = match, name = rawName.toLowerCase();
+    const closing = tag.startsWith('</');
+    if (!block) {
+      if (closing || !accept(tag,name)) continue;
+      const attrs = attributes(tag);
+      block = {name,attrs,depth:1,start:match.index+tag.length};
+    } else if (block.name === name) {
+      block.depth += closing ? -1 : 1;
+      if (!block.depth) {
+        yield {attrs:block.attrs,content:html.slice(block.start,match.index)};
+        block = null;
+      }
+    }
+  }
+}
+const classElements = (html,className) => htmlBlocks(html,tag =>
+  tag.includes(className) && attributes(tag).class?.split(/\s+/).includes(className));
+const optionKey = value => String(value || '').replace(/^\./,'').toLowerCase();
+function filterDictionary(html,prefix) {
+  const dictionary = new Map(), orderBySlug = new Map();
+  const normalized = value => value.normalize('NFD').replace(/\p{M}/gu,'').replace(/[đĐ]/g,'d').toLowerCase()
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  const groups = prefix === 'ac' ? [...classElements(html,'box-filter-search'),...classElements(html,'box-filter')] :
+    [...classElements(html,'filter-group'),...htmlBlocks(html,(_tag,name) => name === 'fieldset')];
+  for (const {attrs:groupAttrs,content} of groups) {
+    const heading = [...classElements(content,'title-filter'),...classElements(content,'dropdown-title'),...classElements(content,'filter-title')][0];
+    const label = readable(heading?.content || groupAttrs['data-label'] ||
+      content.match(/<(?:legend|h[2-6])\b[^>]*>([\s\S]*?)<\/(?:legend|h[2-6])>/i)?.[1]);
+    const slug = normalized(label).slice(0,50);
+    if (!slug) continue;
+    if (!orderBySlug.has(slug)) orderBySlug.set(slug,orderBySlug.size);
+    const order = orderBySlug.get(slug);
+    for (const [,tag,body] of content.matchAll(/<label\b([^>]*)>([\s\S]*?)<\/label\s*>/gi)) {
+      const attrs = attributes(tag);
+      const input = attributes(body.match(/<input\b[^>]*>/i)?.[0] || '');
+      const id = optionKey(attrs['data-filter'] || attrs['option-id'] || attrs['data-option-id'] ||
+        attrs.name || attrs.for || input.value || input.id);
+      const value = attrs['data-name'] || readable(body);
+      if (/^[a-z0-9_-]{1,80}$/.test(id) && value && !dictionary.has(id)) {
+        dictionary.set(id,{key:prefix+'-'+slug,label,order,values:[value]});
+        if (prefix === 'ac' && /^\d+$/.test(id)) dictionary.set('option-'+id,dictionary.get(id));
+      }
+    }
+  }
+  return dictionary;
+}
+function filterSchema(dictionary) {
+  const groups = new Map();
+  for (const {key,label,order,values} of dictionary.values()) {
+    if (!groups.has(key)) groups.set(key,{key,label,order,values:[]});
+    groups.get(key).values.push(...values);
+  }
+  return normalizeSourceFacets([...groups.values()],200);
+}
+function catalogueFacets(attrs,dictionary) {
+  return normalizeSourceFacets(Object.entries(attrs).filter(([key]) => key === 'class' || key.startsWith('data-'))
+    .flatMap(([,value]) => value.split(/[\s,;]+/).map(value => dictionary.get(optionKey(value))).filter(Boolean)));
+}
+function anCuongRecords(html,dictionary) {
+  const records = [];
+  for (const {attrs,content} of classElements(html,'product-box')) {
+    const rawCode = readable(content.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1]);
+    const split = rawCode.match(/^(.+?)\s+[-–—]\s+(.+)$/);
+    const codeAndFinish = (split?.[2] || rawCode).match(/^(.+?\d)\s+([A-Z][A-Z0-9]{0,4})$/);
+    const code = codeAndFinish?.[1] || split?.[2] || rawCode;
+    const name = readable(content.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/i)?.[1]);
+    const productType = readable(classElements(content,'h-group').next().value?.content);
+    const images = [...content.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => imageSources(attributes(tag)));
+    const imageVariants = images.flatMap(source => [source.replace(/\/products\/products-thumb\//i,'/products/products-full/'),source]);
+    const sourceFacets = catalogueFacets(attrs,dictionary);
+    const option = prefix => sourceFacets.find(group => group.key.startsWith('ac-'+prefix))?.values[0];
+    const detail = classElements(content,'link-load').next().value?.attrs.href;
+    if (code && imageVariants.length) records.push({code,rawCode,name:name || code,images:imageVariants,detail,brand:'An Cường',sourceFacets,
+      size:option('kich-thuoc'),material:split?.[1] || productType || option('loai-san-pham'),finish:codeAndFinish?.[2] || option('hieu-ung-be-mat'),
+      collection:option('bo-suu-tap'),grain:option('loai-van-go')});
+  }
+  return records;
+}
+function repeatedProductRecords(html) {
+  const counts = new Map();
+  for (const [tag] of html.matchAll(/<(?:article|li|div|a)\b[^>]*\bclass\s*=[^>]*>/gi)) {
+    for (const key of attributes(tag).class?.split(/\s+/) || []) {
+      if (/^[\w-]{2,60}$/.test(key)) counts.set(key,(counts.get(key) || 0)+1);
+    }
+  }
+  const candidates = [...counts].filter(([,count]) => count >= 6)
+    .sort(([a,ac],[b,bc]) => Number(/product|card|tile|item/i.test(b))-Number(/product|card|tile|item/i.test(a)) || bc-ac).slice(0,12);
+  const dictionary = filterDictionary(html,'web');
+  for (const [className] of candidates) {
+    const records = [];
+    for (const {attrs,content} of classElements(html,className)) {
+      const headings = [...content.matchAll(/<h[2-6]\b[^>]*>([\s\S]*?)<\/h[2-6]>/gi)];
+      if (headings.length !== 1) continue;
+      const name = readable(headings[0][1]);
+      const images = [...content.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => imageSources(attributes(tag)));
+      if (!name || !images.length) continue;
+      const sourceFacets = catalogueFacets(attrs,dictionary);
+      const detail = [...content.matchAll(/<a\b[^>]*>/gi)].map(([tag]) => attributes(tag).href).find(href => href && !imageLink(href));
+      records.push({name,code:attrs['data-sku'] || attrs['data-code'],images,
+        ...(sourceFacets.length ? {sourceFacets,detail} : {})});
+    }
+    if (records.length >= 6) return records;
+  }
+  return [];
+}
+function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
   const meta = {};
   for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
@@ -161,10 +273,24 @@ function extractProducts(html,url,validateUrl,maxItems) {
     const key = [image,code].join('|');
     if (seen.has(key) || (!code && items.some(item => item.image === image))) return;
     seen.add(key);
+    let detail;
+    if (record.detail) {
+      try {
+        const target = validateUrl(new URL(record.detail,url).href);
+        if (target.origin === new URL(url).origin) detail = target.href;
+      } catch { /* Liên kết ngoài không hợp lệ. */ }
+    }
     items.push({name:name.slice(0,160),code:code.slice(0,80),
       size:size.slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image,
+      ...(record.sourceFacets ? {sourceFacets:record.sourceFacets,material:record.material || '',finish:record.finish || '',
+        collection:record.collection || '',grain:record.grain || ''} : {}),
+      ...(record.rawCode ? {rawCode:record.rawCode.slice(0,100)} : {}),...(detail ? {detail} : {}),
       ...(record.price === undefined ? {} : {price:record.price,priceUnit:decode(record.priceUnit).slice(0,30)}),
       ...(imageAlternates.length ? {imageAlternates} : {})});
+  }
+  if (siteDictionary) {
+    for (const record of anCuongRecords(html,siteDictionary)) add(record);
+    if (items.length) return items;
   }
   const structured = [];
   for (const block of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi)) {
@@ -193,6 +319,7 @@ function extractProducts(html,url,validateUrl,maxItems) {
   if (!items.length && singleProduct) add({name:title,code:meta['product:retailer_item_id'],images:gallery,
     price:!meta['product:price:currency'] || meta['product:price:currency'].toUpperCase() === 'VND'
       ? parsePrice(meta['product:price:amount']) : undefined});
+  if (!items.length) for (const record of repeatedProductRecords(html)) add(record);
   if (!items.length) for (const record of productLinks(html,url)) add(record);
   if (!items.length) {
     for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
@@ -257,22 +384,24 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
 async function importCatalogueUrls(urls,options = {}) {
   const load = catalogueDownloader(options);
   const validate = options.validateUrl || checkSsrfUrl;
-  const maxItems = urls.length === 1 ? 600 : 60;
+  const maxItems = urls.length === 1 && anCuongHost(urls[0]) ? 5000 : urls.length === 1 ? 600 : 60;
   const items = [], warnings = [];
   let needsAi = false;
-  let pagination;
+  let pagination, sourceFilterGroups;
   for (const url of urls) {
     try {
       const page = await load(url,'html');
       const html = page.buffer.toString('utf8');
-      const result = extractProducts(html,page.url,validate,maxItems);
+      const siteDictionary = anCuongHost(page.url) ? filterDictionary(html,'ac') : undefined;
+      const result = extractProducts(html,page.url,validate,maxItems,siteDictionary);
+      if (siteDictionary && result.some(item => item.rawCode)) sourceFilterGroups = filterSchema(siteDictionary);
       if (urls.length === 1) pagination = cataloguePagination(html,page.url,validate);
-      needsAi ||= result.some(item => !item.name || !item.code || !item.size);
+      needsAi ||= result.some(item => !item.sourceFacets && (!item.name || !item.code || !item.size));
       items.push(...result.filter(candidate => !items.some(item => item.image === candidate.image && item.code === candidate.code)));
       if (items.length >= maxItems) break;
     } catch (error) { warnings.push(error.message); }
   }
-  return {items:items.slice(0,maxItems),warnings,needsAi,...(pagination || {})};
+  return {items:items.slice(0,maxItems),warnings,needsAi,...(pagination || {}),...(sourceFilterGroups ? {sourceFilterGroups} : {})};
 }
 
 module.exports = {importCatalogueUrls,catalogueDownloader,cataloguePagination};

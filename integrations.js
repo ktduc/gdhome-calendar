@@ -1064,7 +1064,8 @@ async function handleIntegrations(req, res, urlPath, ctx) {
         }
       } catch (error) { aiWarning = error.message; }
     }
-    sendJson(res,200,{items:result.items,warnings:result.warnings,aiWarning,next:result.next,total:result.total});
+    sendJson(res,200,{items:result.items,warnings:result.warnings,aiWarning,next:result.next,total:result.total,
+      sourceFilterGroups:result.sourceFilterGroups});
     return true;
   }
   if (urlPath === '/api/catalogue/image' && req.method === 'POST') {

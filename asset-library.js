@@ -248,15 +248,31 @@ window.GDHomeAssets = (() => {
     return data;
   }
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
-  const addItems = (categoryId,items) => libraryCall('items',{categoryId,items},data => {
+  const addItems = (categoryId,items,sourceFilterGroups) => libraryCall('items',{categoryId,items,sourceFilterGroups},data => {
+    attributeCatalog().mergeSourceSchema(data,categoryId,sourceFilterGroups);
     const added = [];
     let skipped = 0;
     for (const item of items) {
-      if (item.code && data.items.some(entry => entry.categoryId === categoryId && entry.code && catalogueKey(entry) === catalogueKey(item))) { skipped++; continue; }
+      const existing = item.code && data.items.find(entry => entry.categoryId === categoryId && entry.code &&
+        (catalogueKey(entry) === catalogueKey(item) || (item.rawCode && catalogueKey(entry) === catalogueKey({...item,code:item.rawCode}))));
+      if (existing) {
+        if (item.rawCode || item.sourceFacets) {
+          const sourceFacets = attributeCatalog().normalizeSourceFacets([...(existing.sourceFacets || []),...(item.sourceFacets || [])]);
+          Object.assign(existing,Object.fromEntries(['rawCode','material','finish','collection','size','grain'].filter(key => item[key])
+            .map(key => [key,item[key]])),{code:item.code,sourceFacets});
+          if (!existing.full || (item.sourcePixels || 0) > (existing.sourcePixels || 0)) {
+            Object.assign(existing,{full:item.full,thumb:item.thumb,sourcePixels:item.sourcePixels,display:item.display,view:item.view});
+          }
+          added.push(existing);
+        } else skipped++;
+        continue;
+      }
       if (!item.code && item.full && data.items.some(entry => entry.categoryId === categoryId && entry.kind === 'image' && entry.full === item.full)) { skipped++; continue; }
       const metadata = Object.fromEntries(['brand','suppliers','tags','material','finish','collection','subgroup'].filter(key => Object.hasOwn(item,key)).map(key => [key,item[key]]));
       const price = attributeCatalog().priceFields(item);
       added.push({id:uid(),categoryId,name:item.name || '',note:'',kind:item.kind || (item.code ? 'wood' : 'image'),hex:item.hex,full:item.full,thumb:item.thumb,display:item.display,view:item.view,size:primarySize(item.size),createdAt:Date.now(),...metadata,
+        ...Object.fromEntries(['rawCode','sourcePixels','grain'].filter(key => Object.hasOwn(item,key)).map(key => [key,item[key]])),
+        ...(item.sourceFacets ? {sourceFacets:attributeCatalog().normalizeSourceFacets(item.sourceFacets)} : {}),
         ...price,...(Object.keys(price).length ? {priceUpdatedAt:Date.now()} : {}),
         ...(item.customAttributes ? {customAttributes:attributeCatalog().customValues(item.customAttributes,data.attributeGroups || [])} : {}),
         ...(item.code ? {code:item.code,brand:item.brand || 'An Cường',collection:item.collection,finish:item.finish} : {})});
@@ -271,6 +287,7 @@ window.GDHomeAssets = (() => {
       for (const key of ['code','view']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       for (const key of ['brand','size','tags','suppliers','display','material','finish','collection','subgroup']) if (Object.hasOwn(patch,key)) item[key] = patch[key];
       if (Object.hasOwn(patch,'customAttributes')) item.customAttributes = attributeCatalog().customValues(patch.customAttributes,data.attributeGroups || []);
+      if (Object.hasOwn(patch,'sourceFacets')) item.sourceFacets = attributeCatalog().normalizeSourceFacets(patch.sourceFacets);
       attributeCatalog().updatePrice(item,patch);
       if (Object.hasOwn(patch,'size')) item.size = primarySize(patch.size);
       if (typeof patch.hidden === 'boolean') item.hidden = patch.hidden;
@@ -516,7 +533,8 @@ window.GDHomeAssets = (() => {
   const {facetLabels} = window.GDHomeLibraryAttributes;
   const facetValues = (item,key) => [...new Set([key === 'size' ? primarySize(item.size) : key === 'favorite' ?
     (item.favorite ? 'favorite' : '') : key === 'review' ? (item.tags?.includes('chua-duyet') ? 'Chưa duyệt' : '') :
-    key.startsWith('custom-') ? item.customAttributes?.[key] : item[key],
+    key.startsWith('custom-') ? item.customAttributes?.[key] : attributeCatalog().isSource(key) ?
+      item.sourceFacets?.find(group => group.key === key)?.values : item[key],
     ...(key === 'brand' ? item.brands || [] : [])].flat().filter(Boolean).map(String))];
   const matchFacets = (item,facets,except) => Object.entries(facets).every(([key,values]) =>
     key === except || !values.size || facetValues(item,key).some(value => values.has(value)));
@@ -546,7 +564,7 @@ window.GDHomeAssets = (() => {
   }
   function facetMarkup(items,facets,config) {
     const groups = config ? [['favorite',facetLabels.favorite],...config.filter(group => group.visible).map(group => [group.key,group.label])] :
-      Object.entries(facetLabels);
+      [...Object.entries(facetLabels),...attributeCatalog().sourceFacetGroups(items).map(({key,label}) => [key,label])];
     return '<div class="asset-facets">' + (config ? '<button type="button" data-edit-filters aria-label="Tuỳ chỉnh cột lọc">⚙ Tuỳ chỉnh lọc</button>' : '') +
       groups.map(([key,label]) => {
       const counts = new Map();
@@ -555,11 +573,17 @@ window.GDHomeAssets = (() => {
       }
       for (const value of facets[key] || []) if (!counts.has(value)) counts.set(value,0);
       if (!counts.size && key === 'favorite') counts.set('favorite',0);
-      if (!counts.size) return config && key.startsWith('custom-') ? filterGroup(key,label,'<p class="asset-empty">Chưa có giá trị</p>') : '';
+      if (!counts.size) return config && (key.startsWith('custom-') || attributeCatalog().isSource(key)) ?
+        filterGroup(key,label,'<p class="asset-empty">Chưa có mẫu khớp</p>') : '';
       const limited = !!config && counts.size > 8;
-      const choice = (value,caption,checked,hidden = false) => '<label class="asset-facet-choice"' + (hidden ? ' hidden' : '') +
+      const choice = (value,caption,checked,hidden = false) => {
+        const color = key === 'ac-mau-sac' && attributeCatalog().colorHex(value);
+        return '<label class="asset-facet-choice"' + (hidden ? ' hidden' : '') +
         (value ? ' data-filter-value' : '') + '><input type="' + (key === 'size' ? 'radio' : 'checkbox') +
-        '" data-facet="' + key + '" data-value="' + esc(value) + '"' + (checked ? ' checked' : '') + '> <span>' + esc(caption) + '</span></label>';
+        '" data-facet="' + key + '" data-value="' + esc(value) + '"' + (checked ? ' checked' : '') + '> ' +
+        (color ? '<i class="asset-facet-color" aria-hidden="true" style="background-color:' + color + '"></i>' : '') +
+        '<span>' + esc(caption) + '</span></label>';
+      };
       const options = (key === 'size' ? choice('','Tất cả',!facets.size?.size) : '') + [...counts].map(([value,count],index) =>
         choice(value,(key === 'size' ? value.replace('x','×') : key === 'cabinetWidth' ? 'Tủ '+value : key === 'favorite' ? 'Chỉ mục yêu thích' : value) +
           ' (' + count + ')',facets[key]?.has(value),limited && index >= 8)).join('');
@@ -830,11 +854,13 @@ window.GDHomeAssets = (() => {
   }
   function editLibraryItem(item,data) {
     const {dialog,body} = modal('asset-attribute-editor','Sửa mẫu vật liệu');
-    const labels = attributeCatalog().groupLabels(data);
+    const sourceGroups = attributeCatalog().sourceFacetGroups(data.items,item.categoryId,data.catalogueFilterGroups?.[item.categoryId]);
+    const labels = Object.fromEntries(Object.entries(attributeCatalog().groupLabels(data)).filter(([key]) =>
+      !attributeCatalog().isSource(key) || sourceGroups.some(group => group.key === key)));
     body.innerHTML = '<form class="asset-attribute-form"><label>Tên <input name="name" maxlength="160" value="' + esc(item.name) + '"></label>' +
       (item.kind === 'paint' ? '<label>Màu hex <input name="hex" value="' + esc(item.hex) + '"></label>' : '') +
       Object.entries(labels).map(([key,label]) => {
-        const value = key.startsWith('custom-') ? item.customAttributes?.[key] : item[key];
+        const value = attributeCatalog().isSource(key) ? facetValues(item,key) : key.startsWith('custom-') ? item.customAttributes?.[key] : item[key];
         return '<label>' + esc(label) + ' <input name="' + key + '" value="' + esc(Array.isArray(value) ? value.join(', ') : value) + '"></label>';
       }).join('') + (data.showPrices ? libraryPriceInputs(item) : '') + '<button>Lưu mẫu</button><p role="status"></p></form>';
     const form = body.querySelector('form');
@@ -846,8 +872,11 @@ window.GDHomeAssets = (() => {
       button.disabled = true;
       const patch = {id:item.id,name:form.elements.name.value.trim(),hex:form.elements.hex?.value.trim()};
       if (keys.some(key => key.startsWith('custom-'))) patch.customAttributes = {};
+      if (sourceGroups.length) patch.sourceFacets = sourceGroups.map(group =>
+        ({...group,values:form.elements[group.key].value.split(',').map(value => value.trim()).filter(Boolean)}));
       for (const key of keys) {
         const value = form.elements[key].value.trim();
+        if (attributeCatalog().isSource(key)) continue;
         if (key.startsWith('custom-')) patch.customAttributes[key] = value;
         else patch[key] = ['tags','suppliers'].includes(key) ? value.split(',').map(part => part.trim()).filter(Boolean) : value;
       }
@@ -2416,11 +2445,12 @@ window.GDHomeAssets = (() => {
       else signal.addEventListener('abort',done,{once:true});
     });
   }
-  async function downloadCataloguePhoto(product,signal) {
+  async function downloadCataloguePhoto(product,signal,beforeRequest) {
     let failure;
     for (const url of [product.image,...(product.imageAlternates || []).slice(0,5)]) {
       signal.throwIfAborted();
       try {
+        await beforeRequest?.();
         const response = await fetch('/api/catalogue/image',{method:'POST',signal,
           headers:{...hooks.headers(),'Content-Type':'application/json'},body:JSON.stringify({url})});
         if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || 'Không tải được ảnh.');
@@ -2428,8 +2458,8 @@ window.GDHomeAssets = (() => {
         const bitmap = await createImageBitmap(blob);
         try {
           if (Math.min(bitmap.width,bitmap.height) < 300) throw new Error('Bỏ ảnh nhỏ hơn 300 px.');
+          return {blob,url,pixels:bitmap.width*bitmap.height};
         } finally { bitmap.close(); }
-        return {blob,url};
       } catch (error) { failure = error; }
     }
     throw failure;
@@ -2438,7 +2468,12 @@ window.GDHomeAssets = (() => {
   async function scanCatalogueWeb(url,{ai,signal,onProgress,onSource,onWarning,budget,hashes}) {
     const items = [], failures = new Set(), visited = new Set(), seen = new Set();
     let total, resume = '', aiWarning = '', missingImages = 0, limitReached = false;
-    while (url && !signal.aborted && budget.pages && budget.items) {
+    const rateLimit = async () => {
+      const time = Math.max(Date.now(),budget.nextPhotoAt || 0);
+      budget.nextPhotoAt = time+500;
+      if (time > Date.now()) await catalogueDelay(time-Date.now(),signal);
+    };
+    while (url && !signal.aborted && budget.pages && (budget.items || budget.ancuongItems)) {
       const key = importHistory().sourceKey(url);
       if (!key || visited.has(key)) {
         failures.add('Trang nguồn trả đường dẫn phân trang không hợp lệ hoặc bị lặp.');
@@ -2479,21 +2514,36 @@ window.GDHomeAssets = (() => {
         pageIdentities.add(identity);
         products.push(product);
       }
-      if (products.length > budget.items) {
+      const isAnCuong = products.some(product => product.rawCode && product.sourceFacets);
+      const itemLimit = isAnCuong ? budget.ancuongItems : budget.items;
+      if (products.length > itemLimit) {
         limitReached = true;
         break;
       }
-      budget.items -= products.length;
+      if (isAnCuong) budget.ancuongItems -= products.length;
+      else budget.items -= products.length;
       for (const product of products) {
         if (signal.aborted) break;
         try {
-          const photo = await downloadCataloguePhoto(product,signal);
+          const structured = product.rawCode || product.sourceFacets?.length;
+          let photo = await downloadCataloguePhoto(product,signal,structured ? rateLimit : undefined);
+          if (!product.rawCode && product.sourceFacets?.length && product.detail) {
+            try {
+              await rateLimit();
+              const detail = await api('/api/catalogue/web',{method:'POST',signal,body:JSON.stringify({urls:[product.detail],useAi:false})});
+              if (detail.items?.length === 1 && detail.items[0].image !== photo.url) {
+                const richer = await downloadCataloguePhoto(detail.items[0],signal,rateLimit);
+                if (richer.pixels > photo.pixels) photo = richer;
+              }
+            } catch { signal.throwIfAborted(); }
+          }
           const hash = await catalogueHash(photo.blob);
           if (hashes.has(hash)) continue;
           hashes.add(hash);
           const source = URL.createObjectURL(photo.blob);
           onSource(source);
-          items.push({...product,image:photo.url,source,crop:{x:0,y:0,w:1,h:1},confidence:.7,web:true});
+          items.push({...product,image:photo.url,source,sourcePixels:photo.pixels,sourceFilterGroups:result.sourceFilterGroups,
+            crop:{x:0,y:0,w:1,h:1},confidence:.7,web:true});
           progress();
         } catch (error) {
           if (!signal.aborted) {
@@ -2507,7 +2557,7 @@ window.GDHomeAssets = (() => {
       if (url && budget.pages && budget.items) await catalogueDelay(1200,signal);
     }
     if (url && !signal.aborted && !resume && (limitReached || !budget.pages || !budget.items)) {
-      failures.add('Đã tới giới hạn 30 trang hoặc 600 mẫu cho một lượt nhập.');
+      failures.add('Đã tới giới hạn 30 trang hoặc số mẫu tối đa cho một lượt nhập.');
       resume = url;
     }
     if (resume) failures.add('Link nhập tiếp ' + resume);
@@ -2623,6 +2673,7 @@ window.GDHomeAssets = (() => {
       esc(woodPatterns.join('\n')) + '</textarea></label></details>' +
       '<button type="submit">Đọc PDF</button><button type="button" data-catalogue-cancel>Dừng</button></form>' +
       '<p role="status"></p><div class="catalogue-review-toolbar" hidden><strong data-catalogue-count></strong>' +
+      '<button type="button" data-preview-mapping hidden>Xem trước ánh xạ</button>' +
       '<button type="button" data-catalogue-select="clear">Bỏ chọn</button><button type="button" data-catalogue-select="invert">Đảo chọn</button>' +
       '<button type="button" data-catalogue-select="qr">Chỉ giữ thẻ có QR</button>' +
       '<label>Lọc <select data-catalogue-filter><option value="all">Tất cả</option><option value="selected">Đã chọn</option><option value="review">Cần kiểm tra</option></select></label>' +
@@ -2899,7 +2950,7 @@ window.GDHomeAssets = (() => {
         }
         if (!activeImports.length) { status.textContent = 'Đã huỷ nhập.'; return; }
         await saveImportRows(activeImports);
-        const guide = readGuide(), budget = {pages:30,items:600};
+        const guide = readGuide(), budget = {pages:30,items:600,ancuongItems:5000};
         const ai = {available:!!window.GDHomeAI,pdf:form.elements.useAi.checked,web:form.elements.useWebAi.checked};
         const webHashes = new Map();
         const scans = new Array(activeImports.length);
@@ -2958,7 +3009,8 @@ window.GDHomeAssets = (() => {
         if (signal.aborted && !items.length) { status.textContent = 'Đã dừng xử lý.'; return; }
         let saveWarning = '';
         if (mode !== 'pdf' && form.elements.autoSave.checked && items.length) {
-          const automatic = items.filter(item => !item.needsReview && (item.code || item.web || item.fileImage));
+          const automatic = items.filter(item => !item.needsReview && (item.code || item.web || item.fileImage) &&
+            !item.sourceFacets?.some(group => group.key.startsWith('web-')));
           if (automatic.length) {
             const saved = await persistSelection(automatic.map(item => ({item,code:item.code || '',name:item.name})),{auto:true});
             saveWarning = status.textContent;
@@ -2967,7 +3019,34 @@ window.GDHomeAssets = (() => {
           if (!items.length) return;
         }
         for (const item of items) sources.add(item.source);
-        const resultMessage = items.length ? 'Nhận diện ' + items.length + ' mẫu. Kiểm tra và chỉnh ảnh trước khi lưu.' : 'Không tìm thấy mẫu có ảnh.';
+        const mappings = attributeCatalog().sourceFacetGroups(items).filter(group => group.key.startsWith('web-'));
+        const mappingButton = body.querySelector('[data-preview-mapping]');
+        mappingButton.hidden = !mappings.length;
+        mappingButton.onclick = () => {
+          const editor = modal('asset-attribute-editor','Xem trước ánh xạ thuộc tính');
+          editor.body.innerHTML = '<form class="asset-attribute-form">' + mappings.map(({key,label}) => {
+            const examples = [...new Set(items.flatMap(item => facetValues(item,key)))].slice(0,6);
+            return (
+            '<div><label>Tên nhóm <input name="' + esc(key) + '" maxlength="60" value="' + esc(label) +
+            '"></label><small>' + esc(examples.join(' · ')) + '</small><label><input type="checkbox" data-keep="' + esc(key) +
+            '" checked> Giữ nhóm ' + esc(label) + '</label></div>');
+          }).join('') +
+            '<button>Áp dụng ánh xạ</button></form>';
+          editor.body.querySelector('form').onsubmit = event => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const names = new Map(mappings.map(({key}) => [key,
+              form.querySelector('[data-keep="' + key + '"]').checked ? form.elements[key].value.trim() : '']));
+            for (const item of items) if (item.sourceFacets) {
+              item.sourceFacets = item.sourceFacets.flatMap(group => names.has(group.key) ?
+                names.get(group.key) ? [{...group,label:names.get(group.key)}] : [] : [group]);
+            }
+            for (const group of mappings) group.label = names.get(group.key) || group.label;
+            editor.dialog.close();
+          };
+        };
+        const resultMessage = items.length ? 'Nhận diện ' + items.length + ' mẫu. ' +
+          (mappings.length ? 'Xem trước ánh xạ thuộc tính trước khi lưu.' : 'Kiểm tra và chỉnh ảnh trước khi lưu.') : 'Không tìm thấy mẫu có ảnh.';
         status.textContent = [saveWarning,resultMessage].filter(Boolean).join(' · ');
         list.innerHTML = items.map(item => '<article class="wood-catalogue-card' + (item.needsReview ? ' needs-review' : '') + '" tabindex="0">' +
           '<canvas aria-label="Ảnh swatch"></canvas><small title="' + (item.needsReview ? 'Cần kiểm tra' : '') + '">' +
@@ -3073,7 +3152,7 @@ window.GDHomeAssets = (() => {
       const brand = form.elements.brand.value.trim();
       const collection = form.elements.collection.value.trim(), finish = form.elements.finish.value.trim();
       let added = 0, skipped = 0, batch = [], batchCategory;
-      const savedCrops = new Map(), finished = new Set(), failures = [];
+      const savedCrops = new Map(), finished = new Set(), savedSchemas = new Set(), failures = [];
       const destinations = new Map(selection.map(({item}) => [item,destinationOf(item)]));
       const reviewed = new Map();
       const failedSources = new Set();
@@ -3095,7 +3174,11 @@ window.GDHomeAssets = (() => {
         const skip = item => { skipped++; finished.add(item); };
         const flush = async () => {
           if (!batch.length) return;
-          const result = await addItems(batchCategory,batch.map(({record}) => record));
+          const schemas = new Map(batch.filter(({item}) => item.sourceFilterGroups)
+            .map(({entry,item}) => [batchCategory+':'+entry.source,item.sourceFilterGroups]).filter(([key]) => !savedSchemas.has(key)));
+          const groups = attributeCatalog().normalizeSourceFacets([...schemas.values()].flat(),200);
+          const result = await addItems(batchCategory,batch.map(({record}) => record),groups.length ? groups : undefined);
+          for (const key of schemas.keys()) savedSchemas.add(key);
           added += result.added.length;
           skipped += result.skipped || 0;
           for (const addedItem of result.added) {
@@ -3124,14 +3207,26 @@ window.GDHomeAssets = (() => {
           const codeKey = code && scopeKey(categoryId,duplicateCode(code));
           if (entry.onlyNew && codeKey && savedCodes.has(codeKey)) { skip(item); continue; }
           const key = scopeKey(categoryId,code ? catalogueKey({brand:itemBrand,code}) : item.source);
-          const previous = existing.get(key);
-          if (previous && !itemSuppliers.some(value => !previous.suppliers?.includes(value)) && !tags.some(value => !previous.tags?.includes(value))) {
+          const previous = existing.get(key) || (item.rawCode && existing.get(scopeKey(categoryId,catalogueKey({brand:itemBrand,code:item.rawCode}))));
+          const catalogueMetadata = !!(item.rawCode || item.sourceFacets?.length);
+          if (previous && !catalogueMetadata && !itemSuppliers.some(value => !previous.suppliers?.includes(value)) && !tags.some(value => !previous.tags?.includes(value))) {
             skip(item); continue;
           }
           status.textContent = 'Đang lưu ' + code + '…';
           const crop = item.crop;
           const cropKey = JSON.stringify([item.source,crop]);
-          let image = previous || savedCrops.get(cropKey);
+          let image = previous || savedCrops.get(cropKey), imagePixels = item.sourcePixels;
+          if (previous && catalogueMetadata && item.sourcePixels) {
+            let previousPixels = previous.sourcePixels;
+            if (!previousPixels) {
+              try {
+                const currentImage = await loadPageImage(await assetUrl(previous.full));
+                previousPixels = currentImage.naturalWidth*currentImage.naturalHeight;
+              } catch { /* Giữ ảnh đã có nếu chưa so được độ phân giải. */ }
+            }
+            if (previousPixels && item.sourcePixels > previousPixels) image = savedCrops.get(cropKey);
+            else imagePixels = previousPixels;
+          }
           try {
             if (!image) {
               const response = await fetch(item.source);
@@ -3162,7 +3257,8 @@ window.GDHomeAssets = (() => {
           if (entry.layout === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
           const category = library.categories.find(category => category.id === categoryId);
           const record = {full:image.full,thumb:image.thumb,display:item.destinationId || entry.override.categoryId ? categoryDisplay(category) : form.elements.display.value,
-            view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,kind:code && woodCategory(category) ? 'wood' : 'image',...fields};
+            view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,kind:code && woodCategory(category) ? 'wood' : 'image',
+            ...fields,...(catalogueMetadata ? {sourceFacets:item.sourceFacets,rawCode:item.rawCode,sourcePixels:imagePixels} : {})};
           existing.set(key,record);
           batch.push({record,entry,item});
           if (batch.length === 50) await flush();

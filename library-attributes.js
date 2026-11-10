@@ -35,7 +35,38 @@
   const fail = (status,message) => { throw Object.assign(new Error(message),{status}); };
   const fields = key => key === 'brand' ? ['brand','brands'] : [key];
   const isCustom = key => /^custom-[a-z0-9]{8,36}$/.test(key);
-  const values = (item,key) => (isCustom(key) ? [item.customAttributes?.[key]] :
+  const isSource = key => /^(?:ac|web)-[a-z0-9-]{1,55}$/.test(key);
+  const palette = {'Be':'#d8c4a3','Cam':'#ef8d29','Đen':'#202020','Đỏ':'#bf3336','Hồng':'#e98baa','Nâu':'#754d35',
+    'Tím':'#8862a4','Trắng':'#faf9f4','Xám':'#8c9096','Xanh Dương':'#3674a6','Xanh Lá':'#618747','Vàng':'#e6c342'};
+  const colorHex = value => Object.entries(palette).find(([name]) => keyFor(name) === keyFor(value))?.[1];
+  function normalizeSourceFacets(input,maxValues = 60) {
+    const groups = new Map();
+    for (const group of (Array.isArray(input) ? input : []).slice(0,100)) {
+      const {key} = group || {}, label = clean(group?.label,60);
+      if (!isSource(key) || !label) continue;
+      const values = (Array.isArray(group.values) ? group.values : []).map(value => clean(value)).filter(Boolean);
+      if (!values.length) continue;
+      const previous = groups.get(key);
+      groups.set(key,{key,label,order:Number.isInteger(group.order) ? Math.max(0,Math.min(99,group.order)) : previous?.order ?? groups.size,
+        values:[...new Map([...(previous?.values || []),...values].map(value => [keyFor(value),value])).values()].slice(0,maxValues)});
+    }
+    return [...groups.values()].sort((a,b) => a.order-b.order).slice(0,24);
+  }
+  function sourceFacetGroups(items,categoryId,schema = []) {
+    const groups = new Map(schema.map(group => [group.key,group]));
+    for (const item of items || []) {
+      if (categoryId && item.categoryId !== categoryId) continue;
+      for (const group of item.sourceFacets || []) if (!groups.has(group.key)) groups.set(group.key,group);
+    }
+    return [...groups.values()].sort((a,b) => a.order-b.order).map(({key,label,order}) => ({key,label,order}));
+  }
+  function mergeSourceSchema(data,categoryId,groups) {
+    if (!Array.isArray(groups) || !groups.length) return;
+    data.catalogueFilterGroups ||= {};
+    data.catalogueFilterGroups[categoryId] = normalizeSourceFacets([...(data.catalogueFilterGroups[categoryId] || []),...groups],200);
+  }
+  const values = (item,key) => (isSource(key) ? item.sourceFacets?.find(group => group.key === key)?.values || [] :
+    isCustom(key) ? [item.customAttributes?.[key]] :
     fields(key).flatMap(field => [item[field]].flat())).filter(value => clean(value));
 
   function normalizeGroups(data) {
@@ -47,7 +78,8 @@
       return [{key,name}];
     });
   }
-  const groupLabels = data => ({...labels,...Object.fromEntries(normalizeGroups(data).map(({key,name}) => [key,name]))});
+  const groupLabels = data => ({...labels,...Object.fromEntries(normalizeGroups(data).map(({key,name}) => [key,name])),
+    ...Object.fromEntries(sourceFacetGroups(data.items,undefined,Object.values(data.catalogueFilterGroups || {}).flat()).map(({key,label}) => [key,label]))});
   function createGroup(data,{key,name}) {
     const groups = normalizeGroups(data);
     const group = {key,name:clean(name,60)};
@@ -68,6 +100,9 @@
     const defaults = Object.entries(facetLabels).filter(([key]) => key !== 'favorite').map(([key,label]) =>
       ({key,label,visible:true,collapsed:false}));
     for (const {key,name} of normalizeGroups(data)) defaults.push({key,label:name,visible:false,collapsed:false});
+    for (const {key,label} of sourceFacetGroups(data.items,categoryId,data.catalogueFilterGroups?.[categoryId])) {
+      defaults.push({key,label,visible:true,collapsed:false});
+    }
     const available = new Map(defaults.map(group => [group.key,group])), chosen = [];
     for (const row of Array.isArray(input) ? input : []) {
       const group = available.get(row?.key);
@@ -92,7 +127,7 @@
       data.filterPreferences[categoryId] = config;
     } else if (groups === null) delete data.filterPreferences[categoryId];
     else {
-      if (!Array.isArray(groups) || groups.length > 40) fail(400,'Cấu hình bộ lọc không hợp lệ.');
+      if (!Array.isArray(groups) || groups.length > 70) fail(400,'Cấu hình bộ lọc không hợp lệ.');
       data.filterPreferences[categoryId] = filterConfig(data,categoryId,groups);
     }
   }
@@ -121,11 +156,20 @@
       return rows.get(id);
     }
     if (key === 'suppliers') for (const entry of data.suppliers || []) add(entry.name,{phone:entry.phone,note:entry.note});
+    for (const [categoryId,groups] of Object.entries(data.catalogueFilterGroups || {})) {
+      for (const value of groups.find(group => group.key === key)?.values || []) {
+        const row = add(value);
+        if (!row.categoryIds.includes(categoryId)) row.categoryIds = [...row.categoryIds,categoryId];
+      }
+    }
     for (const item of data.items) {
       const seen = new Set();
       for (const value of values(item,key)) {
         const row = add(value), id = keyFor(value);
-        if (row && !seen.has(id)) row.count++;
+        if (row && !seen.has(id)) {
+          row.count++;
+          if (isSource(key) && !row.categoryIds.includes(item.categoryId)) row.categoryIds = [...row.categoryIds,item.categoryId];
+        }
         seen.add(id);
       }
     }
@@ -167,6 +211,11 @@
     } else fail(400,'Thao tác thuộc tính không hợp lệ.');
 
     for (const item of data.items) {
+      if (isSource(key)) {
+        const group = item.sourceFacets?.find(entry => entry.key === key);
+        if (group) group.values = [...new Set(group.values.map(value => replaced.has(keyFor(value)) ? replacement : value).filter(Boolean))];
+        continue;
+      }
       if (isCustom(key)) {
         if (replaced.has(keyFor(item.customAttributes?.[key]))) {
           if (replacement) item.customAttributes[key] = replacement;
@@ -180,6 +229,10 @@
             .filter(Boolean).map(value => [keyFor(value),value])).values()];
         } else if (replaced.has(keyFor(item[field]))) item[field] = replacement;
       }
+    }
+    if (isSource(key)) for (const groups of Object.values(data.catalogueFilterGroups || {})) {
+      const group = groups.find(entry => entry.key === key);
+      if (group) group.values = [...new Set(group.values.map(value => replaced.has(keyFor(value)) ? replacement : value).filter(Boolean))];
     }
     let next = rows.filter(row => !replaced.has(keyFor(row.name)));
     if (result) {
@@ -199,6 +252,7 @@
     if (!data.categories.some(category => category.id === id)) return;
     if (data.items.some(item => item.categoryId === id)) fail(409,'Hạng mục còn mẫu. Chuyển hoặc xoá mẫu trước.');
     data.categories = data.categories.filter(category => category.id !== id);
+    if (data.catalogueFilterGroups) delete data.catalogueFilterGroups[id];
     if (!canMergeCategory(id)) {
       const removed = removedSystemCategories(data);
       removed.add(id);
@@ -216,6 +270,8 @@
     target.aliases = [...new Set([...(target.aliases || []),source.name,source.source,...(source.aliases || [])].filter(Boolean))];
     for (const item of data.items) if (item.categoryId === sourceId) item.categoryId = targetId;
     for (const record of data.imports || []) if (record.categoryId === sourceId) record.categoryId = targetId;
+    mergeSourceSchema(data,targetId,data.catalogueFilterGroups?.[sourceId]);
+    if (data.catalogueFilterGroups) delete data.catalogueFilterGroups[sourceId];
     for (const rows of Object.values(data.attributes || {})) for (const row of rows) {
       if (row.categoryIds?.includes(sourceId)) {
         row.categoryIds = [...new Set(row.categoryIds.map(id => id === sourceId ? targetId : id))];
@@ -224,7 +280,8 @@
     data.categories = data.categories.filter(category => category.id !== sourceId);
   }
 
-  const api = {labels,facetLabels,groupLabels,normalizeGroups,createGroup,customValues,isCustom,filterConfig,normalizeFilters,saveFilters,parsePrice,priceFields,updatePrice,
+  const api = {labels,facetLabels,groupLabels,normalizeGroups,createGroup,customValues,isCustom,isSource,normalizeSourceFacets,sourceFacetGroups,mergeSourceSchema,
+    palette,colorHex,filterConfig,normalizeFilters,saveFilters,parsePrice,priceFields,updatePrice,
     normalize,view,change,canMergeCategory,removedSystemCategories,removeCategory,mergeCategories};
   if (typeof module !== 'undefined') module.exports = api;
   else window.GDHomeLibraryAttributes = api;

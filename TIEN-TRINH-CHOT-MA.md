@@ -755,3 +755,7 @@ Toàn bộ Playwright Edge sau bản bổ sung đạt 102/102 ca.
 
 Ảnh nhúng chứa nhiều hàng được tách theo dải mã. Mẫu scan có thanh nhận diện được hiện ở Cần nhập mã. Trang trống hoặc lỗi có thông báo riêng và bộ đọc tiếp tục sang trang sau. Node 83/83. Edge 8/8, gồm PDF 4 trang có ảnh nhúng nối hai thanh, một trang trống và một trang scan.
 Bổ sung sau khi đọc đặc tả phần 2. Edge xác nhận đọc đủ 40/40 trang, giữ nhật ký từng trang bỏ qua và vẫn nhận được mẫu ở trang 40.
+
+### 21.10 · Adapter An Cường và bộ lọc từ web
+
+Đọc 423/423 thẻ trong HTML Melamine, lấy ảnh đầy đủ từ products-full, tách mã và giữ rawCode. Lưu nhóm lọc theo hạng mục, có chip màu, cập nhật mẫu trùng và đổi ảnh khi độ phân giải tăng. Website khác có cấu trúc lặp được suy ra nhóm và có bước xem trước để đổi tên hoặc bỏ nhóm. Node 85/85. Edge 6/6 qua hai lượt, gồm nhập lại giữ ID và thay ảnh, chỉnh ánh xạ trước khi lưu.
