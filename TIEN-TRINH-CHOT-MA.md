@@ -777,3 +777,13 @@ Toàn bộ Playwright Edge trên 7dbf8d1 đạt 105/105 ca. Node đạt 86/86.
 | 21.11 | Tìm oak sh, giữ giá trị đếm 0, bỏ từng chip, khôi phục bộ lọc sau tải lại và sửa màu tự đoán. |
 
 XONG GĐ21
+
+## GĐ22 · Sửa lỗi hàng loạt "Cần nhập mã" ở Phào chỉ và mã số gỗ từ web
+
+### 22.1 · Phào chỉ PDF
+Mã nhận dạng chịu lỗi hơn: cho phép dấu cách, chấm, gạch nối ("PC 1234", "PC-1234A") và gộp các mảnh chữ cùng dòng bị tách rời. Thanh chưa ghép được mã không còn bị bỏ hay để trống: lấy dòng chữ gần nhất bên dưới làm mã gợi ý (đánh dấu cần kiểm tra), kể cả khi trang đã có mã khác. Trang còn thanh cần kiểm tra được gửi AI đọc lại; AI trả đúng vị trí thì tự điền mã và bỏ cờ cần kiểm tra.
+
+### 22.2 · Mã gỗ từ web (An Cường)
+Mã chính là phần số (MS 701 SH → 701). Phần còn lại giữ ở tên, rawCode và fullCode. Phân loại có sẵn của nguồn (sourceFacets) vẫn được lấy như cũ. Node 52/67 giống trước khi sửa (15 ca lỗi sẵn do môi trường), riêng gd19-catalogue-web 7/7. Chưa chạy được Edge vì chưa có PDF mẫu; cần anh nhập thử PDF Phào chỉ trang 13–16.
+
+XONG GĐ22

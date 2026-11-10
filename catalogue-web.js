@@ -228,7 +228,9 @@ function anCuongRecords(html,dictionary) {
     const rawCode = readable(content.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1]);
     const split = rawCode.match(/^(.+?)\s+[-–—]\s+(.+)$/);
     const codeAndFinish = (split?.[2] || rawCode).match(/^(.+?\d)\s+([A-Z][A-Z0-9]{0,4})$/);
-    const code = codeAndFinish?.[1] || split?.[2] || rawCode;
+    const fullCode = codeAndFinish?.[1] || split?.[2] || rawCode;
+    // Mã chính là phần số (MS 701 SH → 701); tiền tố/hậu tố là tên phụ, vẫn giữ trong name/rawCode/fullCode.
+    const code = fullCode.match(/\d[\d./-]*\d|\d/)?.[0] || fullCode;
     const name = readable(content.match(/<h3\b[^>]*>([\s\S]*?)<\/h3>/i)?.[1]);
     const productType = readable(classElements(content,'h-group').next().value?.content);
     const images = [...content.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => imageSources(attributes(tag)));
@@ -236,7 +238,7 @@ function anCuongRecords(html,dictionary) {
     const sourceFacets = catalogueFacets(attrs,dictionary);
     const option = prefix => sourceFacets.find(group => group.key.startsWith('ac-'+prefix))?.values[0];
     const detail = classElements(content,'link-load').next().value?.attrs.href;
-    if (code && imageVariants.length) records.push({code,rawCode,name:name || code,images:imageVariants,detail,brand:'An Cường',sourceFacets,
+    if (code && imageVariants.length) records.push({code,rawCode,fullCode,name:name || fullCode,images:imageVariants,detail,brand:'An Cường',sourceFacets,
       size:option('kich-thuoc'),material:split?.[1] || productType || option('loai-san-pham'),finish:codeAndFinish?.[2] || option('hieu-ung-be-mat'),
       collection:option('bo-suu-tap'),grain:option('loai-van-go')});
   }

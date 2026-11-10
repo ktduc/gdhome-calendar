@@ -30,7 +30,7 @@ test('GĐ21.10 An Cường đọc cả thẻ ẩn, tách mã và ánh xạ đún
     fetchFn:async url => new Response(url.endsWith('/robots.txt') ? 'User-agent: *' : html,
       {headers:{'Content-Type':url.endsWith('/robots.txt') ? 'text/plain' : 'text/html'}})});
   assert.equal(result.items.length,4);
-  assert.deepEqual(result.items.map(({code}) => code),['MS 701','MS 702','MS 703','MS 704']);
+  assert.deepEqual(result.items.map(({code}) => code),['701','702','703','704']);
   const [first] = result.items;
   assert.deepEqual([first.material,first.finish,first.rawCode],['MFC','SH','MFC - MS 701 SH']);
   assert.deepEqual(first.sourceFacets.map(({label,values}) => [label,values[0]]),groups);

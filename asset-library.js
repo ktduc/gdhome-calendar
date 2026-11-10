@@ -2044,6 +2044,29 @@ window.GDHomeAssets = (() => {
     });
   }
 
+  function phaoCode(text) {
+    const found = String(text).match(/(?<![A-Z0-9])[A-Z]{1,4}[\s.\-_]{0,2}\d{3,8}[A-Z0-9]{0,3}(?![A-Z0-9])/i)?.[0];
+    return found?.replace(/[\s.\-_]/g,'').toUpperCase();
+  }
+
+  // Mã bị tách thành nhiều mảnh chữ (vd "PC" + "1234") được gộp lại khi cùng dòng và sát nhau.
+  function mergePhaoLabels(labels) {
+    for (let i=0;i<labels.length;i++) {
+      const a = labels[i];
+      if (phaoCode(a.text)) continue;
+      const b = labels.find((other,j) => j !== i && Math.abs(other.y-a.y) <= a.height*.5 &&
+        other.x >= a.x+a.width-2 && other.x-a.x-a.width <= a.height*1.2);
+      const text = b && (a.text + ' ' + b.text);
+      if (!b || !phaoCode(text) || phaoCode(b.text)) continue;
+      const x = Math.min(a.box.x,b.box.x), y = Math.min(a.box.y,b.box.y);
+      a.text = text;
+      a.width = b.x+b.width-a.x;
+      a.box = {x,y,w:Math.max(a.box.x+a.box.w,b.box.x+b.box.w)-x,h:Math.max(a.box.y+a.box.h,b.box.y+b.box.h)-y};
+      labels.splice(labels.indexOf(b),1);
+      i = -1;
+    }
+  }
+
   async function matchPhaoCrops(page,viewport,pdfjs,context,canvas,matches,labels,includeCode) {
     const embedded = await embeddedCatalogueImages(page,viewport,pdfjs,true);
     const components = rasterCatalogueImages(context,canvas,true);
@@ -2147,9 +2170,23 @@ window.GDHomeAssets = (() => {
       return [{...record,size,materialCrop:relativeCrop(image,canvas),
         crop:relativeCrop({x,y,w:right-x,h:bottom-y},canvas),confidence:.95}];
     });
-    if (matches.length) return records;
-    return bars.sort((a,b) => a.y-b.y || a.x-b.x).map(image =>
-      ({code:'',name:'Cần nhập mã',crop:relativeCrop(image,canvas),confidence:.55,needsReview:true}));
+    // Thanh chưa ghép được mã: lấy dòng chữ gần nhất bên dưới làm mã gợi ý, không có thì để trống cho người dùng nhập.
+    const placed = records.map(record => record.materialCrop).map(crop => ({x:crop.x*canvas.width,y:crop.y*canvas.height,
+      w:crop.w*canvas.width,h:crop.h*canvas.height}));
+    const taken = new Set(matches);
+    const leftovers = imageBoxes.filter(box => !placed.some(item => intersection(item,box) >= box.w*box.h*.5))
+      .sort((a,b) => a.y-b.y || a.x-b.x).map(image => {
+        const text = labels.filter(label => !taken.has(label) && label.text.length <= 40 && !/^\d{1,4}(?:\s*[x×*]\s*\d{1,4})?$/i.test(label.text) &&
+          centerX(label.box) >= image.x-image.w*.1 && centerX(label.box) <= endX(image)+image.w*.1 &&
+          label.box.y >= image.y+image.h*.5 && label.box.y-endY(image) <= Math.max(label.height*3,image.h*1.2))
+          .sort((a,b) => a.box.y-b.box.y || a.x-b.x)[0];
+        const code = text?.text.replace(/\s+/g,' ').trim().toUpperCase() || '';
+        const crop = text ? {x:Math.min(image.x,text.box.x),y:image.y,w:Math.max(endX(image),endX(text.box))-Math.min(image.x,text.box.x),
+          h:endY(text.box)-image.y} : image;
+        return {code,name:code || 'Cần nhập mã',codeBox:text && pdfLabelCrop(text,canvas),materialCrop:relativeCrop(image,canvas),
+          crop:relativeCrop(crop,canvas),confidence:code ? .6 : .55,needsReview:true};
+      });
+    return [...records,...leftovers];
   }
 
   function wireCatalogueGuide(form,status) {
@@ -2319,6 +2356,15 @@ window.GDHomeAssets = (() => {
             if (match) Object.assign(match,anCuongLabel(item.code,item.name),{grain:item.grain || match.grain});
             continue;
           }
+          if (layout === 'phao' && localPages.has(item.page) && item.bbox && item.code) {
+            const {x,y,w,h} = item.bbox;
+            const blank = results.find(row => row.page === item.page && row.needsReview && (!row.code || row.confidence < .7) &&
+              x+w/2 >= row.crop.x && x+w/2 <= row.crop.x+row.crop.w && y+h/2 >= row.crop.y && y+h/2 <= row.crop.y+row.crop.h);
+            if (blank) {
+              Object.assign(blank,{code:item.code,name:item.name || item.code,needsReview:false,confidence:Math.max(.85,item.confidence || 0)});
+              continue;
+            }
+          }
           const code = item.code;
           const index = results.findIndex(row => row.page === item.page && row.code.replace(/\s/g,'').toUpperCase() === code.replace(/\s/g,'').toUpperCase());
           const match = index >= 0;
@@ -2360,9 +2406,10 @@ window.GDHomeAssets = (() => {
           const width = item.width*scale, height = Math.max(1,item.height*scale);
           return {text:item.str.trim(),x,y,width,height,box:catalogueTextBounds(item,viewport,pdfjs,width,height)};
         });
+        if (layout === 'phao') mergePhaoLabels(labels);
         const matches = layout === 'ancuong' ? [] : layout === 'kitchen' ? kitchenCatalogueRows(labels) : labels.flatMap(label => {
           if (layout === 'phao') {
-            const code = label.text.match(/\b[A-Z]{1,4}\s*\d{3,8}[A-Z0-9]*\b/i)?.[0]?.replace(/\s/g,'').toUpperCase();
+            const code = phaoCode(label.text);
             return code ? [{...label,code,name:code}] : [];
           }
           const match = regexes.map(regex => label.text.match(regex)).filter(Boolean)
@@ -2395,14 +2442,14 @@ window.GDHomeAssets = (() => {
         const count = layout === 'kitchen' ? matches.length : detected.length+swatches.length;
         if (results.length + count > 5000) throw Object.assign(new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.'),{code:'catalogue_limit'});
         const needsAi = generic ? !detected.some(item => !item.unmatched) :
-          layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : layout !== 'phao' && !matches.length;
+          layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : layout === 'phao' ? detected.some(item => item.needsReview) : !matches.length;
         if (layout === 'ancuong' && labels.length && !swatches.length) return;
         // Save page as a compressed image and keep only the swatch canvases live.
         const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
         sources.set(number,source);
         pageAspects.set(number,canvas.width/canvas.height);
         if (layout !== 'phao' && !labels.length) scannedPages.add(number);
-        if (matches.length || swatches.length) localPages.add(number);
+        if (matches.length || swatches.length || (layout === 'phao' && detected.length)) localPages.add(number);
         if (needsAi && useAi()) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
         for (const swatch of [...swatches,...detected]) results.push({...swatch,page:number,source});
