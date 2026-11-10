@@ -79,3 +79,25 @@ test('Đọc tên, kích thước và mã gạch từ HTML sản phẩm sau lỗ
   assert.equal(result.next,'https://catalogue.test/gach/page/6/');
   assert.equal(result.needsAi,false);
 });
+
+test('Ưu tiên ảnh Product, OG, gallery và srcset có độ phân giải cao', async () => {
+  const documents = {
+    '/san-pham/mau':'<meta property="og:image" content="/og.jpg"><a href="/gallery.jpg"><img data-zoom-image="/zoom.jpg"></a>' +
+      '<script type="application/ld+json">{"@type":"Product","sku":"X-001","image":[{"url":"/low.jpg","width":320,"height":320},{"url":"/full.jpg","width":1600,"height":1600}]}</script>',
+    '/grid':'<a href="/san-pham/a"><img alt="Mẫu A-100" src="/small.jpg" srcset="/small.jpg 300w, /big.jpg 1800w, /mid.jpg 900w"></a>' +
+      '<a href="/san-pham/b"><img alt="Mẫu B-100" width="400" srcset="/b1.jpg 1x, /b3.jpg 3x, /b2.jpg 2x"></a>' +
+      '<a href="/san-pham/c"><img alt="Mẫu C-100" src="/wp-content/uploads/2026/photo-247x296.jpg"></a>' +
+      '<a href="/san-pham/logo"><img alt="Logo" src="/logo.png"></a>'
+  };
+  const options = {dnsResolver:async () => [{address:'8.8.8.8'}],fetchFn:async url => {
+    const name = new URL(url).pathname;
+    return new Response(name === '/robots.txt' ? 'User-agent: *' : documents[name],{
+      headers:{'Content-Type':name === '/robots.txt' ? 'text/plain' : 'text/html'}
+    });
+  }};
+  const detail = (await importCatalogueUrls(['https://catalogue.test/san-pham/mau'],options)).items[0];
+  assert.deepEqual([detail.image,...detail.imageAlternates].map(url => new URL(url).pathname),
+    ['/full.jpg','/low.jpg','/og.jpg','/gallery.jpg','/zoom.jpg']);
+  const listing = await importCatalogueUrls(['https://catalogue.test/grid'],options);
+  assert.deepEqual(listing.items.map(item => new URL(item.image).pathname),['/big.jpg','/b3.jpg','/wp-content/uploads/2026/photo.jpg']);
+});

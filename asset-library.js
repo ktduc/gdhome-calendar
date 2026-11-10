@@ -2162,7 +2162,26 @@ window.GDHomeAssets = (() => {
       else signal.addEventListener('abort',done,{once:true});
     });
   }
-  async function scanCatalogueWeb(url,{ai,signal,onProgress,onSource,onWarning,budget}) {
+  async function downloadCataloguePhoto(product,signal) {
+    let failure;
+    for (const url of [product.image,...(product.imageAlternates || []).slice(0,5)]) {
+      signal.throwIfAborted();
+      try {
+        const response = await fetch('/api/catalogue/image',{method:'POST',signal,
+          headers:{...hooks.headers(),'Content-Type':'application/json'},body:JSON.stringify({url})});
+        if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || 'Không tải được ảnh.');
+        const blob = await response.blob();
+        const bitmap = await createImageBitmap(blob);
+        try {
+          if (Math.min(bitmap.width,bitmap.height) < 300) throw new Error('Bỏ ảnh nhỏ hơn 300 px.');
+        } finally { bitmap.close(); }
+        return {blob,url};
+      } catch (error) { failure = error; }
+    }
+    throw failure;
+  }
+
+  async function scanCatalogueWeb(url,{ai,signal,onProgress,onSource,onWarning,budget,hashes}) {
     const items = [], failures = new Set(), visited = new Set(), seen = new Set();
     let total, resume = '', aiWarning = '', missingImages = 0, limitReached = false;
     while (url && !signal.aborted && budget.pages && budget.items) {
@@ -2214,12 +2233,13 @@ window.GDHomeAssets = (() => {
       for (const product of products) {
         if (signal.aborted) break;
         try {
-          const response = await fetch('/api/catalogue/image',{method:'POST',signal,
-            headers:{...hooks.headers(),'Content-Type':'application/json'},body:JSON.stringify({url:product.image})});
-          if (!response.ok) throw new Error((await response.json().catch(() => ({}))).message || 'Không tải được ảnh.');
-          const source = URL.createObjectURL(await response.blob());
+          const photo = await downloadCataloguePhoto(product,signal);
+          const hash = await catalogueHash(photo.blob);
+          if (hashes.has(hash)) continue;
+          hashes.add(hash);
+          const source = URL.createObjectURL(photo.blob);
           onSource(source);
-          items.push({...product,source,crop:{x:0,y:0,w:1,h:1},confidence:.7,web:true});
+          items.push({...product,image:photo.url,source,crop:{x:0,y:0,w:1,h:1},confidence:.7,web:true});
           progress();
         } catch (error) {
           if (!signal.aborted) {
@@ -2621,6 +2641,7 @@ window.GDHomeAssets = (() => {
         await saveImportRows(activeImports);
         const guide = readGuide(), budget = {pages:30,items:600};
         const ai = {available:!!window.GDHomeAI,pdf:form.elements.useAi.checked,web:form.elements.useWebAi.checked};
+        const webHashes = new Map();
         const scans = new Array(activeImports.length);
         let next = 0;
         async function worker() {
@@ -2635,7 +2656,11 @@ window.GDHomeAssets = (() => {
             onProgress('Đang chạy…');
             try {
               let imported;
-              if (entry.type === 'web') imported = await scanCatalogueWeb(entry.url,{ai,signal,onProgress,onWarning,budget,onSource:source => sources.add(source)});
+              if (entry.type === 'web') {
+                if (!webHashes.has(entry.categoryId)) webHashes.set(entry.categoryId,new Set());
+                imported = await scanCatalogueWeb(entry.url,{ai,signal,onProgress,onWarning,budget,
+                  hashes:webHashes.get(entry.categoryId),onSource:source => sources.add(source)});
+              }
               else if (entry.type === 'pdf') imported = await scanWoodCatalogue(entry.file,form.elements.patterns.value,
                 (page,total) => onProgress('Đang đọc trang ' + page + '/' + total + '…'),
                 {ai,signal,layout:entry.layout,guide,onWarning,includeCode:form.elements.includeCode.checked,

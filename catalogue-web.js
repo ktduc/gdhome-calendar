@@ -74,7 +74,29 @@ function attributes(tag) {
 }
 const first = value => Array.isArray(value) ? value[0] : value;
 const readable = value => decode(String(value || '').replace(/<[^>]*>/g,' ')).replace(/\s+/g,' ').trim();
-const imageSource = attrs => attrs['data-src'] || attrs['data-lazy-src'] || attrs['data-original'] || attrs.src || attrs.srcset?.split(/\s/)[0];
+const nonProductImage = /(?:^|[/_.-])(?:logo|sprite|icon|avatar|pixel|banner|placeholder)(?:[/_.-]|$)/i;
+function srcsetImages(attrs) {
+  const width = Number(attrs.width) || 300;
+  return ['srcset','data-srcset','data-lazy-srcset'].flatMap(key => String(attrs[key] || '').split(',').flatMap(value => {
+    const match = value.trim().match(/^(\S+)(?:\s+(\d+(?:\.\d+)?)([wx]))?$/);
+    if (!match) return [];
+    return [{url:match[1],width:match[3] === 'x' ? Number(match[2])*width : Number(match[2]) || width}];
+  })).sort((a,b) => b.width-a.width).map(item => item.url);
+}
+const zoomImages = attrs => [attrs['data-zoom-image'],attrs['data-large'],attrs['data-large_image'],attrs['data-large-image']];
+const imageSources = attrs => [...zoomImages(attrs),...srcsetImages(attrs),attrs['data-original'],attrs['data-src'],attrs['data-lazy-src'],attrs.src].filter(Boolean);
+const imageLink = url => /\.(?:jpe?g|webp|png|avif|gif|bmp)(?:[?#]|$)/i.test(url || '');
+function galleryImages(html) {
+  return [...html.matchAll(/<(?:img|a)\b[^>]*>/gi)].flatMap(([tag]) => {
+    const attrs = attributes(tag);
+    return [...zoomImages(attrs),imageLink(attrs.href) && attrs.href].filter(Boolean);
+  });
+}
+function productImages(input) {
+  return [input].flat().map(value => typeof value === 'string' ? {url:value,area:0} : {
+    url:value?.contentUrl || value?.url,area:(Number(value?.width) || 0)*(Number(value?.height) || 0)
+  }).filter(item => item.url).sort((a,b) => b.area-a.area).map(item => item.url);
+}
 function productLinks(html,url) {
   const products = new Map();
   for (const [,tag,content] of html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/gi)) {
@@ -87,9 +109,9 @@ function productLinks(html,url) {
     } catch { continue; }
     const record = products.get(href) || {};
     const img = content.match(/<img\b[^>]*>/i)?.[0];
-    if (img && !record.image) {
+    if (img && !record.images?.length) {
       const attrs = attributes(img);
-      record.image = imageSource(attrs);
+      record.images = imageSources(attrs);
       record.code = attrs['data-sku'] || link['data-sku'];
       record.size = attrs['data-size'];
       record.name ||= attrs.alt || attrs.title;
@@ -116,9 +138,20 @@ function extractProducts(html,url,validateUrl,maxItems) {
   const items = [];
   const seen = new Set();
   function add(record) {
-    if (!record.image || items.length >= maxItems) return;
-    let image;
-    try { image = validateUrl(new URL(record.image,url).href).href; } catch { return; }
+    if (!record.images?.length || items.length >= maxItems) return;
+    const candidates = [...new Set(record.images.flatMap(source => {
+      try {
+        const absolute = validateUrl(new URL(source,url).href);
+        if (nonProductImage.test(absolute.pathname)) return [];
+        const original = new URL(absolute);
+        if (/\/wp-content\/uploads\//i.test(original.pathname)) {
+          original.pathname = original.pathname.replace(/-\d+x\d+(?=\.[a-z]+$)/i,'');
+        }
+        return [original.href,absolute.href];
+      } catch { return []; }
+    }))].slice(0,6);
+    const [image,...imageAlternates] = candidates;
+    if (!image) return;
     const name = readable(record.name || title);
     const code = readable(record.code) || nameCode(name);
     const size = readable(record.size) || name.match(/\b\d{2,4}\s*(?:cm|mm)?\s*[×x*]\s*\d{2,4}(?:\s*(?:cm|mm))?\b/i)?.[0] || '';
@@ -126,34 +159,38 @@ function extractProducts(html,url,validateUrl,maxItems) {
     if (seen.has(key) || (!code && items.some(item => item.image === image))) return;
     seen.add(key);
     items.push({name:name.slice(0,160),code:code.slice(0,80),
-      size:size.slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image});
+      size:size.slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image,
+      ...(imageAlternates.length ? {imageAlternates} : {})});
   }
+  const structured = [];
   for (const block of html.matchAll(/<script\b[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script\s*>/gi)) {
     try {
       const queue = [JSON.parse(block[1])];
-      for (let i=0; i<queue.length && i<2500 && items.length<maxItems; i++) {
+      for (let i=0; i<queue.length && i<2500 && structured.length<maxItems; i++) {
         const node = queue[i];
         if (!node || typeof node !== 'object') continue;
         if ([node['@type']].flat().some(type => typeof type === 'string' && /(?:^|\/)Product$/.test(type))) {
-          const img = first(node.image), brand = first(node.brand);
-          add({name:node.name,code:node.sku || node.mpn || node.productID,size:node.size,
-            brand:typeof brand === 'object' ? brand?.name : brand,image:typeof img === 'object' ? img?.url || img?.contentUrl : img});
+          const brand = first(node.brand);
+          structured.push({name:node.name,code:node.sku || node.mpn || node.productID,size:node.size,
+            brand:typeof brand === 'object' ? brand?.name : brand,images:productImages(node.image)});
         }
         for (const child of Object.values(node)) if (child && typeof child === 'object') queue.push(child);
       }
     } catch { /* A malformed script does not prevent HTML fallback. */ }
   }
+  const singleProduct = /^(?:og:)?product$/i.test(meta['og:type'] || '') || /\/(?:san-pham|products?)\/[^/]+\/?$/i.test(new URL(url).pathname);
+  const gallery = singleProduct || structured.length === 1 ? [meta['og:image'],...galleryImages(html)].filter(Boolean) : [];
+  for (const record of structured) add({...record,images:[...record.images,...gallery]});
+  if (!items.length && singleProduct) add({name:title,code:meta['product:retailer_item_id'],images:gallery});
   if (!items.length) for (const record of productLinks(html,url)) add(record);
   if (!items.length) {
     for (const match of html.matchAll(/<img\b[^>]*>/gi)) {
       const attrs = attributes(match[0]);
-      const source = imageSource(attrs);
-      if (!source || /logo|sprite|icon|avatar|pixel|banner/i.test(source) || (attrs.width && Number(attrs.width)<100)) continue;
       if (!attrs.alt && !/product|san-pham/i.test(attrs.class || '')) continue;
-      add({name:attrs.alt || attrs.title,code:attrs['data-sku'],size:attrs['data-size'],image:source});
+      add({name:attrs.alt || attrs.title,code:attrs['data-sku'],size:attrs['data-size'],images:imageSources(attrs)});
     }
     if (meta['og:image']) {
-      add({name:title,code:meta['product:retailer_item_id'],image:meta['og:image']});
+      add({name:title,code:meta['product:retailer_item_id'],images:[meta['og:image']]});
     }
   }
   return items;

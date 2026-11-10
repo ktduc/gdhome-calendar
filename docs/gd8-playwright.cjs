@@ -7,6 +7,13 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 const cases = {};
+function webPhoto(label,width = 320,height = 320) {
+  const {PNG} = require('pngjs');
+  const color = require('node:crypto').createHash('sha256').update(label).digest();
+  const png = new PNG({width,height});
+  png.data.fill(Buffer.from([color[0],color[1],color[2],255]));
+  return PNG.sync.write(png);
+}
 
 cases['8.1'] = async page => {
   await openMaterials(page);
@@ -2184,7 +2191,7 @@ cases['19.6'] = async page => {
   });
   await page.route('**/api/catalogue/image',route => {
     assert.equal(route.request().postDataJSON().url,'https://example.com/gach.png');
-    return route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')});
+    return route.fulfill({contentType:'image/png',body:webPhoto('gach')});
   });
   await openMaterials(page);
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
@@ -2846,22 +2853,15 @@ cases['20.11'] = async page => {
 
 cases['20.9'] = async page => {
   await openMaterials(page);
-  const secondImage = await page.evaluate(() => {
-    const canvas = Object.assign(document.createElement('canvas'),{width:32,height:18});
-    const context = canvas.getContext('2d');
-    context.fillStyle = '#65a643';
-    context.fillRect(0,0,32,18);
-    return canvas.toDataURL('image/png').split(',')[1];
-  });
   let reads = 0;
   await page.route('**/api/catalogue/web',route => {
     reads++;
     const row = (code,image) => ({code,name:code,image:'https://example.com/' + image + '.png',brand:'Hãng lịch sử'});
     return route.fulfill({json:{items:reads === 1 ? [row('G-01','a')] :
-      [row('g 01','b'),row('G-02','a'),row('G-03','b')]}});
+      [row('g 01','c'),row('G-02','a'),row('G-03','b')]}});
   });
   await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',
-    body:Buffer.from(route.request().postDataJSON().url.endsWith('a.png') ? imageFixture : secondImage,'base64')}));
+    body:webPhoto(route.request().postDataJSON().url)}));
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
@@ -2909,7 +2909,7 @@ cases['20.10'] = async page => {
   });
   await page.route('**/api/catalogue/image',route => {
     images.push(route.request().postDataJSON().url);
-    return route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')});
+    return route.fulfill({contentType:'image/png',body:webPhoto(images.at(-1))});
   });
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
@@ -2974,7 +2974,7 @@ cases['20.12'] = async page => {
     const aiWarning = code === 'WEB-A' ? 'Gemini · Đã hết hạn mức API.' : undefined;
     return route.fulfill({json:{items:[{code,name:code,image:url+'.png'}],aiWarning}});
   });
-  await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:Buffer.from(imageFixture,'base64')}));
+  await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:webPhoto(route.request().postDataJSON().url)}));
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'ancuong-wood'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
@@ -3024,6 +3024,35 @@ cases['20.12'] = async page => {
   assert.equal(data.imports.find(entry => entry.source === 'https://example.com/a').status,'done');
 };
 
+cases['21.3'] = async page => {
+  await openMaterials(page);
+  const seen = [], base = 'https://example.com/';
+  await page.route('**/api/catalogue/web',route => route.fulfill({json:{items:[
+    {code:'GD-211',name:'Ảnh gốc',image:base+'missing.png',imageAlternates:[base+'thumb.png',base+'large.png']},
+    {code:'GD-212',name:'Trùng nội dung',image:base+'copy.png'},
+    {code:'GD-213',name:'Ảnh nhỏ',image:base+'icon.png'}
+  ]}}));
+  await page.route('**/api/catalogue/image',route => {
+    const file = new URL(route.request().postDataJSON().url).pathname.slice(1);
+    seen.push(file);
+    if (file === 'missing.png') return route.fulfill({status:404});
+    const body = ['thumb.png','icon.png'].includes(file) ? webPhoto('small',200,200) : webPhoto('original',800,400);
+    return route.fulfill({contentType:'image/png',body});
+  });
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=autoSave]').uncheck();
+  await modal.locator('[name=urls]').fill(base+'catalogue');
+  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.locator('[data-save-wood]:enabled').waitFor();
+  assert.deepEqual(seen,['missing.png','thumb.png','large.png','copy.png','icon.png']);
+  assert.deepEqual(await modal.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),['GD-211']);
+  assert.equal(await modal.locator('.wood-catalogue-card canvas').evaluate(canvas => canvas.width/canvas.height),2);
+  assert.match(await modal.locator('[data-source-warning]').innerText(),/300 px/);
+};
+
 cases['20.12-bulk'] = async page => {
   await openMaterials(page);
   const png = Buffer.from(imageFixture,'base64');
@@ -3040,7 +3069,7 @@ cases['20.12-bulk'] = async page => {
     });
     return route.fulfill({json:{items,total:3,next:n < 3 ? url.origin+'/tiles?page='+(n+1) : null}});
   });
-  await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:png}));
+  await page.route('**/api/catalogue/image',route => route.fulfill({contentType:'image/png',body:webPhoto(route.request().postDataJSON().url)}));
   await page.route('**/api/materials/assets/*',route => route.fulfill({contentType:'image/png',body:png}));
   await page.route('**/api/materials/assets',route => {
     const index = processed+1;

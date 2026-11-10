@@ -590,12 +590,6 @@ Lượt hồi quy đầu phát hiện ca 19.6 còn trỏ ô nhà cung cấp vào
 
 XONG GĐ20
 
-## GĐ21
-
-| Bước | Thay đổi và kiểm thử |
-| --- | --- |
-| 21.6 | Hộp thư viện cao cố định. Danh sách hạng mục cuộn riêng, nút thêm ở đáy, các thao tác quản lý nằm trong menu ⋯ và dải thêm ảnh có thể gập. Node 78/78. Edge 21.6, 20-category-merge-target, 20-library-ui, 20.16, 17.0 đạt. |
-
 ## GĐ20 bổ sung lần 3
 
 - 20.17. Khi đọc kích thước cũ dạng mảng hoặc danh sách phân tách bằng dấu phẩy/chấm phẩy, thư viện chỉ dùng giá trị đầu tiên. Kích thước được lưu thành một chuỗi. Mục chưa có kích thước hợp lệ để trống.
@@ -715,5 +709,12 @@ Ca 20.14 kiểm tra phiên Google trên máy chủ thử với phản hồi toke
 | 20.18 | Đạt |
 
 XONG GĐ20
+
+## GĐ21
+
+| Bước | Thay đổi và kiểm thử |
+| --- | --- |
+| 21.6 | Hộp thư viện cao cố định. Danh sách hạng mục cuộn riêng, nút thêm ở đáy, các thao tác quản lý nằm trong menu ⋯ và dải thêm ảnh có thể gập. Node 78/78. Edge 21.6, 20-category-merge-target, 20-library-ui, 20.16, 17.0 đạt. |
 | 21.1 | Dò biên ảnh nhúng và vùng ảnh raster, ghép mã theo vị trí, giữ khung trong biên mẫu và đưa khung mơ hồ vào Cần kiểm tra. AI chỉ nhận trang chưa ghép được ảnh với mã. Node 78/78. Edge 21.1 và 9 ca PDF hồi quy đạt. |
 | 21.2 | Giới hạn tốc độ theo khóa, đọc RetryInfo, thử lại có jitter, đổi khóa dự phòng và tiếp tục job từ trang chưa xử lý. Kết nối hiển thị số yêu cầu trong ngày và cấu hình model. Node 80/80. Edge 21.2 và 7 ca hồi quy đạt. |
+| 21.3 | Chọn ảnh Product, OG, gallery và srcset lớn. Đọc kích thước ảnh thật và lọc SHA-256 trùng trước khi nén. Node 81/81. Edge 21.3 và 5 ca nhập web đạt. |
