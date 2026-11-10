@@ -48,14 +48,16 @@ function itemMetadata(item) {
   const tags = stringList([...(Array.isArray(item.tags) ? item.tags : []),...(cabinetWidth ? ['Tủ '+cabinetWidth] : [])]);
   const suppliedSize = Object.hasOwn(item,'size');
   const sourceFacets = attributes.normalizeSourceFacets(item.sourceFacets);
+  const inferredFields = attributes.inferredFields(item.inferredFields);
   return {brand:text(item.brand,80),size:materialSize(suppliedSize ? item.size : item.name,suppliedSize),tags,suppliers:stringList(item.suppliers),
-    ...Object.fromEntries(['material','finish','collection','subgroup'].filter(key => Object.hasOwn(item,key))
+    ...Object.fromEntries(['material','finish','collection','subgroup','tone','grain'].filter(key => Object.hasOwn(item,key))
       .map(key => [key,text(item[key],['finish','collection'].includes(key) ? 120 : 80)])),
     ...(Array.isArray(item.brands) ? {brands:stringList(item.brands)} : {}),
     ...(item.spec ? {spec:text(item.spec,160)} : {}),...(item.subgroup ? {subgroup:text(item.subgroup,80)} : {}),
     ...(cabinetWidth ? {cabinetWidth} : {}),...(item.innerWidth ? {innerWidth:number(item.innerWidth,20000)} : {}),
     ...(item.unit ? {unit:text(item.unit,30)} : {}),...(item.rawCode ? {rawCode:text(item.rawCode,100)} : {}),
     ...(sourceFacets.length ? {sourceFacets} : {}),
+    ...(inferredFields.length ? {inferredFields} : {}),
     ...(Number.isSafeInteger(item.sourcePixels) && item.sourcePixels > 0 ? {sourcePixels:item.sourcePixels} : {}),
     ...attributes.priceFields(item)};
 }
@@ -141,7 +143,8 @@ function normalize(data) {
   const filterData = {...base,categories,items,catalogueFilterGroups};
   return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
     ...(removed.size ? {removedSystemCategories:[...removed]} : {}),
-    attributeGroups,catalogueFilterGroups,filterPreferences:attributes.normalizeFilters(filterData),showPrices:base.showPrices === true,
+    attributeGroups,catalogueFilterGroups,filterPreferences:attributes.normalizeFilters(filterData),
+    filterPresets:attributes.filterPresets(filterData),showPrices:base.showPrices === true,
     attributes:attributes.normalize(filterData),imports:(Array.isArray(base.imports) ? base.imports : [])
       .slice(0,200).map(importHistory.normalize).filter(Boolean),woodSeeded:true,paintSeeded:true };
 }
@@ -284,6 +287,10 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     const {data} = await mutate(store,key,data => attributes.saveFilters(data,body || {}));
     return sendJson(res,200,data);
   }
+  if (urlPath === '/api/library/filter-presets') {
+    const {data} = await mutate(store,key,data => attributes.saveFilterPreset(data,body || {}));
+    return sendJson(res,200,data);
+  }
   if (urlPath === '/api/library/preferences') {
     if (typeof body.showPrices !== 'boolean') fail(400,'Thiết lập hiện giá không hợp lệ.');
     const {data} = await mutate(store,key,data => { data.showPrices = body.showPrices; });
@@ -418,6 +425,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       attributes.updatePrice(item,body);
       if (Object.hasOwn(body,'customAttributes')) item.customAttributes = attributes.customValues(body.customAttributes,data.attributeGroups);
       if (Object.hasOwn(body,'sourceFacets')) item.sourceFacets = attributes.normalizeSourceFacets(body.sourceFacets);
+      if (Object.hasOwn(body,'inferredFields')) item.inferredFields = attributes.inferredFields(body.inferredFields);
       for (const field of Object.keys(attributes.labels)) {
         if (Object.hasOwn(body,field)) item[field] = metadata[field];
       }

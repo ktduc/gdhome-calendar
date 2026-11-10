@@ -3545,6 +3545,7 @@ cases['19.9'] = async page => {
   const item = (await page.request.get('/api/library').then(r => r.json())).items.find(item => item.code === 'KT1210');
   assert.equal(item.size,'30x120');
   assert.equal(item.display,'pad');
+  assert.equal(item.sourceFacets.find(group => group.key === 'ac-mau-sac').values[0],'Trắng');
   assert.ok(!item.square && !item.originalFull);
   await modal.locator('.close-dialog').click();
   const library = page.locator('.asset-library-dialog');
@@ -3637,6 +3638,81 @@ cases['21.8'] = async page => {
   assert.equal(aiRequests,0);
 };
 
+cases['21.11'] = async page => {
+  await openMaterials(page);
+  await page.route(/\/api\/materials\/assets\/([123])\1{63}\.webp$/,route =>
+    route.fulfill({body:webPhoto('mau-loc'),contentType:'image/png'}));
+  await page.evaluate(async () => {
+    const items = [
+      ['MS 7011','Mẫu sồi đẹp','SH','Oak','Nâu'],
+      ['MS 7012','Mẫu óc chó','SH','Walnut','Xám'],
+      ['MS 7013','Mẫu sồi mờ','EV','Oak','Xám']
+    ].map(([code,name,finish,grain,color],index) => {
+      const file = String(index+1).repeat(64)+'.webp';
+      return {code,name,finish,full:file,thumb:file,tags:['Gỗ tự nhiên'],sourceFacets:[
+        {key:'ac-loai-van-go',label:'Loại Vân Gỗ',order:1,values:[grain]},
+        {key:'ac-mau-sac',label:'Màu Sắc',order:2,values:[color]}
+      ]};
+    });
+    await GDHomeAssets.addItems('cat-6',items);
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog');
+  const search = library.locator('.asset-library-head input[type=search]');
+  const card = code => library.locator('.asset-card').filter({hasText:code});
+  await search.fill('oak sh');
+  await card('MS 7012').waitFor({state:'detached'});
+  assert.equal(await library.locator('.asset-card').count(),1);
+  assert.ok(await card('MS 7011').isVisible());
+  assert.equal(await library.locator('datalist option').count(),1);
+  await search.fill('go tu nhien soi');
+  await card('MS 7013').waitFor();
+  assert.equal(await library.locator('.asset-card').count(),2);
+  await search.clear();
+  await card('MS 7012').waitFor();
+  const ev = library.locator('[data-facet=finish][data-value=EV]');
+  const oak = library.locator('[data-facet=ac-loai-van-go][data-value=Oak]');
+  const walnut = library.locator('[data-facet=ac-loai-van-go][data-value=Walnut]');
+  await ev.check();
+  assert.equal(await oak.getAttribute('data-filter-count'),'1');
+  assert.equal(await walnut.getAttribute('data-filter-count'),'0');
+  assert.equal(await walnut.isEnabled(),true);
+  await walnut.check();
+  await library.getByText('Không có mẫu khớp bộ lọc',{exact:false}).waitFor();
+  await library.getByRole('button',{name:'Bỏ Loại Vân Gỗ Walnut'}).click();
+  await card('MS 7013').waitFor();
+  await oak.check();
+  page.once('dialog',prompt => prompt.accept('Gỗ sồi mờ'));
+  await library.getByRole('button',{name:'Lưu bộ lọc',exact:true}).click();
+  await library.locator('[data-filter-preset] option').filter({hasText:'Gỗ sồi mờ'}).waitFor({state:'attached'});
+  await page.reload();
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await library.getByLabel('Bộ lọc nhanh').selectOption({label:'Gỗ sồi mờ'});
+  assert.equal(await library.locator('.asset-card').count(),1);
+  await library.getByRole('button',{name:'Xoá lọc',exact:true}).click();
+  assert.equal(await library.locator('.asset-card').count(),3);
+
+  const {PNG} = require('pngjs');
+  const image = new PNG({width:340,height:340});
+  image.data.fill(Buffer.from([216,196,163,255]));
+  const chooser = page.waitForEvent('filechooser');
+  await library.locator('.asset-drop').click();
+  await (await chooser).setFiles({name:'mau-doan-mau.png',mimeType:'image/png',buffer:PNG.sync.write(image)});
+  const uploaded = card('mau doan mau');
+  await uploaded.getByText('Tự đoán',{exact:true}).waitFor();
+  await uploaded.locator('figcaption').dblclick();
+  const editor = page.locator('.asset-attribute-editor');
+  assert.equal(await editor.getByLabel('Màu Sắc',{exact:true}).inputValue(),'Be');
+  assert.equal(await editor.getByLabel('Tông màu',{exact:true}).inputValue(),'Sáng');
+  assert.equal(await editor.getByLabel('Loại vật liệu',{exact:true}).inputValue(),'Đơn sắc');
+  await editor.getByLabel('Màu Sắc',{exact:true}).fill('Trắng');
+  await editor.getByRole('button',{name:'Lưu mẫu'}).click();
+  await editor.waitFor({state:'detached'});
+  const item = (await page.request.get('/api/library').then(r => r.json())).items.find(item => item.name === 'mau doan mau');
+  assert.deepEqual(item.sourceFacets.find(group => group.key === 'ac-mau-sac').values,['Trắng']);
+  assert.deepEqual(item.inferredFields,['tone','material']);
+};
+
 cases['21.10'] = async page => {
   await openMaterials(page);
   const source = 'https://ancuong.com/melamine.html';
@@ -3725,6 +3801,12 @@ cases['21.9'] = async page => {
   for (const [code,y] of [['KT900',356],['KT901',287]]) {
     first.drawText(code,{x:150,y,size:14,color:rgb(1,1,1),font});
   }
+  const white = rgb(.92,.92,.92);
+  first.drawRectangle({x:390,y:370,width:225,height:24,color:white});
+  first.drawRectangle({x:390,y:343,width:225,height:24,color:white});
+  first.drawRectangle({x:610,y:367,width:2,height:3,color:rgb(.72,.73,.75)});
+  first.drawText('NT900',{x:499,y:368,size:1.7,color:white,font});
+  first.drawText('NT901',{x:486,y:332,size:11,color:white,font});
   pdf.addPage([700,450]);
   const scanned = pdf.addPage([700,450]);
   background(scanned);
@@ -3753,7 +3835,7 @@ cases['21.9'] = async page => {
   await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
   const cards = modal.locator('.wood-catalogue-card');
   assert.deepEqual(await cards.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),
-    ['KT900','KT901','','NT903']);
+    ['KT900','KT901','NT900','NT901','','NT903']);
   assert.equal(await cards.filter({hasText:'T3 · 55%'}).locator('input[type=checkbox]').isChecked(),false);
   assert.equal(await cards.filter({hasText:'T40 · 95%'}).count(),1);
   assert.deepEqual(await page.evaluate(() => [...new Set(window.gd21ReadPages)]),Array.from({length:40},(_,i) => i+1));

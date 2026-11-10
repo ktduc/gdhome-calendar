@@ -40,6 +40,10 @@
 .asset-facet-choice input{flex:none;margin:0}
 .asset-facet-choice span{overflow-wrap:anywhere}
 .asset-facet-color{flex:none;width:12px;height:12px;border:1px solid #0003;border-radius:50%}
+.asset-facet-choice.is-zero{color:#64748b}
+.asset-facet-choice.is-zero:not(:has(input:checked)){opacity:.64}
+.asset-active-facets,.asset-preset-controls{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:5px 0}
+.asset-active-facets button[data-remove-facet]{background:#e8f0fe;color:#174ea6;border-radius:12px}
 .asset-facet-choice[hidden]{display:none}
 .asset-facets [data-edit-filters]{margin-bottom:6px}
 .asset-facets [data-facet-search]{box-sizing:border-box;width:100%;min-width:0;margin:3px 0}
@@ -299,6 +303,7 @@
 .asset-card figcaption{white-space:normal;overflow-wrap:anywhere}
 .asset-card-badge{position:absolute;top:4px;left:4px;max-width:calc(100% - 26px);background:#fff;border-radius:4px;padding:2px 4px;font-size:10px;overflow-wrap:anywhere}
 .asset-card-price{display:block;font-weight:600;color:var(--gd-ink,#172039);padding:2px 3px;overflow-wrap:anywhere}
+.asset-inferred-note{padding:2px 3px;color:#526176}
 .asset-facets:empty{display:none}
 .asset-facet-choice:has(:checked){color:#174ea6;font-weight:600}
 .asset-thumb .asset-paint-swatch{display:block;width:100%;height:100%}

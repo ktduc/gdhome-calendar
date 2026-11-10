@@ -1,5 +1,5 @@
 (() => {
-  const labels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',
+  const labels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',tone:'Tông màu',
     finish:'Bề mặt',collection:'Bộ sưu tập',subgroup:'Nhóm con phụ kiện',tags:'Tag'};
   const facetLabels = {favorite:'★ Yêu thích',review:'Duyệt mẫu',size:labels.size,brand:labels.brand,suppliers:labels.suppliers,
     material:labels.material,finish:labels.finish,collection:labels.collection,subgroup:'Nhóm phụ kiện',
@@ -39,6 +39,33 @@
   const palette = {'Be':'#d8c4a3','Cam':'#ef8d29','Đen':'#202020','Đỏ':'#bf3336','Hồng':'#e98baa','Nâu':'#754d35',
     'Tím':'#8862a4','Trắng':'#faf9f4','Xám':'#8c9096','Xanh Dương':'#3674a6','Xanh Lá':'#618747','Vàng':'#e6c342'};
   const colorHex = value => Object.entries(palette).find(([name]) => keyFor(name) === keyFor(value))?.[1];
+  const inferredFields = input => ['ac-mau-sac','tone','material'].filter(key => Array.isArray(input) && input.includes(key));
+  function estimatePhoto(pixels,width,height) {
+    const samples = [[],[],[]], lights = [];
+    let horizontal = 0, vertical = 0;
+    for (let y=0;y<height;y++) for (let x=0;x<width;x++) {
+      const index = y*width+x, p = index*4;
+      for (let i=0;i<3;i++) samples[i].push(pixels[p+i]);
+      const light = .2126*pixels[p]+.7152*pixels[p+1]+.0722*pixels[p+2];
+      lights.push(light);
+      if (x) horizontal += Math.abs(light-lights[index-1]);
+      if (y) vertical += Math.abs(light-lights[index-width]);
+    }
+    const [r,g,b] = samples.map(channel => channel.sort((a,b) => a-b)[channel.length>>1]);
+    const light = .2126*r+.7152*g+.0722*b;
+    let color;
+    if (Math.max(r,g,b)-Math.min(r,g,b) < 20) color = light < 62 ? 'Đen' : light > 213 ? 'Trắng' : 'Xám';
+    else {
+      const distance = hex => [r,g,b].reduce((sum,value,i) => sum+(value-parseInt(hex.slice(1+i*2,3+i*2),16))**2,0);
+      color = Object.entries(palette).sort((a,b) => distance(a[1])-distance(b[1]))[0][0];
+    }
+    const average = lights.reduce((sum,value) => sum+value,0)/lights.length;
+    const deviation = Math.sqrt(lights.reduce((sum,value) => sum+(value-average)**2,0)/lights.length);
+    const texture = (horizontal+vertical)/(2*lights.length);
+    const directional = Math.abs(horizontal-vertical)/Math.max(1,horizontal+vertical);
+    return {color,tone:light >= 145 ? 'Sáng' : 'Tối',
+      material:deviation < 9 || texture < 2.5 ? 'Đơn sắc' : directional >= .22 ? 'Vân gỗ' : 'Vân đá'};
+  }
   function normalizeSourceFacets(input,maxValues = 60) {
     const groups = new Map();
     for (const group of (Array.isArray(input) ? input : []).slice(0,100)) {
@@ -130,6 +157,30 @@
       if (!Array.isArray(groups) || groups.length > 70) fail(400,'Cấu hình bộ lọc không hợp lệ.');
       data.filterPreferences[categoryId] = filterConfig(data,categoryId,groups);
     }
+  }
+  function filterPresets(data) {
+    const ids = new Set(data.categories.map(category => category.id));
+    return (Array.isArray(data.filterPresets) ? data.filterPresets : []).slice(0,100).flatMap(item => {
+      const id = clean(item?.id,60), name = clean(item?.name,60), categoryId = item?.categoryId;
+      if (!/^[a-z0-9-]{1,60}$/i.test(id) || !name || !ids.has(categoryId)) return [];
+      const facets = Object.fromEntries(Object.entries(item.facets || {}).filter(([key]) =>
+        Object.hasOwn(facetLabels,key) || isSource(key) || isCustom(key)).map(([key,values]) =>
+        [key,[...new Set((Array.isArray(values) ? values : []).slice(0,60).map(value => clean(value)).filter(Boolean))]]));
+      return [{id,name,categoryId,query:clean(item.query,160),facets}];
+    });
+  }
+  function saveFilterPreset(data,patch) {
+    const previous = filterPresets(data);
+    if (patch.remove) {
+      data.filterPresets = previous.filter(item => item.id !== patch.id);
+      return;
+    }
+    const [preset] = filterPresets({...data,filterPresets:[patch]});
+    if (!preset) fail(400,'Tên hoặc hạng mục của bộ lọc không hợp lệ.');
+    const same = previous.find(item => item.categoryId === preset.categoryId && keyFor(item.name) === keyFor(preset.name));
+    if (same) preset.id = same.id;
+    if (!same && previous.length >= 100) fail(400,'Tối đa 100 bộ lọc nhanh.');
+    data.filterPresets = [...previous.filter(item => item.id !== preset.id),preset];
   }
 
   function normalize(data) {
@@ -270,6 +321,7 @@
     target.aliases = [...new Set([...(target.aliases || []),source.name,source.source,...(source.aliases || [])].filter(Boolean))];
     for (const item of data.items) if (item.categoryId === sourceId) item.categoryId = targetId;
     for (const record of data.imports || []) if (record.categoryId === sourceId) record.categoryId = targetId;
+    for (const preset of data.filterPresets || []) if (preset.categoryId === sourceId) preset.categoryId = targetId;
     mergeSourceSchema(data,targetId,data.catalogueFilterGroups?.[sourceId]);
     if (data.catalogueFilterGroups) delete data.catalogueFilterGroups[sourceId];
     for (const rows of Object.values(data.attributes || {})) for (const row of rows) {
@@ -281,7 +333,7 @@
   }
 
   const api = {labels,facetLabels,groupLabels,normalizeGroups,createGroup,customValues,isCustom,isSource,normalizeSourceFacets,sourceFacetGroups,mergeSourceSchema,
-    palette,colorHex,filterConfig,normalizeFilters,saveFilters,parsePrice,priceFields,updatePrice,
+    palette,colorHex,inferredFields,estimatePhoto,filterConfig,normalizeFilters,saveFilters,filterPresets,saveFilterPreset,parsePrice,priceFields,updatePrice,
     normalize,view,change,canMergeCategory,removedSystemCategories,removeCategory,mergeCategories};
   if (typeof module !== 'undefined') module.exports = api;
   else window.GDHomeLibraryAttributes = api;

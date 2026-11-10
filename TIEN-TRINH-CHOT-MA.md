@@ -759,3 +759,7 @@ Bổ sung sau khi đọc đặc tả phần 2. Edge xác nhận đọc đủ 40/
 ### 21.10 · Adapter An Cường và bộ lọc từ web
 
 Đọc 423/423 thẻ trong HTML Melamine, lấy ảnh đầy đủ từ products-full, tách mã và giữ rawCode. Lưu nhóm lọc theo hạng mục, có chip màu, cập nhật mẫu trùng và đổi ảnh khi độ phân giải tăng. Website khác có cấu trúc lặp được suy ra nhóm và có bước xem trước để đổi tên hoặc bỏ nhóm. Node 85/85. Edge 6/6 qua hai lượt, gồm nhập lại giữ ID và thay ảnh, chỉnh ánh xạ trước khi lưu.
+
+### 21.11 · Tìm và lưu bộ lọc thông minh
+
+Giữ giá trị có số đếm 0, hiển thị chip đang chọn, tìm không dấu theo nhiều từ trong mã, tên, tag và thuộc tính, có gợi ý. Bộ lọc nhanh lưu theo tài khoản và hạng mục. Ảnh tải tay và mẫu PDF được gợi ý màu, tông và vật liệu còn thiếu, có nhãn Tự đoán và có thể sửa từng giá trị. Node 85/85. Edge 13/13, có thêm ca Phào chỉ nối bóng qua khe 3 px và kiểm tra đoán màu từ riêng thanh phào.
