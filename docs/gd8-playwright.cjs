@@ -15,6 +15,64 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['23.5'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/'+'d'.repeat(64)+'.webp',route => route.fulfill({status:404}));
+  let searches = 0;
+  await page.route('**/api/catalogue/logo-search',route => {
+    searches++;
+    return route.fulfill({json:{items:[{url:'https://brand.test/logo.png',title:'Logo hãng'}]}});
+  });
+  await page.route('**/api/catalogue/logo-image',route => route.fulfill({contentType:'image/png',body:webPhoto('brand',180,90)}));
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  let library = page.locator('.asset-library-dialog');
+  await library.getByRole('tab',{name:'Thương hiệu',exact:true}).click();
+  await library.getByRole('button',{name:'Thêm thương hiệu',exact:true}).click();
+  const editor = page.locator('dialog').filter({has:page.getByRole('heading',{name:'Thêm thương hiệu',exact:true})});
+  await editor.getByLabel('Tên',{exact:true}).fill('GD23 Brand');
+  await editor.getByLabel('Website',{exact:true}).fill('https://brand.test');
+  await editor.getByRole('button',{name:'Lưu',exact:true}).click();
+  const logos = page.locator('dialog').filter({has:page.getByRole('heading',{name:'Tìm logo · GD23 Brand',exact:true})});
+  await logos.locator('.brand-logo-candidates img').waitFor();
+  await logos.locator('.brand-logo-candidates button').click();
+  await logos.waitFor({state:'detached'});
+  assert.equal(searches,1);
+  let data = await page.request.get('/api/library').then(r => r.json());
+  const brand = data.brands.find(brand => brand.name === 'GD23 Brand');
+  assert.ok(brand.logo.endsWith('.png'));
+  const dimensions = await page.evaluate(async logo => {
+    const blob = await fetch('/api/materials/assets/'+logo).then(r => r.blob());
+    const image = await createImageBitmap(blob); return [image.width,image.height];
+  },brand.logo);
+  assert.deepEqual(dimensions,[512,512]);
+  await library.locator('.close-dialog').click();
+  await page.evaluate(async () => {
+    const file = 'd'.repeat(64)+'.webp';
+    const result = await GDHomeAssets.addItems('cat-6',[{code:'BRAND-1',name:'Mẫu hãng',brand:'GD23 Brand',full:file,thumb:file}]);
+    applyLibraryMaterial(sheet.groups[0].rows[0],0,result.added[0]);
+    await flushSave();
+  });
+  assert.equal(await page.locator('[data-row=g1-r1] [data-slot="0"] .material-brand-logo').count(),1);
+  const published = await page.evaluate(async () => {
+    const result = await post(releasePath(),{_version:materials._version,action:'publish',showBrandLogos:true});
+    return result.path;
+  });
+  const review = await page.request.get('/api/review/'+published.split('/').at(-1)).then(r => r.json());
+  assert.equal(review.sheet.groups[0].rows[0].options[0].brandLogo,brand.logo);
+  const response = await page.request.get('/api/review/'+published.split('/').at(-1)+'/assets/'+brand.logo);
+  assert.equal(response.status(),200);
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await library.getByRole('tab',{name:'Thương hiệu',exact:true}).click();
+  await library.locator('[data-brand-id="'+brand.id+'"]').getByRole('button',{name:'Sửa',exact:true}).click();
+  const rename = page.locator('dialog').filter({has:page.getByRole('heading',{name:'Sửa thương hiệu',exact:true})});
+  await rename.getByLabel('Tên',{exact:true}).fill('GD23 Brand mới');
+  await rename.getByRole('button',{name:'Lưu',exact:true}).click();
+  await rename.waitFor({state:'detached'});
+  data = await page.request.get('/api/library').then(r => r.json());
+  assert.equal(data.items.find(item => item.code === 'BRAND-1').brand,'GD23 Brand mới');
+  assert.ok(data.brands.find(item => item.id === brand.id).aliases.includes('GD23 Brand'));
+};
+
 cases['23.4'] = async page => {
   const {PDFDocument,StandardFonts} = require('pdf-lib');
   const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);

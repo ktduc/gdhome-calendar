@@ -1,3 +1,4 @@
+const brands = require('./library-brands');
 const productLines = require('./product-lines');
 // Thư viện dữ liệu dùng chung (ảnh mẫu vật liệu theo hạng mục) cho mọi công cụ GD HOME.
 // Ảnh nằm trong kho ảnh Chốt mã của tài khoản (/api/materials/assets), nên dùng thẳng cho ô PA mà không cần sao chép.
@@ -142,7 +143,7 @@ function normalize(data) {
   const catalogueFilterGroups = Object.fromEntries(categories.filter(({id}) => Array.isArray(base.catalogueFilterGroups?.[id]))
     .map(({id}) => [id,attributes.normalizeSourceFacets(base.catalogueFilterGroups[id],200)]));
   const filterData = {...base,categories,items,catalogueFilterGroups};
-  return { _version: Number(base._version) || 0, categories, items,suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
+  return { _version: Number(base._version) || 0, categories, items,brands:brands.normalize(base.brands,items),suppliers:(Array.isArray(base.suppliers) ? base.suppliers : []).map(supplierRecord).filter(item => item.name).slice(0,500),
     ...(removed.size ? {removedSystemCategories:[...removed]} : {}),
     attributeGroups,catalogueFilterGroups,filterPreferences:attributes.normalizeFilters(filterData),
     filterPresets:attributes.filterPresets(filterData),showPrices:base.showPrices === true,
@@ -177,6 +178,7 @@ async function mutate(store, key, change, persist = data => store.put(key,data))
   const run = previous.catch(() => {}).then(async () => {
     const data = normalize(await store.get(key));
     const result = await change(data);
+    data.brands = brands.normalize(data.brands,data.items);
     data._version += 1;
     await persist(data,result);
     return { data, result };
@@ -272,6 +274,37 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   }
   if (req.method !== 'POST') fail(405, 'Phương thức không hỗ trợ.');
   const body = await readJsonBody(req);
+  if (urlPath === '/api/library/brands') {
+    const {data} = await mutate(store,key,data => {
+      if (Array.isArray(body.order)) {
+        const order = new Map(body.order.map((id,index) => [id,index]));
+        for (const brand of data.brands) if (order.has(brand.id)) brand.order = order.get(brand.id);
+        return;
+      }
+      const source = data.brands.find(brand => brand.id === body.id);
+      const target = body.mergeInto && data.brands.find(brand => brand.id === body.mergeInto);
+      if (body.mergeInto && (!source || !target || source === target)) fail(400,'Chọn hai hãng khác nhau.');
+      if (target) {
+        target.aliases = [...new Set([...target.aliases,source.name,...source.aliases])];
+        target.categories = [...new Set([...target.categories,...source.categories])];
+        target.logo ||= source.logo;
+        data.brands = data.brands.filter(brand => brand !== source);
+        for (const item of data.items) if (brands.find([source],item.brand)) item.brand = target.name;
+        return;
+      }
+      const name = text(body.name,80);
+      if (!name) fail(400,'Nhập tên thương hiệu.');
+      if (data.brands.some(brand => brand !== source && brands.find([brand],name))) fail(409,'Thương hiệu đã có.');
+      const record = brands.normalize([{...source,...body,id:source?.id || crypto.randomUUID(),name}])[0];
+      record.categories = record.categories.filter(id => data.categories.some(category => category.id === id));
+      if (source) {
+        record.aliases = [...new Set([...record.aliases,source.name])].filter(alias => alias !== record.name);
+        data.brands[data.brands.indexOf(source)] = record;
+        for (const item of data.items) if (brands.find([source],item.brand)) item.brand = record.name;
+      } else data.brands.push(record);
+    });
+    return sendJson(res,200,data);
+  }
   if (urlPath === '/api/library/imports') {
     const {data} = await mutate(store,key,data => importHistory.apply(data,body));
     return sendJson(res,200,data);

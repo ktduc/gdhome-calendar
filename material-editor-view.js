@@ -408,6 +408,7 @@ function materialPaperForExport(current) {
     field.replaceWith(value);
   });
   paper.querySelectorAll('.image-cell').forEach(cell => cell.classList.remove('reserve'));
+  if (current.showBrandLogos === false) paper.querySelectorAll('.material-brand-logo').forEach(image => image.remove());
   const exportScope = typeof savedMaterialExportScope === 'function' ? savedMaterialExportScope() : {};
   const position = materialExportCodePosition(exportScope);
   {
@@ -581,6 +582,8 @@ function imageCell(list, slot, content = '', state = '', removable = false, edit
   } else if (isPaint) {
     photo = '<div class="image-open paint-swatch-box" data-action="open-paint" title="Màu sơn: ' + html(pa.paint.brand + ' ' + pa.paint.code + ' – ' + pa.paint.name) + '" style="background-color:' + html(pa.paint.hex) + ';width:100%;height:100%;border-radius:4px;display:flex;align-items:flex-end;justify-content:center;padding:2px;box-sizing:border-box;cursor:pointer;"><span class="image-code-tag">' + html(pa.paint.code || pa.paint.hex) + '</span></div>';
   }
+  const logo = pa && (GDHomeAssets.brandFor(pa.brand)?.logo || pa.brandLogo);
+  if (pa?.brand && materialView.export?.showBrandLogos !== false) photo += '<img class="material-brand-logo" data-material-brand="' + html(pa.brand) + '"' + (logo ? ' data-asset="' + html(logo) + '"' : ' hidden') + ' alt="' + html(pa.brand) + '">';
   const label = slot === 'render' ? 'Chi tiết phối cảnh 3D' : 'Chi tiết phương án ' + (Number(slot)+1);
   const isChosen = state === 'chosen';
   const choose = slot === 'render' ? '' : '<button type="button" class="image-pick' + (isChosen ? ' chosen' : '') + '" data-action="pick-pa" aria-label="' + (isChosen ? 'Bỏ chốt PA' : 'Chốt PA') + (Number(slot)+1) + '" aria-pressed="' + isChosen + '" title="' + (isChosen ? 'Phương án đã chốt · Bấm để bỏ chốt' : 'Chốt phương án') + '">' + (isChosen ? '✓ Đã chốt' : '✓') + '</button>';

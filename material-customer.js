@@ -22,7 +22,7 @@ function renderCustomer() {
         (pa.code || pa.brand || pa.finish || pa.size || pa.color || pa.images.length) ? '<div class="review-option"><label><input type="radio" name="' + row.id +
           '" value="' + i + '" required ' + (customer?'disabled ':'') + ((committed[row.id] ?? row.chosen) === i ? 'checked' : '') +
           '> PA' + (i+1) + ' · ' + html([pa.brand,pa.code,pa.color,pa.size,pa.finish].filter(Boolean).join(' · ')) +
-          '</label><div class="print-squares">' + printImages(pa.images,reviewApi+'/assets/',false,true,pa.code) + '</div></div>' : ''
+          '</label><div class="print-squares">' + printImages(pa.images,reviewApi+'/assets/',false,true,pa.code,sheet.showBrandLogos === false ? '' : pa.brandLogo) + '</div></div>' : ''
       ).join('') + '</div></fieldset>').join('') + '</section>').join('') +
     (customer ? '' : '<section class="panel">' + signatureForm('customer') + '<p><label><input type="checkbox" id="accepted" required> Tôi đồng ý với các lựa chọn và nội dung biên bản.</label></p><button class="primary">Đồng ý và ký</button></section>') +
     '</form>' + (customer ? '<section class="panel"><h3>Đã nhận xác nhận</h3><div class="print-signatures"><div>Bên A<br>' +

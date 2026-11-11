@@ -239,6 +239,7 @@ window.GDHomeAssets = (() => {
   }
   let libraryError = null;
   async function loadLibrary(force = false) {
+    await libraryDependencies();
     if (library && !force) return visibleLibrary(library);
     if (isGuest()) {
       const data = guestLibrary();
@@ -263,6 +264,7 @@ window.GDHomeAssets = (() => {
     return visibleLibrary(await libraryLoading);
   }
   async function libraryCall(path,body,guestChange) {
+    await libraryDependencies();
     if (isGuest()) {
       const data = guestLibrary();
       const result = guestChange(data);
@@ -975,7 +977,7 @@ window.GDHomeAssets = (() => {
     });
   }
   const libraryTabs = active => '<div class="asset-library-tabs" role="tablist" aria-label="Quản lý dữ liệu">' +
-    [['items','Mẫu vật liệu'],['attributes','Thuộc tính']].map(([id,label]) => '<button type="button" role="tab" data-library-tab="' +
+    [['items','Mẫu vật liệu'],['attributes','Thuộc tính'],['brands','Thương hiệu']].map(([id,label]) => '<button type="button" role="tab" data-library-tab="' +
       id + '" aria-selected="' + (id === active) + '">' + label + '</button>').join('') + '</div>';
   function renderLibraryAttributes(body,data,state,paint) {
     const {groupLabels,view,createGroup} = attributeCatalog(), labels = groupLabels(data), key = state.attributeKey || 'size';
@@ -1102,15 +1104,30 @@ window.GDHomeAssets = (() => {
       showLibraryContext(root,event,actions);
     };
   }
+  let dependencyPromise;
+  function libraryDependencies() {
+    dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
+      if (window[name]) return;
+      await new Promise((resolve,reject) => {
+        const script = document.createElement('script'); script.src = '/'+file+'?v=gd23.5';
+        script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
+      });
+    })).catch(error => { dependencyPromise = null; throw error; });
+    return dependencyPromise;
+  }
+  function brandLogo(name) {
+    const brand = window.GDHomeBrands?.find(library?.brands,name);
+    return brand?.logo ? '<img class="asset-brand-logo" data-lib-asset="' + esc(brand.logo) + '" alt="' + esc(brand.name) + '">' : '';
+  }
   function grid(items,{selectable = true,removable = false,selected = null,showPrices = false,lazy = false,empty = 'Chưa có ảnh.'} = {}) {
     if (!items.length) return '<p class="asset-empty">' + esc(empty) + '</p>';
     return '<div class="asset-grid' + (selected ? ' asset-grid-managed' : '') + '">' + GDHomeProductLines.group(items).map(variants => { const item = variants[0]; return '<figure class="asset-card' + (selected?.has(item.id) ? ' is-selected' : '') +
       '" data-variant-ids="' + esc(variants.map(item => item.id).join(',')) + '" data-asset-id="' + esc(item.id) + '"' + (selected ? ' draggable="true"' : '') + '>' +
       (selected ? '<label class="asset-card-check"><input type="checkbox" data-bulk-select aria-label="Chọn ' + esc(item.name || item.code) + '"' + (selected.has(item.id) ? ' checked' : '') + '></label>' : '') +
       '<button type="button" class="asset-thumb"' + (selectable ? ' data-asset-pick' : ' data-asset-open') + ' title="' + esc(item.name || item.room || '') + '">' +
-      (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ?
+      (brandLogo(item.brand) + (item.kind === 'paint' ? '<span class="asset-paint-swatch" style="background-color:' + esc(item.hex) + '"></span>' : item.thumb ?
         '<img data-lib-asset="' + esc(item.thumb) + '"' + (lazy ? ' loading="lazy"' : '') + displayAttribute(item.display) +
-        ' alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>') + '</button>' +
+        ' alt="' + esc(item.name || 'Ảnh') + '">' : '<span>' + esc(item.code || '') + '</span>')) + '</button>' +
       (variants.length > 1 ? '<button type="button" class="asset-line-badge" data-line-variants>' + variants.length + ' mã</button>' : '') +
       (item.size || item.brand ? '<span class="asset-card-badge">' + esc([item.size?.replace('x','×'),item.brand].filter(Boolean).join(' · ')) + '</span>' : '') +
       (selected ? '<figcaption title="' + esc([item.code,item.name,item.collection,item.finish,item.spec].filter(Boolean).join(' · ')) + '"><strong>' +
@@ -4004,6 +4021,13 @@ window.GDHomeAssets = (() => {
       body.querySelector('.asset-facets').scrollTop = facetScroll;
       const resetPage = () => { viewState.page = 1; return paint(); };
       wireFacets(body,facets,resetPage);
+      if (viewState.tab === 'brands') {
+        dialog.onkeydown = dialog.onpaste = null;
+        body.ondragstart = body.ondragover = body.ondragend = body.ondrop = null;
+        main.replaceChildren();
+        await GDHomeBrandManager.render(main,data,libraryCall,paint);
+        return;
+      }
       if (attributes) {
         dialog.onkeydown = dialog.onpaste = null;
         body.ondragstart = body.ondragover = body.ondragend = body.ondrop = null;
@@ -4362,5 +4386,5 @@ window.GDHomeAssets = (() => {
 
   return {configure,libraryItemMatches:(full,code) => !!library?.items.some(item => item.full === full && (item.code === code || item.name === code)),invalidateRenders,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
     categoryFor,openLibrary,openRenders,pickRender,pickLibrary,pickPaint,pickWood,loadPaintData,loadWoodData,storeAsset,closePicker,editView,viewCss,viewStyle,clampView,hydrate,assetUrl,displayAttribute,displayOptions,
-    filePicker,isPdf,pdfPages};
+    brandFor:name => window.GDHomeBrands?.find(library?.brands,name),filePicker,isPdf,pdfPages};
 })();

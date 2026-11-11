@@ -48,7 +48,7 @@ function cleanSheet(sheet) {
           const decision = ['draft','sent','chosen','changed'].includes(row.decision) ? row.decision : 'draft';
           return { id:unique(row.id), ...pick(row,['name','room','qty','unit','supplier','note','spec']), render:assetsOnly(row.render),
             ...(Array.isArray(row.noteSuggestions) ? { noteSuggestions:row.noteSuggestions.slice(0,12).map(value => text(value,2000)).filter(Boolean) } : {}),
-            options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size','supplier','price']), ...withPaint(pa), ...(typeof pa?.autoName === 'boolean' ? {autoName:pa.autoName} : {}), ...(imageName(pa?.autoNameAsset) ? {autoNameAsset:pa.autoNameAsset} : {}),
+            options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size','supplier','price']), ...withPaint(pa),...(imageName(pa?.brandLogo) ? {brandLogo:pa.brandLogo} : {}), ...(typeof pa?.autoName === 'boolean' ? {autoName:pa.autoName} : {}), ...(imageName(pa?.autoNameAsset) ? {autoNameAsset:pa.autoNameAsset} : {}),
               ...(/^[A-Za-z0-9_.-]{1,60}$/.test(pa?.libraryItemId || '') ? {libraryItemId:pa.libraryItemId} : {}),
               ...(['manual','library'].includes(pa?.imageSource) ? {imageSource:pa.imageSource} : {}),
               ...(pa?.autoColor ? {autoColor:text(pa.autoColor)} : {}), images:assetsOnly(pa?.images) })),
@@ -68,7 +68,7 @@ function publicSheet(sheet) {
       id:group.id, name:group.name,
       rows:group.rows.filter(row => row.options.some(hasOption)).map(row => ({
         id:row.id, ...pick(row,['name','room','qty','unit','note','spec']), chosen:row.chosen, render:assetsOnly(row.render),
-        options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size']), ...withPaint(pa), images:assetsOnly(pa.images) }))
+        options:row.options.map(pa => ({ ...pick(pa,['brand','code','finish','color','size']), ...withPaint(pa),...(imageName(pa?.brandLogo) ? {brandLogo:pa.brandLogo} : {}), images:assetsOnly(pa.images) }))
       }))
     })).filter(group => group.rows.length)
   };
@@ -135,7 +135,7 @@ function signature(body) {
 function assetNames(sheet) {
   const names = new Set();
   for (const group of sheet.groups || []) for (const row of group.rows) {
-    const images = [...(row.render || []),...row.options.flatMap(pa => pa.images || [])];
+    const images = [...(row.render || []),...row.options.flatMap(pa => [...(pa.images || []),...(imageName(pa.brandLogo) ? [pa.brandLogo] : [])])];
     for (const image of images) {
       for (const name of typeof image === 'string' ? [image] : [image?.full,image?.thumb]) {
         if (imageName(name)) names.add(name);
@@ -250,6 +250,13 @@ async function handleInternalReview(req,url,{ res, repo, account, readJsonBody, 
     if (body.action === 'publish') {
       if (sheet.archivedAt) error(409,'Khôi phục bảng trước khi phát hành.');
       const snapshot = publicSheet({ ...sheet,meta:{ ...sheet.meta,...await resolveProfile(sheet,data) } });
+      const libraryApi = require('./shared-library');
+      const library = libraryApi.normalize(await repo.store.get(libraryApi.libraryKey(account)));
+      for (const group of snapshot.groups) for (const row of group.rows) for (const pa of row.options) {
+        const brand = require('./library-brands').find(library.brands,pa.brand);
+        if (brand?.logo) pa.brandLogo = brand.logo;
+      }
+      snapshot.showBrandLogos = body.showBrandLogos !== false;
       snapshot.imageFit = (['fill','fit'].includes(body.imageFit) ? body.imageFit : data.viewSettings?.imageFit) === 'fit' ? 'fit' : 'fill';
       if (!snapshot.groups.length) error(400,'Điền ít nhất một phương án trước khi phát hành.');
       const token = encryptToken(repo.key,secret);

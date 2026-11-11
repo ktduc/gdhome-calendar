@@ -44,7 +44,7 @@ function replaceSaved(result) {
   sheet.meta = {...sheet.meta,...materials.profiles?.[sheet.projectId]};
 }
 async function publish() {
-  const result = await post(releasePath(),{ _version:materials._version,action:'publish',imageFit:materialImageFit() });
+  const result = await post(releasePath(),{ _version:materials._version,action:'publish',imageFit:materialImageFit(),showBrandLogos:savedMaterialExportScope().showBrandLogos !== false });
   replaceSaved(result);
   materials.publishedSheetIds = [...new Set([...(materials.publishedSheetIds || []),sheet.id])];
   saveToolsSnapshot();
@@ -136,7 +136,7 @@ function savedMaterialExportScope() {
 async function runDirectExport(mode) {
   const saved = savedMaterialExportScope();
   const watermark = saved.watermark !== false;
-  const filtered = { ...sheet,groups:sheet.groups
+  const filtered = { ...sheet,showBrandLogos:savedMaterialExportScope().showBrandLogos !== false,groups:sheet.groups
     .filter(group => saved.groups !== 'visible' || materialGroupVisible(group))
     .map(group => ({ ...group,rows:group.rows.filter(row =>
       (saved.rows !== 'chosen' || (row.chosen != null && row.decision === 'chosen')) &&
@@ -209,6 +209,7 @@ function statistics(mode) {
     '<label><span>Ảnh</span><select name="imageFit"><option value="fill"' + (saved.imageFit !== 'fit' ? ' selected' : '') + '>Fill đầy ô</option><option value="fit"' + (saved.imageFit === 'fit' ? ' selected' : '') + '>Vừa khung (giữ nguyên)</option></select></label>' +
     '<label class="export-code-toggle"><span>Vị trí mã</span><select name="codePosition">' +
     [['above','Trên ảnh'],['below','Dưới ảnh'],['both','Cả hai']].map(([key,label]) => option(key,label,materialExportCodePosition(saved))).join('') + '</select></label>' +
+    '<label><span>Hiện logo hãng</span><input name="showBrandLogos" type="checkbox"' + (saved.showBrandLogos === false ? '' : ' checked') + '></label>' +
     '<label class="export-watermark-toggle"><span>Sọc chìm</span><input name="watermark" type="checkbox"' + (saved.watermark === false ? '' : ' checked') + '></label>' +
     '<details class="export-print-columns"><summary>Cột in</summary><div class="sidebar-compact"><div class="sb-chip-grid">' +
     printColumnCheckboxes('name="printColumn"') + '</div></div></details>' +
@@ -220,7 +221,7 @@ function statistics(mode) {
     const watermark = scope.has('watermark');
     const columns = scope.getAll('printColumn');
     if (columns.length) savePrintColumns(columns);
-    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',codePosition:scope.get('codePosition')}});
+    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,showBrandLogos:scope.has('showBrandLogos'),imageFit:scope.get('imageFit') || 'fill',codePosition:scope.get('codePosition')}});
     element.close();
     window.GDHomeShell?.toast?.('Đã lưu cài đặt xuất.');
   };
@@ -232,8 +233,8 @@ function statistics(mode) {
     const columns = scope.getAll('printColumn');
     if (!columns.length) { byId('export-scope-status').textContent = 'Bật in ít nhất một cột.'; return; }
     savePrintColumns(columns);
-    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,imageFit:scope.get('imageFit') || 'fill',codePosition:scope.get('codePosition')}});
-    const filtered = { ...sheet,groups:sheet.groups
+    setMaterialView({export:{groups:scope.get('groups'),rows:scope.get('rows'),room:scope.get('room'),watermark,showBrandLogos:scope.has('showBrandLogos'),imageFit:scope.get('imageFit') || 'fill',codePosition:scope.get('codePosition')}});
+    const filtered = { ...sheet,showBrandLogos:savedMaterialExportScope().showBrandLogos !== false,groups:sheet.groups
       .filter(group => scope.get('groups') !== 'visible' || materialGroupVisible(group))
       .map(group => ({ ...group,rows:group.rows.filter(row =>
         (scope.get('rows') !== 'chosen' || (row.chosen != null && row.decision === 'chosen')) &&

@@ -19,7 +19,17 @@ function say(message) {
   if (message && sheet) GDHomeShell.toast(message,materialToast ||= byId('material-toast'));
 }
 
-function showImages(root = box()) {
+async function showImages(root = box()) {
+  const logos = [...root.querySelectorAll('[data-material-brand]')];
+  if (logos.length) {
+    try {
+      await GDHomeAssets.loadLibrary();
+      for (const image of logos) {
+        const logo = GDHomeAssets.brandFor(image.dataset.materialBrand)?.logo || image.dataset.asset;
+        if (logo) { image.dataset.asset = logo; image.hidden = false; }
+      }
+    } catch { /* Existing PA logos remain available while offline. */ }
+  }
   return Promise.all([...root.querySelectorAll('img[data-asset]')].map(async img => {
     try {
       const name = img.dataset.asset;
@@ -848,6 +858,7 @@ function applyLibraryMaterial(row,slot,item,render = true) {
     pa.code = item.code || item.name || '';
     pa.color = item.name || '';
     pa.brand = item.brand || '';
+    pa.brandLogo = GDHomeAssets.brandFor(item.brand)?.logo || '';
     pa.finish = item.finish || '';
     if (item.kind === 'paint') pa.paint = item;
     else delete pa.paint;
