@@ -423,3 +423,4 @@
 [data-catalogue-details]:not([hidden]){top:var(--catalogue-toolbar-height,52px);max-height:calc(90dvh - 110px - var(--catalogue-toolbar-height,52px));overflow:auto;box-sizing:border-box;background:#f4f0ea;overscroll-behavior:contain}
 .wood-catalogue-card>[data-show-catalogue-detail][aria-pressed=true]{background:#2563eb;color:#fff;border-color:#1d4ed8;box-shadow:0 0 0 2px #bfdbfe}
 @media(max-width:650px){.catalogue-review:has(>[data-catalogue-details]:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(145px,42%)}}
+.wood-crop-actions{display:flex;justify-content:flex-end;margin-top:10px}

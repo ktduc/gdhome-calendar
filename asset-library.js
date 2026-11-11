@@ -1160,7 +1160,7 @@ window.GDHomeAssets = (() => {
     dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
       if (window[name]) return;
       await new Promise((resolve,reject) => {
-        const script = document.createElement('script'); script.src = '/'+file+'?v=logo-crop-2';
+        const script = document.createElement('script'); script.src = '/'+file+'?v=logo-crop-3';
         script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
       });
     })).catch(error => { dependencyPromise = null; throw error; });
@@ -3236,9 +3236,10 @@ window.GDHomeAssets = (() => {
         else card.removeAttribute('title');
         card.hidden = (filter.value === 'selected' && !include(card).checked) || (filter.value === 'review' && !items[i].needsReview && !issue);
       }
-      const index = activeDetail ?? (chosen.length === 1 ? cards.indexOf(chosen[0]) : -1);
+      const index = activeDetail ?? (chosen.length === 1 ? cards.indexOf(chosen[0]) : Math.max(0,cards.findIndex(card => !card.hidden)));
       const detail = details[index];
-      if (detail && !cards[index].hidden) {
+      if (detail) {
+        activeDetail = index;
         const destination = library.categories.find(category => category.id === destinationOf(items[index]));
         detail.querySelector('[data-catalogue-destination-label]').textContent = destination?.name || '';
         detail.querySelector('[data-catalogue-save-error]').textContent = items[index].saveError || '';
@@ -3526,7 +3527,7 @@ window.GDHomeAssets = (() => {
           };
           include(cards[i]).onclick = event => toggleCard(i,event.target.checked,event.shiftKey);
           cards[i].querySelector('[data-show-catalogue-detail]').onclick = () => {
-            activeDetail = activeDetail === i ? null : i;
+            activeDetail = i;
             refreshSelection();
           };
           cards[i].ondblclick = event => {
@@ -3556,7 +3557,12 @@ window.GDHomeAssets = (() => {
           };
           details[i].querySelector('[data-edit-wood-crop]').onclick = async () => {
             const image = await loadPageImage(item.source);
-            editWoodCrop(image,item.crop,crop => { item.crop = crop; delete item.materialCrop; drawSwatch(canvas,image,crop); });
+            editWoodCrop(image,item.crop,crop => {
+              item.crop = crop; delete item.materialCrop; drawSwatch(canvas,image,crop);
+              include(cards[i]).checked = true;
+              activeDetail = i;
+              refreshSelection();
+            });
           };
         }
         function arrangeProductLines() {
@@ -3785,7 +3791,8 @@ window.GDHomeAssets = (() => {
     const save = document.createElement('button');
     save.type = 'button';
     save.textContent = 'Áp dụng khung cắt';
-    body.append(save);
+    const actions = document.createElement('div'); actions.className = 'wood-crop-actions';
+    actions.append(save); body.append(actions);
     const paint = () => Object.assign(frame.style,{left:crop.x*100+'%',top:crop.y*100+'%',width:crop.w*100+'%',height:crop.h*100+'%'});
     frame.onpointerdown = event => {
       const start = {...crop}, x = event.clientX, y = event.clientY, rect = stage.getBoundingClientRect();
@@ -3805,6 +3812,11 @@ window.GDHomeAssets = (() => {
       frame.onlostpointercapture = () => { frame.onpointermove = null; };
     };
     save.onclick = () => { onSave(crop); dialog.close(); };
+    dialog.addEventListener('keydown',event => {
+      if (event.key !== 'Enter' || event.isComposing) return;
+      event.preventDefault(); event.stopPropagation(); save.click();
+    });
+    save.focus({preventScroll:true});
     paint();
   }
 

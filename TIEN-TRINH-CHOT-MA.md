@@ -845,3 +845,7 @@ Kiểm thử Node 103/103. Edge library-tools, logo-tools, 20.11, 21.4, brand-pa
 - Sửa tải logo thương hiệu trên thẻ vật liệu khi mở Dữ liệu dùng chung từ trang chủ. Tìm logo và chọn logo đề xuất dùng xác thực chung, không phụ thuộc hàm chỉ có ở trang Chốt mã.
 - Bảng chi tiết nhập PDF giữ vị trí dưới thanh lệnh khi cuộn, tự tính khoảng cách theo chiều cao thanh lệnh và có vùng cuộn riêng khi nội dung dài. Nút ba chấm tô xanh đúng thẻ đang mở để chỉnh sửa.
 - Kiểm thử Node 103/103. Edge logo-tools, brand-paste-tools, brand-paste, library-tools, 20.11, 21.4, 21.9 và 23.5 đạt. Ca PDF kiểm tra ở 600, 1050, 1280, 1440, 1920 và 2560 px; logo kiểm tra crop, khôi phục, lưu, mở lại, ảnh thực sự tải được và chọn logo đề xuất từ trang chủ.
+
+### Điều chỉnh xác nhận crop catalogue
+
+Giữ bảng chi tiết có nút Chỉnh khung cắt luôn mở khi có vật liệu, kể cả bỏ chọn tất cả hoặc bấm lại nút ba chấm. Xác nhận crop tự tích chọn vật liệu đó để nhập, giữ bảng ở vật liệu vừa sửa. Enter xác nhận khung cắt, nút Áp dụng khung cắt nằm bên phải. Node 103/103; Edge 21.9, logo-tools, 20.11, 21.4 đạt, gồm kiểm tra trạng thái bảng, tự chọn sau Enter, vị trí nút và các chiều rộng 600–2560 px.

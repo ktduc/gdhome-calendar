@@ -4560,6 +4560,22 @@ cases['21.9'] = async page => {
   const ratios = await cards.locator('canvas').evaluateAll(nodes => nodes.map(node => node.width/node.height));
   assert.ok(ratios.every(value => value > 3.6),JSON.stringify(ratios));
   assert.equal(ai,0);
+  await modal.locator('[data-catalogue-details]:not([hidden])').waitFor();
+  await modal.locator('[data-catalogue-select="clear"]').click();
+  await modal.locator('[data-catalogue-details]:not([hidden])').waitFor();
+  await cards.first().locator('[data-show-catalogue-detail]').click();
+  await cards.first().locator('[data-show-catalogue-detail]').click();
+  await modal.locator('[data-catalogue-details]:not([hidden])').waitFor();
+  assert.equal(await cards.first().locator('[data-wood-include]').isChecked(),false);
+  await modal.locator('[data-edit-wood-crop]').click();
+  const crop = page.locator('.wood-crop-dialog');
+  const action = await crop.getByRole('button',{name:'Áp dụng khung cắt',exact:true}).boundingBox();
+  const cropBody = await crop.locator('.asset-dialog-body').boundingBox();
+  assert.ok(Math.abs(action.x+action.width-cropBody.x-cropBody.width)<5);
+  await page.keyboard.press('Enter');
+  await crop.waitFor({state:'detached'});
+  assert.equal(await cards.first().locator('[data-wood-include]').isChecked(),true);
+  assert.equal(await modal.locator('[data-save-wood]').isEnabled(),true);
   for (const width of [1050,1280,1440,1920,2560,600]) {
     await page.setViewportSize({width,height:720});
     await cards.nth(0).locator('[data-show-catalogue-detail]').click();
