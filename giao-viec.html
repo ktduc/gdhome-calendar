@@ -34,7 +34,7 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-export-excel" title="Xuất danh sách ra file Excel">
           <i data-lucide="file-spreadsheet"></i><span>Xuất Excel</span>
         </button>
-        <button type="button" class="btn btn-success btn-sm" id="btn-create-pdf" title="Tạo PDF hồ sơ giao việc đính kèm">
+        <button type="button" class="btn btn-success btn-sm" id="btn-open-pdf-builder" title="Tạo PDF hồ sơ giao việc đính kèm">
           <i data-lucide="file-plus"></i><span>Tạo PDF</span>
         </button>
         <button type="button" class="btn btn-primary btn-sm" id="btn-add-contractor" title="Thêm nhà thầu / đội thợ mới">
@@ -52,7 +52,7 @@
   </header>
 
   <div class="work-app-layout">
-    <aside class="shell-sidebar sidebar-compact" id="work-sidebar">
+    <aside class="shell-sidebar sidebar-compact work-sidebar" id="work-sidebar">
       <details class="sb-collapsible" open>
         <summary class="sb-head">Chọn dự án</summary>
         <div class="sb-body">
@@ -78,16 +78,18 @@
         <button type="button" class="work-tab-btn active" data-tab="assignments">Phiếu giao việc (<span id="count-assignments">0</span>)</button>
         <button type="button" class="work-tab-btn" data-tab="contractors">Danh bạ nhà thầu (<span id="count-contractors">0</span>)</button>
       </div>
+
+      <!-- TAB 1: PHIẾU GIAO VIỆC -->
       <div id="tab-assignments-panel" class="work-tab-panel active">
         <div class="work-panel-toolbar">
-          <input type="search" id="search-assignments" class="form-control" placeholder="Tìm phiếu giao việc, nhà thầu, công việc..." style="max-width: 300px;">
+          <input type="search" id="search-assignments" class="form-control" placeholder="Tìm phiếu giao việc, nhà thầu, công việc..." style="max-width: 340px;">
           <div id="overdue-alerts" class="overdue-badge-wrap"></div>
         </div>
         <div class="table-responsive">
           <table class="data-table work-table" id="table-assignments">
             <thead>
               <tr>
-                <th>STT</th>
+                <th style="width: 40px; text-align: center;">STT</th>
                 <th>Dự án</th>
                 <th>Hạng mục</th>
                 <th>Công việc Lịch</th>
@@ -95,29 +97,238 @@
                 <th>Khối lượng</th>
                 <th>Bắt đầu - Kết thúc</th>
                 <th>Trạng thái</th>
-                <th>Hồ sơ đính kèm</th>
-                <th>Thao tác</th>
+                <th>Hồ sơ PDF</th>
+                <th style="width: 120px; text-align: center;">Thao tác</th>
               </tr>
             </thead>
             <tbody id="tbody-assignments">
-              <tr><td colspan="10" style="text-align: center; color: #64748b; padding: 24px;">Chưa có phiếu giao việc nào.</td></tr>
+              <tr><td colspan="10" style="text-align: center; color: #64748b; padding: 24px;">Đang tải danh sách phiếu giao việc...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
+      <!-- TAB 2: DANH BẠ NHÀ THẦU -->
       <div id="tab-contractors-panel" class="work-tab-panel" style="display: none;">
         <div class="work-panel-toolbar">
-          <input type="search" id="search-contractors" class="form-control" placeholder="Tìm nhà thầu (tên, SĐT, khu vực, không dấu)..." style="max-width: 300px;">
-          <select id="filter-contractor-category" class="form-select" style="max-width: 200px;">
+          <input type="search" id="search-contractors" class="form-control" placeholder="Tìm nhà thầu (tên, người liên hệ, SĐT, khu vực)..." style="max-width: 340px;">
+          <select id="filter-contractor-category" class="form-select" style="max-width: 220px;">
             <option value="">Tất cả hạng mục</option>
           </select>
         </div>
         <div class="contractor-grid" id="contractor-grid">
+          <!-- Danh bạ nhà thầu -->
         </div>
       </div>
     </main>
   </div>
+
+  <!-- MODAL 1: THÊM / SỬA NHÀ THẦU -->
+  <dialog id="dialog-contractor" class="shell-dialog work-dialog" aria-label="Thông tin nhà thầu">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h3 id="contractor-dialog-title">Thêm nhà thầu / Đội thợ</h3>
+        <button type="button" class="close-dialog" onclick="document.getElementById('dialog-contractor').close()">×</button>
+      </div>
+      <form id="form-contractor" class="work-form">
+        <input type="hidden" id="contractor-id" name="id">
+        <div class="form-group">
+          <label for="contractor-name">Tên nhà thầu / Đội thợ <span style="color:red">*</span></label>
+          <input type="text" id="contractor-name" name="name" required class="form-control" placeholder="VD: Đội thợ sơn Minh Quân">
+        </div>
+        <div class="form-group">
+          <label>Hạng mục chuyên</label>
+          <div id="contractor-categories-picker" class="category-chip-picker"></div>
+        </div>
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label for="contractor-contact">Người liên hệ</label>
+            <input type="text" id="contractor-contact" name="contactPerson" class="form-control" placeholder="VD: Anh Minh">
+          </div>
+          <div class="form-group">
+            <label for="contractor-phone">Số điện thoại</label>
+            <input type="tel" id="contractor-phone" name="phone" class="form-control" placeholder="VD: 0912345678">
+          </div>
+        </div>
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label for="contractor-zalo">Zalo</label>
+            <input type="text" id="contractor-zalo" name="zalo" class="form-control" placeholder="VD: 0912345678">
+          </div>
+          <div class="form-group">
+            <label for="contractor-email">Email</label>
+            <input type="email" id="contractor-email" name="email" class="form-control" placeholder="VD: thoson@gmail.com">
+          </div>
+        </div>
+        <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label for="contractor-area">Khu vực hoạt động</label>
+            <input type="text" id="contractor-area" name="area" class="form-control" placeholder="VD: Hà Nội, Bắc Ninh...">
+          </div>
+          <div class="form-group">
+            <label for="contractor-rating">Đánh giá</label>
+            <select id="contractor-rating" name="rating" class="form-select">
+              <option value="5">★★★★★ (5/5)</option>
+              <option value="4">★★★★☆ (4/5)</option>
+              <option value="3">★★★☆☆ (3/5)</option>
+              <option value="2">★★☆☆☆ (2/5)</option>
+              <option value="1">★☆☆☆☆ (1/5)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="contractor-notes">Ghi chú & Năng lực</label>
+          <textarea id="contractor-notes" name="notes" class="form-control" rows="3" placeholder="Đặc điểm thi công, tay nghề, báo giá tham khảo..."></textarea>
+        </div>
+        <div class="dialog-actions" style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px;">
+          <button type="button" class="btn btn-outline" onclick="document.getElementById('dialog-contractor').close()">Huỷ</button>
+          <button type="submit" class="btn btn-primary" id="btn-save-contractor">Lưu nhà thầu</button>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL 2: THÊM / SỬA PHIẾU GIAO VIỆC -->
+  <dialog id="dialog-assignment" class="shell-dialog work-dialog" aria-label="Phiếu giao việc">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h3 id="assignment-dialog-title">Tạo phiếu giao việc</h3>
+        <button type="button" class="close-dialog" onclick="document.getElementById('dialog-assignment').close()">×</button>
+      </div>
+      <form id="form-assignment" class="work-form">
+        <input type="hidden" id="assignment-id" name="id">
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label for="assign-project">Dự án <span style="color:red">*</span></label>
+            <select id="assign-project" name="projectId" required class="form-select">
+              <option value="">-- Chọn dự án --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="assign-contractor">Nhà thầu / Đội thợ <span style="color:red">*</span></label>
+            <select id="assign-contractor" name="contractorId" required class="form-select">
+              <option value="">-- Chọn nhà thầu --</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label for="assign-task">Công việc Lịch (từ Tiến độ)</label>
+            <select id="assign-task" name="taskId" class="form-select">
+              <option value="">-- Chọn công việc Lịch để đồng bộ --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="assign-category">Hạng mục <span style="color:red">*</span></label>
+            <input type="text" id="assign-category" name="category" required class="form-control" list="datalist-categories" placeholder="VD: Sơn bả">
+            <datalist id="datalist-categories"></datalist>
+          </div>
+        </div>
+        <div class="form-row" style="display: grid; grid-template-columns: 2fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label for="assign-scope">Phạm vi công việc</label>
+            <input type="text" id="assign-scope" name="scope" class="form-control" placeholder="VD: Bả 2 lớp, sơn lót 1, phủ 2 tầng 1-3">
+          </div>
+          <div class="form-group">
+            <label for="assign-quantity">Khối lượng</label>
+            <input type="text" id="assign-quantity" name="quantity" class="form-control" placeholder="VD: 450 m2">
+          </div>
+        </div>
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+          <div class="form-group">
+            <label for="assign-start-date">Ngày bắt đầu</label>
+            <input type="date" id="assign-start-date" name="startDate" class="form-control">
+          </div>
+          <div class="form-group">
+            <label for="assign-end-date">Ngày kết thúc</label>
+            <input type="date" id="assign-end-date" name="endDate" class="form-control">
+          </div>
+          <div class="form-group">
+            <label for="assign-status">Trạng thái</label>
+            <select id="assign-status" name="status" class="form-select">
+              <option value="Nháp">Nháp</option>
+              <option value="Đã gửi">Đã gửi</option>
+              <option value="Đang làm">Đang làm</option>
+              <option value="Nghiệm thu">Nghiệm thu</option>
+              <option value="Xong">Xong</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="assign-notes">Ghi chú thi công</label>
+          <textarea id="assign-notes" name="notes" class="form-control" rows="2" placeholder="Yêu cầu kỹ thuật, nghiệm thu từng đợt..."></textarea>
+        </div>
+        <div class="dialog-actions" style="display: flex; justify-content: space-between; align-items: center; margin-top: 14px;">
+          <button type="button" class="btn btn-outline btn-sm" id="btn-attach-pdf-from-assign" style="color: var(--gd-primary);">
+            <i data-lucide="file-plus"></i> Ghép hồ sơ PDF
+          </button>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" class="btn btn-outline" onclick="document.getElementById('dialog-assignment').close()">Huỷ</button>
+            <button type="submit" class="btn btn-primary" id="btn-save-assignment">Lưu phiếu</button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </dialog>
+
+  <!-- MODAL 3: BỘ TẠO PDF HỒ SƠ GIAO VIỆC -->
+  <dialog id="dialog-pdf-builder" class="shell-dialog work-dialog" style="max-width: 860px; width: 95vw;" aria-label="Ghép PDF hồ sơ giao việc">
+    <div class="dialog-content">
+      <div class="dialog-header">
+        <h3>Ghép hồ sơ giao việc PDF</h3>
+        <button type="button" class="close-dialog" onclick="document.getElementById('dialog-pdf-builder').close()">×</button>
+      </div>
+
+      <div class="pdf-builder-body" style="padding: 10px 0;">
+        <div class="form-row" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+          <div class="form-group">
+            <label for="pdf-project-select">1. Dự án nguồn</label>
+            <select id="pdf-project-select" class="form-select">
+              <option value="">-- Chọn dự án --</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label for="pdf-document-select">2. Tài liệu PDF dự án (từ Quản lý dự án)</label>
+            <select id="pdf-document-select" class="form-select">
+              <option value="">-- Chọn tài liệu bản vẽ / PDF --</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+          <strong>Các trang PDF đã chọn (<span id="selected-pages-count">0</span> trang):</strong>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <button type="button" class="btn btn-outline btn-sm" id="btn-pdf-select-all">Chọn tất cả</button>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-pdf-deselect-all">Bỏ chọn</button>
+          </div>
+        </div>
+
+        <div id="pdf-thumbnails-container" class="pdf-thumb-grid">
+          <div style="grid-column: 1/-1; text-align: center; color: #64748b; padding: 24px;">
+            Vui lòng chọn tài liệu PDF để hiển thị danh sách trang.
+          </div>
+        </div>
+
+        <div style="margin-top: 14px; padding: 12px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;">
+          <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer;">
+            <input type="checkbox" id="pdf-opt-cover" checked>
+            <span>Thêm trang bìa tự sinh (Tên dự án, Hạng mục, Nhà thầu, Ngày lập, Logo GD HOME)</span>
+          </label>
+        </div>
+
+        <div style="margin-top: 12px; font-size: 13px; color: #475569;">
+          Tên file PDF: <strong id="pdf-output-filename" style="color: #0f172a;">GDHOME - Giao việc.pdf</strong>
+        </div>
+      </div>
+
+      <div class="dialog-actions" style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px;">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('dialog-pdf-builder').close()">Đóng</button>
+        <button type="button" class="btn btn-success" id="btn-execute-pdf-build">
+          <i data-lucide="file-check"></i> Tạo PDF
+        </button>
+      </div>
+    </div>
+  </dialog>
 
   <div id="work-toast" class="toast-notification" role="status"></div>
 </body>

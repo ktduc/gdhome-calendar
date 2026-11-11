@@ -28,6 +28,7 @@ const { handlePublicReview } = require('./material-review');
 const { handleProjectHub } = require('./project-hub');
 const { getStorageKind } = require('./object-storage');
 const { driveBackup } = require('./drive-backup');
+const { handleWorkApi } = require('./work-manager');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -600,6 +601,9 @@ async function handleApi(req, res, urlPath) {
   }
   if (urlPath === '/api/library' || urlPath.startsWith('/api/library/')) {
     return handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, sendJson });
+  }
+  if (urlPath === '/api/work' || urlPath.startsWith('/api/work/')) {
+    return handleWorkApi(req, res, urlPath, { sendJson, readJsonBody, dataKey, store, defaultSchedule: defaultData });
   }
   if (urlPath === '/api/materials' || urlPath.startsWith('/api/materials/')) {
     return handleMaterials(req, urlPath, { res, store, dataKey, readJsonBody, readRawBody, sendJson, dataDir: DATA_DIR, secret: SESSION_SECRET, defaultSchedule: defaultData });

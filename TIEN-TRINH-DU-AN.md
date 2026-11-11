@@ -258,3 +258,30 @@
     - Chốt mã chỉ sửa qua `GDHomeShell.layout()` tự động, không sửa file tĩnh của Chốt mã.
     - Playwright đo vị trí, kích thước header (height 52px), nút ☰ (x 16px, y 10px, 32x32px) và avatar (x 1393px, y 12px, 28x28px, right 19px) giống nhau 100% (±0px, đạt yêu cầu ±1px) trên cả 5 trang.
     - Đã chụp ảnh sau (1440px) lưu tại `docs/gd23/`: `sau-lich-1440.png`, `sau-chot-ma-1440.png`, `sau-du-an-1440.png`, `sau-tools-1440.png`, `sau-giao-viec-1440.png`.
+
+- [x] **23B.2. Tool "Giao việc · Tổng hợp nhà thầu" + Ghép PDF hồ sơ giao việc**
+  - **WorkManager backend (`work-manager.js`)**:
+    - Quản lý danh bạ nhà thầu (CRUD: tên, SĐT, nhóm việc/hạng mục, đánh giá sao, ghi chú, trạng thái).
+    - Quản lý phiếu giao việc (CRUD: dự án, công việc liên kết từ Lịch, nhà thầu, hạng mục, khối lượng, phạm vi, ngày bắt đầu, deadline, trạng thái, ghi chú).
+    - Tự động tính trạng thái quá hạn (`isOverdue`, số ngày quá hạn) dựa trên ngày giờ Việt Nam.
+    - Tìm kiếm tiếng Việt không dấu chuẩn hóa qua `removeAccents`.
+    - Cách ly dữ liệu theo tài khoản (`work-v1-${hash}` bằng SHA-256 từ `dataKey`).
+    - API endpoints: `/api/work/overview`, `/api/work/contractors`, `/api/work/assignments`.
+  - **Giao diện người dùng (`/giao-viec`, `giao-viec.html`, `giao-viec.js`, `giao-viec.css`)**:
+    - Bộ lọc dự án, bộ lọc hạng mục, thanh tìm kiếm tiếng Việt không dấu tức thời.
+    - Danh sách nhà thầu trực quan dạng card, đánh giá sao, gắn thẻ hạng mục.
+    - Bảng phiếu giao việc có badge trạng thái (Chưa giao, Đang làm, Quá hạn đỏ rực với số ngày trễ, Hoàn thành, Tạm dừng).
+    - Xuất bảng tổng hợp giao việc ra file Excel (.xlsx) qua SheetJS.
+    - Tích hợp trang Lịch: huy hiệu nhà thầu trực tiếp trên thanh công việc và popover chỉnh sửa nhanh.
+  - **Ghép PDF hồ sơ giao việc (PDF Builder)**:
+    - Nạp bản vẽ PDF từ Quản lý dự án (`/api/project-hub/project?id=...`).
+    - Hiển thị danh sách thumbnail các trang PDF trực quan (hỗ trợ PDF.js và fallback PDFLib canvas).
+    - Chọn từng trang cụ thể (Check/Uncheck, Chọn tất cả, Bỏ chọn), kéo thả đổi thứ tự trang.
+    - Tùy chọn sinh tự động trang bìa chuẩn nhận diện GD HOME (khung xanh thương hiệu, tên dự án, hạng mục, nhà thầu, khối lượng, phạm vi, ngày phát hành, số trang bản vẽ).
+    - Trích xuất và ghép đúng các trang đã chọn thành file PDF mới tải về máy và tự động lưu vào Quản lý dự án.
+  - **Kiểm thử**:
+    - Bộ kiểm thử tự động `tests/gd23b-work.test.js` gồm 5 test cases (CRUD nhà thầu, CRUD phiếu & cảnh báo quá hạn, cách ly tài khoản, Server HTTP API, và Playwright E2E tạo nhà thầu, tạo phiếu, chọn 3 trang PDF giả và tạo PDF ghép 4 trang có bìa và 3 trang không bìa).
+    - Toàn bộ 91/91 test trong hệ thống vượt qua 100%.
+
+---
+**XONG GĐ23B**

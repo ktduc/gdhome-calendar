@@ -561,6 +561,55 @@ window.GDHomeShell = (() => {
     initSidebarToggle();
   }
 
+  
+  // ---------------------------------------------------------------------------
+  // GĐ23B.2: Huy hiệu nhà thầu trên trang Lịch (msp-contractor-badge)
+  // ---------------------------------------------------------------------------
+  let workAssignmentsMap = new Map();
+  let lastWorkRefresh = 0;
+  async function refreshWorkBadges() {
+    if (typeof window === 'undefined') return;
+    const isSchedulePage = location.pathname === '/' || location.pathname.endsWith('index.html');
+    if (!isSchedulePage) return;
+    if (Date.now() - lastWorkRefresh < 8000) return;
+    lastWorkRefresh = Date.now();
+    try {
+      const res = await fetch('/api/work/assignments', { headers: getShellAuthHeaders() });
+      if (!res.ok) return;
+      const data = await res.json();
+      if (Array.isArray(data.assignments)) {
+        workAssignmentsMap = new Map();
+        for (const a of data.assignments) {
+          if (a.taskId && a.contractorName) {
+            workAssignmentsMap.set(a.taskId, a);
+          }
+        }
+        decorateAllWorkBadges();
+      }
+    } catch {}
+  }
+
+  function decorateWorkBadge(row) {
+    if (!row || !row.dataset?.taskId) return;
+    row.querySelector('.msp-contractor-badge')?.remove();
+    const assignment = workAssignmentsMap.get(row.dataset.taskId);
+    if (!assignment) return;
+
+    const badge = document.createElement('a');
+    badge.href = '/giao-viec?project=' + encodeURIComponent(assignment.projectId || '');
+    badge.className = 'msp-contractor-badge';
+    badge.title = 'Nhà thầu: ' + assignment.contractorName + (assignment.status ? ' (' + assignment.status + ')' : '');
+    badge.innerHTML = '👷 ' + escape(assignment.contractorName);
+    badge.onclick = e => e.stopPropagation();
+
+    const targetCell = row.querySelector('.col-name') || row;
+    targetCell.append(badge);
+  }
+
+  function decorateAllWorkBadges() {
+    document.querySelectorAll('.msp-tr.task-row[data-task-id]').forEach(decorateWorkBadge);
+  }
+
   function toggleSidebar(forcedState) {
     const key = 'gdhome_sidebar_hidden:' + location.pathname;
     const isCurrentlyCollapsed = document.body.classList.contains('is-sidebar-collapsed');
@@ -578,13 +627,13 @@ window.GDHomeShell = (() => {
 
   if (typeof window !== 'undefined') {
     const start = () => {
-      initHubJobTracker(); layout();
+      initHubJobTracker(); layout(); refreshWorkBadges(); window.addEventListener("focus", refreshWorkBadges);
       // Các trang vẽ thanh bên sau khi tải xong (Chốt mã, Tools...): theo dõi để gắn nút ngay khi có.
       let queued = false;
       new MutationObserver(() => {
         if (queued) return;
         queued = true;
-        requestAnimationFrame(() => { queued = false; layout(); });
+        requestAnimationFrame(() => { queued = false; layout(); if (workAssignmentsMap.size) decorateAllWorkBadges(); else refreshWorkBadges(); });
       }).observe(document.body,{childList:true,subtree:true});
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',start);
