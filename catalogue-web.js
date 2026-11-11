@@ -430,6 +430,108 @@ function tableVariants(html,url,validate) {
   return rows;
 }
 
+
+// ---------------------------------------------------------------- Garis (garis.vn)
+// Trang danh mục chỉ hiện vài sản phẩm mỗi nhóm + "Xem tất cả" sang trang con; mỗi sản phẩm có trang chi tiết
+// với gallery ảnh và bảng mã đặt hàng. Bộ đọc đi theo cây danh mục của web, mở từng trang chi tiết, mỗi dòng bảng là 1 mã.
+const garisHost = url => { try { return /(?:^|\.)garis\.vn$/i.test(new URL(url).hostname); } catch { return false; } };
+function garisMenu(html,base) {
+  const tree = new Map();   // url -> [nhóm lớn, nhóm con]
+  const menu = html.match(/<ul\b[^>]*class\s*=\s*["'][^"']*\bproduct_li\b[\s\S]*?<\/ul>\s*<\/li>\s*<\/ul>/i)?.[0] || '';
+  for (const top of menu.matchAll(/<li\b[^>]*>\s*(?:<img\b[^>]*>)?\s*<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>([\s\S]*?)(?=<li\b[^>]*>\s*(?:<img\b[^>]*>)?\s*<a\b[^>]*href\s*=\s*["'][^"']+["'][^>]*>[^<]*<\/a>\s*<ul\b|$)/gi)) {
+    const topName = readable(top[2]);
+    let topUrl; try { topUrl = new URL(decode(top[1]),base).href; } catch { continue; }
+    if (!/\.html$/i.test(topUrl) || !topName) continue;
+    if (!tree.has(topUrl)) tree.set(topUrl,[topName]);
+    for (const child of (top[3] || '').matchAll(/<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+      try { const url = new URL(decode(child[1]),base).href; const name = readable(child[2]); if (name && !tree.has(url)) tree.set(url,[topName,name]); } catch { /* bỏ link hỏng */ }
+    }
+  }
+  return tree;
+}
+function garisProductLinks(html,base) {
+  const links = new Set();
+  for (const {content} of classElements(html,'product-item')) {
+    const href = content.match(/<a\b[^>]*href\s*=\s*["']([^"']+\.html)["']/i)?.[1];
+    if (href) try { links.add(new URL(decode(href),base).href); } catch { /* bỏ */ }
+  }
+  return [...links];
+}
+function garisProduct(html,url,path,validate) {
+  const name = readable(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
+  const images = [];
+  const push = source => {
+    if (!source) return;
+    try {
+      const absolute = validate(new URL(decode(source),url).href);
+      if (!/\/uploaded\//i.test(absolute.pathname) || /\/san-pham\/layer|garis|logo|\/ico\/|icon|banner/i.test(decodeURIComponent(absolute.pathname))) return;
+      if (!images.includes(absolute.href)) images.push(absolute.href);
+    } catch { /* bỏ ảnh ngoài */ }
+  };
+  for (const block of html.matchAll(/<script\b[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    // Ảnh JSON-LD là bản cắt /temp/-uploaded_<tên>_cr_1080x1080.jpg → lấy file gốc /uploaded/<tên>.jpg
+    try { for (const image of [JSON.parse(block[1]).image].flat()) if (typeof image === 'string') push(image.replace(/\/temp\/-uploaded_(.+?)_cr_\d+x\d+(\.[a-z]+)$/i,'/uploaded/$1$2')); } catch { /* bỏ */ }
+  }
+  for (const tag of html.matchAll(/<img\b[^>]*>/gi)) { const attrs = attributes(tag[0]); push(attrs['data-src'] || attrs.src); }
+  const og = html.match(/<meta\b[^>]*property\s*=\s*["']og:image["'][^>]*content\s*=\s*["']([^"']+)["']/i)?.[1];
+  if (og) push(og);
+  const [image,...imageAlternates] = images.slice(0,8);
+  if (!image || !name) return [];
+  const [group = 'Garis',subgroup = ''] = path || [];
+  const sourceFacets = normalizeSourceFacets([{key:'web-garis-nhom',label:'Nhóm sản phẩm',order:0,values:[group]},
+    ...(subgroup ? [{key:'web-garis-danh-muc',label:'Danh mục',order:1,values:[subgroup]}] : [])]);
+  const common = {brand:'Garis',supplier:'garis.vn',image,imageAlternates,lineId:'garis-' + new URL(url).pathname.replace(/\W+/g,'-'),
+    lineName:name,detail:url,subgroup:subgroup || group,sourceFacets,tags:[group,subgroup].filter(Boolean)};
+  const rows = [];
+  for (const table of html.matchAll(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi)) {
+    for (const row of table[0].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)) {
+      const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]\s*>/gi)].map(cell => readable(cell[1]));
+      const variant = require('./product-lines').tableRow(cells.join(' | '));
+      if (!variant) continue;
+      // Bảng web: Mã | Quy cách | Tủ tiêu chuẩn | Khoảng hở | Lọt lòng | Đơn vị | Đơn giá
+      const price = parsePrice(cells[6]);
+      rows.push({...common,...variant,name:variant.code,cabinetWidth:cells[2] || variant.cabinetWidth,clearance:cells[3] || variant.clearance,
+        innerWidth:cells[4] || '',unit:cells[5] || variant.unit,...(price ? {price,priceUnit:cells[5] || 'Bộ'} : {})});
+    }
+  }
+  if (rows.length) return rows;
+  const code = readable(html.match(/class\s*=\s*["']ma["'][^>]*>([\s\S]*?)<\/div>/i)?.[1]).replace(/^Mã:\s*/i,'').split(/[,;]/)[0].trim() || nameCode(name);
+  return [{...common,code,name}];
+}
+async function importGaris(startUrl,load,validate,maxItems,onProgress) {
+  const first = await load(startUrl,'html');
+  const html = first.buffer.toString('utf8');
+  const tree = garisMenu(html,first.url);
+  const startPath = tree.get(first.url);
+  // Trang lớn (vd Phụ kiện tủ bếp) → đi mọi trang con trong menu; trang con → chính nó; trang sản phẩm → chỉ nó.
+  const categories = startPath?.length === 1 ? [...tree].filter(([,path]) => path.length === 2 && path[0] === startPath[0]).map(([url]) => url) : [];
+  const pages = categories.length ? categories : [first.url];
+  const products = new Map(), warnings = [];
+  for (const page of pages) {
+    let url = page, guard = 0;
+    while (url && guard++ < 30) {
+      let current;
+      try { current = url === first.url ? html : (await load(url,'html')).buffer.toString('utf8'); }
+      catch (error) { warnings.push(error.message); break; }
+      for (const link of garisProductLinks(current,url)) if (!products.has(link) && products.size < 300) products.set(link,tree.get(page) || startPath || []);
+      url = cataloguePagination(current,url,validate).next;
+    }
+  }
+  if (!products.size && /<h1\b/i.test(html) && /<table\b/i.test(html)) products.set(first.url,startPath || []);
+  const items = [];
+  let done = 0;
+  for (const [url,path] of products) {
+    if (items.length >= maxItems) break;
+    try {
+      const page = url === first.url ? html : (await load(url,'html')).buffer.toString('utf8');
+      items.push(...garisProduct(page,url,path,validate));
+    } catch (error) { warnings.push(error.message); }
+    onProgress?.({done:++done,total:products.size,items:items.length});
+  }
+  const groups = normalizeSourceFacets(items.flatMap(item => item.sourceFacets),200);
+  return {items:items.slice(0,maxItems),warnings,sourceFilterGroups:groups,crawled:{categories:pages.length,products:products.size}};
+}
+
 async function importCatalogueUrls(urls,options = {}) {
   const load = Object.keys(options).length ? catalogueDownloader(options) : downloadCatalogueResource;
   const validate = options.validateUrl || checkSsrfUrl;
@@ -437,6 +539,10 @@ async function importCatalogueUrls(urls,options = {}) {
   const items = [], warnings = [];
   let needsAi = false;
   let pagination, sourceFilterGroups;
+  if (urls.length === 1 && garisHost(urls[0])) {
+    const result = await importGaris(urls[0],load,validate,1500,options.onProgress);
+    return {...result,needsAi:false};
+  }
   for (const url of urls) {
     try {
       const page = await load(url,'html');
@@ -454,4 +560,4 @@ async function importCatalogueUrls(urls,options = {}) {
   return {items:items.slice(0,maxItems),warnings,needsAi,...(pagination || {}),...(sourceFilterGroups ? {sourceFilterGroups} : {})};
 }
 
-module.exports = {importCatalogueUrls,catalogueDownloader,cataloguePagination,downloadCatalogueResource};
+module.exports = {importGaris,garisMenu,garisProduct,importCatalogueUrls,catalogueDownloader,cataloguePagination,downloadCatalogueResource};
