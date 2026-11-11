@@ -105,6 +105,39 @@ cases['23.5'] = async page => {
   assert.ok(data.brands.find(item => item.id === brand.id).aliases.includes('GD23 Brand'));
 };
 
+cases['23.4-ocr'] = async page => {
+  await openMaterials(page);
+  const png = await page.evaluate(() => {
+    const canvas = document.createElement('canvas'); canvas.width = 2400; canvas.height = 1600;
+    const ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0,0,2400,1600);
+    ctx.fillStyle = '#aaa'; ctx.fillRect(100,150,900,900);
+    ctx.fillStyle = '#111'; ctx.font = '40px monospace';
+    const lines = ['GARIS X SERIES','Gia bat nang ha dien ML06H','Inox 304 Bao hanh 5 nam',
+      'ML06.75HC R750*S372*C700 750 Bo 56.490.000',
+      'ML06.80HK R800*S372*C700 800 Bo 56.990.000'];
+    lines.forEach((text,index) => ctx.fillText(text,100,1150+index*85));
+    window.jsQR = () => null;
+    return canvas.toDataURL('image/png').split(',')[1];
+  });
+  const {PDFDocument,StandardFonts} = require('pdf-lib');
+  const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+  const image = await pdf.embedPng(Buffer.from(png,'base64')), sheet = pdf.addPage([1200,800]);
+  sheet.drawImage(image,{x:0,y:0,width:1200,height:800});
+  sheet.drawText('*//3 !@#$%^',{x:700,y:20,font,size:8,opacity:0});
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'kitchen-accessories'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=layout]').selectOption('garis');
+  await modal.locator('[name=pdf]').setInputFiles({name:'Garis-real-OCR.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
+  await modal.getByRole('button',{name:'Chạy thử 10 mẫu',exact:true}).click();
+  await modal.locator('.catalogue-product-line').waitFor({timeout:120000});
+  const codes = await modal.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value));
+  assert.deepEqual(codes,['ML06.75HC','ML06.80HK']);
+  assert.equal(Number((await modal.locator('[data-line-field=price]').first().inputValue()).replace(/[.,]/g,'')),56490000);
+  assert.equal(await modal.locator('.needs-review').count(),2);
+  assert.ok(await modal.locator('[data-save-wood]').isDisabled());
+};
+
 cases['23.4'] = async page => {
   const {PDFDocument,StandardFonts} = require('pdf-lib');
   const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
@@ -144,6 +177,7 @@ cases['23.4'] = async page => {
   assert.equal(await modal.locator('.catalogue-product-line').count(),2);
   await firstVariant.getByLabel('Chuyển dòng sản phẩm').selectOption(lineId);
   assert.equal(await modal.locator('.catalogue-product-line').count(),1);
+  for (const input of await modal.locator('[data-wood-include]').all()) await input.check();
   await modal.locator('[data-save-wood]').click();
   await modal.locator('button[type=submit]').first().and(modal.locator(':enabled')).waitFor({timeout:20000});
   await modal.getByText(/Đã lưu 2 mã/).waitFor({timeout:20000});

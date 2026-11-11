@@ -2463,7 +2463,7 @@ window.GDHomeAssets = (() => {
             const [x,y] = viewport.convertToViewportPoint(item.transform[4],item.transform[5]);
             return {text:item.str,x,y,height:item.height*viewport.scale,width:item.width*viewport.scale};
           });
-          let text = labels.map(label => label.text).join('\n');
+          let text = labels.map(label => label.text).join('\n'), ocrUsed = false;
           const shifted = text.replace(/[!-~]/g,char => String.fromCharCode(char.charCodeAt(0)+29));
           if (garisTextScore(shifted) > garisTextScore(text)) {
             labels = labels.map(label => ({...label,text:label.text.replace(/[!-~]/g,char => String.fromCharCode(char.charCodeAt(0)+29))})); text = shifted;
@@ -2476,10 +2476,22 @@ window.GDHomeAssets = (() => {
             const ocr = await catalogueScript('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js','Tesseract');
             worker ||= await ocr.createWorker(['vie','eng']);
             const {data} = await worker.recognize(canvas);
+            ocrUsed = true;
             text = data.text || '';
             labels = (data.lines || []).map(line => ({text:line.text.trim(),x:line.bbox.x0,y:line.bbox.y1,
               width:line.bbox.x1-line.bbox.x0,height:line.bbox.y1-line.bbox.y0}));
             if (!labels.length) labels = text.split(/\n/).map((text,index) => ({text,x:0,y:index*20,width:canvas.width,height:20}));
+          }
+          if (ocrUsed) {
+            const normalizeCode = value => value.replace(/\b([A-Z]{2})([O\d]{2})(?=[A-Z.]|\b)/g,(_,prefix,digits) => prefix+digits.replace(/O/g,'0'));
+            labels = labels.map(label => ({...label,text:normalizeCode(label.text)}));
+            const normalized = labels.map(label => label.text).join('\n');
+            const root = normalized.match(/\b([A-Z]{2}\d{2})[A-Z]\b/)?.[1];
+            if (root) labels = labels.map(label => ({...label,text:label.text.replace(/\b([A-Z]{2}\d{2})(?=\.\d)/g,value => {
+              const ambiguous = value.slice(0,2) === root.slice(0,2) && [...value.slice(2)].every((digit,index) => digit === root[index+2] || /[09]/.test(digit) && /[09]/.test(root[index+2]));
+              return ambiguous ? root : value;
+            })}));
+            warnings.push('Trang '+number+' dùng OCR. Kiểm tra mã, kích thước và giá trước khi lưu.');
           }
           signal?.throwIfAborted();
           const rows = kitchenCatalogueRows(labels);
@@ -2514,7 +2526,7 @@ window.GDHomeAssets = (() => {
           const tags = [...(/inox\s*304/i.test(text) ? ['Inox 304'] : []),...(/nhom.*AA/i.test(fold(text)) ? ['Nhôm AA'] : []),
             ...(/say/.test(fold(text)) ? ['Có sấy'] : []),/dien/.test(fold(title)) ? 'Nâng hạ điện' : 'Nâng hạ tay'];
           for (const row of rows) results.push({...row,lineId:'garis-page-'+number,lineName:title,name:title,brand:'Garis',series,description,features,otherSpecs:features.join(' · '),video,warranty,
-            subgroup,tags:[...tags,...(row.kemTu === 'có' ? ['Kèm tủ'] : [])],page:number,source,crop:cropOf(main),confidence:.85,
+            needsReview:ocrUsed,subgroup,tags:[...tags,...(row.kemTu === 'có' ? ['Kèm tủ'] : [])],page:number,source,crop:cropOf(main),confidence:.85,
             auxiliaryCrops:photos.filter(box => box !== main && box.w > canvas.width*.08 && box.h > canvas.height*.08).slice(0,6).map(cropOf)});
           if (trial && results.length >= 10) break;
         } finally { canvas.width = canvas.height = 0; page.cleanup(); }
