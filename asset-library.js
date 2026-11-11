@@ -273,9 +273,10 @@ window.GDHomeAssets = (() => {
     const data = await api('/api/library/' + path,{method:'POST',body:JSON.stringify(body)});
     if (!library || data._version >= library._version) library = data;
     libraryError = null;
-    notifyLibrary();
+    if (!quietLibrary) notifyLibrary();
     return data;
   }
+  let quietLibrary = false;
   const uid = () => crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random();
   const addItems = (categoryId,items,sourceFilterGroups) => libraryCall('items',{categoryId,items,sourceFilterGroups},data => {
     attributeCatalog().mergeSourceSchema(data,categoryId,sourceFilterGroups);
@@ -378,6 +379,23 @@ window.GDHomeAssets = (() => {
       if (score > bestScore) { bestScore = score; best = category; }
     }
     return bestScore >= 0.5 ? best : null;
+  }
+
+  // Danh mục của bảng chốt mã phải có trong Dữ liệu dùng chung: tạo hạng mục còn thiếu (khớp tên gần đúng thì bỏ qua).
+  let ensuring = Promise.resolve();
+  function ensureCategoriesFor(names) {
+    const wanted = [...new Set((names || []).map(name => String(name || '').trim()).filter(name => name && !/^nhóm mới$/i.test(name)))];
+    if (!wanted.length) return ensuring;
+    ensuring = ensuring.catch(() => {}).then(async () => {
+      const data = await loadLibrary();
+      const create = wanted.filter(name => !categoryFor(data,name));
+      if (!create.length) return;
+      // Tạo hàng loạt rồi báo đổi 1 lần, để hộp thư viện không vẽ lại liên tục.
+      quietLibrary = true;
+      try { for (const name of create) if (!categoryFor(library,name)) await saveCategory(name.replace(/\s*\(.*\)\s*$/,'') || name); }
+      finally { quietLibrary = false; notifyLibrary(); }
+    });
+    return ensuring;
   }
 
   // ---------------------------------------------------------------- Vùng nhìn ảnh
@@ -4479,7 +4497,7 @@ window.GDHomeAssets = (() => {
 
   if (location.hash === '#library') addEventListener('load',() => setTimeout(() => openLibrary(),300));
 
-  return {configure,libraryItemMatches:(full,code) => !!library?.items.some(item => item.full === full && (item.code === code || item.name === code)),invalidateRenders,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
+  return {configure,ensureCategoriesFor,libraryItemMatches:(full,code) => !!library?.items.some(item => item.full === full && (item.code === code || item.name === code)),invalidateRenders,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
     categoryFor,openLibrary,openRenders,pickRender,pickLibrary,pickPaint,pickWood,loadPaintData,loadWoodData,storeAsset,closePicker,editView,viewCss,viewStyle,clampView,hydrate,assetUrl,displayAttribute,displayOptions,
     brandFor:name => window.GDHomeBrands?.find(library?.brands,name),filePicker,isPdf,pdfPages};
 })();

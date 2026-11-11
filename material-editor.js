@@ -315,6 +315,7 @@ const projectFields = ['project','address','customer','phone','email','contract'
 function openSheet(value) {
   if (!value) return;
   sheet = structuredClone(value);
+  GDHomeAssets.ensureCategoriesFor?.(sheet.groups?.map(group => group.name))?.catch(() => {});
   selectedMaterialRows.clear();
   materialRangeAnchor = null;
   const project = materials.projects.find(p => p.id === sheet.projectId);
@@ -732,6 +733,7 @@ document.addEventListener('change', event => {
       delete group.taskLinkScore;
     } else if (group && key === 'groupName') {
       group.name = value;
+      GDHomeAssets.ensureCategoriesFor?.([value])?.catch(() => {});
       applyMaterialTaskLinks(materialTaskUpdates(sheet,[group],true));
     } else if (group) group[key] = value;
     else if (key === 'title') sheet.title = value;
