@@ -80,7 +80,7 @@ window.GDHomeAssets = (() => {
         if (target.isConnected) hydrateImage(target);
       }
     },{root:main,rootMargin:'160px'});
-    for (const image of main.querySelectorAll('img[loading=lazy]')) observer.observe(image);
+    for (const image of main.querySelectorAll('img[data-lib-asset]')) observer.observe(image);
     return observer;
   }
   async function uploadImage(file,guess = false) {
@@ -1160,7 +1160,7 @@ window.GDHomeAssets = (() => {
     dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
       if (window[name]) return;
       await new Promise((resolve,reject) => {
-        const script = document.createElement('script'); script.src = '/'+file+'?v=library-tools-1';
+        const script = document.createElement('script'); script.src = '/'+file+'?v=logo-crop-2';
         script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
       });
     })).catch(error => { dependencyPromise = null; throw error; });
@@ -3219,6 +3219,9 @@ window.GDHomeAssets = (() => {
     }
     let cards = [], details = [], rangeAnchor = null, activeDetail = null;
     const toolbar = body.querySelector('.catalogue-review-toolbar'), detailPanel = body.querySelector('[data-catalogue-details]');
+    const toolbarSize = new ResizeObserver(() => body.style.setProperty('--catalogue-toolbar-height',toolbar.offsetHeight + 8 + 'px'));
+    toolbarSize.observe(toolbar);
+    dialog.addEventListener('close',() => toolbarSize.disconnect(),{once:true});
     const filter = toolbar.querySelector('[data-catalogue-filter]');
     const include = card => card.querySelector('[data-wood-include]');
     const selected = () => cards.filter(card => include(card).checked);
@@ -3242,6 +3245,7 @@ window.GDHomeAssets = (() => {
         if (detailPanel.firstElementChild !== detail) detailPanel.replaceChildren(detail);
       } else detailPanel.replaceChildren();
       detailPanel.hidden = !detailPanel.childElementCount;
+      cards.forEach((card,i) => card.querySelector('[data-show-catalogue-detail]').setAttribute('aria-pressed',String(!detailPanel.hidden && i === index)));
       toolbar.hidden = !cards.length || !historyPanel.hidden;
       toolbar.querySelector('[data-catalogue-count]').textContent = 'Đã chọn ' + chosen.length + '/' + cards.length;
       save.disabled = busy || trial || !chosen.length;
@@ -4534,5 +4538,5 @@ window.GDHomeAssets = (() => {
 
   return {configure,ensureCategoriesFor,libraryItemMatches:(full,code) => !!library?.items.some(item => item.full === full && (item.code === code || item.name === code)),invalidateRenders,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
     categoryFor,openLibrary,openRenders,pickRender,pickLibrary,pickPaint,pickWood,loadPaintData,loadWoodData,storeAsset,closePicker,editView,viewCss,viewStyle,clampView,hydrate,assetUrl,displayAttribute,displayOptions,
-    brandFor:name => window.GDHomeBrands?.find(library?.brands,name),filePicker,isPdf,pdfPages};
+    brandFor:name => window.GDHomeBrands?.find(library?.brands,name),filePicker,isPdf,pdfPages,editCrop:editWoodCrop};
 })();

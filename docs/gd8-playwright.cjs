@@ -303,12 +303,29 @@ cases['logo-tools'] = async page => {
   await modal.locator('canvas').waitFor();
   const alpha=await modal.locator('canvas').evaluate(canvas=>[canvas.getContext('2d').getImageData(0,0,1,1).data[3],canvas.getContext('2d').getImageData(50,50,1,1).data[3]]);
   assert.deepEqual(alpha,[0,255]);
+  const cropLogo = async () => {
+    await modal.getByRole('button',{name:'Crop logo',exact:true}).click();
+    const crop = page.locator('.wood-crop-dialog'), frame = crop.locator('.wood-crop-frame');
+    const box = await frame.boundingBox();
+    await page.mouse.move(box.x+box.width,box.y+box.height);
+    await page.mouse.down();
+    await page.mouse.move(box.x+box.width*.8,box.y+box.height*.8,{steps:5});
+    await page.mouse.up();
+    await crop.getByRole('button',{name:'Áp dụng khung cắt',exact:true}).click();
+  };
+  await cropLogo();
+  const cropped = await modal.locator('canvas').evaluate(canvas=>[canvas.width,canvas.height]);
+  assert.ok(cropped.every(size=>size>=78 && size<=82),JSON.stringify(cropped));
+  await modal.getByRole('button',{name:'Khôi phục khung gốc',exact:true}).click();
+  assert.deepEqual(await modal.locator('canvas').evaluate(canvas=>[canvas.width,canvas.height]),[100,100]);
+  await cropLogo();
   await modal.getByRole('button',{name:'Lưu logo đã xử lý',exact:true}).click();
   await modal.waitFor({state:'detached'});
   const result=await page.request.get('/api/library').then(r=>r.json());
   assert.notEqual(result.brands.find(item=>item.id===brand.id).logo,logo);
   await library.locator('[data-brand-id="'+brand.id+'"]').getByRole('button',{name:'Tách nền / tăng nét',exact:true}).click();
   await modal.locator('canvas').waitFor();
+  assert.deepEqual(await modal.locator('canvas').evaluate(canvas=>[canvas.width,canvas.height]),cropped);
   assert.equal(await modal.getByLabel('Tách nền theo màu',{exact:true}).isChecked(),false);
   assert.equal(await modal.locator('canvas').evaluate(canvas=>canvas.getContext('2d').getImageData(50,50,1,1).data[3]),255);
 
@@ -331,6 +348,25 @@ cases['brand-paste-tools'] = async page => {
   const data = await page.request.get('/api/library').then(r => r.json());
   assert.match(data.brands.find(item => item.id === brand.id).logo,/^[a-f0-9]{64}\.png$/);
   assert.equal(data.brands.find(item => item.id === brand.id).note,'Giữ ghi chú');
+  await card.locator('img').evaluate(image=>image.decode());
+  const logo = data.brands.find(item => item.id === brand.id).logo;
+  await page.evaluate(async ({logo,name}) => {
+    await GDHomeAssets.addItems('cat-6',[{kind:'image',name:'Mẫu có logo',brand:name,full:logo,thumb:logo}]);
+  },{logo,name:brand.name});
+  await library.getByRole('tab',{name:'Mẫu vật liệu',exact:true}).click();
+  await library.locator('[data-cat="cat-6"] input').check();
+  const image = library.locator('.asset-brand-logo').first();
+  await image.scrollIntoViewIfNeeded();
+  await page.waitForFunction(()=>document.querySelector('.asset-brand-logo')?.naturalWidth>0);
+  await page.route('**/api/catalogue/logo-search',route=>route.fulfill({json:{items:[{url:'https://logo.example.test/brand.png',title:'Logo đề xuất'}]}}));
+  await page.route('**/api/catalogue/logo-image',route=>route.fulfill({body:webPhoto('suggested-logo',100,100),contentType:'image/png'}));
+  await page.route('**/api/google/search?*',route=>route.fulfill({json:{configured:false,items:[]}}));
+  await library.getByRole('tab',{name:'Thương hiệu',exact:true}).click();
+  await card.getByRole('button',{name:'Tìm logo',exact:true}).click();
+  const search = page.locator('dialog').filter({has:page.getByRole('heading',{name:'Tìm logo · '+brand.name,exact:true})});
+  await search.getByRole('button',{name:'Logo đề xuất',exact:true}).locator('img').evaluate(image=>image.decode());
+  await search.getByRole('button',{name:'Logo đề xuất',exact:true}).click();
+  await search.waitFor({state:'detached'});
 };
 
 cases['brand-paste'] = async page => {
@@ -4524,6 +4560,26 @@ cases['21.9'] = async page => {
   const ratios = await cards.locator('canvas').evaluateAll(nodes => nodes.map(node => node.width/node.height));
   assert.ok(ratios.every(value => value > 3.6),JSON.stringify(ratios));
   assert.equal(ai,0);
+  for (const width of [1050,1280,1440,1920,2560,600]) {
+    await page.setViewportSize({width,height:720});
+    await cards.nth(0).locator('[data-show-catalogue-detail]').click();
+    assert.equal(await cards.nth(0).locator('[data-show-catalogue-detail]').getAttribute('aria-pressed'),'true');
+    await cards.nth(1).locator('[data-show-catalogue-detail]').click();
+    assert.equal(await cards.nth(0).locator('[data-show-catalogue-detail]').getAttribute('aria-pressed'),'false');
+    assert.equal(await cards.nth(1).locator('[data-show-catalogue-detail]').getAttribute('aria-pressed'),'true');
+    // Simulate a long catalogue without repeating PDF extraction work.
+    await modal.locator('.wood-catalogue-results').evaluate(list=>list.style.minHeight='1800px');
+    await modal.locator('.asset-dialog-body').evaluate(body=>body.scrollTop=body.querySelector('.catalogue-review').offsetTop+150);
+    await page.waitForTimeout(100);
+    const panel = await modal.locator('[data-catalogue-details]').boundingBox();
+    const toolbar = await modal.locator('.catalogue-review-toolbar').boundingBox();
+    const scrollport = await modal.locator('.asset-dialog-body').boundingBox();
+    assert.ok(panel.y>=toolbar.y+toolbar.height,JSON.stringify({panel,toolbar}));
+    assert.ok(panel.y+panel.height<=scrollport.y+scrollport.height+2,JSON.stringify({panel,scrollport}));
+    const before = panel.y;
+    await modal.locator('.asset-dialog-body').evaluate(body=>body.scrollTop+=160);
+    assert.ok(Math.abs((await modal.locator('[data-catalogue-details]').boundingBox()).y-before)<2);
+  }
 };
 
 cases['20.7'] = async page => {

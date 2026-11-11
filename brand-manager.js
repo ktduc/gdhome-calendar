@@ -112,18 +112,31 @@ window.GDHomeBrandManager = (() => {
           '<label><input type="checkbox" name="removeBackground"' + (transparentBorder ? '' : ' checked') + '> Tách nền theo màu</label><label>Màu nền <input type="color" name="background" value="#'+background+'"></label>' +
           '<label>Mức tách nền <input type="range" name="threshold" min="0" max="180" value="35"></label>' +
           '<label>Tăng nét <input type="range" name="sharpness" min="0" max="2" step="0.1" value="0.5"></label>' +
-          '<small>Điều chỉnh và xem vùng trong suốt trên nền ô vuông trước khi lưu.</small><button>Lưu logo đã xử lý</button><p role="status"></p></form>';
+          '<div><button type="button" data-logo-crop>Crop logo</button> <button type="button" data-logo-reset>Khôi phục khung gốc</button></div>' +
+          '<small>Điều chỉnh và xem vùng trong suốt trên nền ô vuông trước khi lưu.</small><button type="submit">Lưu logo đã xử lý</button><p role="status"></p></form>';
         view.body.querySelector('.brand-logo-edit-preview').append(canvas);
         const form = view.body.querySelector('form');
+        let crop = {x:0,y:0,w:1,h:1};
+        const source = document.createElement('canvas'); source.width = original.width; source.height = original.height;
+        const sourceContext = source.getContext('2d');
         const preview = () => {
           const color = form.elements.background.value.match(/[a-f0-9]{2}/gi).map(value => parseInt(value,16));
           const result = GDHomeLogoProcessing.process(original,{removeBackground:form.elements.removeBackground.checked,color,
             threshold:Number(form.elements.threshold.value),sharpness:Number(form.elements.sharpness.value)});
-          ctx.putImageData(new ImageData(result.data,result.width,result.height),0,0);
+          sourceContext.putImageData(new ImageData(result.data,result.width,result.height),0,0);
+          const x = Math.floor(crop.x*source.width), y = Math.floor(crop.y*source.height);
+          canvas.width = Math.max(1,Math.min(source.width-x,Math.round(crop.w*source.width)));
+          canvas.height = Math.max(1,Math.min(source.height-y,Math.round(crop.h*source.height)));
+          ctx.drawImage(source,x,y,canvas.width,canvas.height,0,0,canvas.width,canvas.height);
         };
         form.oninput = preview; preview();
+        form.querySelector('[data-logo-crop]').onclick = async () => {
+          const image = new Image(); image.src = source.toDataURL('image/png'); await image.decode();
+          GDHomeAssets.editCrop(image,crop,value => { crop = value; preview(); },'Crop logo · kéo khung để di chuyển, kéo góc để đổi kích thước');
+        };
+        form.querySelector('[data-logo-reset]').onclick = () => { crop = {x:0,y:0,w:1,h:1}; preview(); };
         form.onsubmit = async event => {
-          event.preventDefault(); const button = form.querySelector('button'); button.disabled = true;
+          event.preventDefault(); const button = form.querySelector('button[type=submit]'); button.disabled = true;
           try {
             const png = await new Promise(resolve => canvas.toBlob(resolve,'image/png'));
             if (!png) throw new Error('Không xuất được logo.');
@@ -169,14 +182,16 @@ window.GDHomeBrandManager = (() => {
       googleForm.onsubmit = event => { event.preventDefault(); const query = googleForm.elements.q.value.trim(); if (query) searchGoogle(query); };
       searchGoogle(brand.name+' logo');
       try {
-        const result = await post('/api/catalogue/logo-search',{name:brand.name,website:brand.website});
+        const response = await fetch('/api/catalogue/logo-search',{method:'POST',headers:{...logoHeaders(),'Content-Type':'application/json'},body:JSON.stringify({name:brand.name,website:brand.website})});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.message || 'Không tìm được logo.');
         view.body.querySelector('[role=status]').textContent = result.items.length ? 'Chọn logo của hãng.' : 'Chưa tìm được logo. Điền website hoặc cấu hình tìm ảnh trong Kết nối.';
         const list = view.body.querySelector('div');
         for (const candidate of result.items) {
           const button = document.createElement('button'); button.type = 'button'; button.title = candidate.title || brand.name;
           const image = document.createElement('img'); image.alt = candidate.title || brand.name; button.append(image); list.append(button);
           try {
-            const response = await fetch('/api/catalogue/logo-image',{method:'POST',headers:authHeaders(),body:JSON.stringify({url:candidate.url})});
+            const response = await fetch('/api/catalogue/logo-image',{method:'POST',headers:{...logoHeaders(),'Content-Type':'application/json'},body:JSON.stringify({url:candidate.url})});
             if (!response.ok) throw new Error('Không tải được logo.');
             const blob = await response.blob(), url = URL.createObjectURL(blob); image.src = url;
             view.element.addEventListener('close',() => URL.revokeObjectURL(url),{once:true});

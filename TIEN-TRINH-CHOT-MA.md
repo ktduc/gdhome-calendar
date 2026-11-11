@@ -838,3 +838,10 @@ Thêm nút Dán logo trên từng thẻ thương hiệu và trong hộp Tìm log
 - Thêm purchasePrice và discountPercent riêng. Giá vào = giá hiện có × (1 − chiết khấu/100), có nhập trực tiếp. Sửa giá gốc cập nhật lại giá vào nếu đang dùng chiết khấu. Đặt chiết khấu hàng loạt khi bỏ trống giá dùng giá hiện có của từng mẫu. Giá vào/chiết khấu ẩn khi in và không có trong dữ liệu link khách/bản xuất vật liệu.
 
 Kiểm thử Node 103/103. Edge library-tools, logo-tools, 20.11, 21.4, brand-paste, brand-paste-tools, 23.5, 24.1-export đạt. Kiểm tra chuyển 120 mẫu theo tag, chuyển đúng 1 mẫu theo tìm kiếm, hoàn tác, tính giá vào/chiết khấu hàng loạt, giữ phạm vi và giá sau tải lại, tách nền giữ phần trắng bên trong, tăng nét logo trong suốt và loại giá vào khỏi bản in/link khách.
+
+### Bổ sung crop logo và giữ bảng chi tiết catalogue
+
+- Crop trong hộp Tách nền / tăng nét dùng khung kéo thả, có khôi phục khung gốc. Xem trước và PNG lưu đúng kích thước cắt; mỗi lần điều chỉnh đều xử lý từ ảnh gốc.
+- Sửa tải logo thương hiệu trên thẻ vật liệu khi mở Dữ liệu dùng chung từ trang chủ. Tìm logo và chọn logo đề xuất dùng xác thực chung, không phụ thuộc hàm chỉ có ở trang Chốt mã.
+- Bảng chi tiết nhập PDF giữ vị trí dưới thanh lệnh khi cuộn, tự tính khoảng cách theo chiều cao thanh lệnh và có vùng cuộn riêng khi nội dung dài. Nút ba chấm tô xanh đúng thẻ đang mở để chỉnh sửa.
+- Kiểm thử Node 103/103. Edge logo-tools, brand-paste-tools, brand-paste, library-tools, 20.11, 21.4, 21.9 và 23.5 đạt. Ca PDF kiểm tra ở 600, 1050, 1280, 1440, 1920 và 2560 px; logo kiểm tra crop, khôi phục, lưu, mở lại, ảnh thực sự tải được và chọn logo đề xuất từ trang chủ.
