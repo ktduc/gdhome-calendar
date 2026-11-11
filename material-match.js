@@ -25,8 +25,10 @@ function rankMaterialMatches(items,traits,group,row) {
   const category = GDHomeAssets.categoryFor({categories:items.categories},group.name)?.id;
   const words = normalized([row.name,traits.material,traits.color,traits.tone,traits.grain,traits.size].join(' ')).split(/\s+/).filter(word => word.length > 1);
   return items.items.filter(item => !item.hidden && (!category || item.categoryId === category)).map(item => {
-    const label = normalized([item.code,item.name,item.material,item.tone,item.grain,item.size,...(item.tags || [])].join(' '));
-    const score = words.reduce((sum,word) => sum + (label.includes(word) ? 1 : 0),0) + (traits.tone && item.tone === traits.tone ? 3 : 0);
+    const label = normalized([item.code,item.name,item.material,item.tone,item.grain,item.size,...(item.tags || []),...(item.sourceFacets || []).flatMap(group => group.values)].join(' '));
+    const colors = (item.sourceFacets || []).filter(group => /mau|color/i.test(group.key)).flatMap(group => group.values);
+    const colorMatch = traits.color && colors.some(color => normalized(color) === normalized(traits.color));
+    const score = (colorMatch ? 6 : 0) + words.reduce((sum,word) => sum + (label.includes(word) ? 1 : 0),0) + (traits.tone && item.tone === traits.tone ? 3 : 0);
     return {id:item.id,score};
   }).sort((a,b) => b.score-a.score || a.id.localeCompare(b.id)).slice(0,6);
 }

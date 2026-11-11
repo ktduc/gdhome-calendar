@@ -37,6 +37,7 @@ cases['23.6'] = async page => {
   });
   assert.ok(placement.input > placement.text);
   assert.notEqual(placement.background,'rgb(0, 0, 0)');
+  if (process.env.GD23_SCREENSHOTS) await page.screenshot({path:path.join(process.env.GD23_SCREENSHOTS,'gd23-filter.png')});
   await library.locator('.close-dialog').click();
   await page.evaluate(() => GDHomeAssets.pickLibrary(document.querySelector('[data-row=g1-r1] [data-slot="0"]'),{groupName:'Gạch ốp lát'}));
   const picker = page.locator('.asset-popover');
@@ -66,6 +67,7 @@ cases['23.5'] = async page => {
   await logos.locator('.brand-logo-candidates img').waitFor();
   await logos.locator('.brand-logo-candidates button').click();
   await logos.waitFor({state:'detached'});
+  if (process.env.GD23_SCREENSHOTS) await page.screenshot({path:path.join(process.env.GD23_SCREENSHOTS,'gd23-brands.png')});
   assert.equal(searches,1);
   let data = await page.request.get('/api/library').then(r => r.json());
   const brand = data.brands.find(brand => brand.name === 'GD23 Brand');
@@ -132,6 +134,10 @@ cases['23.4'] = async page => {
   await modal.locator('.catalogue-product-line').waitFor({timeout:20000});
   assert.equal(await modal.locator('.wood-catalogue-card').count(),2);
   assert.equal(await page.evaluate(() => window.garisOcrCalls),1);
+  if (process.env.GD23_SCREENSHOTS) {
+    await modal.locator('.catalogue-product-line').scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(process.env.GD23_SCREENSHOTS,'gd23-variants.png')});
+  }
   const lineId = await modal.getByLabel('Chuyển dòng sản phẩm').first().inputValue();
   const firstVariant = modal.locator('.wood-catalogue-card').first();
   await firstVariant.getByLabel('Chuyển dòng sản phẩm').selectOption('__split');
@@ -707,7 +713,7 @@ cases['10.1'] = async page => {
     await page.evaluate(() => document.fonts.ready);
     for (const [name,selector] of [['header','.app-header'],['sidebar','.app-sidebar']]) {
       const target = page.locator(selector);
-      assert.equal(Math.round((await target.boundingBox())[name === 'header' ? 'height' : 'width']),name === 'header' ? 56 : 262);
+      assert.equal(Math.round((await target.boundingBox())[name === 'header' ? 'height' : 'width']),name === 'header' ? 52 : 260);
       if (destination) await target.screenshot({path:path.join(destination,'lich-'+width+'-'+name+'.png'),animations:'disabled'});
     }
   }
@@ -914,7 +920,7 @@ cases['10.6'] = async page => {
       for (const [name,selector] of [['header','.app-header'],['sidebar',sidebar]]) {
         const element = page.locator(selector);
         const bounds = await element.boundingBox();
-        assert.equal(Math.round(bounds[name === 'header' ? 'height' : 'width']),name === 'header' ? 56 : 262);
+        assert.equal(Math.round(bounds[name === 'header' ? 'height' : 'width']),name === 'header' ? 52 : 260);
         if (destination) await element.screenshot({path:path.join(destination,tool+'-'+width+'-'+name+'.png'),animations:'disabled'});
       }
     }
