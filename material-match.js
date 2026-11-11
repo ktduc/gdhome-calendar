@@ -43,9 +43,9 @@ async function runMaterialMatches(targets,bounds) {
   const notice = message => GDHomeShell.aiNotice('material-match-job',{state:'running',body:html(message)});
   try {
     const library = await GDHomeAssets.loadLibrary();
-    while (job.pending.length && sheet === currentSheet) {
+    while (job.pending.length) {
       const id = job.pending[0];
-      const group = sheet.groups.find(group => group.rows.some(row => row.id === id));
+      const group = currentSheet.groups.find(group => group.rows.some(row => row.id === id));
       const row = group?.rows.find(row => row.id === id);
       if (!row?.render?.length) { job.pending.shift(); localStorage.setItem(key,JSON.stringify(job)); continue; }
       notice('Đang tìm mẫu cho ' + (row.name || 'hạng mục') + ' · Còn ' + job.pending.length + ' dòng');
@@ -56,9 +56,15 @@ async function runMaterialMatches(targets,bounds) {
       job.pending.shift();
       localStorage.setItem(key,JSON.stringify(job));
     }
-    GDHomeShell.aiNotice('material-match-job',{state:'done',body:'Đã có đề xuất vật liệu.',label:'Duyệt đề xuất',onAction:() => reviewMaterialMatches()});
+    GDHomeShell.aiNotice('material-match-job',{state:'done',body:'Đã có đề xuất vật liệu.',label:'Duyệt đề xuất',onAction:async () => {
+      if (sheet?.id !== currentSheet.id) { await flushSave(); if (dirty || saving || conflict) return; openSheet(materials.sheets.find(item => item.id === currentSheet.id)); }
+      reviewMaterialMatches();
+    }});
   } catch (error) {
-    GDHomeShell.aiNotice('material-match-job',{state:'error',body:html(error.message),label:'Tiếp tục',onAction:() => runMaterialMatches()});
+    GDHomeShell.aiNotice('material-match-job',{state:'error',body:html(error.message),label:'Tiếp tục',onAction:async () => {
+      if (sheet?.id !== currentSheet.id) { await flushSave(); if (dirty || saving || conflict) return; openSheet(materials.sheets.find(item => item.id === currentSheet.id)); }
+      runMaterialMatches();
+    }});
   } finally { materialMatchRunning = false; }
 }
 async function reviewMaterialMatches() {

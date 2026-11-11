@@ -1763,9 +1763,35 @@ window.GDHomeAssets = (() => {
       [...groups].map(([path,files]) => '<tr><td>' + esc(path || 'Tệp rời') + '</td><td>' +
         files.filter(file => !isPdf(file)).length + ' ảnh / ' + files.filter(isPdf).length +
         ' PDF</td><td><input aria-label="Tag thư mục" value="' + esc(folderTags(path).join(', ')) + '"></td></tr>').join('') +
-      '</tbody></table><p role="status"></p><button data-folder-save>Lưu ảnh và mở PDF</button> <button data-folder-cancel>Huỷ</button>';
+      '</tbody></table><p role="status"></p><button type="button" data-folder-trial>Chạy thử 10 mẫu</button><div class="asset-folder-trial-grid"></div><button data-folder-save>Lưu ảnh và mở PDF</button> <button data-folder-cancel>Huỷ</button>';
     dialog.addEventListener('close',() => controller.abort(),{once:true});
     body.querySelector('[data-folder-cancel]').onclick = () => controller.abort();
+    const previews = new Set();
+    dialog.addEventListener('close',() => { for (const url of previews) URL.revokeObjectURL(url); },{once:true});
+    body.querySelector('[data-folder-trial]').onclick = async event => {
+      const button = event.currentTarget; button.disabled = true;
+      const preview = body.querySelector('.asset-folder-trial-grid'); preview.replaceChildren();
+      for (const url of previews) URL.revokeObjectURL(url); previews.clear();
+      let count = 0;
+      try {
+        for (const files of groups.values()) for (const file of files) {
+          if (count >= 10) break;
+          const append = blob => {
+            const url = URL.createObjectURL(blob); previews.add(url);
+            const image = document.createElement('img'); image.src = url; image.alt = file.name;
+            preview.append(image); count++;
+          };
+          if (isPdf(file)) {
+            let pages = 0;
+            for await (const page of pdfPages(file)) { append(page.blob); if (++pages >= 3 || count >= 10) break; }
+          } else append(file);
+        }
+        body.querySelector('[role=status]').textContent = 'Chạy thử '+count+' mẫu · chưa lưu. Chỉnh tag thư mục trước khi nhập toàn bộ.';
+        button.textContent = 'Chạy thử lại';
+        body.querySelector('[data-folder-save]').textContent = 'Nhập toàn bộ với cài đặt này';
+      } catch (error) { body.querySelector('[role=status]').textContent = error.message; }
+      finally { button.disabled = false; }
+    };
     body.querySelector('[data-folder-save]').onclick = async event => {
       event.currentTarget.disabled = true;
       const status = body.querySelector('[role=status]');
@@ -2274,7 +2300,7 @@ window.GDHomeAssets = (() => {
         return {code,name:code || 'Cần nhập mã',codeBox:text && pdfLabelCrop(text,canvas),materialCrop:relativeCrop(image,canvas),
           crop:relativeCrop(crop,canvas),confidence:code ? .6 : .55,needsReview:true};
       });
-    return [...records,...leftovers];
+    return [...records,...leftovers.filter(item => !item.code || !records.some(record => duplicateCode(record.code) === duplicateCode(item.code)))];
   }
 
   function wireCatalogueGuide(form,status) {
@@ -2591,7 +2617,9 @@ window.GDHomeAssets = (() => {
           return {text:item.str.trim(),x,y,width,height,box:catalogueTextBounds(item,viewport,pdfjs,width,height)};
         });
         if (layout === 'phao') mergePhaoLabels(labels);
-        const matches = layout === 'ancuong' ? [] : layout === 'kitchen' ? kitchenCatalogueRows(labels) : labels.flatMap(label => {
+        const tableRows = kitchenCatalogueRows(labels);
+        const productTable = layout === 'kitchen' || (generic && tableRows.length > 1);
+        const matches = layout === 'ancuong' ? [] : productTable ? tableRows : labels.flatMap(label => {
           if (layout === 'phao') {
             const code = phaoCode(label.text);
             return code ? [{...label,code,name:code}] : [];
@@ -2615,7 +2643,7 @@ window.GDHomeAssets = (() => {
         const swatches = layout === 'ancuong' ? await anCuongSwatches(context,canvas,labels,includeCode) : [];
         const detected = layout === 'phao' ?
           await matchPhaoCrops(page,viewport,pdfjs,context,canvas,matches,labels,includeCode) :
-          generic && matches.length ? await matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) : [];
+          generic && !productTable && matches.length ? await matchCatalogueCrops(page,viewport,pdfjs,context,canvas,matches,labels) : [];
         if (layout === 'phao') {
           if (!detected.length) {
             pageWarnings.push('Trang ' + number + ' không tách được mẫu.');
@@ -2623,10 +2651,10 @@ window.GDHomeAssets = (() => {
           }
           if (matches.length > detected.length) pageWarnings.push('Trang ' + number + ' còn ' + (matches.length-detected.length) + ' mã chưa ghép được ảnh.');
         }
-        const count = layout === 'kitchen' ? matches.length : detected.length+swatches.length;
+        const count = productTable ? matches.length : detected.length+swatches.length;
         if (results.length + count > 5000) throw Object.assign(new Error('Catalogue vượt 5.000 mã. Hãy chia PDF thành nhiều lượt.'),{code:'catalogue_limit'});
-        const needsAi = generic ? !detected.some(item => !item.unmatched) :
-          layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : layout === 'phao' ? detected.some(item => item.needsReview) : !matches.length;
+        const needsAi = productTable ? false : generic ? !detected.some(item => !item.unmatched) :
+          layout === 'ancuong' ? !swatches.some(item => !item.needsReview) : layout === 'phao' ? matches.length > 0 && detected.every(item => item.needsReview) : !matches.length;
         if (layout === 'ancuong' && labels.length && !swatches.length) return;
         // Save page as a compressed image and keep only the swatch canvases live.
         const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
@@ -2637,7 +2665,7 @@ window.GDHomeAssets = (() => {
         if (needsAi && useAi()) batch.push({number,image:canvas.toDataURL('image/jpeg',.7),
           text:labels.slice(0,500).map(({text,x,y,width,height}) => ({text,x:x/canvas.width,y:y/canvas.height,w:width/canvas.width,h:height/canvas.height}))});
         for (const swatch of [...swatches,...detected]) results.push({...swatch,page:number,source});
-        if (layout === 'kitchen') {
+        if (productTable) {
           const first = matches[0];
           if (first) {
             const tableTop = labels.filter(label => label.y < first.y && label.y >= first.y-first.height*12 &&
@@ -3463,17 +3491,45 @@ window.GDHomeAssets = (() => {
             editWoodCrop(image,item.crop,crop => { item.crop = crop; delete item.materialCrop; drawSwatch(canvas,image,crop); });
           };
         }
-        const lines = new Map();
-        for (const [index,item] of items.entries()) if (item.lineId) {
-          if (!lines.has(item.lineId)) {
-            const section = document.createElement('section');
-            section.className = 'catalogue-product-line';
-            const heading = document.createElement('h3');
-            heading.textContent = item.lineName || item.name || item.lineId;
-            section.append(heading); list.append(section); lines.set(item.lineId,section);
+        function arrangeProductLines() {
+          for (const card of cards) list.append(card);
+          list.querySelectorAll('.catalogue-product-line').forEach(section => section.remove());
+          const lines = new Map();
+          for (const [index,item] of items.entries()) if (item.lineId) {
+            if (!lines.has(item.lineId)) {
+              const section = document.createElement('section'); section.className = 'catalogue-product-line';
+              const heading = document.createElement('h3'); heading.textContent = item.lineName || item.name || item.lineId;
+              const preview = document.createElement('canvas'), original = cards[index].querySelector('canvas');
+              preview.width = original.width; preview.height = original.height; preview.getContext('2d').drawImage(original,0,0);
+              preview.className = 'catalogue-line-picture';
+              const table = document.createElement('div'); table.className = 'catalogue-variant-table'; table.setAttribute('role','table'); table.setAttribute('aria-label','Bảng mã đặt hàng');
+              section.append(heading,preview,table); list.append(section); lines.set(item.lineId,table);
+            }
+            lines.get(item.lineId).append(cards[index]);
           }
-          lines.get(item.lineId).append(cards[index]);
         }
+        for (const [index,item] of items.entries()) if (item.lineId) {
+          const card = cards[index]; card.setAttribute('role','row');
+          for (const key of ['spec','price']) {
+            const target = details[index].querySelector('[data-catalogue-field="'+key+'"]');
+            const input = document.createElement('input'); input.value = item[key] ?? '';
+            input.setAttribute('aria-label',key === 'spec' ? 'Quy cách mã' : 'Giá mã');
+            input.dataset.lineField = key;
+            input.oninput = () => { item[key] = input.value; if (target) target.value = input.value; };
+            card.append(input);
+          }
+          const line = document.createElement('select'); line.setAttribute('aria-label','Chuyển dòng sản phẩm');
+          const options = [...new Map(items.filter(item => item.lineId).map(item => [item.lineId,item.lineName || item.lineId]))];
+          line.innerHTML = options.map(([id,name]) => '<option value="'+esc(id)+'"'+(id === item.lineId ? ' selected' : '')+'>'+esc(name)+'</option>').join('') + '<option value="__split">Tách mã thành dòng riêng</option>';
+          line.onchange = () => {
+            item.lineId = line.value === '__split' ? uid() : line.value;
+            const field = details[index].querySelector('[data-catalogue-field=lineId]'); if (field) field.value = item.lineId;
+            if (line.value === '__split') { const option = new Option(item.code || item.name,item.lineId,true,true); line.add(option,0); }
+            arrangeProductLines();
+          };
+          card.append(line);
+        }
+        arrangeProductLines();
       } catch (error) { status.textContent = error.message; }
       finally {
         for (const control of locked) control.disabled = false;

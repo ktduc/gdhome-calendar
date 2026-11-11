@@ -132,6 +132,12 @@ cases['23.4'] = async page => {
   await modal.locator('.catalogue-product-line').waitFor({timeout:20000});
   assert.equal(await modal.locator('.wood-catalogue-card').count(),2);
   assert.equal(await page.evaluate(() => window.garisOcrCalls),1);
+  const lineId = await modal.getByLabel('Chuyển dòng sản phẩm').first().inputValue();
+  const firstVariant = modal.locator('.wood-catalogue-card').first();
+  await firstVariant.getByLabel('Chuyển dòng sản phẩm').selectOption('__split');
+  assert.equal(await modal.locator('.catalogue-product-line').count(),2);
+  await firstVariant.getByLabel('Chuyển dòng sản phẩm').selectOption(lineId);
+  assert.equal(await modal.locator('.catalogue-product-line').count(),1);
   await modal.locator('[data-save-wood]').click();
   await modal.locator('button[type=submit]').first().and(modal.locator(':enabled')).waitFor({timeout:20000});
   await modal.getByText(/Đã lưu 2 mã/).waitFor({timeout:20000});
@@ -462,6 +468,7 @@ cases['8.6'] = async page => {
   console.log(JSON.stringify(metrics));
   assert.ok(metrics.maxRender < 200,'150 dòng phải render dưới 200 ms');
   assert.ok(metrics.maxInput < 50 && metrics.focusRetained,'Nhập mã không được dựng lại ô');
+  await page.keyboard.press('Escape');
   await page.locator('[data-row="g1-r2"] .image-cell[data-slot="0"] [data-action="pick-pa"]').click();
   await page.locator('.toast-notification.show').filter({hasText:'Điền thông tin hoặc thêm ảnh'}).waitFor();
 };
@@ -2494,6 +2501,11 @@ cases['19.11'] = async page => {
   },imageFixture);
   const review = page.locator('.asset-folder-dialog');
   assert.equal(await review.getByLabel('Tag thư mục').inputValue(),'Sàn, Loại 1, Ambon Floor');
+  let writes = 0;
+  page.on('request',request => { if (request.method() === 'POST' && request.url().includes('/api/library')) writes++; });
+  await review.getByRole('button',{name:'Chạy thử 10 mẫu',exact:true}).click();
+  await review.getByText(/Chạy thử 1 mẫu · chưa lưu/).waitFor();
+  assert.equal(writes,0);
   await review.locator('[data-folder-save]').click();
   await review.getByText(/Hoàn tất/).waitFor();
   const data = await page.request.get('/api/library').then(r => r.json());
