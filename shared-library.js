@@ -173,6 +173,29 @@ function categoryForGroup(library, groupName) {
   return bestScore >= 0.5 ? best : null;
 }
 
+const materialsKey = dataKey => 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+const groupCache = new Map();
+async function sheetGroupNames(store,dataKey) {
+  const cached = groupCache.get(dataKey);
+  if (cached && Date.now() - cached.at < 30000) return cached.names;
+  const materials = await store.get(materialsKey(dataKey)) || {};
+  const names = [...new Set([...(materials.sheets || []),...(materials.archivedSheets || [])]
+    .flatMap(sheet => Array.isArray(sheet?.groups) ? sheet.groups.map(group => text(group?.name,160)) : [])
+    .filter(name => name && !/^nhóm mới$/i.test(name)))].slice(0,200);
+  groupCache.set(dataKey,{at:Date.now(),names});
+  return names;
+}
+function missingCategories(library,names) {
+  const out = [];
+  const view = {categories:[...library.categories]};
+  for (const name of names) {
+    if (categoryForGroup(view,name)) continue;
+    out.push(name);
+    view.categories.push({id:'new',name:shortName(name),source:name});
+  }
+  return out;
+}
+
 async function mutate(store, key, change, persist = data => store.put(key,data)) {
   const previous = queues.get(key) || Promise.resolve();
   const run = previous.catch(() => {}).then(async () => {
@@ -265,7 +288,15 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       attributes:Object.fromEntries(Object.keys(attributes.groupLabels(data)).map(key => [key,attributes.view(data,key)]))});
   }
   if (urlPath === '/api/library' && req.method === 'GET') {
-    const stored = await store.get(key);
+    let stored = await store.get(key);
+    // Hạng mục có trong bảng chốt mã nhưng chưa có trong Dữ liệu dùng chung: tạo luôn (mọi trang đều thấy đủ).
+    const groups = await sheetGroupNames(store,dataKey).catch(() => []);
+    if (groups.length && missingCategories(normalize(stored),groups).length) {
+      const {data} = await mutate(store,key,data => {
+        for (const name of missingCategories(data,groups)) data.categories.push({id:'cat-' + crypto.randomUUID().slice(0,8),name:shortName(name),source:text(name,160)});
+      });
+      return sendJson(res,200,data);
+    }
     if (!stored?.paintSeeded || !stored?.woodSeeded) {
       const {data} = await mutate(store,key,() => {});
       return sendJson(res,200,data);
