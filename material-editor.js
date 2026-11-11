@@ -859,7 +859,9 @@ function applyLibraryMaterial(row,slot,item,render = true) {
     pa.color = item.name || '';
     pa.brand = item.brand || '';
     pa.brandLogo = GDHomeAssets.brandFor(item.brand)?.logo || '';
-    pa.finish = item.finish || '';
+    pa.finish = item.finish || item.spec || '';
+    pa.size = item.size || (item.cabinetWidth ? 'Tủ '+item.cabinetWidth : '');
+    pa.price = item.price == null ? '' : String(item.price);
     if (item.kind === 'paint') pa.paint = item;
     else delete pa.paint;
     if (item.id) pa.libraryItemId = item.id;

@@ -239,6 +239,7 @@ cases['23.2'] = async page => {
   assert.equal(await variants.locator('tbody tr').count(),4);
   await variants.locator('tbody tr').filter({hasText:'ML06.80HK'}).getByRole('button',{name:'Chọn mã',exact:true}).click();
   assert.equal(await page.evaluate(() => sheet.groups[0].rows[0].options[0].code),'ML06.80HK');
+  assert.deepEqual(await page.evaluate(() => { const pa = sheet.groups[0].rows[0].options[0]; return [pa.finish,pa.size,pa.price]; }),['R800*S372*C700','800x372','57000000']);
   const library = await page.request.get('/api/library').then(r => r.json());
   const items = library.items.filter(item => item.lineId === 'garis-ML06H');
   assert.equal(items.length,4);
