@@ -1,3 +1,4 @@
+const productLines = require('./product-lines');
 // Thư viện dữ liệu dùng chung (ảnh mẫu vật liệu theo hạng mục) cho mọi công cụ GD HOME.
 // Ảnh nằm trong kho ảnh Chốt mã của tài khoản (/api/materials/assets), nên dùng thẳng cho ô PA mà không cần sao chép.
 const crypto = require('node:crypto');
@@ -49,7 +50,7 @@ function itemMetadata(item) {
   const suppliedSize = Object.hasOwn(item,'size');
   const sourceFacets = attributes.normalizeSourceFacets(item.sourceFacets);
   const inferredFields = attributes.inferredFields(item.inferredFields);
-  return {brand:text(item.brand,80),size:materialSize(suppliedSize ? item.size : item.name,suppliedSize),tags,suppliers:stringList(item.suppliers),
+  return {...productLines.metadata(item),brand:text(item.brand,80),size:materialSize(suppliedSize ? item.size : item.name,suppliedSize),tags,suppliers:stringList(item.suppliers),
     ...Object.fromEntries(['material','finish','collection','subgroup','tone','grain'].filter(key => Object.hasOwn(item,key))
       .map(key => [key,text(item[key],['finish','collection'].includes(key) ? 120 : 80)])),
     ...(Array.isArray(item.brands) ? {brands:stringList(item.brands)} : {}),
@@ -322,7 +323,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
           if (imported) {
             const incoming = itemMetadata(item);
             const sourceFacets = attributes.normalizeSourceFacets([...(existing.sourceFacets || []),...(incoming.sourceFacets || [])]);
-            Object.assign(existing,Object.fromEntries(['rawCode','material','finish','collection','size'].filter(key => incoming[key])
+            Object.assign(existing,productLines.metadata(item),Object.fromEntries(['rawCode','material','finish','collection','size'].filter(key => incoming[key])
               .map(key => [key,incoming[key]])),{sourceFacets,code:metadata.code});
             if (metadata.grain) existing.grain = metadata.grain;
             if (kind !== 'paint' && (!existing.full || (item.full !== existing.full &&
@@ -429,6 +430,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       for (const field of Object.keys(attributes.labels)) {
         if (Object.hasOwn(body,field)) item[field] = metadata[field];
       }
+      Object.assign(item,productLines.metadata(body));
       if (typeof body.note === 'string') item.note = text(body.note, 500);
       if (data.categories.some(c => c.id === body.categoryId)) item.categoryId = body.categoryId;
       if (typeof body.favorite === 'boolean') item.favorite = body.favorite;

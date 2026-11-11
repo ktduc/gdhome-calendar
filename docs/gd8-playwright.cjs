@@ -15,6 +15,34 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['23.2'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    const file = 'c'.repeat(64)+'.webp';
+    await GDHomeAssets.addItems('kitchen-accessories',[75,80,90,91].map((width,i) => ({
+      code:'ML06.'+width+(i%2 ? 'HK' : 'HC'),name:'Giá bát',full:file,thumb:file,lineId:'garis-ML06H',lineName:'ML06H',
+      spec:'R'+width+'0*S372*C700',price:56000000+i*1000000,size:width+'0x372',brand:'Garis'
+    })));
+    GDHomeAssets.pickLibrary(document.querySelector('[data-row=g1-r1] [data-slot="0"]'),{
+      groupName:'PHỤ KIỆN BẾP',onPick:item => libraryPicked(sheet.groups[0].rows[0],'0',item)
+    });
+  });
+  const picker = page.locator('.asset-popover');
+  await picker.getByRole('button',{name:'4 mã',exact:true}).click();
+  const variants = page.locator('.asset-variant-dialog');
+  assert.equal(await variants.locator('tbody tr').count(),4);
+  await variants.locator('tbody tr').nth(1).getByRole('button',{name:'Chọn mã',exact:true}).click();
+  assert.equal(await page.evaluate(() => sheet.groups[0].rows[0].options[0].code),'ML06.80HK');
+  const library = await page.request.get('/api/library').then(r => r.json());
+  const items = library.items.filter(item => item.lineId === 'garis-ML06H');
+  assert.equal(items.length,4);
+  assert.equal(new Set(items.map(item => item.full)).size,1);
+  await page.reload();
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'kitchen-accessories'}));
+  await page.locator('.asset-library-dialog').getByRole('button',{name:'4 mã',exact:true}).waitFor();
+};
+
 cases['23.7'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({contentType:'image/png',body:webPhoto('oak')}));

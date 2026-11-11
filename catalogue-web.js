@@ -410,6 +410,26 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
   return {next:(explicit || named || inferred)?.href || null,total};
 }
 
+function tableVariants(html,url,validate) {
+  const rows = [];
+  for (const table of html.matchAll(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi)) {
+    const before = html.slice(0,table.index);
+    const images = [...before.matchAll(/<img\b[^>]*>/gi)];
+    const attrs = images.length ? attributes(images.at(-1)[0]) : {};
+    const source = attrs['data-src'] || attrs.src;
+    if (!source) continue;
+    let image;
+    try { image = validate(new URL(decode(source),url).href).href; } catch { continue; }
+    const lineId = 'table-' + table.index;
+    for (const row of table[0].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)) {
+      const text = decode(row[1].replace(/<[^>]*>/g,' ')).replace(/\s+/g,' ').trim();
+      const variant = require('./product-lines').tableRow(text);
+      if (variant) rows.push({...variant,image,lineId,lineName:rows.find(item => item.lineId === lineId)?.lineName || variant.code,name:variant.code});
+    }
+  }
+  return rows;
+}
+
 async function importCatalogueUrls(urls,options = {}) {
   const load = Object.keys(options).length ? catalogueDownloader(options) : downloadCatalogueResource;
   const validate = options.validateUrl || checkSsrfUrl;
@@ -422,7 +442,8 @@ async function importCatalogueUrls(urls,options = {}) {
       const page = await load(url,'html');
       const html = page.buffer.toString('utf8');
       const siteDictionary = anCuongHost(page.url) ? filterDictionary(html,'ac') : undefined;
-      const result = extractProducts(html,page.url,validate,maxItems,siteDictionary);
+      const variants = tableVariants(html,page.url,validate);
+      const result = variants.length ? variants : extractProducts(html,page.url,validate,maxItems,siteDictionary);
       if (siteDictionary && result.some(item => item.rawCode)) sourceFilterGroups = filterSchema(siteDictionary);
       if (urls.length === 1) pagination = cataloguePagination(html,page.url,validate);
       needsAi ||= result.some(item => !item.sourceFacets && (!item.name || !item.code || !item.size));
