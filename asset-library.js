@@ -3423,7 +3423,7 @@ window.GDHomeAssets = (() => {
           '<button type="button" data-show-catalogue-detail aria-label="Chi tiết ' + esc(item.code || item.name) + '">⋯</button>' +
           '<input aria-label="Mã" data-wood-code-input maxlength="80" value="' + esc(item.code) + '">' +
           '<input aria-label="Tên" data-wood-name-input maxlength="160" value="' + esc(item.name) + '">' +
-          '<div data-catalogue-detail-fields><p>Hạng mục lưu <strong data-catalogue-destination-label></strong></p><small data-catalogue-save-error></small>' +
+          '<div data-catalogue-detail-fields><div class="catalogue-detail-actions"><button type="button" data-edit-wood-crop>✂ Chỉnh khung cắt</button><button type="button" data-catalogue-merge>Gộp mã trùng</button></div><p>Hạng mục lưu <strong data-catalogue-destination-label></strong></p><small data-catalogue-save-error></small>' +
           (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.originImport.override.suppliers ? '' : item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.originImport.override.brand || item.brand) + '"></label>' : '') +
           (['kitchen','garis'].includes(item.originImport.layout) && !item.web && !item.fileImage ? '<datalist id="catalogue-kitchen-' + esc(item.code) + '">' +
             kitchenSubgroups.map(name => '<option>' + esc(name) + '</option>').join('') + '</datalist>' +
@@ -3431,10 +3431,20 @@ window.GDHomeAssets = (() => {
               ({spec:'Quy cách R*S*C',cabinetWidth:'Rộng tủ',innerWidth:'Lọt lòng',unit:'Đơn vị',subgroup:'Nhóm phụ kiện'})[key] +
               '<input data-catalogue-field="' + key + '"' + (key === 'subgroup' ? ' list="catalogue-kitchen-' + esc(item.code) + '"' : '') +
               ' value="' + esc(item[key]) + '"></label>').join('') : '') +
-          ['lineId','series','clearance','pairing','kemTu','video','warranty','size','finish','collection','material','tone','grain',...((library.showPrices || item.lineId) ? ['price','priceUnit','priceNote'] : [])].map(key => '<label>' +
-            ({series:'Series',clearance:'Khoảng hở lắp đặt',pairing:'Gợi ý kết hợp',kemTu:'Kèm tủ',video:'Video QR',warranty:'Bảo hành',lineId:'Dòng sản phẩm (cùng tên để gộp, khác tên để tách)',size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân',price:'Đơn giá nội bộ',priceUnit:'Đơn vị giá',priceNote:'Ghi chú giá'})[key] +
-            '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
-          '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></div></article>').join('');
+          (() => {
+            // Chỉ hiện các trường hợp với kiểu catalogue; trường còn lại (trống) gom vào "Thêm thuộc tính" để khỏi phải cuộn.
+            const labels = {series:'Series',clearance:'Khoảng hở lắp đặt',pairing:'Gợi ý kết hợp',kemTu:'Kèm tủ',video:'Video QR',warranty:'Bảo hành',lineId:'Dòng sản phẩm (cùng tên để gộp, khác tên để tách)',size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân',price:'Đơn giá nội bộ',priceUnit:'Đơn vị giá',priceNote:'Ghi chú giá'};
+            const all = ['lineId','series','clearance','pairing','kemTu','video','warranty','size','finish','collection','material','tone','grain',...((library.showPrices || item.lineId) ? ['price','priceUnit','priceNote'] : [])];
+            const layout = item.originImport.layout;
+            const main = layout === 'ancuong' ? ['material','finish','collection','tone','grain'] :
+              layout === 'phao' ? ['size','collection'] :
+              ['kitchen','garis'].includes(layout) ? ['lineId','series','clearance','kemTu','price'] : ['size','finish','collection'];
+            const field = key => '<label>' + labels[key] + '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>';
+            const primary = all.filter(key => main.includes(key) || String(item[key] ?? '').trim());
+            const rest = all.filter(key => !primary.includes(key));
+            return primary.map(field).join('') + (rest.length ? '<details class="catalogue-detail-more"><summary>Thêm thuộc tính (' + rest.length + ')</summary>' + rest.map(field).join('') + '</details>' : '');
+          })() +
+          '</div></article>').join('');
         cards = [...list.children];
         details = cards.map(card => {
           const fields = card.querySelector('[data-catalogue-detail-fields]');
