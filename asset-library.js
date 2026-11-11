@@ -1160,7 +1160,7 @@ window.GDHomeAssets = (() => {
     dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
       if (window[name]) return;
       await new Promise((resolve,reject) => {
-        const script = document.createElement('script'); script.src = '/'+file+'?v=web-largest-1';
+        const script = document.createElement('script'); script.src = '/'+file+'?v=web-stone-2';
         script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
       });
     })).catch(error => { dependencyPromise = null; throw error; });
@@ -2932,7 +2932,7 @@ window.GDHomeAssets = (() => {
       for (const product of products) {
         if (signal.aborted) break;
         try {
-          if (product.brand === 'Hà Linh' && product.detail) {
+          if (product.detail && /^(?:www\.)?halinhjsc\.vn$/i.test(new URL(product.detail).hostname)) {
             try {
               await rateLimit();
               const detail = await api('/api/catalogue/web',{method:'POST',signal,body:JSON.stringify({urls:[product.detail],useAi:false})});

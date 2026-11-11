@@ -123,6 +123,10 @@ function srcsetImages(attrs) {
 const zoomImages = attrs => [attrs['data-zoom-image'],attrs['data-large'],attrs['data-large_image'],attrs['data-large-image']];
 const imageSources = attrs => [...zoomImages(attrs),...srcsetImages(attrs),attrs['data-original'],attrs['data-src'],attrs['data-lazy-src'],attrs.src].filter(Boolean);
 const imageLink = url => /\.(?:jpe?g|webp|png|avif|gif|bmp)(?:[?#]|$)/i.test(url || '');
+const halinhCode = name => {
+  const value = readable(name).replace(/\s*[-–]\s*/g,'-');
+  return value.match(/\b(PU[A-Z]{1,5}-\d+[A-Z0-9-]*(?:\s+(?:DV|VGDV|VG|TRẮNG))?)$/i)?.[1].replace(/\s+/g,'-').toUpperCase() || nameCode(value);
+};
 function galleryImages(html) {
   return [...html.matchAll(/<(?:img|a)\b[^>]*>/gi)].flatMap(([tag]) => {
     const attrs = attributes(tag);
@@ -289,11 +293,34 @@ function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
       if (target.origin === new URL(url).origin) url = target.href;
     }
   } catch { /* Giữ URL trang nếu base không hợp lệ. */ }
+  if (/^(?:www\.)?vicostone\.com$/i.test(new URL(pageUrl).hostname)) {
+    const records = [];
+    for (const {content} of classElements(html,'section-products-item')) {
+      const name = readable(classElements(content,'card2-title').next().value?.content);
+      const code = name.match(/\bB[A-Z]\s*\d{3,6}[A-Z]?\b/i)?.[0].replace(/\s/g,'').toUpperCase();
+      if (!code) continue;
+      const front = classElements(content,'card2-product-front').next().value?.content || content;
+      const images = [...front.matchAll(/<[^>]+\bdata-background-image\s*=[^>]*>/gi)].flatMap(([tag]) => {
+        try {
+          const source = validateUrl(new URL(attributes(tag)['data-background-image'],url).href);
+          const original = new URL(source);
+          for (const key of ['h','w','as','iar','mw','mh']) original.searchParams.delete(key);
+          return [original.href,source.href];
+        } catch { return []; }
+      });
+      if (!images.length || records.some(record => record.code === code)) continue;
+      records.push({name,code,brand:'VICOSTONE',supplier:'vicostone.com',image:images[0],imageAlternates:[...new Set(images)].slice(1,6)});
+      if (records.length >= maxItems) break;
+    }
+    if (records.length) return records;
+  }
   if (/^(?:www\.)?halinhjsc\.vn$/i.test(new URL(pageUrl).hostname)) {
     const absolute = source => validateUrl(new URL(source,url).href).href;
-    const listing = [...classElements(html,'itemPr')];
+    const main = [...htmlBlocks(html,tag => attributes(tag).id === 'main')][0]?.content ||
+      [...classElements(html,'productContent')].find(block => !/owl-carousel/.test(block.attrs.class))?.content || html;
+    const listing = [...classElements(main,'itemPr')];
     const heading = readable(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
-    const code = nameCode(heading);
+    const code = halinhCode(heading);
     if (code && /\/phao-chi\//i.test(new URL(pageUrl).pathname)) {
       const key = code.toUpperCase().replace(/[^A-Z0-9]/g,'');
       const images = [...html.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => {
@@ -302,9 +329,16 @@ function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
           let stem;
           try { stem = decodeURIComponent(new URL(source,url).pathname.split('/').at(-1)); } catch { return false; }
           stem = stem.replace(/\.[a-z0-9]+$/i,'').replace(/_\d{9,}$/,'').replace(/\(\d+\)$/,'').replace(/-\d+x\d+$/i,'');
-          return stem.toUpperCase().replace(/[^A-Z0-9]/g,'') === key || nameCode(attrs.alt || attrs.title || '') === code;
+          const prefix = code.split(/[-\s]+/).map(part => part.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('[-_\\s]*');
+          return stem.toUpperCase().replace(/[^A-Z0-9]/g,'') === key || new RegExp('^'+prefix+'(?:[-_\\s(]|$)','i').test(stem) || halinhCode(attrs.alt || attrs.title || '') === code;
         });
       });
+      if (images.length < 2) {
+        const description = classElements(main,'descripttion').next().value?.content || '';
+        const fallback = [...description.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => imageSources(attributes(tag)))
+          .find(source => !nonProductImage.test(source) && !/download|3d-file/i.test(source));
+        if (fallback) images.push(fallback);
+      }
       const candidates = [...new Set(images.flatMap(source => { try { return [absolute(source)]; } catch { return []; } }))];
       return candidates.length ? [{name:heading,code,brand:'Hà Linh',supplier:'halinhjsc.vn',image:candidates[0],
         imageAlternates:candidates.slice(1,6)}] : [];
@@ -316,7 +350,7 @@ function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
       if (!attrs.src || !name) return [];
       try {
         const detail = link.href ? absolute(link.href) : '';
-        return [{name,code:nameCode(name),brand:'Hà Linh',supplier:'halinhjsc.vn',image:absolute(attrs.src),
+        return [{name,code:halinhCode(name),brand:'Hà Linh',supplier:'halinhjsc.vn',image:absolute(attrs.src),
           ...(detail && new URL(detail).origin === new URL(pageUrl).origin ? {detail} : {})}];
       } catch { return []; }
     }).slice(0,maxItems);

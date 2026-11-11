@@ -3837,6 +3837,23 @@ cases['20.12'] = async page => {
   assert.equal(data.imports.find(entry => entry.source === 'https://example.com/a').status,'done');
 };
 
+cases['vicostone-web'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/catalogue/web',route=>route.fulfill({json:{items:['BQ6984','BC3020','BS110'].map(code=>({code,name:'Đá '+code,brand:'VICOSTONE',
+    image:'https://vicostone.com/-/media/'+code+'-fullslab.jpg',imageAlternates:['https://vicostone.com/-/media/'+code+'-fullslab.jpg?h=260']})),warnings:[]}}));
+  await page.route('**/api/catalogue/image',route=>route.fulfill({contentType:'image/jpeg',body:webPhoto(route.request().postDataJSON().url,1000,500)}));
+  await page.evaluate(()=>GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal=page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=autoSave]').uncheck();
+  await modal.locator('[name=urls]').fill('https://vicostone.com/vi-vn/product');
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
+  await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
+  assert.deepEqual(await modal.locator('[data-wood-code-input]').evaluateAll(nodes=>nodes.map(node=>node.value)),['BQ6984','BC3020','BS110']);
+  assert.equal(await modal.locator('.wood-catalogue-card canvas').first().evaluate(canvas=>canvas.width/canvas.height),2);
+  assert.doesNotMatch(await modal.locator('[data-source-warning]').innerText(),/raster|tải chưa thành công/);
+};
+
 cases['halinh-web'] = async page => {
   await openMaterials(page);
   const listing='https://halinhjsc.vn/phao-chi-ha-linh/62-phao-co-tran-pu.htm';
@@ -3846,7 +3863,7 @@ cases['halinh-web'] = async page => {
   const sources=[];
   await page.route('**/api/catalogue/web',route=>{
     const url=route.request().postDataJSON().urls[0]; sources.push(url);
-    return route.fulfill({json:{items:[{code:'PUPT-256',name:'Phào trần hoa văn PUPT-256',brand:'Hà Linh',image,
+    return route.fulfill({json:{items:[{code:'PUPT-256',name:'Phào trần hoa văn PUPT-256',brand:'HÀ LINH',image,
       ...(url===listing ? {detail} : {imageAlternates:[large]})}],warnings:[]}});
   });
   await page.route('**/api/catalogue/image',route=>{

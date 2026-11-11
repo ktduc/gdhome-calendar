@@ -857,3 +857,10 @@ Giữ bảng chi tiết có nút Chỉnh khung cắt luôn mở khi có vật li
 - Đọc trang chi tiết Hà Linh trước khi lọc ảnh nhỏ. Tải và so kích thước pixel của tối đa 6 ứng viên, giữ ảnh lớn nhất; ứng viên lỗi không làm mất ảnh đã tải thành công. Giữ lọc ảnh dưới 300 px và chống ảnh trùng nội dung.
 - Kiểm tra link thật danh mục 62-phao-co-tran-pu.htm đọc được 51 mã không cảnh báo. Cặp PUPT-256 thật: 400×213 so với 1741×928. Không ghi dữ liệu thử vào thư viện đang dùng.
 - Node 106/106; Edge halinh-web, 21.3, 21.4, 20.11 đạt. Kiểm tra theo trang chi tiết, bỏ thumbnail nhỏ, chọn ảnh lớn, lưu ảnh đúng tỷ lệ, ảnh đầu đã đủ kích thước vẫn so ứng viên lớn hơn, ứng viên lỗi cuối danh sách và giữ riêng mã hậu tố.
+
+### Sửa nhập Vicostone và hai danh mục Hà Linh
+
+- Vicostone dùng ảnh nền data-background-image trên thẻ section-products-item. Đọc đúng mã BQ/BC/BS và ảnh mặt tấm ở card2-product-front, lấy bản gốc bỏ tham số thu nhỏ, không lấy ảnh đại diện trang hay ảnh phối cảnh mặt sau. Kiểm tra trang thật đọc được 194 mã, ảnh gốc BQ6984 trả JPEG hợp lệ khoảng 1,86 MB.
+- Hà Linh nhận diện luồng tải trang chi tiết theo hostname thay vì tên thương hiệu có thể bị sửa/AI đổi chữ hoa. Chuẩn hóa khoảng trắng trong PUNT- 161VG, giữ hậu tố; nhận file có hậu tố làm lại, GIF và ảnh mô tả khi tên file khác mã.
+- Giới hạn danh mục vào productContent chính, loại carousel Sản phẩm mới bên ngoài. Kiểm tra link thật 64-phao-chan-tuong-pu.htm có 3 mẫu, 63-phao-nep-tuong-pu.htm có 30 mẫu. PUCT-200 và PUNT-161VG đều có ảnh gốc tương ứng thay thumbnail 400×213.
+- Node 109/109. Edge vicostone-web, halinh-web, 21.3, 21.4 đạt. Ca Hà Linh dùng tên thương hiệu chữ hoa để kiểm tra không phụ thuộc nhãn, ca Vicostone kiểm tra 3 nhóm mã và ảnh mặt tấm.
