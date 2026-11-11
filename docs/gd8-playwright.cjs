@@ -15,6 +15,48 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['23.4'] = async page => {
+  const {PDFDocument,StandardFonts} = require('pdf-lib');
+  const pdf = await PDFDocument.create(), font = await pdf.embedFont(StandardFonts.Helvetica);
+  const image = await pdf.embedPng(webPhoto('garis',400,400));
+  const sheet = pdf.addPage([1000,700]);
+  sheet.drawImage(image,{x:30,y:170,width:420,height:500});
+  sheet.drawText('*//3 !@#$%^',{x:500,y:150,font,size:14});
+  const buffer = Buffer.from(await pdf.save());
+  await openMaterials(page);
+  await page.evaluate(() => {
+    window.garisOcrCalls = 0;
+    const lines = ['X SERIES','Gia bat nang ha dien co say ML06H','Inox 304','Bao hanh 5 nam',
+      'ML06.75HC R750*S372*C700 750 (750-753)*350*700 Bo 56.490.000 kem tu',
+      'ML06.80HK R800*S372*C700 800 (800-803)*350*700 Bo 56.990.000 khong tu'];
+    window.Tesseract = {createWorker:async languages => {
+      if (languages.join('+') !== 'vie+eng') throw new Error('Sai ngôn ngữ OCR');
+      return {recognize:async () => { window.garisOcrCalls++; return {data:{text:lines.join('\n'),lines:lines.map((text,index) => ({text,bbox:{x0:500,y0:300+index*30,x1:950,y1:320+index*30}}))}}; },terminate:async () => {}};
+    }};
+    window.jsQR = () => ({data:'https://garis.vn/video/ML06H'});
+    GDHomeAssets.openLibrary({categoryId:'kitchen-accessories'});
+  });
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=layout]').selectOption('garis');
+  await modal.locator('[name=pdf]').setInputFiles({name:'Garis-encoded.pdf',mimeType:'application/pdf',buffer});
+  await modal.getByRole('button',{name:'Đọc PDF',exact:true}).click();
+  await modal.locator('.catalogue-product-line').waitFor({timeout:20000});
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),2);
+  assert.equal(await page.evaluate(() => window.garisOcrCalls),1);
+  await modal.locator('[data-save-wood]').click();
+  await modal.locator('button[type=submit]').first().and(modal.locator(':enabled')).waitFor({timeout:20000});
+  await modal.getByText(/Đã lưu 2 mã/).waitFor({timeout:20000});
+  const library = await page.request.get('/api/library').then(r => r.json());
+  const items = library.items.filter(item => item.brand === 'Garis');
+  assert.equal(items.length,2);
+  assert.equal(items[0].lineId,items[1].lineId);
+  assert.equal(items[0].full,items[1].full);
+  assert.ok(items.every(item => item.series === 'X' && item.video === 'https://garis.vn/video/ML06H'));
+  assert.equal(items.find(item => item.code === 'ML06.75HC').kemTu,'có');
+  assert.equal(items.find(item => item.code === 'ML06.75HC').price,56490000);
+};
+
 cases['23.3'] = async page => {
   await openMaterials(page);
   let writes = 0, pages = 0;

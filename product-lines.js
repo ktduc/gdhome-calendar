@@ -3,7 +3,7 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.GDHomeProductLines = api;
 })(typeof window === 'object' ? window : globalThis,() => {
-  const fields = ['lineId','lineName','description','features','otherSpecs','drawing','video','warranty','series','clearance','pairing','kemTu','note'];
+  const fields = ['gallery','lineId','lineName','description','features','otherSpecs','drawing','video','warranty','series','clearance','pairing','kemTu','note'];
   function metadata(item) {
     return Object.fromEntries(fields.filter(key => Object.hasOwn(item,key)).map(key => [key,
       Array.isArray(item[key]) ? item[key].slice(0,30).map(value => String(value).slice(0,500)) : String(item[key] ?? '').slice(0,key === 'description' ? 3000 : 1000)]));

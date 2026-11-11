@@ -1959,7 +1959,7 @@ window.GDHomeAssets = (() => {
     const inRange = phao ? ratio >= .15 && ratio <= 22 && fraction >= .00015 : ratio >= .3 && ratio <= 3 && fraction >= .005;
     return w > 0 && h > 0 && inRange && fraction < .85 ? {x,y,w,h} : null;
   }
-  async function embeddedCatalogueImages(page,viewport,pdfjs,phao = false) {
+  async function embeddedCatalogueImages(page,viewport,pdfjs,phao = false,acceptImage = () => true) {
     const {fnArray,argsArray} = await page.getOperatorList();
     const {OPS,Util} = pdfjs;
     const stack = [], images = [];
@@ -1980,7 +1980,9 @@ window.GDHomeAssets = (() => {
       } else if (op === OPS.transform) {
         transform = Util.transform(transform,args);
       } else if (op === OPS.paintImageXObject || op === OPS.paintInlineImageXObject) {
-        add(transform);
+        let image;
+        try { image = op === OPS.paintInlineImageXObject ? args[0] : page.objs.get(args[0]); } catch { /* Some shared images live in commonObjs. */ }
+        if (acceptImage(image,args[0])) add(transform);
       } else if (op === OPS.paintImageXObjectRepeat) {
         const [,sx,sy,positions] = args;
         for (let j=0;j<positions.length;j+=2) add(Util.transform(transform,[sx,0,0,sy,positions[j],positions[j+1]]));
@@ -2361,14 +2363,110 @@ window.GDHomeAssets = (() => {
       const tail = widths ? rest.slice(widths[0].length) : rest;
       const price = tail.match(/\d{1,3}(?:[.,]\d{3}){1,4}|\d{5,10}/);
       const unit = (price ? tail.slice(0,price.index) : tail).trim().split(/\s+/)[0] || '';
-      rows.push({code:code.toUpperCase(),spec:spec[0].replace(/\s+/g,'').replace(/[x×]/gi,'*').toUpperCase(),
+      rows.push({...GDHomeProductLines.tableRow(row),code:code.toUpperCase(),spec:spec[0].replace(/\s+/g,'').replace(/[x×]/gi,'*').toUpperCase(),
         cabinetWidth:widths?.[1] || '',innerWidth:widths?.[2] || '',unit,price:price?.[0] || '',
         subgroup,name:subgroup || code,y:label.y,height:label.height});
     }
     return rows;
   }
 
+  async function catalogueScript(url,globalName) {
+    if (window[globalName]) return window[globalName];
+    await new Promise((resolve,reject) => {
+      const script = document.createElement('script'); script.src = url;
+      script.onload = resolve; script.onerror = () => reject(new Error('Không tải được bộ nhận dạng ' + globalName));
+      document.head.append(script);
+    });
+    return window[globalName];
+  }
+  function garisTextScore(text) {
+    const rows = text.split(/\n/).filter(line => GDHomeProductLines.tableRow(line)).length;
+    const words = fold(text).match(/\b(?:garis|series|gia|bat|nang|ha|quy|cach|dien|inox|thong|so|bao|hanh)\b/g) || [];
+    return rows*20+words.length;
+  }
+  async function scanGarisCatalogue(file,onPage,{signal,trial,onWarning}) {
+    const pdfjs = await loadPdfJs();
+    const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
+    const results = [], warnings = [], imagePages = new Map();
+    for (let number=1; number<=pdf.numPages; number++) {
+      const page = await pdf.getPage(number), ops = await page.getOperatorList();
+      const ids = new Set(ops.fnArray.flatMap((op,index) => op === pdfjs.OPS.paintImageXObject ? [ops.argsArray[index][0]] : []));
+      for (const id of ids) imagePages.set(id,(imagePages.get(id) || 0)+1);
+      page.cleanup();
+    }
+    let worker;
+    try {
+      for (let number=1; number<=Math.min(pdf.numPages,trial ? 3 : pdf.numPages); number++) {
+        signal?.throwIfAborted(); onPage(number,pdf.numPages,results.length);
+        const page = await pdf.getPage(number), viewport = page.getViewport({scale:Math.min(3,3000/page.getViewport({scale:1}).width)});
+        const canvas = document.createElement('canvas'); canvas.width = Math.ceil(viewport.width); canvas.height = Math.ceil(viewport.height);
+        try {
+          await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+          const content = await page.getTextContent();
+          let labels = content.items.filter(item => item.str?.trim()).map(item => {
+            const [x,y] = viewport.convertToViewportPoint(item.transform[4],item.transform[5]);
+            return {text:item.str,x,y,height:item.height*viewport.scale,width:item.width*viewport.scale};
+          });
+          let text = labels.map(label => label.text).join('\n');
+          const shifted = text.replace(/[!-~]/g,char => String.fromCharCode(char.charCodeAt(0)+29));
+          if (garisTextScore(shifted) > garisTextScore(text)) {
+            labels = labels.map(label => ({...label,text:label.text.replace(/[!-~]/g,char => String.fromCharCode(char.charCodeAt(0)+29))})); text = shifted;
+          }
+          // Missing digits cannot be recovered by a character shift.
+          if (garisTextScore(text) < 25 || !kitchenCatalogueRows(labels).length) {
+            const ocr = await catalogueScript('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js','Tesseract');
+            worker ||= await ocr.createWorker(['vie','eng']);
+            const {data} = await worker.recognize(canvas);
+            text = data.text || '';
+            labels = (data.lines || []).map(line => ({text:line.text.trim(),x:line.bbox.x0,y:line.bbox.y1,
+              width:line.bbox.x1-line.bbox.x0,height:line.bbox.y1-line.bbox.y0}));
+            if (!labels.length) labels = text.split(/\n/).map((text,index) => ({text,x:0,y:index*20,width:canvas.width,height:20}));
+          }
+          signal?.throwIfAborted();
+          const rows = kitchenCatalogueRows(labels);
+          if (!rows.length) { warnings.push('Trang '+number+' chưa đọc được bảng mã; cần kiểm tra OCR.'); continue; }
+          const photos = await embeddedCatalogueImages(page,viewport,pdfjs,false,(image,id) => {
+            if (pdf.numPages > 1 && imagePages.get(id) === pdf.numPages) return false;
+            if (image?.width === 77 && image?.height === 77) return false;
+            return !(image?.width >= 2500 && image.width === image.height);
+          });
+          const leftPhotos = photos.filter(box => box.x+box.w/2 < canvas.width*.55 && box.w > canvas.width*.1 && box.h > canvas.height*.15);
+          const main = leftPhotos.sort((a,b) => b.w*b.h-a.w*a.h)[0] || {x:canvas.width*.04,y:canvas.height*.04,w:canvas.width*.46,h:canvas.height*.68};
+          const cropOf = box => ({x:box.x/canvas.width,y:box.y/canvas.height,w:box.w/canvas.width,h:box.h/canvas.height});
+          const source = URL.createObjectURL(await new Promise(resolve => canvas.toBlob(resolve,'image/webp',.94)));
+          const series = text.match(/(PLATINUM|TITANIUM|PREMIUM|BASE|MV|X)\s*SERIES/i)?.[1]?.toUpperCase() || '';
+          const title = labels.map(label => label.text).find(value => /gia bat|gia gia vi|gia xoong|tu do kho|thung rac|thung gao/.test(fold(value))) || 'Phụ kiện Garis';
+          const subgroup = kitchenSubgroups.find(name => fold(title).includes(fold(name))) || rows[0].subgroup;
+          const description = text.slice(0,3000);
+          const features = text.split(/\n/).filter(value => /inox|nhom|nang ha|say|tai trong|cong suat|dien ap/i.test(fold(value))).slice(0,20);
+          let video = '';
+          if (window.BarcodeDetector) {
+            try { video = (await new BarcodeDetector({formats:['qr_code']}).detect(canvas)).map(code => code.rawValue).find(value => /^https?:\/\//i.test(value)) || ''; } catch { /* Try the portable QR decoder below. */ }
+          }
+          if (!video) {
+            try {
+              const decode = await catalogueScript('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js','jsQR');
+              const pixels = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height);
+              const value = decode(pixels.data,canvas.width,canvas.height)?.data;
+              if (/^https?:\/\//i.test(value || '')) video = value;
+            } catch { warnings.push('Trang '+number+' chưa giải mã được QR.'); }
+          }
+          const warranty = text.split(/\n/).find(value => /bao hanh/.test(fold(value))) || '';
+          const tags = [...(/inox\s*304/i.test(text) ? ['Inox 304'] : []),...(/nhom.*AA/i.test(fold(text)) ? ['Nhôm AA'] : []),
+            ...(/say/.test(fold(text)) ? ['Có sấy'] : []),/dien/.test(fold(title)) ? 'Nâng hạ điện' : 'Nâng hạ tay'];
+          for (const row of rows) results.push({...row,lineId:'garis-page-'+number,lineName:title,name:title,brand:'Garis',series,description,features,otherSpecs:features.join(' · '),video,warranty,
+            subgroup,tags:[...tags,...(row.kemTu === 'có' ? ['Kèm tủ'] : [])],page:number,source,crop:cropOf(main),confidence:.85,
+            auxiliaryCrops:photos.filter(box => box !== main && box.w > canvas.width*.08 && box.h > canvas.height*.08).slice(0,6).map(cropOf)});
+          if (trial && results.length >= 10) break;
+        } finally { canvas.width = canvas.height = 0; page.cleanup(); }
+      }
+    } finally { await worker?.terminate(); await pdf.destroy(); }
+    if (warnings.length) onWarning?.(warnings.join(' · '));
+    return trial ? results.slice(0,10) : results;
+  }
+
   async function scanWoodCatalogue(file,patterns,onPage,{ai,signal,onWarning,onPause,onAiProgress,layout,guide,includeCode = true,trial = false} = {}) {
+    if (layout === 'garis') return scanGarisCatalogue(file,onPage,{signal,trial,onWarning});
     const regexes = patterns.split(/\r?\n/).map(line => line.trim()).filter(Boolean).map(line => new RegExp(line,'i'));
     if (!regexes.length) throw new Error('Nhập ít nhất một mẫu nhận diện mã.');
     const pdfjs = await loadPdfJs();
@@ -2845,7 +2943,7 @@ window.GDHomeAssets = (() => {
       '<label>Ảnh <input type="file" name="images" accept="image/*" multiple></label>' +
       '<div class="asset-drop" data-catalogue-drop>Kéo thả thư mục, PDF hoặc ảnh vào đây</div></div>' +
       '<ol data-catalogue-queue aria-label="Hàng đợi nguồn nhập"></ol>' +
-      '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option><option value="phao">Phào chỉ</option><option value="kitchen">Phụ kiện bếp · ảnh và bảng mã</option></select></label>' +
+      '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option><option value="phao">Phào chỉ</option><option value="kitchen">Phụ kiện bếp · ảnh và bảng mã</option><option value="garis">Garis (trang đôi + bảng mã)</option></select></label>' +
       '<label>Kiểu hiển thị ' + displaySelect(preset.display || categoryDisplay(library.categories.find(c => c.id === categoryId)),'name="display"') + '</label>' +
       '<label>Hãng <input name="brand" list="wood-brands" value="' + (categoryId === 'ancuong-wood' ? 'An Cường' : '') + '" maxlength="80"></label>' +
       '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
@@ -2878,6 +2976,10 @@ window.GDHomeAssets = (() => {
       /\bphao chi\b/.test(fold(library.categories.find(category => category.id === id)?.name)) ? 'phao' : 'generic';
     let previousCategory = form.elements.category.value;
     form.elements.layout.value = defaultLayout(previousCategory);
+    form.elements.layout.addEventListener('change',() => {
+      if (form.elements.layout.value !== 'garis') return;
+      form.elements.brand.value = 'Garis'; form.elements.collection.value ||= 'Garis'; form.elements.category.value = 'kitchen-accessories';
+    });
     const suggest = () => attributeSuggestions(form,library,form.elements.category.value,{
       brand:[form.elements.brand],collection:[form.elements.collection],finish:[form.elements.finish],
       suppliers:[form.elements.suppliers],tags:[form.elements.tags]});
@@ -3250,14 +3352,14 @@ window.GDHomeAssets = (() => {
           '<input aria-label="Tên" data-wood-name-input maxlength="160" value="' + esc(item.name) + '">' +
           '<div data-catalogue-detail-fields><p>Hạng mục lưu <strong data-catalogue-destination-label></strong></p><small data-catalogue-save-error></small>' +
           (item.web ? '<label>Đơn vị cung cấp <input data-catalogue-supplier value="' + esc(item.originImport.override.suppliers ? '' : item.supplier) + '"></label><label>Hãng <input data-catalogue-brand value="' + esc(item.originImport.override.brand || item.brand) + '"></label>' : '') +
-          (item.originImport.layout === 'kitchen' && !item.web && !item.fileImage ? '<datalist id="catalogue-kitchen-' + esc(item.code) + '">' +
+          (['kitchen','garis'].includes(item.originImport.layout) && !item.web && !item.fileImage ? '<datalist id="catalogue-kitchen-' + esc(item.code) + '">' +
             kitchenSubgroups.map(name => '<option>' + esc(name) + '</option>').join('') + '</datalist>' +
             ['spec','cabinetWidth','innerWidth','unit','subgroup'].map(key => '<label>' +
               ({spec:'Quy cách R*S*C',cabinetWidth:'Rộng tủ',innerWidth:'Lọt lòng',unit:'Đơn vị',subgroup:'Nhóm phụ kiện'})[key] +
               '<input data-catalogue-field="' + key + '"' + (key === 'subgroup' ? ' list="catalogue-kitchen-' + esc(item.code) + '"' : '') +
               ' value="' + esc(item[key]) + '"></label>').join('') : '') +
-          ['lineId','size','finish','collection','material','tone','grain',...(library.showPrices ? ['price','priceUnit','priceNote'] : [])].map(key => '<label>' +
-            ({lineId:'Dòng sản phẩm (cùng tên để gộp, khác tên để tách)',size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân',price:'Đơn giá nội bộ',priceUnit:'Đơn vị giá',priceNote:'Ghi chú giá'})[key] +
+          ['lineId','series','clearance','pairing','kemTu','video','warranty','size','finish','collection','material','tone','grain',...((library.showPrices || item.lineId) ? ['price','priceUnit','priceNote'] : [])].map(key => '<label>' +
+            ({series:'Series',clearance:'Khoảng hở lắp đặt',pairing:'Gợi ý kết hợp',kemTu:'Kèm tủ',video:'Video QR',warranty:'Bảo hành',lineId:'Dòng sản phẩm (cùng tên để gộp, khác tên để tách)',size:'Kích thước',finish:'Bề mặt',collection:'Catalogue',material:'Loại vật liệu',tone:'Tông màu',grain:'Vân',price:'Đơn giá nội bộ',priceUnit:'Đơn vị giá',priceNote:'Ghi chú giá'})[key] +
             '<input data-catalogue-field="' + key + '" value="' + esc(item[key]) + '"></label>').join('') +
           '<button type="button" data-catalogue-merge>Gộp mã trùng</button><button type="button" data-edit-wood-crop>Chỉnh khung cắt</button></div></article>').join('');
         cards = [...list.children];
@@ -3450,6 +3552,21 @@ window.GDHomeAssets = (() => {
             failedSources.add(entry);
             continue;
           }
+          if (item.auxiliaryCrops?.length && !image.gallery) {
+            image.gallery = [];
+            const original = await fetch(item.source).then(response => response.blob());
+            for (const crop of item.auxiliaryCrops) {
+              const key = JSON.stringify([item.source,crop]);
+              let auxiliary = savedCrops.get(key);
+              if (!auxiliary) {
+                const compressed = await GDHomeImages.compress(original,[crop.x,crop.y,crop.x+crop.w,crop.y+crop.h]);
+                const full = await storeAsset(compressed.full);
+                auxiliary = {full,thumb:compressed.thumb === compressed.full ? full : await storeAsset(compressed.thumb)};
+                savedCrops.set(key,auxiliary);
+              }
+              image.gallery.push(auxiliary.full);
+            }
+          }
           const hashKey = scopeKey(categoryId,image.full.split('.')[0]);
           if (entry.onlyNew && savedHashes.has(hashKey)) { skip(item); continue; }
           savedCrops.set(cropKey,image);
@@ -3463,8 +3580,8 @@ window.GDHomeAssets = (() => {
               .filter(field => item[field]).map(field => [field,item[field]]))};
           if (entry.layout === 'phao' && fields.size && !/mm|cm/i.test(fields.size)) fields.size += ' mm';
           const category = library.categories.find(category => category.id === categoryId);
-          const record = {...GDHomeProductLines.metadata(item),lineId:(fields.lineId || item.lineId) ? entry.source+'#'+(fields.lineId || item.lineId) : '',full:image.full,thumb:image.thumb,display:item.destinationId || entry.override.categoryId ? categoryDisplay(category) : form.elements.display.value,
-            view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags,kind:code && woodCategory(category) ? 'wood' : 'image',
+          const record = {...GDHomeProductLines.metadata(item),...(image.gallery?.length ? {gallery:image.gallery,drawing:image.gallery.at(-1)} : {}),lineId:(fields.lineId || item.lineId) ? entry.source+'#'+(fields.lineId || item.lineId) : '',full:image.full,thumb:image.thumb,display:item.destinationId || entry.override.categoryId ? categoryDisplay(category) : form.elements.display.value,
+            view:item.view,code,name,brand:itemBrand,collection,finish,suppliers:itemSuppliers,tags:[...new Set([...tags,...(item.tags || [])])],kind:code && woodCategory(category) ? 'wood' : 'image',
             ...fields,lineId:(fields.lineId || item.lineId) ? entry.source+'#'+(fields.lineId || item.lineId) : '',...(catalogueMetadata ? {sourceFacets:item.sourceFacets,rawCode:item.rawCode,sourcePixels:imagePixels} : {}),
             ...inferredPhotoFields({...item,...fields},image.traits)};
           existing.set(key,record);

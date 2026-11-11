@@ -7,3 +7,5 @@ user-*.json
 _backup*/
 assets/
 docs/gd21/local/
+
+docs/gd23/local/
