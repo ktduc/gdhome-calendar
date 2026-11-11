@@ -15,6 +15,36 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['23.6'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    const file = 'f'.repeat(64)+'.webp';
+    await GDHomeAssets.addItems('cat-6',[{name:'GD23 Gạch',code:'FILTER-236',brand:'GD23',tags:['Bóng'],full:file,thumb:file}]);
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library = page.locator('.asset-library-dialog');
+  const sidebar = library.locator('.asset-filter-sidebar');
+  await sidebar.getByText('BỘ LỌC',{exact:true}).waitFor();
+  const search = sidebar.getByRole('searchbox',{name:'Tìm theo mã…',exact:true});
+  await search.fill('FILTER-236');
+  await library.locator('.asset-card').getByText('FILTER-236',{exact:true}).waitFor();
+  const label = sidebar.locator('label:has(input[data-facet=brand][data-value=GD23])');
+  await label.evaluate(label => { label.closest('details').open = true; });
+  const placement = await label.evaluate(label => {
+    const input = label.querySelector('input').getBoundingClientRect(), text = label.querySelector('span').getBoundingClientRect();
+    return {input:input.x,text:text.x,background:getComputedStyle(label.closest('.asset-filter-sidebar')).backgroundColor};
+  });
+  assert.ok(placement.input > placement.text);
+  assert.notEqual(placement.background,'rgb(0, 0, 0)');
+  await library.locator('.close-dialog').click();
+  await page.evaluate(() => GDHomeAssets.pickLibrary(document.querySelector('[data-row=g1-r1] [data-slot="0"]'),{groupName:'Gạch ốp lát'}));
+  const picker = page.locator('.asset-popover');
+  await picker.getByText('BỘ LỌC',{exact:true}).waitFor();
+  await picker.getByRole('searchbox',{name:'Tìm theo mã…',exact:true}).fill('FILTER-236');
+  await picker.locator('.asset-card').getByText(/FILTER-236/).waitFor();
+};
+
 cases['23.5'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/'+'d'.repeat(64)+'.webp',route => route.fulfill({status:404}));
@@ -216,6 +246,8 @@ cases['23.1'] = async page => {
   });
   const anchor = page.locator('[data-row=g2-r15] .image-cell[data-slot="0"]').first();
   await anchor.scrollIntoViewIfNeeded();
+  // Exercise document scrolling even when the shell contains the sheet in a scroll panel.
+  await page.evaluate(() => { document.body.style.minHeight = '180vh'; window.scrollTo(0,80); });
   const before = await anchor.evaluate(element => {
     GDHomeAssets.pickLibrary(element,{groupName:'Gạch ốp lát'});
     return {y:scrollY,top:element.getBoundingClientRect().top};

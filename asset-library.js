@@ -713,6 +713,12 @@ window.GDHomeAssets = (() => {
     const favorites = facets.querySelector('[data-filter-group=favorite]');
     if (favorites) categoryColumn.prepend(favorites);
     sidebar.append(categoryColumn,facets);
+    const heading = document.createElement('div'); heading.className = 'asset-sidebar-heading';
+    heading.innerHTML = '<strong>BỘ LỌC</strong><input type="text" role="searchbox" data-sidebar-search placeholder="Tìm theo mã…" aria-label="Tìm theo mã…">';
+    const search = root.querySelector('input[type=search]');
+    const proxy = heading.querySelector('input'); proxy.value = search?.value || '';
+    proxy.oninput = () => { if (search) { search.value = proxy.value; search.dispatchEvent(new Event('input',{bubbles:true})); } };
+    sidebar.prepend(heading);
     for (const input of sidebar.querySelectorAll('[data-facet=size]')) input.name = state.radioName + '-size';
     for (const input of sidebar.querySelectorAll('[data-category-check]')) input.name = state.radioName + '-category';
     for (const group of sidebar.querySelectorAll('[data-filter-group]')) {
@@ -1205,11 +1211,17 @@ window.GDHomeAssets = (() => {
   }
   function preservePickerScroll(panel) {
     const pageX = window.scrollX, pageY = window.scrollY;
+    const headerFocused = document.activeElement?.matches('[data-sidebar-search]');
+    const caret = headerFocused ? document.activeElement.selectionStart : null;
     const positions = ['.asset-body','.asset-facets','.asset-category-column'].map(selector => {
       const element = panel.querySelector(selector);
       return {selector,top:element?.scrollTop || 0,left:element?.scrollLeft || 0};
     });
     return () => {
+      if (headerFocused) {
+        const field = panel.querySelector('[data-sidebar-search]'); field?.focus({preventScroll:true});
+        if (caret != null) field?.setSelectionRange(caret,caret);
+      }
       if (window.scrollX !== pageX || window.scrollY !== pageY) {
         window.scrollTo({left:pageX,top:pageY,behavior:'instant'});
       }
@@ -1379,7 +1391,7 @@ window.GDHomeAssets = (() => {
         wireFacets(panel,facets,paint);
         wirePickerCategories(panel,value => { categoryId = value; clearFacets(facets); paint(); });
         const search = panel.querySelector('input[type=search]');
-        search.oninput = () => { query = search.value; clearTimeout(search.timer); search.timer = setTimeout(() => { paint().then(() => { const s = panel.querySelector('input[type=search]'); s?.focus({preventScroll:true}); s?.setSelectionRange(query.length,query.length); }); },250); };
+        wireAssetSearch(panel,() => query,value => { query = value; },paint);
         panel.querySelector('[data-full]').onclick = () => { close(); openLibrary({groupName,categoryId:categoryId === 'all' ? null : categoryId,onPick}); };
         panel.querySelector('[data-upload]').onclick = async () => {
           const target = categoryId === 'all' ? categoryFor(data,groupName)?.id || data.categories[0]?.id : categoryId;
@@ -1416,11 +1428,12 @@ window.GDHomeAssets = (() => {
   function wireAssetSearch(root,getQuery,setQuery,paint) {
     const field = root.querySelector('input[type=search]');
     field.oninput = () => {
+      const fromSidebar = document.activeElement?.matches('[data-sidebar-search]');
       setQuery(field.value);
       clearTimeout(field.timer);
       field.timer = setTimeout(async () => {
         await paint();
-        const replacement = root.querySelector('input[type=search]');
+        const replacement = root.querySelector(fromSidebar ? '[data-sidebar-search]' : 'input[type=search]');
         replacement?.focus({preventScroll:true});
         replacement?.setSelectionRange(getQuery().length,getQuery().length);
       },250);
@@ -3904,6 +3917,7 @@ window.GDHomeAssets = (() => {
       imageObserver?.disconnect();
       const focused = document.activeElement;
       const focusKey = body.contains(focused) && (
+        (focused.matches('[data-sidebar-search]') && '[data-sidebar-search]') ||
         (focused.matches('.asset-library-head input[type=search]') && '.asset-library-head input[type=search]') ||
         (focused.matches('.asset-sort-controls select') && '.asset-sort-controls select') ||
         ['libraryTab','priceRange','pageDir','showPrices','assetFilterToggle'].map(key => {
@@ -3914,7 +3928,7 @@ window.GDHomeAssets = (() => {
         (focused.matches('[data-category-check]') && '[data-cat="' + CSS.escape(focused.closest('[data-cat]').dataset.cat) + '"] input') ||
         (focused.matches('[data-facet]') && '[data-facet="' + CSS.escape(focused.dataset.facet) + '"][data-value="' +
           CSS.escape(focused.dataset.value) + '"]'));
-      const caret = focused === body.querySelector('.asset-library-head input[type=search]') ? focused?.selectionStart : null;
+      const caret = focused.matches('input[type=search],[data-sidebar-search]') ? focused?.selectionStart : null;
       const restoreFocus = () => {
         if (!focusKey) return;
         const next = body.querySelector(focusKey);
