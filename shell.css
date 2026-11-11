@@ -946,3 +946,6 @@ body.is-sidebar-collapsed .app-sidebar,
 .app-header .header-right{justify-content:flex-start !important}
 .app-header .header-right>.shell-toolbar{margin-left:auto !important}
 .app-header .header-right>.shell-account{margin-left:8px !important}
+/* GĐ24. The work page uses the shared sidebar toggle with its own grid wrapper. */
+body.is-sidebar-collapsed .work-app-layout{grid-template-columns:minmax(0,1fr)}
+body.is-sidebar-collapsed .work-app-layout>.shell-sidebar{display:none!important}

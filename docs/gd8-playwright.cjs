@@ -15,6 +15,62 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['24.2'] = async page => {
+  for (const width of [1280,1920,2560]) {
+    await page.setViewportSize({width,height:900});
+    for (const [name,url] of [['Lịch','/'],['Chốt mã','/chot-ma'],['Dự án','/du-an'],['Tools','/tools'],['Giao việc','/giao-viec']]) {
+      if (url === '/chot-ma') await openMaterials(page);
+      else {
+        await page.goto(url);
+        if (url === '/') await page.locator('.project-owner-header').first().waitFor();
+        if (url === '/du-an') await page.locator('#project-select option[value=p1]').waitFor({state:'attached'});
+        if (url === '/giao-viec') await page.locator('#work-project-select option[value=p1]').waitFor({state:'attached'});
+      }
+      await page.locator('.gd-tools-menu summary').waitFor();
+      const result = await page.evaluate(async () => {
+        await new Promise(resolve => setTimeout(resolve,2000));
+        const toggle = document.getElementById('btn-toggle-sidebar'), menu = document.querySelector('.gd-tools-menu');
+        let mutations = 0, detached = false;
+        const observer = new MutationObserver(records => {
+          mutations += records.length;
+          for (const record of records) for (const node of record.removedNodes) {
+            if (node === toggle || node === menu || node.contains?.(toggle) || node.contains?.(menu)) detached = true;
+          }
+        });
+        observer.observe(document.body,{childList:true,subtree:true});
+        await new Promise(resolve => setTimeout(resolve,2000));
+        observer.disconnect();
+        return {mutations,detached,same:toggle === document.getElementById('btn-toggle-sidebar') && menu === document.querySelector('.gd-tools-menu') && toggle.isConnected && menu.isConnected};
+      });
+      assert.ok(result.mutations <= 20,JSON.stringify({name,width,...result}));
+      assert.equal(result.detached,false,JSON.stringify({name,width,...result}));
+      assert.equal(result.same,true,JSON.stringify({name,width,...result}));
+      const sidebar = page.locator('.app-sidebar,.material-sidebar,.shell-sidebar').first();
+      const toggle = page.locator('#btn-toggle-sidebar');
+      if (await sidebar.count()) {
+        const before = await page.locator('body').evaluate(body => body.classList.contains('is-sidebar-collapsed'));
+        await toggle.click();
+        assert.equal(await page.locator('body').evaluate(body => body.classList.contains('is-sidebar-collapsed')),!before);
+        await page.waitForFunction(hidden => {
+          const sidebar = document.querySelector('.app-sidebar,.material-sidebar,.shell-sidebar'), rect = sidebar.getBoundingClientRect();
+          return (getComputedStyle(sidebar).display === 'none' || rect.right <= 0 || rect.width === 0) === hidden;
+        },!before);
+        await toggle.click();
+        assert.equal(await page.locator('body').evaluate(body => body.classList.contains('is-sidebar-collapsed')),before);
+      } else {
+        assert.equal(url,'/tools');
+        assert.equal(await toggle.isVisible(),false,'Trang chủ Tools chủ động ẩn nút khi không có thanh bên');
+      }
+      const menu = page.locator('.gd-tools-menu');
+      await menu.locator('summary').click();
+      assert.equal(await menu.evaluate(menu => menu.open),true);
+      await menu.locator('nav').waitFor();
+      await menu.locator('summary').click();
+      console.log('24.2 '+width+'px '+name+' '+result.mutations+' mutations; nút và menu giữ nguyên node');
+    }
+  }
+};
+
 cases['24.1'] = async page => {
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();
@@ -81,7 +137,6 @@ cases['24.1-legacy'] = async page => {
   assert.equal(await page.locator('#msp-title-prefix-input').textContent(),'TIÊU ĐỀ ĐÃ TỰ SỬA');
   assert.equal(await page.locator('#construction-note-text').textContent(),'');
   await page.locator('#msp-title-prefix-input').fill('TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -');
-  await page.locator('#msp-title-prefix-input').press('Tab');
   await page.evaluate(async () => { clearTimeout(_saveTimer); await flushSaveToBackend(); });
   await page.reload();
   await page.locator('.project-owner-header').first().waitFor();

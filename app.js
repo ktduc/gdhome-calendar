@@ -4340,7 +4340,7 @@ function setupEvents() {
   for (const [id,field] of [['design-title-prefix','designCustomTitlePrefix'],['msp-title-prefix-input','mspCustomTitlePrefix'],
     ['design-note-text','designNote'],['construction-note-text','constructionNote']]) {
     const element = document.getElementById(id);
-    element.addEventListener('input',() => { setScheduleText(field,element.textContent); saveToStorage(); });
+    element.addEventListener('input',() => { setScheduleText(field,element.textContent); saveToBackend(); });
     element.addEventListener('blur',() => { setScheduleText(field,element.textContent.trim()); saveToBackend(); renderScheduleText(); });
     if (field.endsWith('TitlePrefix')) element.addEventListener('keydown',event => { if (event.key === 'Enter') { event.preventDefault(); element.blur(); } });
   }

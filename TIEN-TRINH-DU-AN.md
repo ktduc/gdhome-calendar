@@ -291,3 +291,6 @@
 | Bước | Kết quả | Kiểm thử |
 | --- | --- | --- |
 | 24.1 | Tiêu đề và ghi chú riêng Lịch/Timeline, sửa tại chỗ bằng contenteditable hoặc Cài đặt. Giữ dòng ngày nghỉ chung, lưu root fields và ghi đè theo dự án ở projectOwners. Đổi mặc định Timeline cũ sang thi công khi nạp dữ liệu, giữ tiêu đề đã tự sửa và ghi chú trống. Áp dụng vào nguồn in/PNG/PDF, đủ lưu server/local/undo. | Node 94/94. Edge 24.1, 24.1-legacy, 24.1-export, 10.5 đạt; xuất dùng html2canvas thật ở cả chế độ PNG và in. |
+| 24.2 | Thêm ca chống lặp DOM trên 5 trang ở 1280/1920/2560px, đợi ổn định 2 giây rồi đo childList 2 giây, bắt cả việc gỡ/gắn lại cùng node. Bấm menu và bật/tắt thanh bên thật. Bổ sung CSS thu gọn cho work-app-layout của Giao việc. Sửa nội dung tại chỗ tự lưu ngay khi nhập và lưu lúc blur. | Edge 15/15 tổ hợp đạt, tất cả 0 mutation; 24.1/24.1-legacy/24.1-export đạt. Node 94/94. |
+
+Trang chủ Tools không có thanh bên nên ca kiểm thử xác nhận nút ☰ ẩn trên 3 kích thước; menu và phép đo DOM vẫn kiểm tra đầy đủ. Bốn trang còn lại kiểm tra cả trạng thái thực của thanh bên sau bấm. Bản sửa layout() GĐ23G được giữ nguyên.
