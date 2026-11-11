@@ -15,6 +15,35 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['23.3'] = async page => {
+  await openMaterials(page);
+  let writes = 0, pages = 0;
+  page.on('request',request => { if (request.method() === 'POST' && request.url().includes('/api/library')) writes++; });
+  await page.route('**/api/catalogue/web',route => {
+    pages++;
+    return route.fulfill({json:{items:Array.from({length:12},(_,i) => ({code:'TRIAL-'+i,name:'Mẫu thử '+i,image:'https://catalogue.test/'+i+'.png'}))}});
+  });
+  await page.route('**/api/catalogue/image',route => route.fulfill({body:webPhoto(route.request().postDataJSON().url),contentType:'image/png'}));
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal = page.locator('.wood-catalogue-dialog');
+  await modal.getByRole('tab',{name:'Từ link website'}).click();
+  await modal.locator('[name=urls]').fill('https://catalogue.test/products');
+  await modal.locator('[name=brand]').fill('Hãng chạy thử');
+  await modal.getByRole('button',{name:'Chạy thử 10 mẫu',exact:true}).click();
+  await modal.getByText(/Chạy thử · chưa lưu/).waitFor({timeout:15000});
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),10);
+  assert.equal(writes,0);
+  assert.equal(pages,1);
+  assert.ok(await modal.locator('[data-save-wood]').isDisabled());
+  await modal.getByRole('button',{name:'Nhập toàn bộ với cài đặt này',exact:true}).click();
+  await modal.getByText(/Đã lưu 12 mã/).waitFor({timeout:20000});
+  const data = await page.request.get('/api/library').then(r => r.json());
+  const imported = data.items.filter(item => item.code?.startsWith('TRIAL-'));
+  assert.equal(imported.length,12);
+  assert.ok(imported.every(item => item.brand === 'Hãng chạy thử' && item.categoryId === 'cat-6'));
+};
+
 cases['23.2'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
@@ -32,7 +61,7 @@ cases['23.2'] = async page => {
   await picker.getByRole('button',{name:'4 mã',exact:true}).click();
   const variants = page.locator('.asset-variant-dialog');
   assert.equal(await variants.locator('tbody tr').count(),4);
-  await variants.locator('tbody tr').nth(1).getByRole('button',{name:'Chọn mã',exact:true}).click();
+  await variants.locator('tbody tr').filter({hasText:'ML06.80HK'}).getByRole('button',{name:'Chọn mã',exact:true}).click();
   assert.equal(await page.evaluate(() => sheet.groups[0].rows[0].options[0].code),'ML06.80HK');
   const library = await page.request.get('/api/library').then(r => r.json());
   const items = library.items.filter(item => item.lineId === 'garis-ML06H');
