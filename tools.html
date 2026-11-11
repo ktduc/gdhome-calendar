@@ -3,10 +3,10 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>GD HOME Tools</title>
 <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,300&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/shell.css?v=gd22.2">
+<link rel="stylesheet" href="/shell.css?v=gd23b">
 <link rel="stylesheet" href="/tools.css?v=gd18d">
 <link rel="stylesheet" href="/asset-library.css?v=gd21.11">
-<script src="/shell.js?v=gd22.2" defer></script>
+<script src="/shell.js?v=gd23b" defer></script>
 <script src="/image-compression.js?v=gd20.14.3" defer></script>
 <script src="/material-template.js" defer></script>
 <script src="/ai-client.js?v=gd21.2" defer></script>
@@ -14,11 +14,10 @@
 <script src="/catalogue-import-history.js?v=gd20.12" defer></script>
 <script src="/asset-library.js?v=gd22.1" defer></script>
 <script src="/integrations-client.js?v=gd21.2" defer></script>
-<header class="app-header"><div class="header-left"><details class="gd-tools-menu" data-shell-menu></details>
-<a class="app-logo" href="/tools"><img class="header-logo-img" src="/gdhome-icon.png" alt="GD HOME"><span>Trang chủ</span></a></div>
+<header class="app-header"><div class="header-left"><button type="button" class="icon-btn shell-sidebar-toggle" id="btn-toggle-sidebar" title="Ẩn/Hiện thanh bên trái" aria-label="Ẩn/Hiện thanh bên trái" style="visibility:hidden;pointer-events:none;"><i data-lucide="menu">☰</i></button><a class="app-logo" href="/tools"><img class="header-logo-img" src="/gdhome-icon.png" alt="GD HOME"><span>Trang chủ</span></a><details class="gd-tools-menu" data-shell-menu></details></div>
 <div class="header-right"><div class="shell-toolbar"></div><div class="shell-account"><strong id="identity"></strong></div></div></header>
 <main><h1>GD HOME Tools</h1>
-<div class="cards"><article><h2>Lập tiến độ</h2><p>Lịch thi công và Timeline dự án.</p><a class="button" href="/">Mở Tiến độ</a></article><article><h2>Chốt mã vật liệu</h2><p>Chọn, xác nhận và đặt vật liệu.</p><a class="button" href="/chot-ma">Mở Chốt mã</a></article><article><h2>Quản lý dự án</h2><p>Hồ sơ dự án, HSKT và phối cảnh 3D.</p><a class="button" href="/du-an">Mở Dự án</a></article><article id="library"><h2>📚 Dữ liệu dùng chung</h2><p>Ảnh mẫu vật liệu theo hạng mục, dùng nhanh cho mọi dự án.</p><button type="button" class="button" data-open-library>Mở dữ liệu</button></article></div>
+<div class="cards"><article><h2>Lập tiến độ</h2><p>Lịch thi công và Timeline dự án.</p><a class="button" href="/">Mở Tiến độ</a></article><article><h2>Chốt mã vật liệu</h2><p>Chọn, xác nhận và đặt vật liệu.</p><a class="button" href="/chot-ma">Mở Chốt mã</a></article><article><h2>Quản lý dự án</h2><p>Hồ sơ dự án, HSKT và phối cảnh 3D.</p><a class="button" href="/du-an">Mở Dự án</a></article><article><h2>Giao việc · Nhà thầu</h2><p>Quản lý nhà thầu, lập phiếu giao việc và ghép PDF hồ sơ.</p><a class="button" href="/giao-viec">Mở Giao việc</a></article><article id="library"><h2>📚 Dữ liệu dùng chung</h2><p>Ảnh mẫu vật liệu theo hạng mục, dùng nhanh cho mọi dự án.</p><button type="button" class="button" data-open-library>Mở dữ liệu</button></article></div>
 <h2>Dự án của tôi</h2><div id="login"></div><p id="notice" role="status"></p><button type="button" id="tools-connection" class="save-status is-offline" hidden>Đang kết nối máy chủ…</button><div id="projects"></div></main>
 <script src="/material-guest.js?v=gd105" defer></script>
 <script src="/tools.js?v=gd15" defer></script>

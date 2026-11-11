@@ -38,7 +38,7 @@ window.GDHomeShell = (() => {
 
   function menu(element) {
     if (!element) return;
-    const links = [['/','Lập tiến độ'],['/chot-ma','Chốt mã vật liệu'],['/du-an','Quản lý dự án'],['/tools','Trang chủ']];
+    const links = [['/','Lập tiến độ'],['/chot-ma','Chốt mã vật liệu'],['/du-an','Quản lý dự án'],['/giao-viec','Giao việc · Nhà thầu'],['/tools','Trang chủ']];
     element.onkeydown = event => {
       if (event.key === 'Escape' && element.open) { element.open = false; element.querySelector('summary').focus(); event.stopPropagation(); }
     };
@@ -421,6 +421,146 @@ window.GDHomeShell = (() => {
     applyState(document.body.classList.contains('is-sidebar-collapsed'));
   }
 
+  function renderAccount(container) {
+    if (!container) return;
+    let sess = null;
+    try {
+      const raw = localStorage.getItem('gdhome_session');
+      if (raw) sess = JSON.parse(raw);
+    } catch {}
+    const token = localStorage.getItem('gdhome_token') || sess?.token;
+    const isGuest = localStorage.getItem('gdhome_guest') === '1' || !token;
+    const user = sess?.user;
+
+    const shortName = !isGuest && user
+      ? (user.name ? user.name.trim().split(/\s+/).pop() : (user.email ? user.email.split('@')[0] : 'Tài khoản'))
+      : 'Khách';
+    const email = user?.email || (isGuest ? 'Chế độ khách' : '');
+    const initial = !isGuest && user ? (user.name || user.email || 'U').trim().charAt(0).toUpperCase() : '👤';
+    const avatarHtml = !isGuest && user?.picture
+      ? '<img src="' + escape(user.picture) + '" alt="" referrerpolicy="no-referrer">'
+      : escape(initial);
+
+    let dropdown = container.querySelector('.shell-account-dropdown');
+    if (!dropdown) {
+      container.innerHTML =
+        '<button type="button" class="btn btn-outline btn-sm shell-guest-login-btn" data-shell-account-action="login" style="display:' + (isGuest ? 'inline-flex' : 'none') + ';">Đăng nhập</button>' +
+        '<details class="hdr-dropdown shell-account-dropdown" data-shell-account>' +
+          '<summary class="shell-user-chip" title="' + escape(email || 'Tài khoản') + '">' +
+            '<span class="shell-user-name">' + escape(shortName) + '</span>' +
+            '<span class="shell-user-avatar user-chip-avatar">' + avatarHtml + '</span>' +
+          '</summary>' +
+          '<div class="hdr-dropdown-menu shell-account-menu">' +
+            '<div class="shell-account-header"><strong>' + escape(isGuest ? 'Chế độ khách' : (user?.name || shortName)) + '</strong><span>' + escape(email) + '</span></div>' +
+            (isGuest
+              ? '<button type="button" class="hdr-menu-item" data-shell-account-action="login"><i data-lucide="log-in">🔑</i><span>Đăng nhập Gmail</span></button>'
+              : '') +
+            '<button type="button" class="hdr-menu-item" data-shell-account-action="connections"><i data-lucide="settings">⚙</i><span>Kết nối</span></button>' +
+            '<button type="button" class="hdr-menu-item" data-shell-account-action="backup"><i data-lucide="hard-drive">💾</i><span>Sao lưu</span></button>' +
+            '<hr style="margin:4px 0;border:none;border-top:1px solid var(--gd-overlay-border,#d8d2c8);">' +
+            '<button type="button" class="hdr-menu-item" data-shell-account-action="logout" style="color:var(--gd-danger,#d93025);"><i data-lucide="log-out">🚪</i><span>Đăng xuất</span></button>' +
+          '</div>' +
+        '</details>' +
+        '<strong id="identity" style="display:none;">' + escape(email) + '</strong>';
+    } else {
+      const loginBtn = container.querySelector('.shell-guest-login-btn');
+      if (loginBtn) loginBtn.style.display = isGuest ? 'inline-flex' : 'none';
+      const nameEl = container.querySelector('.shell-user-name');
+      if (nameEl) nameEl.textContent = shortName;
+      const avatarEl = container.querySelector('.shell-user-avatar');
+      if (avatarEl) avatarEl.innerHTML = avatarHtml;
+      const idEl = container.querySelector('#identity');
+      if (idEl) idEl.textContent = email;
+    }
+
+    if (!container.dataset.shellAccountBound) {
+      container.dataset.shellAccountBound = '1';
+      container.addEventListener('click', event => {
+        const actionBtn = event.target.closest('[data-shell-account-action]');
+        if (!actionBtn) return;
+        const action = actionBtn.dataset.shellAccountAction;
+        const parentDetails = actionBtn.closest('details');
+        if (parentDetails) parentDetails.removeAttribute('open');
+
+        if (action === 'connections') {
+          if (window.GDHomeConnections) window.GDHomeConnections.open();
+          else location.href = '/tools#connections';
+        } else if (action === 'backup') {
+          const exportBackupBtn = document.getElementById('btn-export-json-backup');
+          if (exportBackupBtn) exportBackupBtn.click();
+          else if (window.GDHomeConnections) window.GDHomeConnections.open('drive');
+          else toast('Bản sao lưu tự động được lưu trên máy chủ.');
+        } else if (action === 'logout') {
+          if (confirm('Bạn muốn đăng xuất khỏi tài khoản này?')) {
+            localStorage.removeItem('gdhome_token');
+            localStorage.removeItem('gdhome_session');
+            localStorage.removeItem('gdhome_guest');
+            location.reload();
+          }
+        } else if (action === 'login') {
+          if (typeof window.promptLoginFromGuest === 'function') {
+            window.promptLoginFromGuest();
+          } else if (typeof window.showLoginOverlay === 'function') {
+            window.showLoginOverlay();
+          } else if (typeof window.signIn === 'function') {
+            window.signIn();
+          } else {
+            const loginCardEl = document.getElementById('login');
+            if (loginCardEl) loginCardEl.scrollIntoView({ behavior: 'smooth' });
+            else location.href = '/tools';
+          }
+        }
+      });
+    }
+  }
+
+  function layout() {
+    const header = document.querySelector('.app-header');
+    if (header) {
+      const headerLeft = header.querySelector('.header-left');
+      if (headerLeft) {
+        let toggleBtn = document.getElementById('btn-toggle-sidebar');
+        if (!toggleBtn) {
+          toggleBtn = document.createElement('button');
+          toggleBtn.type = 'button';
+          toggleBtn.className = 'icon-btn shell-sidebar-toggle';
+          toggleBtn.id = 'btn-toggle-sidebar';
+          toggleBtn.title = 'Ẩn/Hiện thanh bên trái';
+          toggleBtn.setAttribute('aria-label', 'Ẩn/Hiện thanh bên trái');
+          toggleBtn.innerHTML = '<i data-lucide="menu">☰</i>';
+        }
+        const hasSidebar = document.querySelector('.app-sidebar, .material-sidebar, .shell-sidebar');
+        if (!hasSidebar) {
+          toggleBtn.style.visibility = 'hidden';
+          toggleBtn.style.pointerEvents = 'none';
+        } else {
+          toggleBtn.style.visibility = 'visible';
+          toggleBtn.style.pointerEvents = 'auto';
+        }
+        headerLeft.prepend(toggleBtn);
+
+        const logo = headerLeft.querySelector('.app-logo');
+        if (logo) {
+          toggleBtn.after(logo);
+          const menuEl = headerLeft.querySelector('.gd-tools-menu');
+          if (menuEl) logo.after(menuEl);
+        }
+      }
+
+      const headerRight = header.querySelector('.header-right');
+      if (headerRight) {
+        let account = headerRight.querySelector('.shell-account');
+        if (!account) {
+          account = document.createElement('div');
+          account.className = 'shell-account';
+          headerRight.append(account);
+        }
+        renderAccount(account);
+      }
+    }
+    initSidebarToggle();
+  }
+
   function toggleSidebar(forcedState) {
     const key = 'gdhome_sidebar_hidden:' + location.pathname;
     const isCurrentlyCollapsed = document.body.classList.contains('is-sidebar-collapsed');
@@ -438,18 +578,18 @@ window.GDHomeShell = (() => {
 
   if (typeof window !== 'undefined') {
     const start = () => {
-      initHubJobTracker(); initSidebarToggle();
+      initHubJobTracker(); layout();
       // Các trang vẽ thanh bên sau khi tải xong (Chốt mã, Tools...): theo dõi để gắn nút ngay khi có.
       let queued = false;
       new MutationObserver(() => {
         if (queued) return;
         queued = true;
-        requestAnimationFrame(() => { queued = false; initSidebarToggle(); });
+        requestAnimationFrame(() => { queued = false; layout(); });
       }).observe(document.body,{childList:true,subtree:true});
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',start);
     else start();
   }
 
-  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders,initSidebarToggle,toggleSidebar };
+  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
 })();

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Giao việc · Nhà thầu · GD HOME</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shell.css?v=gd23b">
+  <link rel="stylesheet" href="/tools.css?v=gd23b">
+  <link rel="stylesheet" href="/giao-viec.css?v=gd23b">
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" defer></script>
+  <script src="/shell.js?v=gd23b" defer></script>
+  <script src="/integrations-client.js?v=gd23b" defer></script>
+  <script src="/projects-client.js?v=gd23b" defer></script>
+  <script src="/giao-viec.js?v=gd23b" defer></script>
+</head>
+<body class="work-body">
+  <header class="app-header work-header">
+    <div class="header-left">
+      <button type="button" class="icon-btn shell-sidebar-toggle" id="btn-toggle-sidebar" title="Ẩn/Hiện thanh bên trái" aria-label="Ẩn/Hiện thanh bên trái"><i data-lucide="menu">☰</i></button>
+      <a class="app-logo" href="/giao-viec">
+        <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
+        <span>Giao việc · Nhà thầu</span>
+      </a>
+      <details class="gd-tools-menu" data-shell-menu></details>
+    </div>
+    <div class="header-right">
+      <div class="shell-toolbar" id="work-toolbar">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-export-excel" title="Xuất danh sách ra file Excel">
+          <i data-lucide="file-spreadsheet"></i><span>Xuất Excel</span>
+        </button>
+        <button type="button" class="btn btn-success btn-sm" id="btn-create-pdf" title="Tạo PDF hồ sơ giao việc đính kèm">
+          <i data-lucide="file-plus"></i><span>Tạo PDF</span>
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-add-contractor" title="Thêm nhà thầu / đội thợ mới">
+          <i data-lucide="user-plus"></i><span>+ Nhà thầu</span>
+        </button>
+        <button type="button" class="btn btn-primary btn-sm" id="btn-add-assignment" title="Tạo phiếu giao việc mới">
+          <i data-lucide="plus"></i><span>+ Phiếu giao việc</span>
+        </button>
+      </div>
+      <span id="save-status" class="save-status is-inline" role="status">✓ Đã lưu</span>
+      <div class="shell-account">
+        <strong id="identity" style="display:none;"></strong>
+      </div>
+    </div>
+  </header>
+
+  <div class="work-app-layout">
+    <aside class="shell-sidebar sidebar-compact" id="work-sidebar">
+      <details class="sb-collapsible" open>
+        <summary class="sb-head">Chọn dự án</summary>
+        <div class="sb-body">
+          <select id="work-project-select" class="form-select sidebar-select" style="width: 100%; margin-bottom: 8px;">
+            <option value="">-- Tất cả dự án --</option>
+          </select>
+        </div>
+      </details>
+      <details class="sb-collapsible" open>
+        <summary class="sb-head">Hạng mục thầu</summary>
+        <div class="sb-body" id="category-filter-list">
+        </div>
+      </details>
+      <details class="sb-collapsible" open>
+        <summary class="sb-head">Trạng thái phiếu</summary>
+        <div class="sb-body" id="status-filter-list">
+        </div>
+      </details>
+    </aside>
+
+    <main class="work-main-content">
+      <div id="work-content-tabs" class="work-tabs-bar">
+        <button type="button" class="work-tab-btn active" data-tab="assignments">Phiếu giao việc (<span id="count-assignments">0</span>)</button>
+        <button type="button" class="work-tab-btn" data-tab="contractors">Danh bạ nhà thầu (<span id="count-contractors">0</span>)</button>
+      </div>
+      <div id="tab-assignments-panel" class="work-tab-panel active">
+        <div class="work-panel-toolbar">
+          <input type="search" id="search-assignments" class="form-control" placeholder="Tìm phiếu giao việc, nhà thầu, công việc..." style="max-width: 300px;">
+          <div id="overdue-alerts" class="overdue-badge-wrap"></div>
+        </div>
+        <div class="table-responsive">
+          <table class="data-table work-table" id="table-assignments">
+            <thead>
+              <tr>
+                <th>STT</th>
+                <th>Dự án</th>
+                <th>Hạng mục</th>
+                <th>Công việc Lịch</th>
+                <th>Nhà thầu / Đội thợ</th>
+                <th>Khối lượng</th>
+                <th>Bắt đầu - Kết thúc</th>
+                <th>Trạng thái</th>
+                <th>Hồ sơ đính kèm</th>
+                <th>Thao tác</th>
+              </tr>
+            </thead>
+            <tbody id="tbody-assignments">
+              <tr><td colspan="10" style="text-align: center; color: #64748b; padding: 24px;">Chưa có phiếu giao việc nào.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="tab-contractors-panel" class="work-tab-panel" style="display: none;">
+        <div class="work-panel-toolbar">
+          <input type="search" id="search-contractors" class="form-control" placeholder="Tìm nhà thầu (tên, SĐT, khu vực, không dấu)..." style="max-width: 300px;">
+          <select id="filter-contractor-category" class="form-select" style="max-width: 200px;">
+            <option value="">Tất cả hạng mục</option>
+          </select>
+        </div>
+        <div class="contractor-grid" id="contractor-grid">
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="work-toast" class="toast-notification" role="status"></div>
+</body>
+</html>

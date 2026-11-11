@@ -243,3 +243,18 @@
 
 ---
 **XONG GĐ18B**
+
+
+## GĐ23B — Đồng bộ khung giao diện & Tool "Giao việc · Tổng hợp nhà thầu"
+
+- [x] **23B.1. Kế hoạch + thực hiện đồng bộ khung giao diện**
+  - Đã lập tài liệu kế hoạch và bảng đối chiếu 11 thành phần trên cả 5 trang: `docs/gd23/KE-HOACH-DONG-BO-GIAO-DIEN.md`.
+  - Đã chụp ảnh trước (1440px) lưu tại `docs/gd23/`: `truoc-lich-1440.png`, `truoc-chot-ma-1440.png`, `truoc-du-an-1440.png`, `truoc-tools-1440.png`.
+  - Layout chung `GDHomeShell.layout()`:
+    - Header cao chuẩn 52px: `[☰ ẩn/hiện thanh bên] [logo + tên trang] [menu Tools] … [nhóm nút lệnh của trang] [trạng thái lưu] [hồ sơ đăng nhập]`.
+    - Thanh bên trái đồng bộ độ rộng 260px (`--gd-sidebar-width: 260px`), cùng nút gập và lưu trạng thái per-page qua `localStorage['gdhome_sidebar_hidden:' + location.pathname]`.
+    - Hồ sơ đăng nhập: avatar tròn 28px (`.shell-user-avatar`) + tên rút gọn ở góc phải mọi trang. Bấm mở menu: email, Kết nối, Sao lưu, Đăng xuất. Ở chế độ khách hiện nút "Đăng nhập".
+    - Màu lệnh chính `#1a73e8`, nút Copy ảnh màu xanh lá `#188038` được giữ nguyên. Nền be ghi cho hộp thoại và popover.
+    - Chốt mã chỉ sửa qua `GDHomeShell.layout()` tự động, không sửa file tĩnh của Chốt mã.
+    - Playwright đo vị trí, kích thước header (height 52px), nút ☰ (x 16px, y 10px, 32x32px) và avatar (x 1393px, y 12px, 28x28px, right 19px) giống nhau 100% (±0px, đạt yêu cầu ±1px) trên cả 5 trang.
+    - Đã chụp ảnh sau (1440px) lưu tại `docs/gd23/`: `sau-lich-1440.png`, `sau-chot-ma-1440.png`, `sau-du-an-1440.png`, `sau-tools-1440.png`, `sau-giao-viec-1440.png`.

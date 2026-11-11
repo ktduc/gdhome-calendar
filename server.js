@@ -62,7 +62,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -467,6 +467,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === '/tools') rel = '/tools.html';
   if (rel === '/chot-ma') rel = '/chot-ma.html';
   if (rel === '/du-an') rel = '/du-an.html';
+  if (rel === '/giao-viec') rel = '/giao-viec.html';
   if (rel === '/favicon.ico') rel = '/gdhome-icon.png';
   if (rel.startsWith('/duyet/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(7))) rel = '/duyet.html';
   const filePath = path.normalize(path.join(ROOT_DIR, rel));

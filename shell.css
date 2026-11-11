@@ -1,9 +1,9 @@
 :root {
   --gd-font: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --gd-sidebar-width: 262px;
+  --gd-sidebar-width: 260px;
   --gd-sidebar-background: #eef1f5;
   --gd-section-border: #e2e8f0;
-  --gd-header-height: 56px;
+  --gd-header-height: 52px;
   --gd-primary: #1a73e8;
   --gd-primary-hover: #1557b0;
   --gd-success: #188038;
@@ -777,4 +777,165 @@ body.is-sidebar-collapsed .app-sidebar,
   border-left: 4px solid #7c3aed !important;
   border-radius: var(--gd-overlay-radius, 10px) !important;
   box-shadow: var(--gd-overlay-shadow, 0 10px 28px rgba(15, 23, 42, 0.16)) !important;
+}
+
+
+/* ==========================================================================
+   GĐ23B: ĐỒNG BỘ KHUNG GIAO DIỆN (HEADER 52PX, AVATAR 28PX, SIDEBAR 260PX)
+   ========================================================================== */
+.app-header {
+  height: 52px !important;
+  min-height: 52px !important;
+  max-height: 52px !important;
+  padding: 0 16px !important;
+  box-sizing: border-box !important;
+}
+
+.header-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  min-width: 0 !important;
+}
+
+.header-left #btn-toggle-sidebar,
+.header-left .shell-sidebar-toggle {
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
+  min-height: 32px !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.app-logo {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  font-size: 16px !important;
+  font-weight: 600 !important;
+  color: #1e293b !important;
+  text-decoration: none !important;
+  white-space: nowrap !important;
+  flex-shrink: 0 !important;
+}
+
+.header-logo-img {
+  width: 28px !important;
+  height: 28px !important;
+  object-fit: contain !important;
+  flex-shrink: 0 !important;
+}
+
+.app-sidebar,
+.material-sidebar,
+.shell-sidebar {
+  width: 260px !important;
+  box-sizing: border-box !important;
+}
+
+/* Hồ sơ đăng nhập: Avatar tròn 28px + tên rút gọn ở góc phải mọi trang */
+.shell-account {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  min-width: 0 !important;
+  flex-shrink: 0 !important;
+  margin-left: auto !important;
+}
+
+.shell-account-dropdown {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+.shell-user-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  height: 32px !important;
+  padding: 2px 2px 2px 8px !important;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  border-radius: 20px !important;
+  cursor: pointer !important;
+  font: inherit !important;
+  font-size: 13px !important;
+  color: #1e293b !important;
+  box-sizing: border-box !important;
+  transition: background-color 0.15s, border-color 0.15s !important;
+}
+.shell-user-chip:hover {
+  background: #f1f5f9 !important;
+  border-color: #dadce0 !important;
+}
+
+.shell-user-avatar,
+.user-chip-avatar {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  min-height: 28px !important;
+  border-radius: 50% !important;
+  background: #1a73e8 !important;
+  color: #ffffff !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  flex-shrink: 0 !important;
+}
+
+.shell-user-avatar img,
+.user-chip-avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.shell-user-name {
+  max-width: 120px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  color: #1e293b !important;
+}
+
+.shell-account-menu {
+  min-width: 210px !important;
+  background-color: var(--gd-overlay-bg, #f4f1ec) !important;
+  border: 1px solid var(--gd-overlay-border, #d8d2c8) !important;
+  border-radius: var(--gd-overlay-radius, 10px) !important;
+  box-shadow: var(--gd-overlay-shadow, 0 10px 28px rgba(15, 23, 42, 0.16)) !important;
+  padding: 6px !important;
+  z-index: 1000 !important;
+}
+
+.shell-account-header {
+  padding: 6px 10px 8px !important;
+  border-bottom: 1px solid var(--gd-overlay-border, #d8d2c8) !important;
+  margin-bottom: 4px !important;
+  font-size: 12px !important;
+  color: #64748b !important;
+  word-break: break-all !important;
+}
+.shell-account-header strong {
+  display: block !important;
+  font-size: 13px !important;
+  color: #1e293b !important;
+  margin-bottom: 2px !important;
+}
+
+.shell-guest-login-btn {
+  height: 32px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
 }
