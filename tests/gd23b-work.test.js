@@ -249,8 +249,9 @@ test('GĐ23B.2: Server API /api/work/overview, /api/work/contractors, /api/work/
   }
 });
 
-test('GĐ23B.2: Playwright tạo nhà thầu, tạo phiếu, chọn 3 trang PDF giả và tạo PDF ghép', async () => {
-  const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'C:/Users/KTDUC/AppData/Local/npm-cache/_npx/e41f203b7505f1fb/node_modules/playwright');
+const loadPlaywright = () => { try { return require(process.env.PLAYWRIGHT_PATH || 'C:/Users/KTDUC/AppData/Local/npm-cache/_npx/e41f203b7505f1fb/node_modules/playwright'); } catch { return null; } };
+test('GĐ23B.2: Playwright tạo nhà thầu, tạo phiếu, chọn 3 trang PDF giả và tạo PDF ghép', { skip: !loadPlaywright() && 'Chưa cài Playwright (đặt PLAYWRIGHT_PATH)' }, async () => {
+  const { chromium } = loadPlaywright();
   const dir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'gdhome-pw-work-'));
   Object.assign(process.env, { DATA_DIR: dir, GIST_TOKEN: '', GOOGLE_CLIENT_ID: '', APP_PASSWORD: '', R2_ACCOUNT_ID: '' });
   const { server, initStore, getStore } = require('../server');
