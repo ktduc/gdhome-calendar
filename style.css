@@ -3475,3 +3475,8 @@ body {
 .sb-autolink-btn { width: 100%; justify-content: center; font-size: 11.5px; font-weight: 700; padding: 5px 8px; margin: 2px 0 4px; }
 .sb-autolink-row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
 .sb-autolink-row .sb-autolink-btn { margin: 2px 0 4px; padding: 5px 4px; white-space: nowrap; }
+
+/* GĐ24. Both notes remain inside the board when printed or captured. */
+.schedule-extra-note{display:block;margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere}
+.schedule-extra-note[contenteditable],.banner-prefix[contenteditable],.msp-inline-title-prefix-input[contenteditable]{border-bottom:1px dashed transparent;border-radius:4px;min-width:1ch;cursor:text}
+.schedule-extra-note[contenteditable]:focus,.banner-prefix[contenteditable]:focus,.msp-inline-title-prefix-input[contenteditable]:focus{outline:1px solid #a8b8cc;border-bottom-color:#1a73e8}

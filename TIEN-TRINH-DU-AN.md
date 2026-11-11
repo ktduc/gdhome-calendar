@@ -285,3 +285,9 @@
 
 ---
 **XONG GĐ23B**
+
+## GĐ24
+
+| Bước | Kết quả | Kiểm thử |
+| --- | --- | --- |
+| 24.1 | Tiêu đề và ghi chú riêng Lịch/Timeline, sửa tại chỗ bằng contenteditable hoặc Cài đặt. Giữ dòng ngày nghỉ chung, lưu root fields và ghi đè theo dự án ở projectOwners. Đổi mặc định Timeline cũ sang thi công khi nạp dữ liệu, giữ tiêu đề đã tự sửa và ghi chú trống. Áp dụng vào nguồn in/PNG/PDF, đủ lưu server/local/undo. | Node 94/94. Edge 24.1, 24.1-legacy, 24.1-export, 10.5 đạt; xuất dùng html2canvas thật ở cả chế độ PNG và in. |

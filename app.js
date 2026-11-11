@@ -15,6 +15,9 @@ function snapshotState() {
       daysOffConfig: AppState.daysOffConfig,
       projectOwners: AppState.projectOwners,
       footerNote: AppState.footerNote,
+      designNote: AppState.designNote,
+      constructionNote: AppState.constructionNote,
+      designCustomTitlePrefix: AppState.designCustomTitlePrefix,
       startMonth: AppState.startMonth,
       endMonth: AppState.endMonth
     });
@@ -58,10 +61,10 @@ function applyRestoredSnapshot(jsonStr, toastMsg) {
     if (data.tasks) AppState.tasks = data.tasks;
     if (data.calendars) AppState.calendars = data.calendars;
     if (data.activeCalendarId) AppState.activeCalendarId = data.activeCalendarId;
-    if (data.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = data.mspCustomTitlePrefix;
     if (data.daysOffConfig) AppState.daysOffConfig = data.daysOffConfig;
     if (data.projectOwners) AppState.projectOwners = data.projectOwners;
     if (data.footerNote !== undefined) AppState.footerNote = data.footerNote;
+    loadScheduleText(data);
     if (data.startMonth) AppState.startMonth = data.startMonth;
     if (data.endMonth) AppState.endMonth = data.endMonth;
     normalizeAppState();
@@ -139,6 +142,41 @@ function getDefaultLeftSidebarSettings() {
   };
 }
 
+const scheduleTextDefaults = {
+  designCustomTitlePrefix:'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -',
+  mspCustomTitlePrefix:'TIẾN ĐỘ THI CÔNG DỰ KIẾN -',
+  designNote:'Tiến độ chưa bao gồm thời gian trao đổi công việc',
+  constructionNote:'Các hạng mục thay đổi khi thi công sẽ làm kéo dài thời gian thi công'
+};
+function migrateScheduleText(field,value) {
+  if (typeof value !== 'string') return scheduleTextDefaults[field];
+  return field === 'mspCustomTitlePrefix' && value.trim() === scheduleTextDefaults.designCustomTitlePrefix ? scheduleTextDefaults.mspCustomTitlePrefix : value;
+}
+function loadScheduleText(source) {
+  for (const field of Object.keys(scheduleTextDefaults)) {
+    AppState[field] = migrateScheduleText(field,source[field]);
+    for (const owner of AppState.projectOwners || []) if (typeof owner[field] !== 'string') owner[field] = AppState[field];
+  }
+}
+function scheduleTextOwner(field) {
+  return getTitleProject(['constructionNote','mspCustomTitlePrefix'].includes(field) ? 'msproject' : 'calendar');
+}
+function scheduleTextValue(field) {
+  return scheduleTextOwner(field)?.[field] ?? AppState[field];
+}
+function setScheduleText(field,value) {
+  AppState[field] = value;
+  const owner = scheduleTextOwner(field);
+  if (owner) owner[field] = value;
+}
+function renderScheduleText() {
+  for (const [id,field] of [['design-title-prefix','designCustomTitlePrefix'],['msp-title-prefix-input','mspCustomTitlePrefix'],
+    ['design-note-text','designNote'],['construction-note-text','constructionNote']]) {
+    const element = document.getElementById(id), value = scheduleTextValue(field);
+    if (element && document.activeElement !== element && element.textContent !== value) element.textContent = value;
+  }
+}
+
 // Khởi tạo state của ứng dụng
 const _initDefaults = getDefaultLeftSidebarSettings();
 const AppState = {
@@ -154,7 +192,7 @@ const AppState = {
   colorPaletteTheme: _initDefaults.colorPaletteTheme,
   autoCascadeShift: _initDefaults.autoCascadeShift,
   autoLinkNewTasks: _initDefaults.autoLinkNewTasks,
-  mspCustomTitlePrefix: 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -', // Tiêu đề tự gõ trên thanh Timeline MS Project
+  ...scheduleTextDefaults,
   selectedTaskIds: [], // Danh sách các ID công việc đang được tick chọn nhiều để kéo di chuyển đồng thời
   collapsedProjects: {},
   collapsedMspOwners: {},
@@ -535,6 +573,11 @@ function sortAllTasksChronologically(resetManual = false) {
 
 // Chuẩn hóa dữ liệu
 function normalizeAppState() {
+  for (const field of Object.keys(scheduleTextDefaults)) {
+    if (typeof AppState[field] !== 'string') AppState[field] = scheduleTextDefaults[field];
+    for (const owner of AppState.projectOwners || []) if (typeof owner[field] !== 'string') owner[field] = scheduleTextDefaults[field];
+  }
+
   const defSettings = getDefaultLeftSidebarSettings();
   if (!AppState.daysOffConfig || typeof AppState.daysOffConfig !== 'object') {
     AppState.daysOffConfig = { ...defSettings.daysOffConfig };
@@ -871,6 +914,7 @@ function resetStateToEmptyGuest() {
   AppState.tasks = [];
   AppState.selectedTaskIds = [];
   AppState.footerNote = buildAutoFooterNoteFromDaysOff();
+  Object.assign(AppState,scheduleTextDefaults);
 }
 
 function enterGuestMode(opts = {}) {
@@ -1173,6 +1217,9 @@ function buildServerPayload() {
     companyName: AppState.companyName,
     companyLogo: AppState.companyLogo,
     footerNote: AppState.footerNote,
+    designNote: AppState.designNote,
+    constructionNote: AppState.constructionNote,
+    designCustomTitlePrefix: AppState.designCustomTitlePrefix,
     showVnHolidays: AppState.showVnHolidays,
     showLunarDates: AppState.showLunarDates,
     mspScope: AppState.mspScope,
@@ -1212,6 +1259,7 @@ function applyServerData(data) {
   if (data.companyName) AppState.companyName = data.companyName;
   if (data.companyLogo !== undefined) AppState.companyLogo = data.companyLogo;
   if (data.footerNote) AppState.footerNote = data.footerNote;
+  loadScheduleText(data);
   if (data.showVnHolidays !== undefined) AppState.showVnHolidays = data.showVnHolidays;
   if (data.showLunarDates !== undefined) AppState.showLunarDates = data.showLunarDates;
   if (data.mspScope) AppState.mspScope = data.mspScope;
@@ -1222,7 +1270,6 @@ function applyServerData(data) {
   if (data.colorPaletteTheme) AppState.colorPaletteTheme = data.colorPaletteTheme;
   if (data.autoCascadeShift !== undefined) AppState.autoCascadeShift = data.autoCascadeShift;
   if (data.autoLinkNewTasks !== undefined) AppState.autoLinkNewTasks = data.autoLinkNewTasks;
-  if (data.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = data.mspCustomTitlePrefix;
   if (data.mspColWidths && typeof data.mspColWidths === 'object') {
     AppState.mspColWidths = Object.assign({}, AppState.mspColWidths, data.mspColWidths);
   }
@@ -1559,7 +1606,7 @@ function updateUIElements() {
   }
   const mspTitlePrefixInput = document.getElementById('msp-title-prefix-input');
   if (mspTitlePrefixInput && document.activeElement !== mspTitlePrefixInput) {
-    mspTitlePrefixInput.value = AppState.mspCustomTitlePrefix !== undefined ? AppState.mspCustomTitlePrefix : 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
+    mspTitlePrefixInput.textContent = scheduleTextValue('mspCustomTitlePrefix');
   }
 
   renderPaletteSwatchesUI();
@@ -1639,6 +1686,9 @@ function saveToStorage() {
     companyName: AppState.companyName,
     companyLogo: AppState.companyLogo,
     footerNote: AppState.footerNote,
+    designNote: AppState.designNote,
+    constructionNote: AppState.constructionNote,
+    designCustomTitlePrefix: AppState.designCustomTitlePrefix,
     showVnHolidays: AppState.showVnHolidays,
     showLunarDates: AppState.showLunarDates,
     mspRowHeight: AppState.mspRowHeight,
@@ -1686,6 +1736,7 @@ function loadFromStorage() {
       if (parsed.companyName) AppState.companyName = parsed.companyName;
       if (parsed.companyLogo !== undefined) AppState.companyLogo = parsed.companyLogo;
       if (parsed.footerNote) AppState.footerNote = parsed.footerNote;
+      loadScheduleText(parsed);
       if (parsed.showVnHolidays !== undefined) AppState.showVnHolidays = parsed.showVnHolidays;
       if (parsed.showLunarDates !== undefined) AppState.showLunarDates = parsed.showLunarDates;
       if (parsed.mspRowHeight !== undefined) AppState.mspRowHeight = parsed.mspRowHeight;
@@ -1697,7 +1748,6 @@ function loadFromStorage() {
       if (parsed.colorPaletteTheme) AppState.colorPaletteTheme = parsed.colorPaletteTheme;
       if (parsed.autoCascadeShift !== undefined) AppState.autoCascadeShift = parsed.autoCascadeShift;
       if (parsed.autoLinkNewTasks !== undefined) AppState.autoLinkNewTasks = parsed.autoLinkNewTasks;
-      if (parsed.mspCustomTitlePrefix !== undefined) AppState.mspCustomTitlePrefix = parsed.mspCustomTitlePrefix;
       if (parsed.mspColWidths) AppState.mspColWidths = Object.assign(AppState.mspColWidths, parsed.mspColWidths);
       if (parsed.mspVisibility) AppState.mspVisibility = Object.assign(AppState.mspVisibility, parsed.mspVisibility);
       if (parsed.userManuallyResizedNameCol !== undefined) AppState.userManuallyResizedNameCol = !!parsed.userManuallyResizedNameCol;
@@ -2520,6 +2570,7 @@ function getTaskEffectiveRenderBounds(task) {
 
 // Render Calendar
 function renderCalendar(targetWeeks = null, customContainer = null) {
+  renderScheduleText();
   const gridContainer = customContainer || document.getElementById('calendar-grid');
   gridContainer.innerHTML = '';
 
@@ -3688,6 +3739,7 @@ function closeTaskModal() {
 // CÀI ĐẶT BRANDING & LOGO CHUẨN ĐỎ ĐEN GD HOME
 // =========================================================================
 function updateCompanyBranding() {
+  renderScheduleText();
   document.getElementById('footer-note-text').textContent = AppState.footerNote || '';
   const mspNote = document.getElementById('msp-footer-note-text');
   if (mspNote) mspNote.textContent = AppState.footerNote || '';
@@ -3884,7 +3936,7 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
         <span class="schedule-month-display">${escapeHtml(monthText)}</span>
       </div>
       <div class="sheet-banner-title">
-        <span class="banner-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN${custName ? ' - ' : ''}</span>
+        <span class="banner-prefix">${escapeHtml(scheduleTextValue('designCustomTitlePrefix'))} </span>
         ${custName ? `<span style="font-size:22px; font-weight:800; color:#b91d14; letter-spacing:0.5px; text-transform:uppercase;">${escapeHtml(custName)}</span>` : ''}
       </div>
     `;
@@ -4232,6 +4284,7 @@ function setupEvents() {
   document.getElementById('btn-project-settings').addEventListener('click', () => {
     document.getElementById('setting-company-name').value = AppState.companyName;
     document.getElementById('setting-note-text').value = AppState.footerNote;
+    for (const field of Object.keys(scheduleTextDefaults)) document.getElementById('setting-'+field).value = scheduleTextValue(field);
     settingsModal.classList.add('active');
   });
 
@@ -4258,6 +4311,7 @@ function setupEvents() {
     e.preventDefault();
     AppState.companyName = document.getElementById('setting-company-name').value.trim() || 'GD HOME';
     AppState.footerNote = document.getElementById('setting-note-text').value.trim();
+    for (const field of Object.keys(scheduleTextDefaults)) setScheduleText(field,document.getElementById('setting-'+field).value.trim());
 
     const logoFile = document.getElementById('setting-logo-file').files[0];
     if (logoFile) {
@@ -4278,9 +4332,18 @@ function setupEvents() {
 
   document.getElementById('footer-note-text').addEventListener('blur', (e) => {
     AppState.footerNote = e.target.textContent.trim();
+    const mspNote = document.getElementById('msp-footer-note-text');
+    if (mspNote) mspNote.textContent = AppState.footerNote;
     saveToBackend();
   });
 
+  for (const [id,field] of [['design-title-prefix','designCustomTitlePrefix'],['msp-title-prefix-input','mspCustomTitlePrefix'],
+    ['design-note-text','designNote'],['construction-note-text','constructionNote']]) {
+    const element = document.getElementById(id);
+    element.addEventListener('input',() => { setScheduleText(field,element.textContent); saveToStorage(); });
+    element.addEventListener('blur',() => { setScheduleText(field,element.textContent.trim()); saveToBackend(); renderScheduleText(); });
+    if (field.endsWith('TitlePrefix')) element.addEventListener('keydown',event => { if (event.key === 'Enter') { event.preventDefault(); element.blur(); } });
+  }
   setupExportModal();
 }
 
@@ -5580,19 +5643,6 @@ function setupMSProjectEvents() {
     });
   }
 
-  // Đồng bộ sửa Tiêu đề chính trên Header MS Project (tự gõ tự do)
-  const mspTitlePrefixInput = document.getElementById('msp-title-prefix-input');
-  if (mspTitlePrefixInput) {
-    mspTitlePrefixInput.addEventListener('input', () => {
-      AppState.mspCustomTitlePrefix = mspTitlePrefixInput.value;
-      saveToStorage();
-    });
-    mspTitlePrefixInput.addEventListener('change', () => {
-      AppState.mspCustomTitlePrefix = mspTitlePrefixInput.value.trim();
-      saveToBackend();
-    });
-  }
-
   // Nút sắp xếp nhanh toàn bộ công việc theo thứ tự ngày bắt đầu
   const btnSortByDate = document.getElementById('btn-msp-sort-by-date');
   if (btnSortByDate) {
@@ -5879,8 +5929,9 @@ function renderMSProjectView() {
     mspMonthInput.value = getAutoScheduleMonth();
   }
   if (mspTitlePrefixInput && document.activeElement !== mspTitlePrefixInput) {
-    mspTitlePrefixInput.value = AppState.mspCustomTitlePrefix !== undefined ? AppState.mspCustomTitlePrefix : 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
+    mspTitlePrefixInput.textContent = scheduleTextValue('mspCustomTitlePrefix');
   }
+  renderScheduleText();
   syncCustomerInputWithActiveCalendar(); // tên dự án trên tiêu đề theo dự án đang hiển thị
   if (mspFooterNote && document.activeElement !== mspFooterNote) {
     mspFooterNote.textContent = AppState.footerNote || '';

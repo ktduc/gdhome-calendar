@@ -68,7 +68,7 @@ const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
   'daysOffConfig', 'calendars', 'activeCalendarId', 'tasks', 'companyName', 'companyLogo',
-  'footerNote', 'showVnHolidays', 'showLunarDates', 'customTaskTitles'
+  'footerNote', 'designNote', 'constructionNote', 'designCustomTitlePrefix', 'mspCustomTitlePrefix', 'showVnHolidays', 'showLunarDates', 'customTaskTitles'
 ];
 
 function defaultData() {

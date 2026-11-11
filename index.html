@@ -13,7 +13,7 @@
   <!-- html2canvas for Export PNG & Copy Clipboard -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link rel="stylesheet" href="shell.css?v=gd23g">
-  <link rel="stylesheet" href="style.css?v=gd21.7">
+  <link rel="stylesheet" href="style.css?v=gd24.1">
   <link rel="stylesheet" href="asset-library.css?v=gd23.final1">
 </head>
 <body>
@@ -370,7 +370,7 @@
                   <input type="text" id="schedule-month-input" class="schedule-month-inline-input" value="Tháng 9, 2026" placeholder="Tháng lập bảng..." title="Bấm vào để chỉnh sửa tháng lập bảng">
                 </div>
                 <div class="sheet-banner-title">
-                  <span class="banner-prefix">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN - </span>
+                  <span class="banner-prefix" id="design-title-prefix" contenteditable="plaintext-only" role="textbox" aria-label="Tiêu đề Lịch">TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -</span>
                   <input type="text" id="customer-name-input" class="customer-name-inline-input" placeholder="Nhập tên khách hàng (VD: A DŨNG VŨ YÊN - HẢI PHÒNG)..." value="A DŨNG VŨ YÊN - HẢI PHÒNG" title="Nhập tên khách hàng tại đây - Tự động gắn vào hậu tố các bước công việc">
                 </div>
               </div>
@@ -402,6 +402,7 @@
               <div class="footer-note">
                 <span class="note-label">GHI CHÚ:</span>
                 <span id="footer-note-text" contenteditable="true" title="Bấm vào để chỉnh sửa ghi chú">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
+                <span class="schedule-extra-note" id="design-note-text" contenteditable="plaintext-only" role="textbox" aria-label="Ghi chú Lịch">Tiến độ chưa bao gồm thời gian trao đổi công việc</span>
               </div>
             </footer>
 
@@ -431,7 +432,7 @@
                 <input type="text" id="msp-month-input" class="msp-inline-month-input" value="Tháng 9, 2026" title="Bấm vào để sửa Tháng lập bảng (đồng bộ với Bảng Lịch)">
               </div>
               <div class="msp-header-center">
-                <input type="text" id="msp-title-prefix-input" class="msp-inline-title-prefix-input" value="TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -" placeholder="Tự gõ tiêu đề tiến độ..." title="Bấm vào để tự gõ tiêu đề tiến độ trên bảng Timeline">
+                <span id="msp-title-prefix-input" class="msp-inline-title-prefix-input" contenteditable="plaintext-only" role="textbox" aria-label="Tiêu đề Timeline" title="Bấm vào để sửa tiêu đề Timeline">TIẾN ĐỘ THI CÔNG DỰ KIẾN -</span>
                 <input type="text" id="msp-customer-input" class="msp-inline-customer-input" value="" placeholder="NHẬP TÊN DỰ ÁN..." title="Tên dự án (đồng bộ 2 chiều với tiêu đề Bảng Lịch & Dự án bên trái)">
                 <span id="msp-scope-badge" class="msp-scope-badge" style="display:none;"></span>
               </div>
@@ -530,6 +531,7 @@
               <div class="footer-note">
                 <span class="note-label">GHI CHÚ:</span>
                 <span id="msp-footer-note-text" contenteditable="true" title="Bấm vào để chỉnh sửa ghi chú">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</span>
+                <span class="schedule-extra-note" id="construction-note-text" contenteditable="plaintext-only" role="textbox" aria-label="Ghi chú Timeline">Các hạng mục thay đổi khi thi công sẽ làm kéo dài thời gian thi công</span>
               </div>
             </footer>
           </div>
@@ -838,6 +840,11 @@
             <textarea id="setting-note-text" rows="3">Bảng tiến độ chưa bao gồm thời gian phản hồi và trao đổi thiết kế</textarea>
           </div>
 
+          <div class="form-group"><label for="setting-designCustomTitlePrefix">Tiêu đề Lịch</label><input id="setting-designCustomTitlePrefix" type="text"></div>
+          <div class="form-group"><label for="setting-designNote">Ghi chú riêng Lịch</label><textarea id="setting-designNote" rows="2"></textarea></div>
+          <div class="form-group"><label for="setting-mspCustomTitlePrefix">Tiêu đề Timeline</label><input id="setting-mspCustomTitlePrefix" type="text"></div>
+          <div class="form-group"><label for="setting-constructionNote">Ghi chú riêng Timeline</label><textarea id="setting-constructionNote" rows="2"></textarea></div>
+
           <div class="modal-actions">
             <button type="button" class="btn btn-outline" id="btn-cancel-settings">Huỷ</button>
             <button type="submit" class="btn btn-primary">Lưu cài đặt</button>
@@ -1040,6 +1047,6 @@
   <script src="integrations-client.js?v=gd21.2"></script>
   <script src="ai-client.js?v=gd21.2"></script>
   <script src="projects-client.js?v=gd105"></script>
-  <script src="app.js?v=gd22.2"></script>
+  <script src="app.js?v=gd24.1"></script>
 </body>
 </html>

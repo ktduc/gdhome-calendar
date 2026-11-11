@@ -15,6 +15,117 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['24.1'] = async page => {
+  await page.goto('/');
+  await page.locator('.project-owner-header').first().waitFor();
+  await page.locator('#design-note-text').getByText('Tiến độ chưa bao gồm thời gian trao đổi công việc',{exact:true}).waitFor();
+  assert.equal(await page.locator('#construction-note-text').textContent(),'Các hạng mục thay đổi khi thi công sẽ làm kéo dài thời gian thi công');
+  assert.equal(await page.locator('#msp-title-prefix-input').textContent(),'TIẾN ĐỘ THI CÔNG DỰ KIẾN -');
+  await page.locator('#design-title-prefix').fill('LỊCH THIẾT KẾ RIÊNG -');
+  await page.locator('#design-title-prefix').press('Tab');
+  await page.locator('#design-note-text').fill('Ghi chú thiết kế riêng');
+  await page.locator('#design-note-text').press('Tab');
+  await page.locator('#btn-view-msproject').click();
+  await page.locator('#msp-title-prefix-input').fill('THI CÔNG RIÊNG -');
+  await page.locator('#msp-title-prefix-input').press('Tab');
+  await page.locator('#construction-note-text').fill('Ghi chú thi công riêng');
+  await page.locator('#construction-note-text').press('Tab');
+  await page.evaluate(async () => { clearTimeout(_saveTimer); await flushSaveToBackend(); });
+  const saved = await page.request.get('/api/schedule').then(r => r.json());
+  assert.equal(saved.data.designNote,'Ghi chú thiết kế riêng');
+  assert.equal(saved.data.constructionNote,'Ghi chú thi công riêng');
+  assert.equal(saved.data.mspCustomTitlePrefix,'THI CÔNG RIÊNG -');
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.locator('.project-owner-header').first().waitFor();
+  await page.locator('#btn-view-msproject').click();
+  assert.equal(await page.locator('#msp-title-prefix-input').textContent(),'THI CÔNG RIÊNG -');
+  assert.equal(await page.locator('#construction-note-text').textContent(),'Ghi chú thi công riêng');
+  await page.locator('#btn-view-calendar').click();
+  assert.equal(await page.locator('#design-title-prefix').textContent(),'LỊCH THIẾT KẾ RIÊNG -');
+  assert.equal(await page.locator('#design-note-text').textContent(),'Ghi chú thiết kế riêng');
+  await page.locator('#btn-project-settings').click();
+  const settings = page.locator('#settings-form');
+  assert.equal(await settings.locator('#setting-designNote').inputValue(),'Ghi chú thiết kế riêng');
+  await settings.locator('#setting-designNote').fill('Sửa từ cài đặt');
+  await settings.getByRole('button',{name:'Lưu cài đặt',exact:true}).click();
+  assert.equal(await page.locator('#design-note-text').textContent(),'Sửa từ cài đặt');
+  assert.equal(await page.locator('#construction-note-text').textContent(),'Ghi chú thi công riêng');
+  await page.evaluate(() => {
+    AppState.projectOwners.push({id:'gd24-other',name:'DỰ ÁN KHÁC',mspCustomTitlePrefix:'TIÊU ĐỀ NGƯỜI DÙNG',constructionNote:''});
+    AppState.calendars.forEach(cal => { cal.visible = false; });
+    AppState.calendars.push({id:'gd24-stage',ownerId:'gd24-other',name:'Giai đoạn khác',visible:true,color:'#a00'});
+    AppState.activeCalendarId = 'gd24-stage';
+    normalizeAppState(); saveToBackend(); updateUIElements(); renderCalendar();
+  });
+  assert.equal(await page.locator('#design-note-text').textContent(),'Tiến độ chưa bao gồm thời gian trao đổi công việc');
+  await page.locator('#btn-view-msproject').click();
+  assert.equal(await page.locator('#msp-title-prefix-input').textContent(),'TIÊU ĐỀ NGƯỜI DÙNG');
+  assert.equal(await page.locator('#construction-note-text').textContent(),'');
+  await page.evaluate(() => {
+    AppState.calendars.forEach(cal => { cal.visible = cal.ownerId === 'p1'; });
+    AppState.activeCalendarId = 'c1'; updateUIElements(); renderCalendar();
+  });
+  await page.locator('#btn-view-msproject').click();
+  assert.equal(await page.locator('#msp-title-prefix-input').textContent(),'THI CÔNG RIÊNG -');
+  assert.equal(await page.locator('#construction-note-text').textContent(),'Ghi chú thi công riêng');
+};
+
+cases['24.1-legacy'] = async page => {
+  const current = await page.request.get('/api/schedule').then(r => r.json());
+  await page.request.post('/api/schedule',{data:{...current.data,_baseVersion:current.version,mspCustomTitlePrefix:'TIÊU ĐỀ ĐÃ TỰ SỬA',designNote:'',constructionNote:''}});
+  await page.goto('/');
+  await page.locator('.project-owner-header').first().waitFor();
+  assert.equal(await page.locator('#design-note-text').textContent(),'');
+  await page.locator('#btn-view-msproject').click();
+  assert.equal(await page.locator('#msp-title-prefix-input').textContent(),'TIÊU ĐỀ ĐÃ TỰ SỬA');
+  assert.equal(await page.locator('#construction-note-text').textContent(),'');
+  await page.locator('#msp-title-prefix-input').fill('TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -');
+  await page.locator('#msp-title-prefix-input').press('Tab');
+  await page.evaluate(async () => { clearTimeout(_saveTimer); await flushSaveToBackend(); });
+  await page.reload();
+  await page.locator('.project-owner-header').first().waitFor();
+  await page.locator('#btn-view-msproject').click();
+  assert.equal(await page.locator('#msp-title-prefix-input').textContent(),'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -');
+};
+
+cases['24.1-export'] = async page => {
+  await page.goto('/');
+  await page.locator('.project-owner-header').first().waitFor();
+  await page.evaluate(() => {
+    setScheduleText('designCustomTitlePrefix','LỊCH THIẾT KẾ XUẤT -');
+    setScheduleText('mspCustomTitlePrefix','TIMELINE THI CÔNG XUẤT -');
+    setScheduleText('designNote','Ghi chú thiết kế xuất');
+    setScheduleText('constructionNote','Ghi chú thi công xuất');
+    AppState.tasks = [{id:'gd24-export',calendarId:'c1',title:'Thi công mẫu',startDate:'2026-11-02',endDate:'2026-11-03',color:'#a00'}];
+    updateUIElements(); renderCalendar();
+    window.gd24Captures = []; window.gd24Exports = 0;
+    const capture = window.html2canvas;
+    window.html2canvas = async (root,options) => {
+      const content = {text:root.textContent,title:root.querySelector('.banner-prefix,#msp-title-prefix-input')?.textContent};
+      const canvas = await capture(root,options); content.width = canvas.width; content.height = canvas.height;
+      window.gd24Captures.push(content); return canvas;
+    };
+    window.downloadCanvas = () => { window.gd24Exports++; };
+    window.printExportCanvas = () => { window.gd24Exports++; };
+  });
+  for (const mode of ['download','print']) {
+    await page.evaluate(mode => executeExportWeeksSlice(currentRenderedWeeks.slice(0,1),true,1,mode),mode);
+    const count = mode === 'download' ? 1 : 2;
+    await page.waitForFunction(count => window.gd24Exports === count,count,{timeout:20000});
+  }
+  await page.locator('#btn-view-msproject').click();
+  for (const mode of ['download','print']) {
+    await page.evaluate(mode => exportMSProjectSheet(1,mode),mode);
+    const count = mode === 'download' ? 3 : 4;
+    await page.waitForFunction(count => window.gd24Exports === count,count,{timeout:20000});
+  }
+  const captures = await page.evaluate(() => window.gd24Captures);
+  for (const capture of captures.slice(0,2)) { assert.match(capture.text,/Ghi chú thiết kế xuất/); assert.equal(capture.title.trim(),'LỊCH THIẾT KẾ XUẤT -'); }
+  for (const capture of captures.slice(2)) { assert.match(capture.text,/Ghi chú thi công xuất/); assert.equal(capture.title,'TIMELINE THI CÔNG XUẤT -'); }
+  assert.ok(captures.every(capture => capture.width > 100 && capture.height > 100));
+};
+
 cases['23.6'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
@@ -4522,6 +4633,7 @@ async function main() {
     browser = await chromium.launch({ channel:'msedge',headless:true });
     for (const key of process.argv.length > 2 ? process.argv.slice(2) : Object.keys(cases)) {
       const caseSchedule = structuredClone(schedule);
+      if (key === '24.1') caseSchedule.mspCustomTitlePrefix = 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
       if (['13.3','17.2'].includes(key)) caseSchedule.projectOwners.push({id:'gd13-other',name:'Dự án thứ hai'});
       if (key === '17.2') {
         caseSchedule.calendars.push({id:'other-cal',ownerId:'gd13-other',name:'Khác',visible:true,color:'#a00'});
