@@ -825,3 +825,7 @@ Khi chọn mã từ thư viện, PA nhận quy cách, kích thước và giá c�
 Ảnh QA của cột lọc, thương hiệu và bảng mã đã được xem kiểm tra trên Edge. Mã chức năng cuối ở f35a1b8 đã push main. Các bước giữ quy trình test/Edge, commit, pull --rebase và push, không force. PDF Garis thật chưa có trong docs/gd23/local; đã kiểm tra PDF giả có text layer lỗi, cả OCR giả lập và OCR vie+eng thực. Kết quả OCR cần kiểm tra mã/kích thước/giá trước khi chọn lưu.
 
 XONG GĐ23
+
+### Bổ sung dán logo thương hiệu từ clipboard
+
+Thêm nút Dán logo trên từng thẻ thương hiệu và trong hộp Tìm logo. Hộp dán tự focus vùng Ctrl+V, có nút đọc clipboard, trạng thái lưu và hướng dẫn Ctrl+V khi quyền đọc bị từ chối. Hỗ trợ cả clipboardData.files và items, giữ thao tác Ctrl+V trực tiếp trên thẻ. Dùng lại đường lưu PNG 512px nền trong suốt. Edge brand-paste-tools, brand-paste và 23.5 đạt; kiểm tra clipboard thật, ảnh dạng files/items, clipboard văn bản, lỗi quyền, đúng hãng và tải lại. Node 100/100.

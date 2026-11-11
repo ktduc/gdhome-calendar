@@ -1132,7 +1132,7 @@ window.GDHomeAssets = (() => {
     dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
       if (window[name]) return;
       await new Promise((resolve,reject) => {
-        const script = document.createElement('script'); script.src = '/'+file+'?v=gd23.5';
+        const script = document.createElement('script'); script.src = '/'+file+'?v=brand-paste-1';
         script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
       });
     })).catch(error => { dependencyPromise = null; throw error; });

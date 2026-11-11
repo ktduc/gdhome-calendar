@@ -20,6 +20,11 @@ window.GDHomeBrandManager = (() => {
     element.addEventListener('close',() => element.remove(),{once:true});
     return {element,body:element.querySelector('[data-brand-body]')};
   }
+  function clipboardImage(data) {
+    const file = [...(data?.files || [])].find(file => file.type.startsWith('image/'));
+    if (file) return file;
+    return [...(data?.items || [])].find(item => item.kind === 'file' && item.type.startsWith('image/'))?.getAsFile();
+  }
   async function render(root,data,call,repaint) {
     const brands = GDHomeBrands.normalize(data.brands,data.items);
     let filter = '';
@@ -41,11 +46,58 @@ window.GDHomeBrandManager = (() => {
       } else guest.brands.push(record);
       return {};
     });
+    async function uploadLogo(brand,file) {
+      await save({...brand,logo:await logoFile(file)});
+      await repaint();
+    }
+    function pasteLogo(brand,onSaved) {
+      const view = modal('Dán logo · '+brand.name);
+      view.body.innerHTML = '<p>Chép ảnh logo, bấm vào vùng dưới rồi nhấn Ctrl+V.</p>' +
+        '<div class="asset-drop" tabindex="0" role="region" aria-label="Vùng dán logo">Dán ảnh logo tại đây · Ctrl+V</div>' +
+        '<button type="button" data-read-logo-clipboard>Dán ảnh từ clipboard</button><p role="status" aria-live="polite"></p>';
+      const zone = view.body.querySelector('.asset-drop');
+      const button = view.body.querySelector('button');
+      const status = view.body.querySelector('[role=status]');
+      let busy = false;
+      async function apply(file) {
+        status.textContent = 'Đang lưu logo…';
+        await uploadLogo(brand,file);
+        view.element.close();
+        onSaved?.();
+      }
+      view.element.onpaste = async event => {
+        const file = clipboardImage(event.clipboardData);
+        if (!file) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (busy) return;
+        busy = button.disabled = true;
+        try { await apply(file); }
+        catch (error) { status.textContent = error.message; }
+        finally { busy = button.disabled = false; }
+      };
+      button.onclick = async () => {
+        if (busy) return;
+        busy = button.disabled = true;
+        try {
+          if (!navigator.clipboard?.read) throw new Error('Bấm vào vùng dán rồi nhấn Ctrl+V để dán ảnh.');
+          const items = await navigator.clipboard.read();
+          const item = items.find(item => item.types.some(type => type.startsWith('image/')));
+          if (!item) { status.textContent = 'Clipboard chưa có ảnh. Chép ảnh logo rồi dán lại.'; return; }
+          await apply(await item.getType(item.types.find(type => type.startsWith('image/'))));
+        } catch (error) {
+          status.textContent = error.name === 'NotAllowedError' ? 'Bấm vào vùng dán rồi nhấn Ctrl+V để dán ảnh.' : error.message;
+          zone.focus({preventScroll:true});
+        } finally { busy = button.disabled = false; }
+      };
+      zone.focus({preventScroll:true});
+    }
     async function chooseLogo(brand) {
       const view = modal('Tìm logo · '+brand.name);
-      view.body.innerHTML = '<p role="status">Đang tìm logo…</p><div class="brand-logo-candidates"></div>' +
+      view.body.innerHTML = '<button type="button" data-paste-brand-logo>Dán logo</button><p role="status">Đang tìm logo…</p><div class="brand-logo-candidates"></div>' +
         '<form class="brand-logo-google"><label>Tìm ảnh trên mạng <input name="q" value="'+esc(brand.name+' logo')+'"></label><button>Tìm</button></form>' +
         '<p class="brand-logo-google-status asset-hint"></p><div class="brand-logo-candidates brand-logo-google-grid"></div>';
+      view.body.querySelector('[data-paste-brand-logo]').onclick = () => pasteLogo(brand,() => view.element.close());
       // Tìm logo bằng ảnh Google (cùng nhà cung cấp tìm ảnh với ô tìm mã); bấm ảnh là lưu làm logo luôn.
       const googleForm = view.body.querySelector('.brand-logo-google');
       const googleStatus = view.body.querySelector('.brand-logo-google-status');
@@ -113,7 +165,7 @@ window.GDHomeBrandManager = (() => {
     }
     function paint() {
       root.innerHTML = '<div class="asset-library-head"><h3>Thương hiệu</h3><button type="button" data-brand-add>Thêm thương hiệu</button><label>Hạng mục <select data-brand-filter><option value="">Tất cả</option>'+data.categories.map(category => '<option value="'+esc(category.id)+'"'+(filter === category.id ? ' selected' : '')+'>'+esc(category.name)+'</option>').join('')+'</select></label></div><div class="brand-grid">'+
-        brands.filter(brand => !filter || brand.categories.includes(filter)).map(brand => '<article draggable="true" data-brand-id="'+esc(brand.id)+'">'+(brand.logo ? '<img data-lib-asset="'+esc(brand.logo)+'" alt="'+esc(brand.name)+'">' : '<div class="brand-placeholder">'+esc(brand.name)+'</div>')+'<strong>'+esc(brand.name)+'</strong><small>'+data.items.filter(item => GDHomeBrands.find([brand],item.brand)).length+' mẫu</small><p>'+brand.categories.map(id => data.categories.find(category => category.id === id)?.name).filter(Boolean).map(esc).join(' · ')+'</p><button type="button" data-brand-edit>Sửa</button><button type="button" data-brand-logo>Tìm logo</button><button type="button" data-brand-upload>Đổi logo</button><button type="button" data-brand-merge>Gộp hãng</button></article>').join('')+'</div>';
+        brands.filter(brand => !filter || brand.categories.includes(filter)).map(brand => '<article draggable="true" data-brand-id="'+esc(brand.id)+'">'+(brand.logo ? '<img data-lib-asset="'+esc(brand.logo)+'" alt="'+esc(brand.name)+'">' : '<div class="brand-placeholder">'+esc(brand.name)+'</div>')+'<strong>'+esc(brand.name)+'</strong><small>'+data.items.filter(item => GDHomeBrands.find([brand],item.brand)).length+' mẫu</small><p>'+brand.categories.map(id => data.categories.find(category => category.id === id)?.name).filter(Boolean).map(esc).join(' · ')+'</p><button type="button" data-brand-edit>Sửa</button><button type="button" data-brand-logo>Tìm logo</button><button type="button" data-brand-upload>Đổi logo</button><button type="button" data-brand-paste>Dán logo</button><button type="button" data-brand-merge>Gộp hãng</button></article>').join('')+'</div>';
       GDHomeAssets.hydrate(root);
       root.querySelector('[data-brand-add]').onclick = () => edit();
       root.querySelector('[data-brand-filter]').onchange = event => { filter = event.target.value; paint(); };
@@ -124,11 +176,12 @@ window.GDHomeBrandManager = (() => {
         card.querySelector('[data-brand-logo]').onclick = () => chooseLogo(brand);
         const upload = async files => {
           if (!files[0]) return;
-          try { await save({...brand,logo:await logoFile(files[0])}); repaint(); } catch (error) { GDHomeShell.toast(error.message); }
+          try { await uploadLogo(brand,files[0]); } catch (error) { GDHomeShell.toast(error.message); }
         };
         card.tabIndex = 0;
-        card.onpaste = event => { const files = [...(event.clipboardData?.files || [])].filter(file => file.type.startsWith('image/')); if (files.length) { event.preventDefault(); upload(files); } };
+        card.onpaste = event => { const file = clipboardImage(event.clipboardData); if (file) { event.preventDefault(); event.stopPropagation(); upload([file]); } };
         card.querySelector('[data-brand-upload]').onclick = async () => upload(await GDHomeAssets.filePicker('image/*',false));
+        card.querySelector('[data-brand-paste]').onclick = () => pasteLogo(brand);
         card.querySelector('[data-brand-merge]').onclick = () => {
           const view = modal('Gộp '+brand.name);
           view.body.innerHTML = '<label>Gộp vào <select>'+brands.filter(other => other.id !== brand.id).map(other => '<option value="'+esc(other.id)+'">'+esc(other.name)+'</option>').join('')+'</select></label><button type="button">Gộp hãng</button>';

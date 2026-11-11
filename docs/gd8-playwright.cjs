@@ -212,6 +212,89 @@ cases['23.6'] = async page => {
   await picker.locator('.asset-card').getByText(/FILTER-236/).waitFor();
 };
 
+cases['brand-paste-tools'] = async page => {
+  await page.goto('/tools');
+  await page.getByRole('button',{name:'Mở dữ liệu',exact:true}).waitFor();
+  const created = await page.request.post('/api/library/brands',{data:{name:'Hãng dán từ Tools',note:'Giữ ghi chú'}}).then(r => r.json());
+  const brand = created.brands.find(brand => brand.name === 'Hãng dán từ Tools');
+  await page.getByRole('button',{name:'Mở dữ liệu',exact:true}).click();
+  const library = page.locator('.asset-library-dialog');
+  await library.getByRole('tab',{name:'Thương hiệu',exact:true}).click();
+  const card = library.locator('[data-brand-id="'+brand.id+'"]');
+  await card.getByRole('button',{name:'Dán logo',exact:true}).click();
+  const modal = page.locator('dialog').filter({has:page.getByRole('heading',{name:'Dán logo · Hãng dán từ Tools',exact:true})});
+  await modal.getByRole('region',{name:'Vùng dán logo'}).focus();
+  assert.equal(await pasteFixture(page,'items'),true);
+  await modal.waitFor({state:'detached'});
+  const data = await page.request.get('/api/library').then(r => r.json());
+  assert.match(data.brands.find(item => item.id === brand.id).logo,/^[a-f0-9]{64}\.png$/);
+  assert.equal(data.brands.find(item => item.id === brand.id).note,'Giữ ghi chú');
+};
+
+cases['brand-paste'] = async page => {
+  await openMaterials(page);
+  const first = await page.request.post('/api/library/brands',{data:{name:'Hãng dán logo'}}).then(r => r.json());
+  const brand = first.brands.find(brand => brand.name === 'Hãng dán logo');
+  await page.request.post('/api/library/brands',{data:{name:'Hãng khác'}});
+  const before = await page.request.get('/api/library').then(r => r.json());
+  await page.evaluate(async () => { await GDHomeAssets.loadLibrary(true); GDHomeAssets.openLibrary({categoryId:'cat-6'}); });
+  const library = page.locator('.asset-library-dialog');
+  await library.getByRole('tab',{name:'Thương hiệu',exact:true}).click();
+  const card = library.locator('[data-brand-id="'+brand.id+'"]');
+  await card.getByRole('button',{name:'Dán logo',exact:true}).click();
+  const modal = page.locator('dialog').filter({has:page.getByRole('heading',{name:'Dán logo · Hãng dán logo',exact:true})});
+  await modal.getByRole('region',{name:'Vùng dán logo'}).focus();
+  assert.equal(await pasteFixture(page,'text'),false);
+  assert.equal(await pasteFixture(page,'items'),true);
+  await modal.waitFor({state:'detached'});
+  let data = await page.request.get('/api/library').then(r => r.json());
+  const firstLogo = data.brands.find(item => item.id === brand.id).logo;
+  assert.match(firstLogo,/^[a-f0-9]{64}\.png$/);
+  assert.equal(data.items.length,before.items.length);
+  assert.equal(data.brands.find(item => item.name === 'Hãng khác').logo,'');
+  // A native clipboard read exercises the explicit paste button as well as browser permissions.
+  await page.context().grantPermissions(['clipboard-read','clipboard-write']);
+  await page.evaluate(async base64 => {
+    const blob = new Blob([Uint8Array.from(atob(base64),char => char.charCodeAt(0))],{type:'image/png'});
+    await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+  },webPhoto('native-brand-logo',180,90).toString('base64'));
+  await card.getByRole('button',{name:'Dán logo',exact:true}).click();
+  await modal.getByRole('button',{name:'Dán ảnh từ clipboard',exact:true}).click();
+  await modal.waitFor({state:'detached'});
+  data = await page.request.get('/api/library').then(r => r.json());
+  const nativeLogo = data.brands.find(item => item.id === brand.id).logo;
+  assert.notEqual(nativeLogo,firstLogo);
+  const pixels = await page.evaluate(async logo => {
+    const blob = await fetch('/api/materials/assets/'+logo).then(r => r.blob());
+    const bitmap = await createImageBitmap(blob), canvas = document.createElement('canvas');
+    canvas.width = bitmap.width; canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d'); ctx.drawImage(bitmap,0,0);
+    return {width:bitmap.width,height:bitmap.height,alpha:ctx.getImageData(0,0,1,1).data[3]};
+  },nativeLogo);
+  assert.deepEqual(pixels,{width:512,height:512,alpha:0});
+  await card.getByRole('button',{name:'Dán logo',exact:true}).click();
+  await page.evaluate(() => Object.defineProperty(navigator.clipboard,'read',{configurable:true,value:async () => { throw new DOMException('Denied','NotAllowedError'); }}));
+  await modal.getByRole('button',{name:'Dán ảnh từ clipboard',exact:true}).click();
+  await modal.getByRole('status').getByText(/Ctrl\+V/).waitFor();
+  assert.equal((await page.request.get('/api/library').then(r => r.json())).brands.find(item => item.id === brand.id).logo,nativeLogo);
+  await modal.getByRole('button',{name:'Đóng',exact:true}).click();
+  await card.focus();
+  const filePaste = await card.evaluate((card,base64) => {
+    const file = new File([Uint8Array.from(atob(base64),char => char.charCodeAt(0))],'logo.png',{type:'image/png'});
+    const event = new ClipboardEvent('paste',{bubbles:true,cancelable:true});
+    Object.defineProperty(event,'clipboardData',{value:{files:[file],items:[]}});
+    return !card.dispatchEvent(event);
+  },imageFixture);
+  assert.equal(filePaste,true);
+  await page.waitForFunction(async ({id,logo}) => (await fetch('/api/library').then(r => r.json())).brands.find(item => item.id === id)?.logo === logo,{id:brand.id,logo:firstLogo});
+  await library.locator('.close-dialog').click();
+  await page.reload();
+  await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await library.getByRole('tab',{name:'Thương hiệu',exact:true}).click();
+  await card.locator('img').waitFor();
+  assert.equal(await card.locator('img').getAttribute('data-lib-asset'),firstLogo);
+};
+
 cases['23.5'] = async page => {
   await openMaterials(page);
   await page.route('**/api/materials/assets/'+'d'.repeat(64)+'.webp',route => route.fulfill({status:404}));
