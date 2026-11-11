@@ -212,6 +212,108 @@ cases['23.6'] = async page => {
   await picker.locator('.asset-card').getByText(/FILTER-236/).waitFor();
 };
 
+cases['library-tools'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({status:404}));
+  await page.evaluate(async () => {
+    const file='e'.repeat(64)+'.webp';
+    for (let offset=0;offset<120;offset+=40) await GDHomeAssets.addItems('cat-6',Array.from({length:40},(_,index) => ({code:'MOVE-'+(offset+index),name:'Mẫu chuyển '+(offset+index),full:file,thumb:file,tags:['Tag chuyển'],suppliers:['Kho mẫu'],price:1000000})));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  });
+  const library=page.locator('.asset-library-dialog');
+  const supplier=library.locator('[data-filter-group=suppliers] label').filter({hasText:'Kho mẫu'});
+  await supplier.waitFor();
+  await supplier.click({button:'right'});
+  await library.locator('.asset-library-context').getByRole('button',{name:'Sửa giá trị',exact:true}).click();
+  const editor=page.locator('.asset-attribute-editor');
+  await editor.getByLabel('Tất cả hạng mục',{exact:true}).uncheck();
+  await editor.getByLabel('PHỤ KIỆN BẾP',{exact:true}).check();
+  await editor.getByRole('button',{name:'Lưu giá trị',exact:true}).click();
+  await editor.waitFor({state:'detached'});
+  let data=await page.request.get('/api/library').then(r=>r.json());
+  assert.deepEqual(data.attributes.suppliers.find(row=>row.name==='Kho mẫu').categoryIds,['kitchen-accessories']);
+  const tag=library.locator('[data-filter-group=tags] label').filter({hasText:'Tag chuyển'});
+  await tag.waitFor();
+  await tag.click({button:'right'});
+  await library.locator('.asset-library-context').getByRole('button',{name:'Chuyển sang hạng mục…',exact:true}).click();
+  await editor.getByLabel('Hạng mục đích',{exact:true}).selectOption('cat-5');
+  await editor.getByRole('button',{name:'Chuyển 120 mẫu',exact:true}).click();
+  await editor.waitFor({state:'detached'});
+  data=await page.request.get('/api/library').then(r=>r.json());
+  assert.equal(data.items.filter(item=>item.code?.startsWith('MOVE-')&&item.categoryId==='cat-5').length,120);
+  assert.equal(new Set(data.items.filter(item=>item.code?.startsWith('MOVE-')).map(item=>item.full)).size,1);
+  await library.locator('[data-bulk=undo]').click();
+  await library.locator('.asset-card').first().waitFor();
+  const search=library.locator('.asset-library-head input[type=search]');
+  await search.fill('MOVE-119');
+  await page.waitForFunction(()=>document.querySelectorAll('.asset-library-dialog .asset-card').length===1);
+  await library.locator('.asset-card figcaption').first().click({button:'right'});
+  await library.locator('.asset-library-context').getByRole('button',{name:'Chuyển các mẫu đang lọc sang hạng mục…',exact:true}).click();
+  await editor.getByLabel('Hạng mục đích',{exact:true}).selectOption('cat-4');
+  await editor.getByRole('button',{name:'Chuyển 1 mẫu',exact:true}).click();
+  await editor.waitFor({state:'detached'});
+  data=await page.request.get('/api/library').then(r=>r.json());
+  assert.equal(data.items.filter(item=>item.code?.startsWith('MOVE-')&&item.categoryId==='cat-4').length,1);
+  await library.locator('[data-bulk=undo]').click();
+  await search.fill('');
+  await library.locator('.asset-card').getByText('MOVE-0',{exact:true}).waitFor();
+  await library.locator('.asset-card figcaption').first().dblclick();
+  await editor.getByLabel('Chiết khấu (%)',{exact:true}).fill('20');
+  assert.equal(await editor.getByLabel('Giá vào (₫) · nội bộ',{exact:true}).inputValue(),'800000');
+  await editor.getByRole('button',{name:'Lưu mẫu',exact:true}).click();
+  await editor.waitFor({state:'detached'});
+  data=await page.request.get('/api/library').then(r=>r.json());
+  const priced=data.items.find(item=>item.discountPercent===20);
+  assert.equal(priced.purchasePrice,800000);
+  await library.getByLabel('Hiện giá',{exact:true}).check();
+  const cost=library.locator('[data-asset-id="'+priced.id+'"] .asset-card-purchase-price');
+  await cost.waitFor();
+  await page.emulateMedia({media:'print'});
+  assert.equal(await cost.isVisible(),false);
+  await page.emulateMedia({media:'screen'});
+  await page.reload();
+  const reloaded=await page.request.get('/api/library').then(r=>r.json());
+  assert.equal(reloaded.items.find(item=>item.id===priced.id).purchasePrice,800000);
+  await openMaterials(page);
+  const publication=await page.evaluate(async id=>{
+    const item=(await GDHomeAssets.loadLibrary(true)).items.find(item=>item.id===id);
+    applyLibraryMaterial(sheet.groups[0].rows[0],0,item);
+    await flushSave();
+    const result=await post(releasePath(),{_version:materials._version,action:'publish'});
+    return {path:result.path,text:materialPaperForExport(sheet).textContent};
+  },priced.id);
+  assert.doesNotMatch(publication.text,/800000|800\.000|Giá vào|Chiết khấu/);
+  const publicData=await page.request.get('/api/review/'+publication.path.split('/').at(-1)).then(r=>r.json());
+  assert.doesNotMatch(JSON.stringify(publicData),/purchasePrice|discountPercent/);
+
+};
+
+cases['logo-tools'] = async page => {
+  await openMaterials(page);
+  const {PNG}=require('pngjs'), png=new PNG({width:100,height:100}); png.data.fill(255);
+  for(let y=25;y<75;y++)for(let x=25;x<75;x++)png.data.set([0,0,0,255],(y*100+x)*4);
+  const logo=await page.evaluate(async base64=>GDHomeAssets.storeAsset(new Blob([Uint8Array.from(atob(base64),char=>char.charCodeAt(0))],{type:'image/png'})),PNG.sync.write(png).toString('base64'));
+  const added=await page.request.post('/api/library/brands',{data:{name:'Logo tách nền',logo}}).then(r=>r.json());
+  const brand=added.brands.find(brand=>brand.name==='Logo tách nền');
+  await page.evaluate(async()=>{await GDHomeAssets.loadLibrary(true);GDHomeAssets.openLibrary({categoryId:'cat-6'});});
+  const library=page.locator('.asset-library-dialog');
+  await library.getByRole('tab',{name:'Thương hiệu',exact:true}).click();
+  await library.locator('[data-brand-id="'+brand.id+'"]').getByRole('button',{name:'Tách nền / tăng nét',exact:true}).click();
+  const modal=page.locator('dialog').filter({has:page.getByRole('heading',{name:'Tách nền / tăng nét · Logo tách nền',exact:true})});
+  await modal.locator('canvas').waitFor();
+  const alpha=await modal.locator('canvas').evaluate(canvas=>[canvas.getContext('2d').getImageData(0,0,1,1).data[3],canvas.getContext('2d').getImageData(50,50,1,1).data[3]]);
+  assert.deepEqual(alpha,[0,255]);
+  await modal.getByRole('button',{name:'Lưu logo đã xử lý',exact:true}).click();
+  await modal.waitFor({state:'detached'});
+  const result=await page.request.get('/api/library').then(r=>r.json());
+  assert.notEqual(result.brands.find(item=>item.id===brand.id).logo,logo);
+  await library.locator('[data-brand-id="'+brand.id+'"]').getByRole('button',{name:'Tách nền / tăng nét',exact:true}).click();
+  await modal.locator('canvas').waitFor();
+  assert.equal(await modal.getByLabel('Tách nền theo màu',{exact:true}).isChecked(),false);
+  assert.equal(await modal.locator('canvas').evaluate(canvas=>canvas.getContext('2d').getImageData(50,50,1,1).data[3]),255);
+
+};
+
 cases['brand-paste-tools'] = async page => {
   await page.goto('/tools');
   await page.getByRole('button',{name:'Mở dữ liệu',exact:true}).waitFor();
@@ -3338,6 +3440,14 @@ cases['21.4'] = async page => {
   await editor.getByRole('button',{name:'Lưu giá'}).click();
   await editor.waitFor({state:'detached'});
   assert.equal(await library.locator('.asset-card-price[title="Nội bộ"]').count(),2);
+  await library.getByLabel('Chọn Gạch A').click();
+  await library.getByLabel('Chọn Gạch B').click();
+  await library.getByRole('button',{name:'Đặt giá',exact:true}).click();
+  await editor.getByLabel('Chiết khấu (%)',{exact:true}).fill('25');
+  await editor.getByRole('button',{name:'Lưu giá',exact:true}).click();
+  await editor.waitFor({state:'detached'});
+  const discounted=(await page.request.get('/api/library').then(r=>r.json())).items.filter(item=>['Gạch A','Gạch B'].includes(item.name));
+  assert.ok(discounted.every(item=>item.price===100000 && item.purchasePrice===75000 && item.priceUnit==='tấm' && item.priceNote==='Nội bộ'));
   await page.reload();
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await library.locator('.asset-card-price').first().waitFor();
@@ -3498,7 +3608,8 @@ cases['20.11'] = async page => {
   await library.locator('[data-attribute-key]').selectOption('brand');
   await row('Hãng mẫu A').locator('[data-attribute-action=edit]').click();
   await editor.locator('[name=value]').fill('Hãng mẫu C');
-  await editor.locator('[name=categories]').selectOption('cat-6');
+  await editor.getByLabel('Tất cả hạng mục',{exact:true}).uncheck();
+  await editor.locator('[name=categories][value=cat-6]').check();
   await editor.getByRole('button',{name:'Lưu giá trị'}).click();
   await editor.waitFor({state:'detached'});
   await row('Hãng mẫu C').getByText('GẠCH ỐP LÁT',{exact:true}).waitFor();

@@ -922,17 +922,24 @@ window.GDHomeAssets = (() => {
       ' <input name="value" maxlength="120" required value="' + esc(row?.name) + '"></label>' +
       (key === 'suppliers' ? '<label>Số điện thoại <input name="phone" maxlength="40" value="' + esc(row?.phone) + '"></label>' +
         '<label>Ghi chú <textarea name="note" maxlength="300">' + esc(row?.note) + '</textarea></label>' : '') +
-      '<label>Hạng mục áp dụng <select name="categories" multiple>' + data.categories.map(category =>
-        '<option value="' + esc(category.id) + '"' + (row?.categoryIds.includes(category.id) ? ' selected' : '') + '>' + esc(category.name) + '</option>').join('') +
-      '</select></label><small>Để trống nếu dùng cho mọi hạng mục.</small><button>Lưu giá trị</button><p role="status"></p></form>';
+      '<fieldset class="asset-attribute-categories"><legend>Hạng mục áp dụng</legend><label><input type="checkbox" data-attribute-all-categories' +
+      (!row?.categoryIds?.length ? ' checked' : '') + '> Tất cả hạng mục</label><div>' + data.categories.map(category =>
+        '<label><input type="checkbox" name="categories" value="' + esc(category.id) + '"' + (row?.categoryIds?.includes(category.id) ? ' checked' : '') + '>' + esc(category.name) + '</label>').join('') +
+      '</div></fieldset><button>Lưu giá trị</button><p role="status"></p></form>';
     const form = body.querySelector('form');
+    const allCategories = form.querySelector('[data-attribute-all-categories]');
+    const categoryInputs = [...form.querySelectorAll('[name=categories]')];
+    const syncCategories = () => { for (const input of categoryInputs) input.disabled = allCategories.checked; };
+    allCategories.onchange = syncCategories;
+    syncCategories();
     form.onsubmit = async event => {
       event.preventDefault();
       const button = form.querySelector('button');
       button.disabled = true;
       try {
+        if (!allCategories.checked && !categoryInputs.some(input => input.checked)) throw new Error('Chọn hạng mục áp dụng hoặc Tất cả hạng mục.');
         await attributePatch({key,action:'save',previous:row?.name,name:form.elements.value.value,
-          categoryIds:[...form.elements.categories.selectedOptions].map(option => option.value),
+          categoryIds:allCategories.checked ? [] : categoryInputs.filter(input => input.checked).map(input => input.value),
           phone:form.elements.phone?.value,note:form.elements.note?.value});
         dialog.close();
       } catch (error) { form.querySelector('[role=status]').textContent = error.message; }
@@ -951,8 +958,9 @@ window.GDHomeAssets = (() => {
         return '<label>' + esc(label) + ' <input name="' + key + '" aria-label="' + esc(label) + '" value="' +
           esc(Array.isArray(value) ? value.join(', ') : value) + '">' +
           (item.inferredFields?.includes(key) ? '<small data-inferred-field="' + key + '">Tự đoán</small>' : '') + '</label>';
-      }).join('') + (data.showPrices ? libraryPriceInputs(item) : '') + '<button>Lưu mẫu</button><p role="status"></p></form>';
+      }).join('') + libraryPriceInputs(item) + '<button>Lưu mẫu</button><p role="status"></p></form>';
     const form = body.querySelector('form');
+    wireLibraryPrices(form);
     const keys = Object.keys(labels);
     attributeSuggestions(form,data,item.categoryId,Object.fromEntries(keys.map(key => [key,[form.elements[key]]])));
     form.onsubmit = async event => {
@@ -972,7 +980,7 @@ window.GDHomeAssets = (() => {
       if (item.inferredFields?.length) patch.inferredFields = item.inferredFields.filter(key => attributeCatalog().isSource(key) ?
         (patch.sourceFacets?.find(group => group.key === key)?.values || []).join(', ') === facetValues(item,key).join(', ') :
         patch[key] === item[key]);
-      try { await updateItem(data.showPrices ? {...patch,...libraryPricePatch(form)} : patch); dialog.close(); }
+      try { await updateItem({...patch,...libraryPricePatch(form)}); dialog.close(); }
       catch (error) { form.querySelector('[role=status]').textContent = error.message; }
       finally { button.disabled = false; }
     };
@@ -980,8 +988,22 @@ window.GDHomeAssets = (() => {
   const libraryPriceInputs = (item = {}) =>
     '<label>Giá (₫) <input type="number" name="price" min="0" max="10000000000" step="0.01" value="' + esc(item.price) + '"></label>' +
     '<label>Đơn vị giá <input name="priceUnit" maxlength="30" placeholder="m², viên, bộ, md, tấm…" value="' + esc(item.priceUnit) + '"></label>' +
+    '<label>Chiết khấu (%) <input type="number" name="discountPercent" min="0" max="100" step="0.01" value="' + esc(item.discountPercent) + '"></label>' +
+    '<label>Giá vào (₫) · nội bộ <input type="number" name="purchasePrice" min="0" max="10000000000" step="0.01" value="' + esc(item.purchasePrice) + '"></label>' +
+    '<small>Nhập chiết khấu để tính từ giá ở trên, hoặc nhập trực tiếp giá vào. Giá vào và chiết khấu chỉ dùng nội bộ.</small>' +
     '<label>Ghi chú giá <input name="priceNote" maxlength="300" value="' + esc(item.priceNote) + '"></label>';
-  const libraryPricePatch = form => Object.fromEntries(['price','priceUnit','priceNote'].map(key => [key,form.elements[key].value.trim()]));
+  const libraryPricePatch = form => Object.fromEntries(['price','priceUnit','priceNote','discountPercent','purchasePrice'].map(key => [key,form.elements[key].value.trim()]));
+  function wireLibraryPrices(form) {
+    const {price,discountPercent,purchasePrice} = form.elements;
+    if (!price || !discountPercent || !purchasePrice) return;
+    const calculate = () => {
+      const fields = attributeCatalog().priceFields({price:price.value,discountPercent:discountPercent.value});
+      if (discountPercent.value !== '') purchasePrice.value = fields.purchasePrice ?? '';
+    };
+    price.addEventListener('input',calculate);
+    discountPercent.addEventListener('input',calculate);
+    purchasePrice.addEventListener('input',() => { discountPercent.value = ''; });
+  }
   function wireFacets(root,facets,paint) {
     root.querySelectorAll('[data-clear-facets],[data-clear-active-facets]').forEach(button => button.onclick = () => { clearFacets(facets); paint(); });
     root.querySelectorAll('[data-remove-facet]').forEach(button => button.onclick = () => {
@@ -1095,9 +1117,10 @@ window.GDHomeAssets = (() => {
     menu.style.top = Math.max(6,Math.min(event.clientY || anchor.bottom,innerHeight-menu.offsetHeight-6)) + 'px';
     menu.firstElementChild.focus({preventScroll:true});
   }
-  function wireLibraryContext(root,data,{renameCategory,mergeCategory,removeManagedCategory,showAttributes,attributeKey}) {
+  function wireLibraryContext(root,data,{renameCategory,mergeCategory,removeManagedCategory,showAttributes,attributeKey,filteredItems = [],moveItems}) {
     const {groupLabels,view,canMergeCategory} = attributeCatalog(), labels = groupLabels(data);
     root.oncontextmenu = event => {
+      if (event.target.closest('input,textarea,select,[contenteditable]') && !event.target.matches('[data-facet]')) return;
       const categoryId = event.target.closest('[data-cat]')?.dataset.cat;
       if (categoryId) {
         const category = data.categories.find(entry => entry.id === categoryId);
@@ -1106,11 +1129,15 @@ window.GDHomeAssets = (() => {
         actions.push(['Xoá hạng mục',() => removeManagedCategory(category)]);
         return showLibraryContext(root,event,actions);
       }
+      if (root.querySelector('.brand-grid')) return;
       const choice = event.target.closest('.asset-facet-choice')?.querySelector('[data-facet]');
       const row = event.target.closest('[data-attribute-row]');
       const group = event.target.closest('summary')?.parentElement.dataset.filterGroup;
       const key = row ? attributeKey : choice?.dataset.facet || group;
-      if (!Object.hasOwn(labels,key)) return;
+      if (!Object.hasOwn(labels,key)) {
+        if (moveItems && event.target.closest('.asset-library-main,.asset-active-facets')) showLibraryContext(root,event,[['Chuyển các mẫu đang lọc sang hạng mục…',() => moveItems(filteredItems)]]);
+        return;
+      }
       const actions = [['Xem bảng giá trị',() => showAttributes(key)]];
       const value = row ? row.querySelector('[data-attribute-select]').value : choice?.dataset.value;
       if (value) {
@@ -1124,6 +1151,7 @@ window.GDHomeAssets = (() => {
             attributePatch({key,action:'merge',names:[source.name,target],target}))]);
         }
       }
+      if (moveItems) actions.push(['Chuyển sang hạng mục…',() => moveItems(value ? filteredItems.filter(item => facetValues(item,key).includes(value)) : filteredItems)]);
       showLibraryContext(root,event,actions);
     };
   }
@@ -1132,7 +1160,7 @@ window.GDHomeAssets = (() => {
     dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
       if (window[name]) return;
       await new Promise((resolve,reject) => {
-        const script = document.createElement('script'); script.src = '/'+file+'?v=brand-paste-1';
+        const script = document.createElement('script'); script.src = '/'+file+'?v=library-tools-1';
         script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
       });
     })).catch(error => { dependencyPromise = null; throw error; });
@@ -1158,6 +1186,7 @@ window.GDHomeAssets = (() => {
         '<figcaption>' + esc(item.page ? 'Trang ' + item.page + (item.room && item.room !== 'Cả nhà' ? ' · ' + item.room : '') : ([item.code,item.name || item.room,item.collection,item.finish,item.spec,item.cabinetWidth && 'Tủ '+item.cabinetWidth,item.subgroup].filter(Boolean).join(' · '))) + '</figcaption>') +
       (showPrices && item.price != null ? '<small class="asset-card-price" title="' + esc(item.priceNote) + '">' +
         esc(displayPrice.format(item.price) + (item.priceUnit ? '/' + item.priceUnit : '')) + '</small>' : '') +
+      (showPrices && item.purchasePrice != null ? '<small class="asset-card-purchase-price">Giá vào: ' + esc(displayPrice.format(item.purchasePrice)) + (item.discountPercent != null ? ' · CK ' + esc(item.discountPercent) + '%' : '') + '</small>' : '') +
       (selected && item.inferredFields?.length ? '<small class="asset-inferred-note">Tự đoán</small>' : '') +
       (removable && item.full ? '<details class="asset-card-menu" data-popup><summary aria-label="Tuỳ chọn ảnh">⋯</summary><label>Kiểu hiển thị' + displaySelect(item.display || 'fill','data-asset-display') + '</label></details>' : '') +
       ((selectable || removable) ? assetItemActions(item) : '') +
@@ -3976,7 +4005,7 @@ window.GDHomeAssets = (() => {
         const ids = new Set(patch.ids);
         if (patch.delete) data.items = data.items.filter(item => !ids.has(item.id));
         for (const item of data.items.filter(item => ids.has(item.id))) {
-          const {price,priceUnit,priceNote,...fields} = patch.set || {};
+          const {price,priceUnit,priceNote,discountPercent,purchasePrice,...fields} = patch.set || {};
           Object.assign(item,fields);
           attributeCatalog().updatePrice(item,patch.set || {});
           if (patch.categoryId) item.categoryId = patch.categoryId;
@@ -4116,7 +4145,16 @@ window.GDHomeAssets = (() => {
         if (!name?.trim()) return;
         try { const result = await saveCategory(name.trim()); changeCategory(result.category?.id || current); } catch (error) { toast(error.message); }
       };
-      if (!onPick) wireLibraryContext(body,data,{renameCategory,mergeCategory,removeManagedCategory,attributeKey:viewState.attributeKey || 'size',showAttributes:key => {
+      if (!onPick) wireLibraryContext(body,data,{renameCategory,mergeCategory,removeManagedCategory,attributeKey:viewState.attributeKey || 'size',filteredItems:attributes ? data.items : items,moveItems:matching => {
+        const ids = matching.map(item => item.id);
+        const editor = modal('asset-attribute-editor','Chuyển vật liệu sang hạng mục');
+        editor.body.innerHTML = '<form class="asset-attribute-form"><p>Chuyển <strong>' + ids.length + '</strong> mẫu khớp bộ lọc, gồm các trang kết quả.</p><p>' + esc(matching.slice(0,6).map(item => item.code || item.name).join(' · ')) + '</p><label>Hạng mục đích <select name="categoryId" aria-label="Hạng mục đích">' + data.categories.map(category => '<option value="' + esc(category.id) + '">' + esc(category.name) + '</option>').join('') + '</select></label><button' + (!ids.length ? ' disabled' : '') + '>Chuyển ' + ids.length + ' mẫu</button><p role="status"></p></form>';
+        editor.body.querySelector('form').onsubmit = async event => {
+          event.preventDefault(); const form = event.target; form.querySelector('button').disabled = true;
+          try { await bulk({ids,categoryId:form.elements.categoryId.value}); editor.dialog.close(); }
+          catch (error) { form.querySelector('[role=status]').textContent = error.message; form.querySelector('button').disabled = false; }
+        };
+      },showAttributes:key => {
         viewState.attributeKey = key;
         viewState.attributeMessage = '';
         showTab('attributes');
@@ -4225,13 +4263,18 @@ window.GDHomeAssets = (() => {
         if (key === 'price') {
           const editor = modal('asset-attribute-editor','Đặt giá cho ' + ids.length + ' mẫu');
           editor.body.innerHTML = '<form class="asset-attribute-form">' + libraryPriceInputs() +
-            '<small>Để trống trường cần xoá.</small><button>Lưu giá</button><p role="status"></p></form>';
+            '<small>Để trống trường cần xoá. Nếu chỉ nhập chiết khấu, giữ giá hiện có của từng mẫu để tính giá vào.</small><button>Lưu giá</button><p role="status"></p></form>';
           const form = editor.body.querySelector('form');
+          wireLibraryPrices(form);
           form.onsubmit = async event => {
             event.preventDefault();
             const button = form.querySelector('button');
             button.disabled = true;
-            try { await bulk({ids,set:libraryPricePatch(form)}); editor.dialog.close(); }
+            try {
+              const set = libraryPricePatch(form);
+              if (set.discountPercent !== '' && set.price === '') for (const key of ['price','priceUnit','priceNote','purchasePrice']) if (set[key] === '') delete set[key];
+              await bulk({ids,set}); editor.dialog.close();
+            }
             catch (error) { form.querySelector('[role=status]').textContent = error.message; }
             finally { button.disabled = false; }
           };

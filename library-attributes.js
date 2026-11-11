@@ -19,12 +19,18 @@
     const price = parsePrice(item.price);
     const priceUnit = clean(item.priceUnit ?? (price !== undefined && !item.priceUpdatedAt ? item.unit : ''),30);
     const priceNote = clean(item.priceNote,300);
+    const discount = typeof item.discountPercent === 'string' ? item.discountPercent.trim().replace(',','.') : item.discountPercent;
+    const discountPercent = discount !== '' && discount != null && Number.isFinite(Number(discount)) && Number(discount) >= 0 && Number(discount) <= 100 ? Number(discount) : undefined;
+    const purchasePrice = discountPercent !== undefined ? (price === undefined ? undefined : Math.round(price*(1-discountPercent/100)*100)/100) : parsePrice(item.purchasePrice);
     return {...(price === undefined ? {} : {price}),...(priceUnit ? {priceUnit} : {}),...(priceNote ? {priceNote} : {}),
+      ...(discountPercent === undefined ? {} : {discountPercent}),...(purchasePrice === undefined ? {} : {purchasePrice}),
       ...(Number.isSafeInteger(item.priceUpdatedAt) && item.priceUpdatedAt > 0 ? {priceUpdatedAt:item.priceUpdatedAt} : {})};
   }
   function updatePrice(item,patch) {
-    const keys = ['price','priceUnit','priceNote'].filter(key => Object.hasOwn(patch,key));
-    const fields = priceFields(patch);
+    const keys = ['price','priceUnit','priceNote','discountPercent','purchasePrice'].filter(key => Object.hasOwn(patch,key));
+    const fields = priceFields({...item,...patch});
+    if (patch.discountPercent !== '' && patch.discountPercent != null && Object.hasOwn(patch,'discountPercent') && fields.discountPercent === undefined) fail(400,'Chiết khấu phải từ 0 đến 100%.');
+    if (keys.some(key => ['price','discountPercent'].includes(key)) && fields.discountPercent !== undefined && !keys.includes('purchasePrice')) keys.push('purchasePrice');
     for (const key of keys) {
       if (item[key] === fields[key]) continue;
       if (fields[key] === undefined) delete item[key];
@@ -193,7 +199,7 @@
         if (!name || seen.has(keyFor(name))) return [];
         seen.add(keyFor(name));
         const categoryIds = [...new Set(Array.isArray(entry.categoryIds) ? entry.categoryIds.filter(id => ids.has(id)) : [])];
-        return [{name,categoryIds,...(key === 'suppliers' ? {phone:clean(entry.phone,40),note:clean(entry.note,300)} : {})}];
+        return [{name,categoryIds,...(entry.scopeExplicit ? {scopeExplicit:true} : {}),...(key === 'suppliers' ? {phone:clean(entry.phone,40),note:clean(entry.note,300)} : {})}];
       })]];
     }));
   }
@@ -210,7 +216,7 @@
     for (const [categoryId,groups] of Object.entries(data.catalogueFilterGroups || {})) {
       for (const value of groups.find(group => group.key === key)?.values || []) {
         const row = add(value);
-        if (!row.categoryIds.includes(categoryId)) row.categoryIds = [...row.categoryIds,categoryId];
+        if (!row.scopeExplicit && !row.categoryIds.includes(categoryId)) row.categoryIds = [...row.categoryIds,categoryId];
       }
     }
     for (const item of data.items) {
@@ -219,7 +225,7 @@
         const row = add(value), id = keyFor(value);
         if (row && !seen.has(id)) {
           row.count++;
-          if (isSource(key) && !row.categoryIds.includes(item.categoryId)) row.categoryIds = [...row.categoryIds,item.categoryId];
+          if (isSource(key) && !row.scopeExplicit && !row.categoryIds.includes(item.categoryId)) row.categoryIds = [...row.categoryIds,item.categoryId];
         }
         seen.add(id);
       }
@@ -241,7 +247,8 @@
       if (patch.previous && !previous) fail(404,'Không tìm thấy giá trị thuộc tính.');
       if (find(replacement) && find(replacement) !== previous) fail(409,'Giá trị đã có. Dùng Gộp để hợp nhất.');
       if (previous) replaced.add(keyFor(previous.name));
-      result = {name:replacement,categoryIds:Array.isArray(patch.categoryIds) ? patch.categoryIds : (previous?.categoryIds || [])};
+      result = {name:replacement,categoryIds:Array.isArray(patch.categoryIds) ? patch.categoryIds : (previous?.categoryIds || []),
+        ...((Object.hasOwn(patch,'categoryIds') || previous?.scopeExplicit) ? {scopeExplicit:true} : {})};
       if (key === 'suppliers') Object.assign(result,{phone:clean(patch.phone ?? previous?.phone,40),note:clean(patch.note ?? previous?.note,300)});
     } else if (action === 'merge') {
       const target = find(patch.target);
@@ -249,7 +256,7 @@
       if (!target || selected.includes(undefined) || !selected.includes(target) || selected.length < 2) fail(400,'Chọn ít nhất hai giá trị và một giá trị đích.');
       replaced = new Set(selected.map(row => keyFor(row.name)));
       replacement = target.name;
-      result = {...target,categoryIds:selected.some(row => !row.categoryIds.length) ? [] : [...new Set(selected.flatMap(row => row.categoryIds))]};
+      result = {...target,...(selected.some(row => row.scopeExplicit) ? {scopeExplicit:true} : {}),categoryIds:selected.some(row => !row.categoryIds.length) ? [] : [...new Set(selected.flatMap(row => row.categoryIds))]};
       if (key === 'suppliers') for (const field of ['phone','note']) result[field] ||= selected.find(row => row[field])?.[field] || '';
     } else if (action === 'delete') {
       if (!previous) fail(404,'Không tìm thấy giá trị thuộc tính.');

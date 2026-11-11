@@ -412,7 +412,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
           kind,...(kind === 'paint' ? {hex:item.hex.toLowerCase()} : {full:item.full,thumb:item.thumb,view:cleanView(item.view),display:cleanDisplay(item.display)}),createdAt: Date.now(),...itemMetadata(item),...metadata,
           ...(item.customAttributes ? {customAttributes:attributes.customValues(item.customAttributes,data.attributeGroups)} : {}),
           ...(imageName(item.originalFull) && imageName(item.originalThumb) ? {originalFull:item.originalFull,originalThumb:item.originalThumb,square:!!item.square} : {}) };
-        if (entry.price != null || entry.priceUnit || entry.priceNote) entry.priceUpdatedAt = entry.createdAt;
+        if (entry.price != null || entry.purchasePrice != null || entry.discountPercent != null || entry.priceUnit || entry.priceNote) entry.priceUpdatedAt = entry.createdAt;
         data.items.unshift(entry);
         added.push(entry);
       }

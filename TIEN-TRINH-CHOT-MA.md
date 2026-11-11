@@ -829,3 +829,12 @@ XONG GĐ23
 ### Bổ sung dán logo thương hiệu từ clipboard
 
 Thêm nút Dán logo trên từng thẻ thương hiệu và trong hộp Tìm logo. Hộp dán tự focus vùng Ctrl+V, có nút đọc clipboard, trạng thái lưu và hướng dẫn Ctrl+V khi quyền đọc bị từ chối. Hỗ trợ cả clipboardData.files và items, giữ thao tác Ctrl+V trực tiếp trên thẻ. Dùng lại đường lưu PNG 512px nền trong suốt. Edge brand-paste-tools, brand-paste và 23.5 đạt; kiểm tra clipboard thật, ảnh dạng files/items, clipboard văn bản, lỗi quyền, đúng hãng và tải lại. Node 100/100.
+
+### Bổ sung xử lý logo, chuyển mẫu theo bộ lọc và giá vào nội bộ
+
+- Logo có nút Tách nền / tăng nét, xem trước nền ô vuông, chọn màu nền, mức tách và mức tăng nét trước khi lưu PNG. Xử lý tại trình duyệt. Logo đã có mép trong suốt mặc định giữ chế độ tăng nét, có thể bật tách nền theo màu.
+- Menu chuột phải ở giá trị thuộc tính/tag hoặc kết quả lọc có chuyển sang hạng mục. Hộp chuyển ghi rõ số mẫu toàn bộ kết quả qua các trang, có hạng mục đích và hoàn tác bằng cơ chế bulk hiện có. Giữ ID và ảnh dùng chung.
+- Phạm vi Hạng mục áp dụng dùng checkbox và Tất cả hạng mục, sửa được nhiều lựa chọn, không tràn ngang. Phạm vi nguồn do người dùng chỉnh được lưu rõ, không bị suy ra lại từ các item sau khi tải lại.
+- Thêm purchasePrice và discountPercent riêng. Giá vào = giá hiện có × (1 − chiết khấu/100), có nhập trực tiếp. Sửa giá gốc cập nhật lại giá vào nếu đang dùng chiết khấu. Đặt chiết khấu hàng loạt khi bỏ trống giá dùng giá hiện có của từng mẫu. Giá vào/chiết khấu ẩn khi in và không có trong dữ liệu link khách/bản xuất vật liệu.
+
+Kiểm thử Node 103/103. Edge library-tools, logo-tools, 20.11, 21.4, brand-paste, brand-paste-tools, 23.5, 24.1-export đạt. Kiểm tra chuyển 120 mẫu theo tag, chuyển đúng 1 mẫu theo tìm kiếm, hoàn tác, tính giá vào/chiết khấu hàng loạt, giữ phạm vi và giá sau tải lại, tách nền giữ phần trắng bên trong, tăng nét logo trong suốt và loại giá vào khỏi bản in/link khách.

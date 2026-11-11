@@ -1,0 +1,40 @@
+const {test} = require('node:test');
+const assert = require('node:assert/strict');
+const {process:processLogo} = require('../logo-processing');
+const attributes = require('../library-attributes');
+const {publicSheet} = require('../material-review');
+test('Logo background removal preserves enclosed white and source pixels',() => {
+  const width=7,height=7,data=new Uint8ClampedArray(width*height*4).fill(255);
+  for (let y=2;y<=4;y++) for (let x=2;x<=4;x++) if (x===2 || x===4 || y===2 || y===4) data.set([0,0,0,255],(y*width+x)*4);
+  const result=processLogo({data,width,height},{removeBackground:true,color:[255,255,255],threshold:20,sharpness:.5});
+  assert.equal(result.data[3],0);
+  assert.equal(result.data[(3*width+3)*4+3],255);
+  assert.equal(result.data[(2*width+2)*4+3],255);
+  assert.equal(data[3],255);
+});
+test('Internal purchase price follows discount and supports manual cost, zero and clearing',() => {
+  const item={price:1000000};
+  attributes.updatePrice(item,{discountPercent:'12,5'});
+  assert.equal(item.purchasePrice,875000);
+  attributes.updatePrice(item,{price:2000000});
+  assert.equal(item.purchasePrice,1750000);
+  attributes.updatePrice(item,{discountPercent:100});
+  assert.equal(item.purchasePrice,0);
+  attributes.updatePrice(item,{discountPercent:'',purchasePrice:600000});
+  assert.equal(item.discountPercent,undefined); assert.equal(item.purchasePrice,600000);
+  attributes.updatePrice(item,{discountPercent:0}); assert.equal(item.purchasePrice,2000000);
+  assert.throws(() => attributes.updatePrice(item,{discountPercent:101}),error => error.status===400);
+  attributes.updatePrice(item,{price:''}); assert.equal(item.purchasePrice,undefined);
+  const sheet={id:'x',title:'Test',meta:{},groups:[{id:'g',name:'G',rows:[{id:'r',name:'R',render:[],options:[{code:'A',price:2000000,purchasePrice:600000,discountPercent:70,images:[]}]}]}]};
+  assert.doesNotMatch(JSON.stringify(publicSheet(sheet)),/purchasePrice|discountPercent|600000/);
+});
+test('Explicit category scope survives inferred source facets and reload normalization',() => {
+  const key='ac-loai-van-go';
+  const data={categories:[{id:'a'},{id:'b'}],items:[{categoryId:'a',sourceFacets:[{key,label:'Loại vân gỗ',values:['Oak']}]}],attributes:{}};
+  attributes.change(data,{key,action:'save',previous:'Oak',name:'Oak',categoryIds:['b']});
+  data.attributes=attributes.normalize(data);
+  assert.deepEqual(attributes.view(data,key)[0].categoryIds,['b']);
+  attributes.change(data,{key,action:'save',previous:'Oak',name:'Oak',categoryIds:[]});
+  assert.deepEqual(attributes.view(data,key)[0].categoryIds,[]);
+  assert.equal(data.items[0].categoryId,'a');
+});

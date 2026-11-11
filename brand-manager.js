@@ -92,6 +92,46 @@ window.GDHomeBrandManager = (() => {
       };
       zone.focus({preventScroll:true});
     }
+    async function editLogo(brand) {
+      const view = modal('Tách nền / tăng nét · '+brand.name);
+      view.body.innerHTML = '<p role="status">Đang mở logo…</p>';
+      try {
+        if (!window.GDHomeLogoProcessing) await new Promise((resolve,reject) => {
+          const script = document.createElement('script'); script.src = '/logo-processing.js?v=logo-tools-1';
+          script.onload = resolve; script.onerror = () => reject(new Error('Không tải được bộ xử lý logo.')); document.head.append(script);
+        });
+        const response = await fetch(await GDHomeAssets.assetUrl(brand.logo));
+        if (!response.ok) throw new Error('Không mở được logo.');
+        const bitmap = await createImageBitmap(await response.blob());
+        const canvas = document.createElement('canvas'); canvas.width = bitmap.width; canvas.height = bitmap.height;
+        const ctx = canvas.getContext('2d'); ctx.drawImage(bitmap,0,0); bitmap.close();
+        const original = ctx.getImageData(0,0,canvas.width,canvas.height);
+        const transparentBorder = [0,canvas.width-1,(canvas.height-1)*canvas.width,canvas.width*canvas.height-1].some(index => original.data[index*4+3] < 250);
+        const background = GDHomeLogoProcessing.backgroundColor(original).map(value => value.toString(16).padStart(2,'0')).join('');
+        view.body.innerHTML = '<div class="brand-logo-edit-preview"></div><form class="brand-logo-processing">' +
+          '<label><input type="checkbox" name="removeBackground"' + (transparentBorder ? '' : ' checked') + '> Tách nền theo màu</label><label>Màu nền <input type="color" name="background" value="#'+background+'"></label>' +
+          '<label>Mức tách nền <input type="range" name="threshold" min="0" max="180" value="35"></label>' +
+          '<label>Tăng nét <input type="range" name="sharpness" min="0" max="2" step="0.1" value="0.5"></label>' +
+          '<small>Điều chỉnh và xem vùng trong suốt trên nền ô vuông trước khi lưu.</small><button>Lưu logo đã xử lý</button><p role="status"></p></form>';
+        view.body.querySelector('.brand-logo-edit-preview').append(canvas);
+        const form = view.body.querySelector('form');
+        const preview = () => {
+          const color = form.elements.background.value.match(/[a-f0-9]{2}/gi).map(value => parseInt(value,16));
+          const result = GDHomeLogoProcessing.process(original,{removeBackground:form.elements.removeBackground.checked,color,
+            threshold:Number(form.elements.threshold.value),sharpness:Number(form.elements.sharpness.value)});
+          ctx.putImageData(new ImageData(result.data,result.width,result.height),0,0);
+        };
+        form.oninput = preview; preview();
+        form.onsubmit = async event => {
+          event.preventDefault(); const button = form.querySelector('button'); button.disabled = true;
+          try {
+            const png = await new Promise(resolve => canvas.toBlob(resolve,'image/png'));
+            if (!png) throw new Error('Không xuất được logo.');
+            await save({...brand,logo:await GDHomeAssets.storeAsset(png)}); await repaint(); view.element.close();
+          } catch (error) { form.querySelector('[role=status]').textContent = error.message; button.disabled = false; }
+        };
+      } catch (error) { if (view.element.isConnected) view.body.querySelector('[role=status]').textContent = error.message; }
+    }
     async function chooseLogo(brand) {
       const view = modal('Tìm logo · '+brand.name);
       view.body.innerHTML = '<button type="button" data-paste-brand-logo>Dán logo</button><p role="status">Đang tìm logo…</p><div class="brand-logo-candidates"></div>' +
@@ -165,7 +205,7 @@ window.GDHomeBrandManager = (() => {
     }
     function paint() {
       root.innerHTML = '<div class="asset-library-head"><h3>Thương hiệu</h3><button type="button" data-brand-add>Thêm thương hiệu</button><label>Hạng mục <select data-brand-filter><option value="">Tất cả</option>'+data.categories.map(category => '<option value="'+esc(category.id)+'"'+(filter === category.id ? ' selected' : '')+'>'+esc(category.name)+'</option>').join('')+'</select></label></div><div class="brand-grid">'+
-        brands.filter(brand => !filter || brand.categories.includes(filter)).map(brand => '<article draggable="true" data-brand-id="'+esc(brand.id)+'">'+(brand.logo ? '<img data-lib-asset="'+esc(brand.logo)+'" alt="'+esc(brand.name)+'">' : '<div class="brand-placeholder">'+esc(brand.name)+'</div>')+'<strong>'+esc(brand.name)+'</strong><small>'+data.items.filter(item => GDHomeBrands.find([brand],item.brand)).length+' mẫu</small><p>'+brand.categories.map(id => data.categories.find(category => category.id === id)?.name).filter(Boolean).map(esc).join(' · ')+'</p><button type="button" data-brand-edit>Sửa</button><button type="button" data-brand-logo>Tìm logo</button><button type="button" data-brand-upload>Đổi logo</button><button type="button" data-brand-paste>Dán logo</button><button type="button" data-brand-merge>Gộp hãng</button></article>').join('')+'</div>';
+        brands.filter(brand => !filter || brand.categories.includes(filter)).map(brand => '<article draggable="true" data-brand-id="'+esc(brand.id)+'">'+(brand.logo ? '<img data-lib-asset="'+esc(brand.logo)+'" alt="'+esc(brand.name)+'">' : '<div class="brand-placeholder">'+esc(brand.name)+'</div>')+'<strong>'+esc(brand.name)+'</strong><small>'+data.items.filter(item => GDHomeBrands.find([brand],item.brand)).length+' mẫu</small><p>'+brand.categories.map(id => data.categories.find(category => category.id === id)?.name).filter(Boolean).map(esc).join(' · ')+'</p><button type="button" data-brand-edit>Sửa</button><button type="button" data-brand-logo>Tìm logo</button><button type="button" data-brand-upload>Đổi logo</button><button type="button" data-brand-paste>Dán logo</button><button type="button" data-brand-process' + (!brand.logo ? ' disabled' : '') + '>Tách nền / tăng nét</button><button type="button" data-brand-merge>Gộp hãng</button></article>').join('')+'</div>';
       GDHomeAssets.hydrate(root);
       root.querySelector('[data-brand-add]').onclick = () => edit();
       root.querySelector('[data-brand-filter]').onchange = event => { filter = event.target.value; paint(); };
@@ -182,6 +222,7 @@ window.GDHomeBrandManager = (() => {
         card.onpaste = event => { const file = clipboardImage(event.clipboardData); if (file) { event.preventDefault(); event.stopPropagation(); upload([file]); } };
         card.querySelector('[data-brand-upload]').onclick = async () => upload(await GDHomeAssets.filePicker('image/*',false));
         card.querySelector('[data-brand-paste]').onclick = () => pasteLogo(brand);
+        card.querySelector('[data-brand-process]').onclick = () => editLogo(brand);
         card.querySelector('[data-brand-merge]').onclick = () => {
           const view = modal('Gộp '+brand.name);
           view.body.innerHTML = '<label>Gộp vào <select>'+brands.filter(other => other.id !== brand.id).map(other => '<option value="'+esc(other.id)+'">'+esc(other.name)+'</option>').join('')+'</select></label><button type="button">Gộp hãng</button>';
