@@ -209,6 +209,13 @@ cases['23.2'] = async page => {
   const items = library.items.filter(item => item.lineId === 'garis-ML06H');
   assert.equal(items.length,4);
   assert.equal(new Set(items.map(item => item.full)).size,1);
+  const previousId = items.find(item => item.code === 'ML06.75HC').id;
+  await page.evaluate(async () => {
+    const item = (await GDHomeAssets.loadLibrary()).items.find(item => item.code === 'ML06.75HC');
+    await GDHomeAssets.addItems('kitchen-accessories',[{...item,price:57000000,spec:'R750*S400*C700'}]);
+  });
+  const updated = (await page.request.get('/api/library').then(r => r.json())).items.filter(item => item.code === 'ML06.75HC');
+  assert.equal(updated.length,1); assert.equal(updated[0].id,previousId); assert.equal(updated[0].price,57000000); assert.equal(updated[0].spec,'R750*S400*C700');
   await page.reload();
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'kitchen-accessories'}));
   await page.locator('.asset-library-dialog').getByRole('button',{name:'4 mã',exact:true}).waitFor();

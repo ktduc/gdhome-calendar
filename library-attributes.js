@@ -1,8 +1,8 @@
 (() => {
   const labels = {size:'Kích thước',brand:'Thương hiệu',suppliers:'Đơn vị cung cấp',material:'Loại vật liệu',tone:'Tông màu',
-    finish:'Bề mặt',collection:'Bộ sưu tập',subgroup:'Nhóm con phụ kiện',tags:'Tag'};
+    series:'Series',finish:'Bề mặt',collection:'Bộ sưu tập',subgroup:'Nhóm con phụ kiện',tags:'Tag'};
   const facetLabels = {favorite:'★ Yêu thích',review:'Duyệt mẫu',size:labels.size,brand:labels.brand,suppliers:labels.suppliers,
-    material:labels.material,finish:labels.finish,collection:labels.collection,subgroup:'Nhóm phụ kiện',
+    series:labels.series,material:labels.material,finish:labels.finish,collection:labels.collection,subgroup:'Nhóm phụ kiện',
     cabinetWidth:'Rộng tủ',tone:'Tông màu',grain:'Vân',tags:labels.tags};
   const listFields = new Set(['suppliers','tags','brands']);
   const clean = (value,max = 120) => typeof value === 'string' ? value.trim().replace(/\s+/g,' ').slice(0,max) : '';

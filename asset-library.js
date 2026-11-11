@@ -137,28 +137,26 @@ window.GDHomeAssets = (() => {
   const isPdf = file => file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
   async function* pdfPages(file) {
     const pdfjs = await loadPdfJs();
-    if (!pdfjs.GlobalWorkerOptions.workerSrc) pdfjs.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
     const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
-    for (let number = 1; number <= pdf.numPages; number++) {
-      const page = await pdf.getPage(number);
-      const base = page.getViewport({scale:1});
-      const scale = Math.min(3,1800/Math.max(base.width,base.height));
-      const viewport = page.getViewport({scale});
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.round(viewport.width);
-      canvas.height = Math.round(viewport.height);
-      const context = canvas.getContext('2d');
-      context.fillStyle = '#fff';
-      context.fillRect(0,0,canvas.width,canvas.height);
-      await page.render({canvasContext:context,viewport}).promise;
-      const blob = await new Promise(resolve => canvas.toBlob(resolve,'image/jpeg',0.92));
-      page.cleanup();
-      yield {number,total:pdf.numPages,blob:new File([blob],(file.name || 'phoi-canh').replace(/\.pdf$/i,'') + '_trang_' + number + '.jpg',{type:'image/jpeg'})};
-    }
+    try {
+      for (let number=1; number<=pdf.numPages; number++) {
+        const page = await pdf.getPage(number), base = page.getViewport({scale:1});
+        const viewport = page.getViewport({scale:Math.min(3,1800/Math.max(base.width,base.height))});
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(viewport.width); canvas.height = Math.round(viewport.height);
+        try {
+          const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0,0,canvas.width,canvas.height);
+          await page.render({canvasContext:context,viewport}).promise;
+          const blob = await new Promise(resolve => canvas.toBlob(resolve,'image/jpeg',.92));
+          yield {number,total:pdf.numPages,blob:new File([blob],(file.name || 'phoi-canh').replace(/\.pdf$/i,'')+'_trang_'+number+'.jpg',{type:'image/jpeg'})};
+        } finally { canvas.width = canvas.height = 0; page.cleanup(); }
+      }
+    } finally { await pdf.destroy(); }
   }
 
   // ---------------------------------------------------------------- Phối cảnh 3D dự án
   async function loadRenders(projectId,force = false) {
+    await libraryDependencies();
     if (!projectId) return [];
     if (isGuest()) throw Object.assign(new Error('Đăng nhập để dùng kho phối cảnh 3D của dự án.'),{guest:true});
     if (!force && renderCache.has(projectId)) return visibleRenders(projectId,await renderCache.get(projectId));
@@ -287,13 +285,14 @@ window.GDHomeAssets = (() => {
       const existing = item.code && data.items.find(entry => entry.categoryId === categoryId && entry.code &&
         (catalogueKey(entry) === catalogueKey(item) || (item.rawCode && catalogueKey(entry) === catalogueKey({...item,code:item.rawCode}))));
       if (existing) {
-        if (item.rawCode || item.sourceFacets) {
+        if (item.lineId || item.rawCode || item.sourceFacets) {
           const sourceFacets = attributeCatalog().normalizeSourceFacets([...(existing.sourceFacets || []),...(item.sourceFacets || [])]);
-          Object.assign(existing,Object.fromEntries(['rawCode','material','finish','collection','size','grain'].filter(key => item[key])
+          Object.assign(existing,GDHomeProductLines.metadata(item),Object.fromEntries(['spec','cabinetWidth','innerWidth','unit','rawCode','material','finish','collection','size','grain'].filter(key => item[key])
             .map(key => [key,item[key]])),{code:item.code,sourceFacets});
           if (!existing.full || (item.sourcePixels || 0) > (existing.sourcePixels || 0)) {
             Object.assign(existing,{full:item.full,thumb:item.thumb,sourcePixels:item.sourcePixels,display:item.display,view:item.view});
           }
+          attributeCatalog().updatePrice(existing,item);
           added.push(existing);
         } else skipped++;
         continue;
@@ -578,7 +577,7 @@ window.GDHomeAssets = (() => {
     if (!words.length) return items;
     return items.filter(item => {
       if (!searchIndex.has(item)) searchIndex.set(item,fold([item.name,item.code,item.rawCode,item.brand,item.brands,item.size,
-        item.material,item.finish,item.collection,item.tone,item.grain,item.subgroup,item.tags,item.suppliers,
+        item.material,item.series,item.finish,item.collection,item.tone,item.grain,item.subgroup,item.tags,item.suppliers,
         Object.values(item.customAttributes || {}),item.sourceFacets?.map(group => [group.label,group.values])].flat(3).join(' ')));
       return words.every(word => searchIndex.get(item).includes(word));
     });
@@ -2444,7 +2443,8 @@ window.GDHomeAssets = (() => {
     const pdfjs = await loadPdfJs();
     const pdf = await pdfjs.getDocument({data:await file.arrayBuffer(),isEvalSupported:false}).promise;
     const results = [], warnings = [], imagePages = new Map();
-    for (let number=1; number<=pdf.numPages; number++) {
+    const probePages = Math.min(pdf.numPages,trial ? 3 : pdf.numPages);
+    for (let number=1; number<=probePages; number++) {
       const page = await pdf.getPage(number), ops = await page.getOperatorList();
       const ids = new Set(ops.fnArray.flatMap((op,index) => op === pdfjs.OPS.paintImageXObject ? [ops.argsArray[index][0]] : []));
       for (const id of ids) imagePages.set(id,(imagePages.get(id) || 0)+1);
@@ -2469,7 +2469,10 @@ window.GDHomeAssets = (() => {
             labels = labels.map(label => ({...label,text:label.text.replace(/[!-~]/g,char => String.fromCharCode(char.charCodeAt(0)+29))})); text = shifted;
           }
           // Missing digits cannot be recovered by a character shift.
-          if (garisTextScore(text) < 25 || !kitchenCatalogueRows(labels).length) {
+          const words = text.match(/\p{L}{2,}/gu) || [];
+          const readable = words.filter(word => /[à-ỹ]/i.test(word) || /^(garis|series|inox|gia|bat|nang|ha|dien|quy|cach|thong|so|bao|hanh|say|the|and)$/i.test(word)).length;
+          const corruptText = words.length > 8 && readable/words.length < .15;
+          if (corruptText || garisTextScore(text) < 25 || !kitchenCatalogueRows(labels).length) {
             const ocr = await catalogueScript('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js','Tesseract');
             worker ||= await ocr.createWorker(['vie','eng']);
             const {data} = await worker.recognize(canvas);
@@ -2482,7 +2485,7 @@ window.GDHomeAssets = (() => {
           const rows = kitchenCatalogueRows(labels);
           if (!rows.length) { warnings.push('Trang '+number+' chưa đọc được bảng mã; cần kiểm tra OCR.'); continue; }
           const photos = await embeddedCatalogueImages(page,viewport,pdfjs,false,(image,id) => {
-            if (pdf.numPages > 1 && imagePages.get(id) === pdf.numPages) return false;
+            if (probePages > 1 && imagePages.get(id) === probePages) return false;
             if (image?.width === 77 && image?.height === 77) return false;
             return !(image?.width >= 2500 && image.width === image.height);
           });

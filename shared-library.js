@@ -352,12 +352,13 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         if (key && existing) {
           existing.suppliers = stringList([...(existing.suppliers || []),...stringList(item.suppliers)]);
           existing.tags = stringList([...(existing.tags || []),...stringList(item.tags)]);
-          const imported = item.rawCode || item.sourceFacets;
+          const imported = item.lineId || item.rawCode || item.sourceFacets;
           if (imported) {
             const incoming = itemMetadata(item);
             const sourceFacets = attributes.normalizeSourceFacets([...(existing.sourceFacets || []),...(incoming.sourceFacets || [])]);
-            Object.assign(existing,productLines.metadata(item),Object.fromEntries(['rawCode','material','finish','collection','size'].filter(key => incoming[key])
+            Object.assign(existing,productLines.metadata(item),Object.fromEntries(['spec','cabinetWidth','innerWidth','unit','rawCode','material','finish','collection','size'].filter(key => incoming[key])
               .map(key => [key,incoming[key]])),{sourceFacets,code:metadata.code});
+            attributes.updatePrice(existing,item);
             if (metadata.grain) existing.grain = metadata.grain;
             if (kind !== 'paint' && (!existing.full || (item.full !== existing.full &&
                 (incoming.sourcePixels || 0) > (existing.sourcePixels || 0)))) {
