@@ -864,3 +864,10 @@ Giữ bảng chi tiết có nút Chỉnh khung cắt luôn mở khi có vật li
 - Hà Linh nhận diện luồng tải trang chi tiết theo hostname thay vì tên thương hiệu có thể bị sửa/AI đổi chữ hoa. Chuẩn hóa khoảng trắng trong PUNT- 161VG, giữ hậu tố; nhận file có hậu tố làm lại, GIF và ảnh mô tả khi tên file khác mã.
 - Giới hạn danh mục vào productContent chính, loại carousel Sản phẩm mới bên ngoài. Kiểm tra link thật 64-phao-chan-tuong-pu.htm có 3 mẫu, 63-phao-nep-tuong-pu.htm có 30 mẫu. PUCT-200 và PUNT-161VG đều có ảnh gốc tương ứng thay thumbnail 400×213.
 - Node 109/109. Edge vicostone-web, halinh-web, 21.3, 21.4 đạt. Ca Hà Linh dùng tên thương hiệu chữ hoa để kiểm tra không phụ thuộc nhãn, ca Vicostone kiểm tra 3 nhóm mã và ảnh mặt tấm.
+
+### Tự chuyển trang Hà Linh PS và lọc AI theo tên
+
+- Nhận phân trang /p0 theo chỉ số từ 0, giải link tương đối theo base cùng nguồn, theo trang liền sau và dừng ở trang cuối. Link thật 60-chi-nep-tuong-ps.htm/p0 trả 30 mẫu, next p1, total 12; p1 next p2; p11 có 6 mẫu và next null. Giữ hỗ trợ phân trang page/p dạng query và /page/n.
+- Thêm nút Lọc bằng AI theo tên cạnh Tuỳ chỉnh lọc. Đọc toàn bộ tên/mã trong hạng mục hiện tại qua từng lô 200, dùng kết nối AI sẵn có và ưu tiên nhãn cũ. Hiển thị nhóm và số mẫu để chọn, áp dụng thành Tag, giữ tag cũ và có Hoàn tác cả lượt. Hiện nhóm Tag nếu đang ẩn/thu gọn. Có trạng thái xử lý và báo chưa kết nối AI; đóng hộp dừng các lượt tiếp theo.
+- API giới hạn đầu vào/đầu ra, chỉ nhận ID có trong lô, gộp nhãn trùng. Ghi nhiều nhóm trong một bulk mutation để hoàn tác nhất quán. Không gửi ảnh hay giá cho AI trong chức năng này.
+- Node 111/111; Edge ai-name-filters, halinh-pagination, halinh-web, 21.4, library-tools đạt. Kiểm tra 220 mẫu qua 2 lô kể cả khi ô tìm kiếm đang lọc, thêm đúng 2 nhóm, giữ tag cũ, click tag lọc danh sách, hoàn tác, lỗi chưa cấu hình AI qua API thật và p0–p2 tự nối trang. Phản hồi phân nhóm AI được giả lập trong Edge; không sử dụng key AI thật để chạy dữ liệu thử.

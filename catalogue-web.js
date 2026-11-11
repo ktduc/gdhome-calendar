@@ -455,7 +455,15 @@ function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
 
 function cataloguePagination(html,url,validate = checkSsrfUrl) {
   const page = new URL(url);
+  let linkBase = page;
+  try {
+    const href = attributes(html.match(/<base\b[^>]*>/i)?.[0] || '').href;
+    const candidate = href && validate(new URL(href,page).href);
+    if (candidate?.origin === page.origin) linkBase = candidate;
+  } catch { /* Giữ URL hiện tại. */ }
   const number = value => {
+    const offset = value.pathname.match(/\/p(\d+)\/?$/i)?.[1];
+    if (offset !== undefined) return Number.isSafeInteger(Number(offset)) ? Number(offset)+1 : null;
     const raw = value.searchParams.get('page') || value.searchParams.get('p') || value.pathname.match(/\/page\/(\d+)\/?$/i)?.[1];
     const n = Number(raw);
     return Number.isSafeInteger(n) && n > 0 ? n : null;
@@ -463,7 +471,7 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
   const current = number(page) || 1;
   const base = value => {
     const copy = new URL(value);
-    copy.pathname = copy.pathname.replace(/\/page\/\d+\/?$/i,'').replace(/\/$/,'');
+    copy.pathname = copy.pathname.replace(/\/(?:page\/\d+|p\d+)\/?$/i,'').replace(/\/$/,'');
     copy.searchParams.delete('page');
     copy.searchParams.delete('p');
     copy.searchParams.sort();
@@ -472,8 +480,9 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
   function destination(href) {
     if (!href || href.startsWith('#')) return null;
     try {
-      const candidate = validate(new URL(href,page).href);
+      const candidate = validate(new URL(href,linkBase).href);
       candidate.hash = '';
+      if (base(candidate) === base(page) && number(candidate) && number(candidate) <= current) return null;
       return candidate.origin === page.origin && candidate.href !== page.href ? candidate : null;
     } catch { return null; }
   }
@@ -484,6 +493,7 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
   }
   let named;
   const numbered = [];
+  const pageNumbers = [];
   for (const match of html.matchAll(/<(a|button)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi)) {
     const attrs = attributes(match[2]), candidate = destination(attrs.href || attrs['data-href'] || attrs.formaction);
     if (!candidate) continue;
@@ -493,11 +503,13 @@ function cataloguePagination(html,url,validate = checkSsrfUrl) {
     if (isNext.test(caption) || isNext.test(attrs['aria-label'] || '') ||
       /(?:^|\s)next(?:\s|$)/.test(attrs.class || '') && /(?:^|\s)page-numbers(?:\s|$)/.test(attrs.class || '')) named ||= candidate;
     const n = number(candidate);
+    if (n && base(candidate) === base(page)) pageNumbers.push(n);
     if (n && Number(caption) === n && base(candidate) === base(page)) numbered.push({candidate,n});
   }
   const inferred = numbered.filter(({n}) => n === current+1)[0]?.candidate;
-  const total = numbered.length ? Math.max(current,...numbered.map(({n}) => n)) : null;
-  return {next:(explicit || named || inferred)?.href || null,total};
+  const total = pageNumbers.length || /\/p\d+\/?$/i.test(page.pathname) ? Math.max(current,...pageNumbers) : null;
+  const next = explicit || (/\/p\d+\/?$/i.test(page.pathname) ? inferred || named : named || inferred);
+  return {next:next?.href || null,total};
 }
 
 function tableVariants(html,url,validate) {

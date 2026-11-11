@@ -439,12 +439,13 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
       const addTags = stringList(body.addTags), removeTags = new Set(stringList(body.removeTags));
       const addSuppliers = stringList(body.addSuppliers), removeSuppliers = new Set(stringList(body.removeSuppliers));
       const metadata = itemMetadata(set);
+      const tagGroups = require('./library-ai-filters').filterGroups(body.tagGroups,data.items.filter(item => ids.has(item.id)));
       for (const item of data.items) {
         if (!ids.has(item.id)) continue;
         if (categoryId) item.categoryId = categoryId;
         for (const field of ['brand','size']) if (Object.hasOwn(set,field)) item[field] = metadata[field];
         attributes.updatePrice(item,set);
-        item.tags = stringList([...(item.tags || []),...addTags]).filter(tag => !removeTags.has(tag));
+        item.tags = stringList([...(item.tags || []),...addTags,...tagGroups.filter(group => group.ids.includes(item.id)).map(group => group.label)]).filter(tag => !removeTags.has(tag));
         item.suppliers = stringList([...(item.suppliers || []),...addSuppliers]).filter(name => !removeSuppliers.has(name));
       }
       if (body.delete === true) data.items = data.items.filter(item => !ids.has(item.id));

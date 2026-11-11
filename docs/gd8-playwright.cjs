@@ -3837,6 +3837,69 @@ cases['20.12'] = async page => {
   assert.equal(data.imports.find(entry => entry.source === 'https://example.com/a').status,'done');
 };
 
+cases['ai-name-filters'] = async page => {
+  await openMaterials(page);
+  const photo=webPhoto('ai-filter-material',320,320).toString('base64');
+  await page.evaluate(async base64=>{
+    const full=await GDHomeAssets.storeAsset(new Blob([Uint8Array.from(atob(base64),c=>c.charCodeAt(0))],{type:'image/png'}));
+    const items=Array.from({length:220},(_,i)=>({code:'AI-'+i,name:(i%2 ? 'Phào nẹp tường ' : 'Phào chân tường ')+i,full,thumb:full,tags:['Giữ tag']}));
+    for(let i=0;i<items.length;i+=50) await GDHomeAssets.addItems('cat-6',items.slice(i,i+50));
+    GDHomeAssets.openLibrary({categoryId:'cat-6'});
+  },photo);
+  let requests=0;
+  await page.route('**/api/ai/library-filters',route=>{
+    const body=route.request().postDataJSON(); requests++;
+    assert.ok(body.items.length<=200);
+    return route.fulfill({json:{groups:[{label:'Phào chân tường',ids:[...body.items.filter(item=>item.name.includes('chân')).map(item=>item.id),'unknown']},
+      {label:'Phào nẹp tường',ids:body.items.filter(item=>item.name.includes('nẹp')).map(item=>item.id)}]}});
+  });
+  const library=page.locator('.asset-library-dialog');
+  await library.locator('input[placeholder="Tìm theo tên / mã"]').fill('chân');
+  await library.getByRole('button',{name:'✦ Lọc bằng AI theo tên',exact:true}).click();
+  const modal=page.locator('.asset-ai-filter-dialog');
+  await modal.getByRole('button',{name:'Áp dụng nhóm lọc',exact:true}).waitFor();
+  await page.waitForFunction(()=>!document.querySelector('[data-apply-ai-filters]')?.disabled);
+  assert.equal(requests,2);
+  assert.equal(await modal.locator('[data-ai-filter-group]').count(),2);
+  await modal.getByRole('button',{name:'Áp dụng nhóm lọc',exact:true}).click();
+  await modal.waitFor({state:'detached'});
+  let data=await page.request.get('/api/library').then(r=>r.json());
+  const samples=data.items.filter(item=>item.code?.startsWith('AI-'));
+  assert.equal(samples.length,220);
+  assert.equal(samples.filter(item=>item.tags.includes('Phào chân tường')).length,110);
+  assert.equal(samples.filter(item=>item.tags.includes('Phào nẹp tường')).length,110);
+  assert.ok(samples.every(item=>item.tags.includes('Giữ tag')));
+  await library.locator('input[placeholder="Tìm theo tên / mã"]').fill('');
+  await library.locator('input[data-facet="tags"][data-value="Phào chân tường"]').check();
+  await page.waitForFunction(()=>[...document.querySelectorAll('.asset-grid-managed .asset-card figcaption')].every(node=>node.textContent.includes('chân')));
+  assert.ok(await library.locator('.asset-card').count()>0);
+  await library.getByRole('button',{name:'Hoàn tác',exact:true}).click();
+  data=await page.request.get('/api/library').then(r=>r.json());
+  assert.ok(data.items.filter(item=>item.code?.startsWith('AI-')).every(item=>item.tags.length===1 && item.tags[0]==='Giữ tag'));
+  await page.unroute('**/api/ai/library-filters');
+  await library.getByRole('button',{name:'✦ Lọc bằng AI theo tên',exact:true}).click();
+  await modal.getByRole('status').getByText(/Chưa kết nối AI/).waitFor();
+};
+
+cases['halinh-pagination'] = async page => {
+  await openMaterials(page);
+  const sources=[], root='https://halinhjsc.vn/phao-chi-ha-linh/60.htm/p';
+  await page.route('**/api/catalogue/web',route=>{
+    const url=route.request().postDataJSON().urls[0]; sources.push(url);
+    const n=Number(url.slice(-1));
+    return route.fulfill({json:{items:[{code:'PAGE-'+n,name:'Phào trang '+n,image:'https://example.com/page'+n+'.png'}],total:3,next:n<2?root+(n+1):null}});
+  });
+  await page.route('**/api/catalogue/image',route=>route.fulfill({contentType:'image/png',body:webPhoto(route.request().postDataJSON().url)}));
+  await page.evaluate(()=>GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal=page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=autoSave]').uncheck();
+  await modal.locator('[name=urls]').fill(root+'0');
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
+  await page.waitForFunction(()=>document.querySelectorAll('.wood-catalogue-card').length===3);
+  assert.deepEqual(sources,[root+'0',root+'1',root+'2']);
+};
+
 cases['vicostone-web'] = async page => {
   await openMaterials(page);
   await page.route('**/api/catalogue/web',route=>route.fulfill({json:{items:['BQ6984','BC3020','BS110'].map(code=>({code,name:'Đá '+code,brand:'VICOSTONE',

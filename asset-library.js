@@ -641,7 +641,7 @@ window.GDHomeAssets = (() => {
   function facetMarkup(items,facets,config,schema = [],available = items) {
     const groups = config ? [['favorite',facetLabels.favorite],...config.filter(group => group.visible).map(group => [group.key,group.label])] :
       [...Object.entries(facetLabels),...attributeCatalog().sourceFacetGroups(items).map(({key,label}) => [key,label])];
-    return '<div class="asset-facets">' + (config ? '<button type="button" data-edit-filters aria-label="Tuỳ chỉnh cột lọc">⚙ Tuỳ chỉnh lọc</button>' : '') +
+    return '<div class="asset-facets">' + (config ? '<div class="asset-filter-actions"><button type="button" data-edit-filters aria-label="Tuỳ chỉnh cột lọc">⚙ Tuỳ chỉnh lọc</button><button type="button" data-ai-name-filters>✦ Lọc bằng AI theo tên</button></div>' : '') +
       groups.map(([key,label]) => {
       const counts = new Map((schema.find(group => group.key === key)?.values || []).map(value => [value,0]));
       if (available !== items || Object.entries(facets).some(([other,values]) => other !== key && values.size)) {
@@ -1160,7 +1160,7 @@ window.GDHomeAssets = (() => {
     dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
       if (window[name]) return;
       await new Promise((resolve,reject) => {
-        const script = document.createElement('script'); script.src = '/'+file+'?v=web-stone-2';
+        const script = document.createElement('script'); script.src = '/'+file+'?v=ai-name-filters-1';
         script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
       });
     })).catch(error => { dependencyPromise = null; throw error; });
@@ -2890,7 +2890,7 @@ window.GDHomeAssets = (() => {
       budget.pages--;
       const parsed = new URL(url);
       const page = parsed.searchParams.get('page') || parsed.searchParams.get('p') ||
-        parsed.pathname.match(/\/page\/(\d+)\/?$/i)?.[1] || visited.size;
+        parsed.pathname.match(/\/page\/(\d+)\/?$/i)?.[1] || (parsed.pathname.match(/\/p(\d+)\/?$/i) ? Number(parsed.pathname.match(/\/p(\d+)\/?$/i)[1])+1 : visited.size);
       const progress = () => onProgress('Trang ' + page + '/' + (total || '?') + ' · ' + items.length + ' mẫu');
       progress();
       let result;
@@ -4038,7 +4038,7 @@ window.GDHomeAssets = (() => {
           attributeCatalog().updatePrice(item,patch.set || {});
           if (patch.categoryId) item.categoryId = patch.categoryId;
           if (patch.order) item.order = patch.order.indexOf(item.id);
-          item.tags = [...new Set([...(item.tags || []),...(patch.addTags || [])])].filter(tag => !patch.removeTags?.includes(tag));
+          item.tags = [...new Set([...(item.tags || []),...(patch.addTags || []),...(patch.tagGroups || []).filter(group => group.ids.includes(item.id)).map(group => group.label)])].filter(tag => !patch.removeTags?.includes(tag));
           item.suppliers = [...new Set([...(item.suppliers || []),...(patch.addSuppliers || [])])].filter(name => !patch.removeSuppliers?.includes(name));
         }
         return {undoToken:'guest'};
@@ -4049,6 +4049,47 @@ window.GDHomeAssets = (() => {
       await paint();
     }
     const applyBulk = patch => bulk(patch).catch(error => toast(error.message));
+    async function aiNameFilters(category) {
+      const items = library.items.filter(item => item.categoryId === category.id && !item.hidden && (item.name || item.code));
+      const view = modal('asset-ai-filter-dialog','Lọc bằng AI theo tên · '+category.name);
+      view.body.innerHTML = '<p>Phân nhóm '+items.length+' mẫu trong hạng mục dựa vào tên/mã. Kết quả được thêm vào Tag, giữ các tag đang có.</p><p role="status"></p><div data-ai-filter-results></div><button type="button" data-apply-ai-filters disabled>Áp dụng nhóm lọc</button>';
+      const status = view.body.querySelector('[role=status]'), apply = view.body.querySelector('[data-apply-ai-filters]');
+      const controller = new AbortController();
+      view.dialog.addEventListener('close',() => controller.abort(),{once:true});
+      if (!items.length) { status.textContent = 'Hạng mục chưa có tên vật liệu để phân loại.'; return; }
+      const groups = new Map();
+      try {
+        for (let offset=0; offset<items.length; offset+=200) {
+          status.textContent = 'AI đang đọc '+Math.min(offset+200,items.length)+'/'+items.length+' mẫu…';
+          const batch = items.slice(offset,offset+200), ids = new Set(batch.map(item => item.id));
+          const result = await api('/api/ai/library-filters',{method:'POST',signal:controller.signal,body:JSON.stringify({category:category.name,
+            items:batch.map(({id,name,code}) => ({id,name,code})),labels:[...new Set([...items.flatMap(item => item.tags || []),...groups.values()].map(value => typeof value === 'string' ? value : value.label))]})});
+          for (const group of result.groups || []) {
+            if (typeof group.label !== 'string' || !Array.isArray(group.ids)) continue;
+            const label = group.label.trim().slice(0,80), key = label.toLocaleLowerCase('vi');
+            if (!label) continue;
+            if (!groups.has(key)) groups.set(key,{label,ids:new Set()});
+            for (const id of group.ids) if (ids.has(id)) groups.get(key).ids.add(id);
+          }
+        }
+        const proposed = [...groups.values()].filter(group => group.ids.size).slice(0,40);
+        status.textContent = proposed.length ? 'Đề xuất '+proposed.length+' nhóm. Chọn các nhóm muốn dùng rồi áp dụng.' : 'AI chưa tìm được nhóm phù hợp từ tên vật liệu.';
+        view.body.querySelector('[data-ai-filter-results]').innerHTML = proposed.map((group,index) => '<label class="asset-ai-filter-group"><input type="checkbox" data-ai-filter-group="'+index+'" checked><strong>'+esc(group.label)+' ('+group.ids.size+')</strong><small>'+esc(items.filter(item => group.ids.has(item.id)).slice(0,4).map(item => item.name || item.code).join(' · '))+'</small></label>').join('');
+        apply.disabled = !proposed.length;
+        apply.onclick = async () => {
+          const chosen = [...view.body.querySelectorAll('[data-ai-filter-group]:checked')].map(input => proposed[Number(input.dataset.aiFilterGroup)])
+            .map(group => ({label:group.label,ids:[...group.ids]}));
+          if (!chosen.length) { status.textContent = 'Chọn ít nhất một nhóm lọc.'; return; }
+          apply.disabled = true;
+          try {
+            const config = attributeCatalog().filterConfig(library,category.id);
+            if (config.some(group => group.key === 'tags' && (!group.visible || group.collapsed))) await saveFilterPreferences({categoryId:category.id,groups:config.map(group => group.key === 'tags' ? {...group,visible:true,collapsed:false} : group)});
+            await bulk({ids:[...new Set(chosen.flatMap(group => group.ids))],tagGroups:chosen});
+            view.dialog.close(); toast('Đã thêm '+chosen.length+' nhóm vào Tag. Có thể Hoàn tác.');
+          } catch (error) { status.textContent = error.message; apply.disabled = false; }
+        };
+      } catch (error) { if (!controller.signal.aborted) status.textContent = error.message; }
+    }
     function bulkControls(showPrices) {
       if (onPick) return '';
       return '<div class="asset-bulk-controls">' + (selected.size ? '<strong>' + selected.size + ' đã chọn</strong> ' +
@@ -4161,6 +4202,8 @@ window.GDHomeAssets = (() => {
         (onPick ? '<p class="asset-hint">Bấm vào ảnh để dùng cho ô đang chọn.</p>' : '') + '</section>';
       arrangeFilterSidebar(body,sidebarState);
       wireLibraryFilterSettings(body,category,config);
+      const aiFilterButton = body.querySelector('[data-ai-name-filters]');
+      if (aiFilterButton && category) aiFilterButton.onclick = () => aiNameFilters(category);
       const main = body.querySelector('.asset-library-main');
       main.dataset.libraryView = viewKey;
       main.dataset.libraryCategory = current || '';
