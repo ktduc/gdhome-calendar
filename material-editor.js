@@ -191,6 +191,21 @@ function context(target) {
 }
 
 let materialEditRevision = 0, pendingMaterialDeletion;
+// Nhóm/dòng mới thêm ở cuối bảng dài: cuộn tới và đặt con trỏ vào ô tên để người dùng thấy ngay.
+function revealCreated(selector) {
+  // Chờ bảng vẽ xong và phần khôi phục focus/cuộn cũ chạy trước.
+  setTimeout(() => {
+    const target = document.querySelector(selector);
+    if (!target) return;
+    target.scrollIntoView({block:'center'});
+    const field = target.querySelector('input[data-field="groupName"],input[data-field="name"],input,textarea');
+    field?.focus({preventScroll:true});
+    field?.select?.();
+    target.classList.add('material-just-added');
+    setTimeout(() => target.classList.remove('material-just-added'),1600);
+  },350);
+}
+
 function modify(change, render = true, recoverDeletion = false) {
   const snapshot = structuredClone(sheet);
   const earlierDeletion = recoverDeletion && pendingMaterialDeletion?.sheet === sheet ? pendingMaterialDeletion : null;
@@ -599,15 +614,26 @@ document.addEventListener('click', async event => {
       }
       case 'header-add-row': {
         const targetGroup = sheet.groups.find(entry => entry.id === byId('header-add-group').value);
-        if (targetGroup) modify(() => targetGroup.rows.push(newRow()));
+        if (targetGroup) {
+          const created = newRow();
+          collapsed.delete(targetGroup.id);
+          modify(() => targetGroup.rows.push(created));
+          revealCreated('[data-row="' + created.id + '"]');
+        }
         break;
       }
       case 'relink-tasks': await relinkMaterialTasks(button); break;
-      case 'add-group': modify(() => sheet.groups.push(newGroup('Nhóm mới'))); break;
+      case 'add-group': {
+        const created = newGroup('Nhóm mới');
+        hiddenGroups.delete(created.id);
+        modify(() => sheet.groups.push(created));
+        revealCreated('tbody[data-group="' + created.id + '"]');
+        break;
+      }
       case 'del-group':
         if (canRemoveRows(group.rows) && confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1));
         break;
-      case 'add-row': modify(() => group.rows.push(newRow())); break;
+      case 'add-row': { const created = newRow(); modify(() => group.rows.push(created)); revealCreated('[data-row="' + created.id + '"]'); break; }
       case 'del-row': removeMaterialRows([row]); break;
       case 'bulk-delete': removeMaterialRows(selectedRows()); break;
       case 'bulk-duplicate': duplicateMaterialRows(); break;

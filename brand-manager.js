@@ -1,5 +1,6 @@
 window.GDHomeBrandManager = (() => {
   const esc = value => GDHomeShell.escape(value ?? '');
+  const logoHeaders = () => (typeof authHeaders === 'function' ? authHeaders() : GDHomeShell.authHeaders?.() || {});
   async function logoFile(blob) {
     const url = URL.createObjectURL(blob);
     try {
@@ -42,7 +43,39 @@ window.GDHomeBrandManager = (() => {
     });
     async function chooseLogo(brand) {
       const view = modal('Tìm logo · '+brand.name);
-      view.body.innerHTML = '<p role="status">Đang tìm logo…</p><div class="brand-logo-candidates"></div>';
+      view.body.innerHTML = '<p role="status">Đang tìm logo…</p><div class="brand-logo-candidates"></div>' +
+        '<form class="brand-logo-google"><label>Tìm ảnh trên mạng <input name="q" value="'+esc(brand.name+' logo')+'"></label><button>Tìm</button></form>' +
+        '<p class="brand-logo-google-status asset-hint"></p><div class="brand-logo-candidates brand-logo-google-grid"></div>';
+      // Tìm logo bằng ảnh Google (cùng nhà cung cấp tìm ảnh với ô tìm mã); bấm ảnh là lưu làm logo luôn.
+      const googleForm = view.body.querySelector('.brand-logo-google');
+      const googleStatus = view.body.querySelector('.brand-logo-google-status');
+      const googleGrid = view.body.querySelector('.brand-logo-google-grid');
+      async function searchGoogle(query) {
+        googleGrid.innerHTML = ''; googleStatus.textContent = 'Đang tìm ảnh…';
+        try {
+          const response = await fetch('/api/google/search?q='+encodeURIComponent(query),{headers:logoHeaders()});
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(data.message || 'Không tìm được ảnh.');
+          if (!data.configured) { googleStatus.textContent = 'Chưa cấu hình nhà cung cấp tìm ảnh trong ⚙ Kết nối.'; return; }
+          const items = (data.items || []).slice(0,12);
+          googleStatus.textContent = items.length ? 'Bấm một ảnh để dùng làm logo.' : 'Không tìm thấy ảnh.';
+          for (const item of items) {
+            const button = document.createElement('button'); button.type = 'button'; button.title = item.title || brand.name;
+            const image = document.createElement('img'); image.alt = item.title || brand.name; image.src = item.thumbnail || item.link; image.referrerPolicy = 'no-referrer';
+            button.append(image); googleGrid.append(button);
+            button.onclick = async () => {
+              button.disabled = true; googleStatus.textContent = 'Đang tải logo…';
+              try {
+                const res = await fetch('/api/google/proxy-image',{method:'POST',headers:{...logoHeaders(),'Content-Type':'application/json'},body:JSON.stringify({url:item.link})});
+                if (!res.ok) throw new Error((await res.json().catch(() => ({}))).message || 'Không tải được ảnh.');
+                await save({...brand,logo:await logoFile(await res.blob())}); view.element.close(); repaint();
+              } catch (error) { button.disabled = false; googleStatus.textContent = error.message; }
+            };
+          }
+        } catch (error) { googleStatus.textContent = error.message; }
+      }
+      googleForm.onsubmit = event => { event.preventDefault(); const query = googleForm.elements.q.value.trim(); if (query) searchGoogle(query); };
+      searchGoogle(brand.name+' logo');
       try {
         const result = await post('/api/catalogue/logo-search',{name:brand.name,website:brand.website});
         view.body.querySelector('[role=status]').textContent = result.items.length ? 'Chọn logo của hãng.' : 'Chưa tìm được logo. Điền website hoặc cấu hình tìm ảnh trong Kết nối.';
