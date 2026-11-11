@@ -811,3 +811,16 @@ Rà soát tích hợp với GĐ23B. Bộ test header/sidebar chuyển kỳ vọn
 Bổ sung độ bền dữ liệu: nhập lại mã thuộc dòng sản phẩm cập nhật giá/quy cách và giữ ID, kể cả dữ liệu khách. Series có trong thuộc tính, tìm kiếm và cột lọc. Nạp phụ thuộc thư viện ở cả đường mở phối cảnh của trang khác. Garis kiểm tra tỷ lệ từ đọc được, giới hạn dò trang ở chế độ thử; bộ đọc PDF giải phóng worker/canvas khi dừng sớm. Node 94/94; Edge 23.2, 23.4, 23.6, 19.11, 19.1 đạt.
 Kiểm thử OCR thực qua tesseract.js CDN với vie+eng trên PDF giả có lớp chữ mã hoá sai đã đọc đủ ML06.75HC / ML06.80HK và giá 56.490.000. Văn bản OCR gốc được giữ trong mô tả; các mã OCR ở trạng thái Cần kiểm tra, chưa tự chọn lưu vì OCR có thể nhầm chữ/số trong kích thước. Ca 23.4-ocr và 23.4 đạt; Node 94/94. Toàn bộ lượt Edge trước bổ sung ca OCR thực đạt 112/112; kiểm tra khung Edge 5 trang đạt.
 Khi chọn mã từ thư viện, PA nhận quy cách, kích thước và giá của đúng variant, đồng thời thay dữ liệu cũ trong các ô này. Node 94/94; Edge 23.2, 23.5, 23.7, 20.14 đạt, có kiểm tra PA ML06.80HK nhận R800*S372*C700, 800x372, 57.000.000.
+
+### Tổng kết kiểm thử GĐ23
+
+| Bộ kiểm thử | Kết quả | Ghi nhận |
+| --- | --- | --- |
+| Node trên main đã tích hợp GĐ23B | 94/94 đạt | Không lỗi, không bỏ qua |
+| Toàn bộ Playwright Microsoft Edge | 113/113 đạt | Có ca OCR vie+eng thật, dữ liệu variant/nhập lại, chạy thử không ghi library, logo/PA/link khách, giữ cuộn và cột lọc |
+| Edge khung giao diện 5 trang | 5/5 đạt | Header 52 px, avatar 28 px, nút thanh bên 32 px |
+| Hiệu năng thư viện 720 mẫu | Đạt | Mở 124,8 ms; lọc 67,3 ms; tìm 69 ms; 96 thẻ mỗi trang, đọc ảnh ban đầu 35 |
+
+Ảnh QA của cột lọc, thương hiệu và bảng mã đã được xem kiểm tra trên Edge. Mã chức năng cuối ở f35a1b8 đã push main. Các bước giữ quy trình test/Edge, commit, pull --rebase và push, không force. PDF Garis thật chưa có trong docs/gd23/local; đã kiểm tra PDF giả có text layer lỗi, cả OCR giả lập và OCR vie+eng thực. Kết quả OCR cần kiểm tra mã/kích thước/giá trước khi chọn lưu.
+
+XONG GĐ23
