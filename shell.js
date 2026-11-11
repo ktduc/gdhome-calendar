@@ -441,6 +441,10 @@ window.GDHomeShell = (() => {
       ? '<img src="' + escape(user.picture) + '" alt="" referrerpolicy="no-referrer">'
       : escape(initial);
 
+    // Chỉ vẽ lại khi thông tin tài khoản đổi: ghi DOM ở đây sẽ kích MutationObserver và tạo vòng lặp làm nút không bấm được.
+    const signature = [isGuest, shortName, email, user?.picture || ''].join('|');
+    if (container.dataset.accountSig === signature && container.querySelector('.shell-account-dropdown')) return;
+    container.dataset.accountSig = signature;
     let dropdown = container.querySelector('.shell-account-dropdown');
     if (!dropdown) {
       container.innerHTML =
@@ -530,20 +534,19 @@ window.GDHomeShell = (() => {
           toggleBtn.innerHTML = '<i data-lucide="menu">☰</i>';
         }
         const hasSidebar = document.querySelector('.app-sidebar, .material-sidebar, .shell-sidebar');
-        if (!hasSidebar) {
-          toggleBtn.style.visibility = 'hidden';
-          toggleBtn.style.pointerEvents = 'none';
-        } else {
-          toggleBtn.style.visibility = 'visible';
-          toggleBtn.style.pointerEvents = 'auto';
+        const show = hasSidebar ? 'visible' : 'hidden';
+        if (toggleBtn.style.visibility !== show) {
+          toggleBtn.style.visibility = show;
+          toggleBtn.style.pointerEvents = hasSidebar ? 'auto' : 'none';
         }
-        headerLeft.prepend(toggleBtn);
+        // Chỉ di chuyển khi sai vị trí: prepend/after lặp lại sẽ gỡ và gắn lại nút mỗi khung hình (cú bấm bị mất).
+        if (headerLeft.firstElementChild !== toggleBtn) headerLeft.prepend(toggleBtn);
 
         const logo = headerLeft.querySelector('.app-logo');
         if (logo) {
-          toggleBtn.after(logo);
+          if (toggleBtn.nextElementSibling !== logo) toggleBtn.after(logo);
           const menuEl = headerLeft.querySelector('.gd-tools-menu');
-          if (menuEl) logo.after(menuEl);
+          if (menuEl && logo.nextElementSibling !== menuEl) logo.after(menuEl);
         }
       }
 
@@ -630,7 +633,9 @@ window.GDHomeShell = (() => {
       initHubJobTracker(); layout(); refreshWorkBadges(); window.addEventListener("focus", refreshWorkBadges);
       // Các trang vẽ thanh bên sau khi tải xong (Chốt mã, Tools...): theo dõi để gắn nút ngay khi có.
       let queued = false;
-      new MutationObserver(() => {
+      new MutationObserver(records => {
+        // Bỏ qua thay đổi bên trong header (do chính layout() tạo ra) để không tự kích vòng lặp.
+        if (records.every(record => (record.target.nodeType === 1 ? record.target : record.target.parentElement)?.closest?.('.app-header'))) return;
         if (queued) return;
         queued = true;
         requestAnimationFrame(() => { queued = false; layout(); if (workAssignmentsMap.size) decorateAllWorkBadges(); else refreshWorkBadges(); });

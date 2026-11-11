@@ -942,3 +942,7 @@ body.is-sidebar-collapsed .app-sidebar,
 
 /* Header không chồng nút ở màn ≤1500px (Lịch: nút tháng bị che) */
 .app-header .header-left,.app-header .header-center{flex:0 0 auto !important}.app-header .header-right{flex:1 1 auto !important;min-width:0 !important}@media (max-width:1500px){.app-header:has(#btn-toggle-range-popover) .header-right .btn-label{display:none !important}.app-header .hdr-range-btn{max-width:150px;overflow:hidden}.app-header .hdr-range-btn span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.app-header .header-right,.app-header .shell-toolbar{gap:4px !important}.app-header .header-left{gap:6px !important}}@media (max-width:1300px){.app-header .shell-user-name,.app-header #btn-today{display:none !important}}
+/* Nhóm nút lệnh (File, AI, Copy ảnh, Thêm dòng…) dồn sát phải, ngay trước hồ sơ đăng nhập */
+.app-header .header-right{justify-content:flex-start !important}
+.app-header .header-right>.shell-toolbar{margin-left:auto !important}
+.app-header .header-right>.shell-account{margin-left:8px !important}
