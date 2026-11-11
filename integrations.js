@@ -1054,7 +1054,7 @@ async function handleIntegrations(req, res, urlPath, ctx) {
       throw httpError(400,'Nhập từ 1 đến 12 đường dẫn website.');
     }
     const {importCatalogueUrls} = require('./catalogue-web');
-    const result = await importCatalogueUrls([...new Set(urls)]);
+    const result = await importCatalogueUrls([...new Set(urls)],{minimumIntervalMs:500,respectRobots:false});
     let aiWarning;
     if (body.useAi === true && result.needsAi && result.items.length) {
       try {
@@ -1101,7 +1101,7 @@ async function handleIntegrations(req, res, urlPath, ctx) {
   if (['/api/catalogue/image','/api/catalogue/logo-image'].includes(urlPath) && req.method === 'POST') {
     const body = await readJsonBody(req);
     if (typeof body?.url !== 'string' || body.url.length > 2000) throw httpError(400,'URL ảnh không hợp lệ.');
-    const {buffer,contentType} = await require('./catalogue-web').downloadCatalogueResource(body.url,'image');
+    const {buffer,contentType} = await require('./catalogue-web').downloadRequestedCatalogueResource(body.url,'image');
     if (!/^image\/(jpeg|png|webp|gif|avif|bmp)$/.test(contentType) && !(urlPath === '/api/catalogue/logo-image' && contentType === 'image/svg+xml')) throw httpError(400,'Ảnh mẫu cần ở định dạng raster.');
     res.writeHead(200,{'Content-Type':contentType,'Content-Length':buffer.length,'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});
     res.end(buffer);

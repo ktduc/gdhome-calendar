@@ -849,3 +849,11 @@ Kiểm thử Node 103/103. Edge library-tools, logo-tools, 20.11, 21.4, brand-pa
 ### Điều chỉnh xác nhận crop catalogue
 
 Giữ bảng chi tiết có nút Chỉnh khung cắt luôn mở khi có vật liệu, kể cả bỏ chọn tất cả hoặc bấm lại nút ba chấm. Xác nhận crop tự tích chọn vật liệu đó để nhập, giữ bảng ở vật liệu vừa sửa. Enter xác nhận khung cắt, nút Áp dụng khung cắt nằm bên phải. Node 103/103; Edge 21.9, logo-tools, 20.11, 21.4 đạt, gồm kiểm tra trạng thái bảng, tự chọn sau Enter, vị trí nút và các chiều rộng 600–2560 px.
+
+### Nhập Hà Linh và so ảnh cùng mã
+
+- Link website được người dùng chủ động nhập đọc được trang công khai dù robots.txt yêu cầu bot không quét. Giữ kiểm tra URL/SSRF, chặn mạng nội bộ và giới hạn tần suất; không thay đổi quyền truy cập HTTP của nguồn.
+- Nhận dạng danh mục Hà Linh, tôn trọng base URL cùng nguồn để giải đúng ảnh và link chi tiết. Trang chi tiết ghép ảnh cùng mã theo alt/tên file, giữ riêng PUPT-112 và PUPT-112A. Mẫu HTML thông thường gom ảnh lặp cùng mã vào các ứng viên.
+- Đọc trang chi tiết Hà Linh trước khi lọc ảnh nhỏ. Tải và so kích thước pixel của tối đa 6 ứng viên, giữ ảnh lớn nhất; ứng viên lỗi không làm mất ảnh đã tải thành công. Giữ lọc ảnh dưới 300 px và chống ảnh trùng nội dung.
+- Kiểm tra link thật danh mục 62-phao-co-tran-pu.htm đọc được 51 mã không cảnh báo. Cặp PUPT-256 thật: 400×213 so với 1741×928. Không ghi dữ liệu thử vào thư viện đang dùng.
+- Node 106/106; Edge halinh-web, 21.3, 21.4, 20.11 đạt. Kiểm tra theo trang chi tiết, bỏ thumbnail nhỏ, chọn ảnh lớn, lưu ảnh đúng tỷ lệ, ảnh đầu đã đủ kích thước vẫn so ứng viên lớn hơn, ứng viên lỗi cuối danh sách và giữ riêng mã hậu tố.

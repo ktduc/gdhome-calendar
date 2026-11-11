@@ -1160,7 +1160,7 @@ window.GDHomeAssets = (() => {
     dependencyPromise ||= Promise.all([['GDHomeProductLines','product-lines.js'],['GDHomeBrands','library-brands.js'],['GDHomeBrandManager','brand-manager.js']].map(async ([name,file]) => {
       if (window[name]) return;
       await new Promise((resolve,reject) => {
-        const script = document.createElement('script'); script.src = '/'+file+'?v=logo-crop-3';
+        const script = document.createElement('script'); script.src = '/'+file+'?v=web-largest-1';
         script.onload = resolve; script.onerror = () => reject(new Error('Không tải được '+file)); document.head.append(script);
       });
     })).catch(error => { dependencyPromise = null; throw error; });
@@ -2849,8 +2849,8 @@ window.GDHomeAssets = (() => {
     });
   }
   async function downloadCataloguePhoto(product,signal,beforeRequest) {
-    let failure;
-    for (const url of [product.image,...(product.imageAlternates || []).slice(0,5)]) {
+    let failure, best;
+    for (const url of [...new Set([product.image,...(product.imageAlternates || []).slice(0,5)])]) {
       signal.throwIfAborted();
       try {
         await beforeRequest?.();
@@ -2861,10 +2861,12 @@ window.GDHomeAssets = (() => {
         const bitmap = await createImageBitmap(blob);
         try {
           if (Math.min(bitmap.width,bitmap.height) < 300) throw new Error('Bỏ ảnh nhỏ hơn 300 px.');
-          return {blob,url,pixels:bitmap.width*bitmap.height};
+          const pixels = bitmap.width*bitmap.height;
+          if (!best || pixels > best.pixels) best = {blob,url,pixels};
         } finally { bitmap.close(); }
-      } catch (error) { failure = error; }
+      } catch (error) { signal.throwIfAborted(); failure = error; }
     }
+    if (best) return best;
     throw failure;
   }
 
@@ -2930,6 +2932,16 @@ window.GDHomeAssets = (() => {
       for (const product of products) {
         if (signal.aborted) break;
         try {
+          if (product.brand === 'Hà Linh' && product.detail) {
+            try {
+              await rateLimit();
+              const detail = await api('/api/catalogue/web',{method:'POST',signal,body:JSON.stringify({urls:[product.detail],useAi:false})});
+              if (detail.items?.length === 1 && duplicateCode(detail.items[0].code) === duplicateCode(product.code)) {
+                product.imageAlternates = [...new Set([detail.items[0].image,...(detail.items[0].imageAlternates || []),...(product.imageAlternates || [])])]
+                  .filter(url => url !== product.image).slice(0,5);
+              }
+            } catch { signal.throwIfAborted(); }
+          }
           const structured = product.rawCode || product.sourceFacets?.length;
           let photo = linePhotos.get(product.image);
           if (!photo) { photo = await downloadCataloguePhoto(product,signal,structured ? rateLimit : undefined); linePhotos.set(product.image,photo); }
@@ -2937,7 +2949,7 @@ window.GDHomeAssets = (() => {
             try {
               await rateLimit();
               const detail = await api('/api/catalogue/web',{method:'POST',signal,body:JSON.stringify({urls:[product.detail],useAi:false})});
-              if (detail.items?.length === 1 && detail.items[0].image !== photo.url) {
+              if (detail.items?.length === 1 && duplicateCode(detail.items[0].code) === duplicateCode(product.code)) {
                 const richer = await downloadCataloguePhoto(detail.items[0],signal,rateLimit);
                 if (richer.pixels > photo.pixels) photo = richer;
               }

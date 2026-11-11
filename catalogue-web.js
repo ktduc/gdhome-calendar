@@ -72,6 +72,7 @@ function catalogueDownloader(options = {}) {
     }
   }
   return (url,type) => download(url,type,async parsed => {
+    if (options.respectRobots === false) return;
     let cached = cache.get(parsed.origin);
     if (!cached || cached.expires <= Date.now()) {
       if (cache.size >= 256) cache.delete(cache.keys().next().value);
@@ -89,6 +90,7 @@ function catalogueDownloader(options = {}) {
   });
 }
 const downloadCatalogueResource = catalogueDownloader({minimumIntervalMs:500});
+const downloadRequestedCatalogueResource = catalogueDownloader({minimumIntervalMs:500,respectRobots:false});
 
 // Thực thể có tên phân biệt hoa/thường (&Aacute; ≠ &aacute;) – các web Việt cũ (vd garis.vn) viết dấu bằng dạng này.
 const latinEntities = Object.fromEntries(('Agrave:À Aacute:Á Acirc:Â Atilde:Ã Egrave:È Eacute:É Ecirc:Ê Igrave:Ì Iacute:Í Ograve:Ò Oacute:Ó Ocirc:Ô Otilde:Õ ' +
@@ -279,6 +281,46 @@ function repeatedProductRecords(html) {
   return [];
 }
 function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
+  const pageUrl = url;
+  try {
+    const base = attributes(html.match(/<base\b[^>]*>/i)?.[0] || '').href;
+    if (base) {
+      const target = validateUrl(new URL(base,url).href);
+      if (target.origin === new URL(url).origin) url = target.href;
+    }
+  } catch { /* Giữ URL trang nếu base không hợp lệ. */ }
+  if (/^(?:www\.)?halinhjsc\.vn$/i.test(new URL(pageUrl).hostname)) {
+    const absolute = source => validateUrl(new URL(source,url).href).href;
+    const listing = [...classElements(html,'itemPr')];
+    const heading = readable(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
+    const code = nameCode(heading);
+    if (code && /\/phao-chi\//i.test(new URL(pageUrl).pathname)) {
+      const key = code.toUpperCase().replace(/[^A-Z0-9]/g,'');
+      const images = [...html.matchAll(/<img\b[^>]*>/gi)].flatMap(([tag]) => {
+        const attrs = attributes(tag);
+        return imageSources(attrs).filter(source => {
+          let stem;
+          try { stem = decodeURIComponent(new URL(source,url).pathname.split('/').at(-1)); } catch { return false; }
+          stem = stem.replace(/\.[a-z0-9]+$/i,'').replace(/_\d{9,}$/,'').replace(/\(\d+\)$/,'').replace(/-\d+x\d+$/i,'');
+          return stem.toUpperCase().replace(/[^A-Z0-9]/g,'') === key || nameCode(attrs.alt || attrs.title || '') === code;
+        });
+      });
+      const candidates = [...new Set(images.flatMap(source => { try { return [absolute(source)]; } catch { return []; } }))];
+      return candidates.length ? [{name:heading,code,brand:'Hà Linh',supplier:'halinhjsc.vn',image:candidates[0],
+        imageAlternates:candidates.slice(1,6)}] : [];
+    }
+    if (listing.length) return listing.flatMap(({content}) => {
+      const attrs = attributes(content.match(/<img\b[^>]*>/i)?.[0] || '');
+      const link = attributes(content.match(/<a\b[^>]*>/i)?.[0] || '');
+      const name = attrs.alt || link.title || '';
+      if (!attrs.src || !name) return [];
+      try {
+        const detail = link.href ? absolute(link.href) : '';
+        return [{name,code:nameCode(name),brand:'Hà Linh',supplier:'halinhjsc.vn',image:absolute(attrs.src),
+          ...(detail && new URL(detail).origin === new URL(pageUrl).origin ? {detail} : {})}];
+      } catch { return []; }
+    }).slice(0,maxItems);
+  }
   const meta = {};
   for (const match of html.matchAll(/<meta\b[^>]*>/gi)) {
     const attrs = attributes(match[0]);
@@ -306,7 +348,12 @@ function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
     const name = readable(record.name || title);
     const code = readable(record.code) || nameCode(name);
     const size = readable(record.size) || name.match(/\b\d{2,4}\s*(?:cm|mm)?\s*[×x*]\s*\d{2,4}(?:\s*(?:cm|mm))?\b/i)?.[0] || '';
-    const key = [image,code].join('|');
+    const key = code ? [readable(record.brand).toLowerCase(),code.toUpperCase().replace(/[\s_-]/g,'')].join('|') : [image,code].join('|');
+    const previous = items.find(item => item._identity === key);
+    if (previous) {
+      previous.imageAlternates = [...new Set([...(previous.imageAlternates || []),...candidates])].filter(source => source !== previous.image).slice(0,5);
+      return;
+    }
     if (seen.has(key) || (!code && items.some(item => item.image === image))) return;
     seen.add(key);
     let detail;
@@ -316,13 +363,15 @@ function extractProducts(html,url,validateUrl,maxItems,siteDictionary) {
         if (target.origin === new URL(url).origin) detail = target.href;
       } catch { /* Liên kết ngoài không hợp lệ. */ }
     }
-    items.push({name:name.slice(0,160),code:code.slice(0,80),
+    const item = {name:name.slice(0,160),code:code.slice(0,80),
       size:size.slice(0,80),brand:decode(record.brand).slice(0,80),supplier:decode(supplier).slice(0,80),image,
       ...(record.sourceFacets ? {sourceFacets:record.sourceFacets,material:record.material || '',finish:record.finish || '',
         collection:record.collection || '',grain:record.grain || ''} : {}),
       ...(record.rawCode ? {rawCode:record.rawCode.slice(0,100)} : {}),...(detail ? {detail} : {}),
       ...(record.price === undefined ? {} : {price:record.price,priceUnit:decode(record.priceUnit).slice(0,30)}),
-      ...(imageAlternates.length ? {imageAlternates} : {})});
+      ...(imageAlternates.length ? {imageAlternates} : {})};
+    Object.defineProperty(item,'_identity',{value:key});
+    items.push(item);
   }
   if (siteDictionary) {
     for (const record of anCuongRecords(html,siteDictionary)) add(record);
@@ -615,4 +664,4 @@ async function importCatalogueUrls(urls,options = {}) {
   return {items:items.slice(0,maxItems),warnings,needsAi,...(pagination || {}),...(sourceFilterGroups ? {sourceFilterGroups} : {})};
 }
 
-module.exports = {importGaris,garisMenu,garisProduct,importCatalogueUrls,catalogueDownloader,cataloguePagination,downloadCatalogueResource};
+module.exports = {importGaris,garisMenu,garisProduct,importCatalogueUrls,catalogueDownloader,cataloguePagination,downloadCatalogueResource,downloadRequestedCatalogueResource};

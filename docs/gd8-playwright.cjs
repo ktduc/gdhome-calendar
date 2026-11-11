@@ -3837,19 +3837,57 @@ cases['20.12'] = async page => {
   assert.equal(data.imports.find(entry => entry.source === 'https://example.com/a').status,'done');
 };
 
+cases['halinh-web'] = async page => {
+  await openMaterials(page);
+  const listing='https://halinhjsc.vn/phao-chi-ha-linh/62-phao-co-tran-pu.htm';
+  const detail='https://halinhjsc.vn/phao-chi/2237-phao-tran-hoa-van-pupt-256.htm';
+  const image='https://halinhjsc.vn/data/Product/pupt-256_1641442548.jpg';
+  const large='https://halinhjsc.vn/data/PUPT-256(4).jpg';
+  const sources=[];
+  await page.route('**/api/catalogue/web',route=>{
+    const url=route.request().postDataJSON().urls[0]; sources.push(url);
+    return route.fulfill({json:{items:[{code:'PUPT-256',name:'Phào trần hoa văn PUPT-256',brand:'Hà Linh',image,
+      ...(url===listing ? {detail} : {imageAlternates:[large]})}],warnings:[]}});
+  });
+  await page.route('**/api/catalogue/image',route=>{
+    const url=route.request().postDataJSON().url;
+    return route.fulfill({contentType:'image/png',body:url===large ? webPhoto('large-halinh',1741,928) : webPhoto('thumb-halinh',400,213)});
+  });
+  await page.evaluate(()=>GDHomeAssets.openLibrary({categoryId:'cat-6'}));
+  await page.locator('[data-import-wood]').click();
+  const modal=page.locator('.wood-catalogue-dialog');
+  await modal.locator('[name=autoSave]').uncheck();
+  await modal.locator('[name=urls]').fill(listing);
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
+  await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
+  assert.deepEqual(sources,[listing,detail]);
+  assert.equal(await modal.locator('.wood-catalogue-card').count(),1);
+  const ratio=await modal.locator('.wood-catalogue-card canvas').evaluate(canvas=>canvas.width/canvas.height);
+  assert.ok(Math.abs(ratio-1741/928)<.02,String(ratio));
+  await modal.locator('[data-save-wood]').click();
+  await modal.getByText(/Đã lưu 1 mã/).waitFor();
+  const saved=await page.request.get('/api/library').then(r=>r.json());
+  const file=saved.items.find(item=>item.code==='PUPT-256').full;
+  const dimensions=await page.evaluate(async file=>{
+    const bitmap=await createImageBitmap(await fetch(await GDHomeAssets.assetUrl(file)).then(r=>r.blob()));
+    const size=[bitmap.width,bitmap.height]; bitmap.close(); return size;
+  },file);
+  assert.ok(dimensions[0]>=1000 && Math.abs(dimensions[0]/dimensions[1]-1741/928)<.02,JSON.stringify(dimensions));
+};
+
 cases['21.3'] = async page => {
   await openMaterials(page);
   const seen = [], base = 'https://example.com/';
   await page.route('**/api/catalogue/web',route => route.fulfill({json:{items:[
-    {code:'GD-211',name:'Ảnh gốc',image:base+'missing.png',imageAlternates:[base+'thumb.png',base+'large.png']},
+    {code:'GD-211',name:'Ảnh gốc',image:base+'missing.png',imageAlternates:[base+'thumb.png',base+'large.png',base+'missing2.png']},
     {code:'GD-212',name:'Trùng nội dung',image:base+'copy.png'},
     {code:'GD-213',name:'Ảnh nhỏ',image:base+'icon.png'}
   ]}}));
   await page.route('**/api/catalogue/image',route => {
     const file = new URL(route.request().postDataJSON().url).pathname.slice(1);
     seen.push(file);
-    if (file === 'missing.png') return route.fulfill({status:404});
-    const body = ['thumb.png','icon.png'].includes(file) ? webPhoto('small',200,200) : webPhoto('original',800,400);
+    if (file.startsWith('missing')) return route.fulfill({status:404});
+    const body = file === 'thumb.png' ? webPhoto('thumbnail',400,400) : file === 'icon.png' ? webPhoto('small',200,200) : webPhoto('original',800,400);
     return route.fulfill({contentType:'image/png',body});
   });
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
@@ -3859,7 +3897,7 @@ cases['21.3'] = async page => {
   await modal.locator('[name=urls]').fill(base+'catalogue');
   await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor();
-  assert.deepEqual(seen,['missing.png','thumb.png','large.png','copy.png','icon.png']);
+  assert.deepEqual(seen,['missing.png','thumb.png','large.png','missing2.png','copy.png','icon.png']);
   assert.deepEqual(await modal.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),['GD-211']);
   assert.equal(await modal.locator('.wood-catalogue-card canvas').evaluate(canvas => canvas.width/canvas.height),2);
   assert.match(await modal.locator('[data-source-warning]').innerText(),/300 px/);
