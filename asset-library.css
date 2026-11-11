@@ -336,6 +336,41 @@
 [data-guide-previews] img{width:100%;height:80px;object-fit:contain}
 .wood-catalogue-dialog [role=tab][aria-selected=true]{background:#dbeafe}
 
+/* Hộp Nhập catalogue: kích thước cố định (không co giãn theo nội dung), một trang nhập 2 cột: Nguồn | Thiết lập. */
+.wood-catalogue-dialog{width:min(1260px,94vw);height:90vh;height:90dvh;max-height:none}
+.wood-catalogue-dialog .asset-dialog-body{height:calc(90vh - 90px);height:calc(90dvh - 90px);max-height:none;scrollbar-gutter:stable}
+.wood-catalogue-dialog [role=tablist]{display:flex;gap:4px;margin-bottom:10px;border-bottom:1px solid #d8d2c8}
+.wood-catalogue-dialog [role=tab]{border-radius:6px 6px 0 0;border-bottom:0;margin-bottom:-1px}
+.wood-catalogue-dialog form.wood-catalogue-controls{display:grid;grid-template-columns:minmax(260px,360px) minmax(0,1fr);align-items:start;gap:12px 16px}
+.wood-catalogue-dialog form.wood-catalogue-controls[hidden]{display:none}
+.wood-catalogue-controls>section{display:grid;gap:8px;min-width:0;padding:10px;border:1px solid #d8d2c8;border-radius:8px;background:#fff}
+.wood-catalogue-controls h3{margin:0;font-size:13px;font-weight:700;color:#334155}
+.wood-catalogue-controls :is(input:not([type=checkbox],[type=file]),select,textarea){box-sizing:border-box;width:100%}
+.wood-catalogue-controls textarea{resize:vertical}
+.wood-catalogue-controls [data-catalogue-mixed]:not([hidden]){display:grid;grid-template-columns:minmax(0,1fr);gap:6px}
+.wood-catalogue-controls [data-catalogue-mixed]>label{grid-template-columns:112px minmax(0,1fr);align-items:center;gap:6px;white-space:nowrap}
+.wood-catalogue-controls input[type=file]{box-sizing:border-box;width:100%;font-size:12px}
+.wood-catalogue-controls [data-remove-source]{align-self:start;padding:2px 8px}
+.wood-catalogue-controls .asset-drop{padding:12px 8px}
+.wood-catalogue-controls [data-catalogue-queue]{max-height:180px;overflow:auto}
+.wood-catalogue-controls [data-catalogue-queue]>li{grid-template-columns:minmax(0,1fr) auto auto}
+.wood-catalogue-controls [data-catalogue-queue]>li>[data-source-progress]{grid-column:1/-1;grid-row:2}
+.catalogue-field-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px 10px;align-items:start}
+.catalogue-field-grid .catalogue-supplier-choices{grid-column:span 2}
+.catalogue-field-grid .catalogue-supplier-choices select{height:52px}
+.catalogue-import-options{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px 16px}
+.catalogue-import-more{border-top:1px solid #e1ded9;padding-top:6px}
+.catalogue-import-more>summary{cursor:pointer;font-weight:600}
+.catalogue-import-more[open]>summary{margin-bottom:6px}
+.catalogue-import-more [data-catalogue-guide]{margin:0;padding:0;border:0}
+.catalogue-import-actions{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.catalogue-import-start{font-weight:700}
+.wood-catalogue-dialog .asset-dialog-body>[role=status]{min-height:1.4em;margin:6px 0}
+@media (max-width:1100px){.catalogue-field-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:760px){
+  .wood-catalogue-dialog form.wood-catalogue-controls,.catalogue-import-options{grid-template-columns:minmax(0,1fr)}
+}
+
 
 #material-ai-form .material-ai-document{display:flex;flex-direction:row;align-items:center;gap:6px;margin:4px 0}
 .material-ai-render-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,108px));gap:8px}

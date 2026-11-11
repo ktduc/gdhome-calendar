@@ -329,7 +329,7 @@ cases['23.4'] = async page => {
   const modal = page.locator('.wood-catalogue-dialog');
   await modal.locator('[name=layout]').selectOption('garis');
   await modal.locator('[name=pdf]').setInputFiles({name:'Garis-encoded.pdf',mimeType:'application/pdf',buffer});
-  await modal.getByRole('button',{name:'Đọc PDF',exact:true}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('.catalogue-product-line').waitFor({timeout:20000});
   assert.equal(await modal.locator('.wood-catalogue-card').count(),2);
   assert.equal(await page.evaluate(() => window.garisOcrCalls),1);
@@ -369,7 +369,6 @@ cases['23.3'] = async page => {
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=urls]').fill('https://catalogue.test/products');
   await modal.locator('[name=brand]').fill('Hãng chạy thử');
   await modal.getByRole('button',{name:'Chạy thử 10 mẫu',exact:true}).click();
@@ -2305,6 +2304,7 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
       canvas.getContext('2d').fillRect(0,0,200,100);
       return canvas.toDataURL('image/png').split(',')[1];
     });
+    await modal.locator('details:has([data-catalogue-guide])>summary').click();
     await modal.locator('[name=guidePrompt]').fill('Chỉ lấy ô vân hình chữ nhật.');
     await modal.locator('[name=guideImages]').setInputFiles({name:'mau.png',mimeType:'image/png',buffer:Buffer.from(example,'base64')});
     for (const field of ['crop','codeBox']) {
@@ -2324,7 +2324,7 @@ async function testCatalogue(page,useAi = false,withGuide = false) {
     await modal.locator('[name=guidePreset]').selectOption('Vân ngang');
     assert.equal(await modal.locator('[name=guidePrompt]').inputValue(),'Chỉ lấy ô vân hình chữ nhật.');
   }
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   const save = modal.locator('[data-save-wood]');
   await page.waitForFunction(() => !document.querySelector('.wood-catalogue-controls [type=submit]')?.disabled,null,{timeout:25000});
   assert.ok(await save.isEnabled(),await modal.getByRole('status').textContent());
@@ -2686,10 +2686,9 @@ cases['19.6'] = async page => {
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=autoSave]').uncheck();
   await modal.locator('[name=urls]').fill('https://example.com/gach');
-  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   const card = modal.locator('.wood-catalogue-card');
   await card.waitFor();
   const supplier = modal.locator('[data-catalogue-details] [data-catalogue-supplier]');
@@ -2747,7 +2746,7 @@ async function openAnCuongReview(page,pdf) {
   await modal.locator('[name=collection]').fill('An Cường mẫu');
   await modal.locator('[name=useAi]').check();
   await modal.locator('[name=pdf]').setInputFiles({name:'demo.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await page.waitForFunction(() => !document.querySelector('.wood-catalogue-dialog [type=submit]').disabled);
   return modal;
 }
@@ -3453,10 +3452,9 @@ cases['20.9'] = async page => {
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=autoSave]').uncheck();
   await modal.locator('[name=urls]').fill('https://example.com/gach/?utm_source=a#anh');
-  const read = modal.getByRole('button',{name:'Đọc website'});
+  const read = modal.getByRole('button',{name:'Bắt đầu nhập'});
   await read.click();
   await modal.locator('[data-save-wood]').click();
   await modal.getByText(/Đã lưu 1 mã/).waitFor();
@@ -3502,12 +3500,11 @@ cases['20.10'] = async page => {
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=urls]').fill('https://example.com/gach');
   assert.ok(await modal.locator('[name=autoSave]').isChecked());
   assert.equal(await modal.locator('[name=useWebAi]').isChecked(),false);
   await modal.locator('[name=useWebAi]').check();
-  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[role=status]').filter({hasText:/Trang 2\/3 · [12] mẫu/}).waitFor();
   await modal.getByText('Đã lưu 3 mã · bỏ qua 0 mã trùng.').waitFor();
   assert.equal(requests.length,3);
@@ -3532,9 +3529,8 @@ cases['20.10'] = async page => {
   const saved = await page.request.get('/api/library').then(r => r.json());
   assert.ok(saved.items.filter(item => /^X[1-3]$/.test(item.code || '')).every(item => !item.tags.includes('chua-duyet')));
   await library.locator('[data-import-wood]').click();
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=urls]').fill('https://example.com/stop');
-  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[role=status]').filter({hasText:/Trang 1\/3 · 1 mẫu/}).waitFor();
   await modal.locator('[data-catalogue-cancel]').click();
   await modal.getByText(/Đã lưu 1 mã/).waitFor();
@@ -3566,7 +3562,6 @@ cases['20.12'] = async page => {
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'ancuong-wood'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Nhiều nguồn'}).click();
   await modal.locator('[name=useWebAi]').check();
   await modal.locator('[name=autoSave]').uncheck();
   await modal.locator('[name=layout]').selectOption('ancuong');
@@ -3593,7 +3588,7 @@ cases['20.12'] = async page => {
       window.maxCatalogueWorkers = Math.max(window.maxCatalogueWorkers,queue.querySelectorAll('[data-source-state=running]').length);
     }).observe(queue,{attributes:true,subtree:true});
   });
-  await modal.getByRole('button',{name:'Xử lý hàng đợi'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor();
   const quotaNotice = rows.filter({hasText:'https://example.com/a'}).locator('[data-source-warning]');
   await quotaNotice.waitFor();
@@ -3630,10 +3625,9 @@ cases['21.3'] = async page => {
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=autoSave]').uncheck();
   await modal.locator('[name=urls]').fill(base+'catalogue');
-  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor();
   assert.deepEqual(seen,['missing.png','thumb.png','large.png','copy.png','icon.png']);
   assert.deepEqual(await modal.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),['GD-211']);
@@ -3672,9 +3666,8 @@ cases['20.12-bulk'] = async page => {
   await page.evaluate(() => GDHomeAssets.openLibrary({categoryId:'cat-6'}));
   await page.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=urls]').fill('https://example.com/tiles');
-  await modal.getByRole('button',{name:'Đọc website'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.getByText(/Đã lưu 160 mã.*1 mẫu chưa lưu/).waitFor({timeout:45000});
   assert.deepEqual(aiRequests,[false,false,false]);
   assert.equal(processed,161);
@@ -3716,7 +3709,7 @@ cases['20.6-code'] = async page => {
     sheet.drawText('MS 9381',{x:30,y:62,size:15,color:rgb(.8,.05,.05)});
     await modal.locator('[name=includeCode]').setChecked(includeCode);
     await modal.locator('[name=pdf]').setInputFiles({name:'nhan-ma.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-    await modal.getByRole('button',{name:'Đọc PDF'}).click();
+    await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
     await modal.locator('[data-save-wood]:enabled').waitFor();
     return modal.locator('.wood-catalogue-card canvas').evaluate(canvas => {
       const rgba = canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data;
@@ -3764,7 +3757,7 @@ cases['21.1'] = async page => {
   assert.equal(await modal.locator('[name=useAi]').isChecked(),false);
   await modal.locator('[name=useAi]').check();
   await modal.locator('[name=pdf]').setInputFiles({name:'bien-anh.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
   assert.equal(await modal.locator('.wood-catalogue-card').count(),expected.length);
   assert.equal(await modal.locator('.wood-catalogue-card.needs-review').count(),0);
@@ -3813,7 +3806,7 @@ cases['21.2'] = async page => {
   const modal = page.locator('.wood-catalogue-dialog');
   await modal.locator('[name=useAi]').check();
   await modal.locator('[name=pdf]').setInputFiles({name:'quota.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[data-source-progress]').filter({hasText:'đã lưu 1/2 trang'}).waitFor();
   await modal.getByRole('button',{name:'Tiếp tục',exact:true}).click();
   await modal.locator('.wood-catalogue-card').nth(1).waitFor();
@@ -3847,7 +3840,7 @@ cases['20-pdf-fallback'] = async page => {
   assert.equal(await modal.locator('[name=useAi]').isChecked(),false);
   await modal.locator('[name=useAi]').check();
   await modal.locator('[name=pdf]').setInputFiles({name:'text-va-scan.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor({timeout:15000});
   assert.deepEqual(await page.evaluate(() => pdfAiCalls),[[2,3,4,5]]);
   assert.equal(await modal.locator('.wood-catalogue-card').count(),7);
@@ -4028,7 +4021,7 @@ cases['19.9'] = async page => {
   await modal.locator('[name=brand]').fill('Mẫu');
   await modal.locator('[name=collection]').fill('Phào');
   await modal.locator('[name=pdf]').setInputFiles({name:'phao.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   const card = modal.locator('.wood-catalogue-card');
   await card.waitFor({timeout:15000});
   assert.equal(await card.locator('[data-wood-code-input]').inputValue(),'KT1210');
@@ -4093,7 +4086,7 @@ cases['21.8'] = async page => {
   assert.equal(await modal.locator('[name=includeCode]').isChecked(),true);
   const run = async filename => {
     await modal.locator('[name=pdf]').setInputFiles({name:filename,mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-    await modal.getByRole('button',{name:'Đọc PDF'}).click();
+    await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
     await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
     const cards = modal.locator('.wood-catalogue-card');
     const codes = await cards.locator('[data-wood-code-input]').evaluateAll(inputs => inputs.map(input => input.value));
@@ -4237,11 +4230,10 @@ cases['21.10'] = async page => {
   const library = page.locator('.asset-library-dialog');
   await library.locator('[data-import-wood]').click();
   const modal = page.locator('.wood-catalogue-dialog');
-  await modal.getByRole('tab',{name:'Từ link website'}).click();
   await modal.locator('[name=urls]').fill(source);
-  const start = () => modal.getByRole('button',{name:'Đọc website'}).click();
+  const start = () => modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   const saved = async () => {
-    await modal.getByRole('button',{name:'Đọc website'}).and(modal.locator(':enabled')).waitFor({timeout:15000});
+    await modal.getByRole('button',{name:'Bắt đầu nhập'}).and(modal.locator(':enabled')).waitFor({timeout:15000});
     await modal.getByText(/Đã lưu 1 mã/).waitFor({timeout:15000});
   };
   const items = async () => (await page.request.get('/api/library').then(r => r.json())).items.filter(item => item.code === 'MS 7654');
@@ -4325,7 +4317,7 @@ cases['21.9'] = async page => {
     }).observe(status,{childList:true});
   });
   await modal.locator('[name=pdf]').setInputFiles({name:'phao-lien-hang.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   await modal.locator('[data-save-wood]:enabled').waitFor({timeout:20000});
   const cards = modal.locator('.wood-catalogue-card');
   assert.deepEqual(await cards.locator('[data-wood-code-input]').evaluateAll(nodes => nodes.map(node => node.value)),
@@ -4447,7 +4439,7 @@ cases['19.10'] = async page => {
   await modal.locator('[name=brand]').fill('Garis');
   await modal.locator('[name=collection]').fill('Mẫu bếp');
   await modal.locator('[name=pdf]').setInputFiles({name:'bep.pdf',mimeType:'application/pdf',buffer:Buffer.from(await pdf.save())});
-  await modal.getByRole('button',{name:'Đọc PDF'}).click();
+  await modal.getByRole('button',{name:'Bắt đầu nhập'}).click();
   const cards = modal.locator('.wood-catalogue-card');
   await cards.last().waitFor({timeout:15000});
   assert.equal(await cards.count(),3);

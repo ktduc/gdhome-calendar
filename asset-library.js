@@ -3011,44 +3011,46 @@ window.GDHomeAssets = (() => {
     const library = await loadLibrary();
     if (!dialog.isConnected) return;
     dialog.querySelector('h2').textContent = 'Nhập catalogue';
-    body.innerHTML = '<div role="tablist" aria-label="Nguồn catalogue"><button type="button" role="tab" data-catalogue-tab="pdf" aria-selected="true">Từ PDF</button>' +
-      '<button type="button" role="tab" data-catalogue-tab="web" aria-selected="false">Từ link website</button>' +
-      '<button type="button" role="tab" data-catalogue-tab="mixed" aria-selected="false">Nhiều nguồn</button>' +
+    // Một trang nhập duy nhất: PDF, ảnh, thư mục và link website cùng vào một hàng đợi (trước là 3 tab, mỗi tab hiện một bộ ô khác nhau).
+    body.innerHTML = '<div role="tablist" aria-label="Nhập catalogue"><button type="button" role="tab" data-catalogue-tab="mixed" aria-selected="true">Nhập mới</button>' +
       '<button type="button" role="tab" data-catalogue-tab="history" aria-selected="false">Đã nhập</button></div>' +
       '<section data-catalogue-history hidden></section><form class="wood-catalogue-controls">' +
+      '<section class="catalogue-import-sources"><h3>1 · Nguồn nhập</h3>' +
+      '<div data-catalogue-mixed><div class="asset-drop" data-catalogue-drop>Kéo thả PDF, ảnh hoặc thư mục vào đây</div>' +
+      '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" multiple></label>' +
+      '<label>Ảnh <input type="file" name="images" accept="image/*" multiple></label>' +
+      '<label>Thư mục <input type="file" name="folder" webkitdirectory multiple></label></div>' +
+      '<label data-catalogue-web>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea>' +
+      '<small>Tự đọc HTML, tải ảnh và theo trang kế tiếp.</small></label>' +
+      '<ol data-catalogue-queue aria-label="Hàng đợi nguồn nhập"></ol></section>' +
+      '<section class="catalogue-import-settings"><h3>2 · Thiết lập chung</h3><div class="catalogue-field-grid">' +
       '<label>Hạng mục lưu mặc định <select name="category">' + library.categories.map(category => '<option value="' + esc(category.id) + '"' +
         (category.id === categoryId ? ' selected' : '') + '>' + esc(category.name) + '</option>').join('') + '</select></label>' +
-      '<label>Đơn vị cung cấp <input name="suppliers" list="catalogue-suppliers" placeholder="Tên cách nhau bằng dấu phẩy"></label>' +
-      '<datalist id="catalogue-suppliers">' + (library.suppliers || []).map(item => '<option>' + esc(item.name) + '</option>').join('') + '</datalist>' +
-      ((library.suppliers || []).length ? '<label>Chọn nhiều đơn vị <select name="supplierChoices" multiple>' +
-        library.suppliers.map(item => '<option>' + esc(item.name) + '</option>').join('') + '</select></label>' : '') +
-      '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
-      '<label data-catalogue-pdf-ai><input type="checkbox" name="useAi"> Dùng AI cho trang khó</label>' +
-      '<label data-catalogue-web-ai hidden><input type="checkbox" name="useWebAi"> Dùng AI bổ sung tên / mã khi HTML thiếu</label>' +
-      '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" multiple></label>' +
-      '<label data-catalogue-pdf-code><input type="checkbox" name="includeCode" checked> Giữ dòng mã trong bố cục chuyên dụng</label>' +
-      '<label data-catalogue-web hidden>Link website <textarea name="urls" rows="3" placeholder="Một URL mỗi dòng"></textarea>' +
-      '<small>Tự đọc HTML, tải ảnh và theo trang kế tiếp.</small></label>' +
-      '<label data-catalogue-autosave hidden><input type="checkbox" name="autoSave" checked> Tự lưu tất cả, lọc lại sau</label>' +
-      '<div data-catalogue-mixed hidden><label>Thư mục <input type="file" name="folder" webkitdirectory multiple></label>' +
-      '<label>Ảnh <input type="file" name="images" accept="image/*" multiple></label>' +
-      '<div class="asset-drop" data-catalogue-drop>Kéo thả thư mục, PDF hoặc ảnh vào đây</div></div>' +
-      '<ol data-catalogue-queue aria-label="Hàng đợi nguồn nhập"></ol>' +
-      '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option><option value="phao">Phào chỉ</option><option value="kitchen">Phụ kiện bếp · ảnh và bảng mã</option><option value="garis">Garis (trang đôi + bảng mã)</option></select></label>' +
-      '<label>Kiểu hiển thị ' + displaySelect(preset.display || categoryDisplay(library.categories.find(c => c.id === categoryId)),'name="display"') + '</label>' +
       '<label>Hãng <input name="brand" list="wood-brands" value="' + (categoryId === 'ancuong-wood' ? 'An Cường' : '') + '" maxlength="80"></label>' +
       '<datalist id="wood-brands">' + ['An Cường','Minh Long','Thái Dương','Mộc Phát','Ba Thanh','Vanachai','EGGER','Khác'].map(name => '<option>' + name + '</option>').join('') + '</datalist>' +
       '<label>Catalogue <input name="collection" list="wood-catalogues" maxlength="120" placeholder="VD: Melamine/MFC"></label>' +
       '<datalist id="wood-catalogues"><option>Melamine/MFC</option><option>Laminate</option><option>Acrylic</option><option>Veneer</option></datalist>' +
       '<label>Bề mặt <input name="finish" maxlength="120" placeholder="VD: Mờ"></label>' +
-      '<fieldset data-catalogue-guide><legend>Hướng dẫn đọc PDF</legend>' +
+      '<label>Bố cục <select name="layout"><option value="generic">Tự động / lưới</option><option value="ancuong">An Cường</option><option value="phao">Phào chỉ</option><option value="kitchen">Phụ kiện bếp · ảnh và bảng mã</option><option value="garis">Garis (trang đôi + bảng mã)</option></select></label>' +
+      '<label>Kiểu hiển thị ' + displaySelect(preset.display || categoryDisplay(library.categories.find(c => c.id === categoryId)),'name="display"') + '</label>' +
+      '<label>Tag <input name="tags" placeholder="Cách nhau bằng dấu phẩy"></label>' +
+      '<label>Đơn vị cung cấp <input name="suppliers" list="catalogue-suppliers" placeholder="Tên cách nhau bằng dấu phẩy"></label>' +
+      '<datalist id="catalogue-suppliers">' + (library.suppliers || []).map(item => '<option>' + esc(item.name) + '</option>').join('') + '</datalist>' +
+      ((library.suppliers || []).length ? '<label class="catalogue-supplier-choices">Chọn nhiều đơn vị <select name="supplierChoices" multiple size="2">' +
+        library.suppliers.map(item => '<option>' + esc(item.name) + '</option>').join('') + '</select></label>' : '') +
+      '</div><div class="catalogue-import-options">' +
+      '<label data-catalogue-autosave><input type="checkbox" name="autoSave" checked> Tự lưu tất cả, lọc lại sau</label>' +
+      '<label data-catalogue-pdf-ai><input type="checkbox" name="useAi"> Dùng AI cho trang khó</label>' +
+      '<label data-catalogue-web-ai><input type="checkbox" name="useWebAi"> Dùng AI bổ sung tên / mã khi HTML thiếu</label>' +
+      '<label data-catalogue-pdf-code><input type="checkbox" name="includeCode" checked> Giữ dòng mã trong bố cục chuyên dụng</label></div>' +
+      '<details class="catalogue-import-more"><summary>Hướng dẫn đọc PDF</summary><fieldset data-catalogue-guide>' +
       '<label>Mô tả cách lọc <textarea name="guidePrompt" maxlength="2000" rows="2"></textarea></label>' +
       '<label>Ảnh minh hoạ · dán, kéo thả hoặc chọn tối đa 3 ảnh <input type="file" name="guideImages" accept="image/*" multiple></label>' +
       '<div data-guide-previews></div><label>Mẫu bố cục <select name="guidePreset"></select></label>' +
-      '<label>Tên mẫu <input name="guideName" maxlength="80"></label><button type="button" data-guide-save>Lưu mẫu bố cục</button></fieldset>' +
-      '<details><summary>Mẫu mã (regex)</summary><label>Mỗi dòng một mẫu<textarea name="patterns" rows="4" maxlength="1000">' +
-      esc(woodPatterns.join('\n')) + '</textarea></label></details>' +
-      '<button type="submit">Đọc PDF</button><button type="submit" data-catalogue-trial>Chạy thử 10 mẫu</button><button type="submit" data-catalogue-full hidden>Nhập toàn bộ với cài đặt này</button><button type="button" data-catalogue-cancel>Dừng</button></form>' +
+      '<label>Tên mẫu <input name="guideName" maxlength="80"></label><button type="button" data-guide-save>Lưu mẫu bố cục</button></fieldset></details>' +
+      '<details class="catalogue-import-more"><summary>Mẫu mã (regex)</summary><label>Mỗi dòng một mẫu<textarea name="patterns" rows="4" maxlength="1000">' +
+      esc(woodPatterns.join('\n')) + '</textarea></label></details></section>' +
+      '<div class="catalogue-import-actions"><button type="submit" class="catalogue-import-start">Bắt đầu nhập</button><button type="submit" data-catalogue-trial>Chạy thử 10 mẫu</button><button type="submit" data-catalogue-full hidden>Nhập toàn bộ với cài đặt này</button><button type="button" data-catalogue-cancel>Dừng</button></div></form>' +
       '<p role="status"></p><div class="catalogue-review-toolbar" hidden><strong data-catalogue-count></strong>' +
       '<button type="button" data-preview-mapping hidden>Xem trước ánh xạ</button>' +
       '<button type="button" data-catalogue-select="clear">Bỏ chọn</button><button type="button" data-catalogue-select="invert">Đảo chọn</button>' +
@@ -3089,7 +3091,10 @@ window.GDHomeAssets = (() => {
     const queue = catalogueQueue(form,body,library.categories,status);
     const list = body.querySelector('.wood-catalogue-results'), save = body.querySelector('[data-save-wood]');
     const read = form.querySelector('[type=submit]');
-    let items = [], mode = 'pdf';
+    let items = [];
+    const mode = 'mixed';
+    // Hàng đợi chỉ có PDF thì giữ cách làm của tab "Từ PDF" cũ: không tự lưu, bắt buộc hãng + catalogue khi lưu.
+    const pdfOnly = () => activeImports.length > 0 && activeImports.every(entry => entry.type === 'pdf');
     let activeImports = [];
     const setProgress = (entry,state,message) => {
       entry.row.dataset.sourceState = state;
@@ -3169,8 +3174,7 @@ window.GDHomeAssets = (() => {
             saved.body.innerHTML = grid(data.items.filter(item => ids.has(item.id)),{selectable:false,empty:'Không có mẫu đã lưu còn trong thư viện.'});
             await hydrate(saved.body);
           } else {
-            const next = ({pdf:'pdf',web:'web',image:'mixed'})[entry.type];
-            body.querySelector('[data-catalogue-tab=' + next + ']').click();
+            body.querySelector('[data-catalogue-tab=mixed]').click();
             if (data.categories.some(category => category.id === entry.categoryId)) form.elements.category.value = entry.categoryId;
             form.elements.category.onchange();
             form.elements.brand.value = entry.brand;
@@ -3278,18 +3282,6 @@ window.GDHomeAssets = (() => {
         showHistory().catch(error => { historyPanel.textContent = error.message; });
         return;
       }
-      if (mode !== next) resetReview();
-      mode = next;
-      form.querySelector('[data-catalogue-web]').hidden = mode === 'pdf';
-      form.querySelector('[data-catalogue-autosave]').hidden = mode === 'pdf';
-      form.querySelector('[data-catalogue-pdf]').hidden = mode === 'web';
-      form.querySelector('[data-catalogue-pdf-code]').hidden = mode === 'web';
-      form.querySelector('[data-catalogue-guide]').hidden = mode === 'web';
-      form.querySelector('[data-catalogue-mixed]').hidden = mode !== 'mixed';
-      form.querySelector('[data-catalogue-pdf-ai]').hidden = mode === 'web';
-      form.querySelector('[data-catalogue-web-ai]').hidden = mode === 'pdf';
-      read.textContent = ({web:'Đọc website',pdf:'Đọc PDF',mixed:'Xử lý hàng đợi'})[mode];
-      queue.render(mode);
       refreshSelection();
     };
     body.querySelector('[data-catalogue-cancel]').onclick = () => controller?.abort();
@@ -3394,7 +3386,7 @@ window.GDHomeAssets = (() => {
         await saveImportRows(activeImports);
         if (signal.aborted && !items.length) { status.textContent = 'Đã dừng xử lý.'; return; }
         let saveWarning = '';
-        if (!trial && mode !== 'pdf' && form.elements.autoSave.checked && items.length) {
+        if (!trial && !pdfOnly() && form.elements.autoSave.checked && items.length) {
           const automatic = items.filter(item => !item.needsReview && (item.code || item.web || item.fileImage) &&
             !item.sourceFacets?.some(group => group.key.startsWith('web-')));
           if (automatic.length) {
@@ -3731,7 +3723,7 @@ window.GDHomeAssets = (() => {
     }
     save.onclick = async () => {
       if (busy || !form.reportValidity()) return;
-      if (mode === 'pdf' && (!form.elements.brand.value.trim() || !form.elements.collection.value.trim())) {
+      if (pdfOnly() && (!form.elements.brand.value.trim() || !form.elements.collection.value.trim())) {
         status.textContent = 'Nhập hãng và tên catalogue.';
         return;
       }
