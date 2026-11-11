@@ -15,6 +15,38 @@ function webPhoto(label,width = 320,height = 320) {
   return PNG.sync.write(png);
 }
 
+cases['23.7'] = async page => {
+  await openMaterials(page);
+  await page.route('**/api/materials/assets/*',route => route.fulfill({contentType:'image/png',body:webPhoto('oak')}));
+  await page.route('**/api/ai/material-match',route => route.fulfill({json:{configured:false}}));
+  await page.evaluate(async () => {
+    const file = 'b'.repeat(64)+'.webp';
+    await GDHomeAssets.addItems('cat-6',Array.from({length:6},(_,i) => ({name:'GD23 Mẫu '+i,code:'GD23-'+i,full:file,thumb:file,tone:'Sáng'})));
+    modify(() => { sheet.groups[0].name = 'Gạch ốp lát'; sheet.groups[0].rows[0].render = [{full:file,thumb:file}]; });
+  });
+  const row = page.locator('[data-row=g1-r1]');
+  await row.locator('[data-material-match=row]').click();
+  await page.getByRole('button',{name:'Tìm 3–6 mẫu',exact:true}).click();
+  await page.locator('#material-match-job [data-ai-action],#material-match-job button').first().waitFor();
+  await page.getByRole('button',{name:'Duyệt đề xuất',exact:true}).click();
+  const review = page.locator('dialog').filter({hasText:'Đề xuất mẫu vật liệu'});
+  await review.locator('[data-match-item]').first().click();
+  const assigned = await page.evaluate(() => sheet.groups[0].rows[0].options[0].libraryItemId);
+  assert.ok(assigned);
+  assert.ok(await review.locator('.material-match-grid article').count() >= 3);
+  await review.getByRole('button',{name:'Đóng',exact:true}).click();
+  let calls = 0;
+  await page.route('**/api/ai/material-match',route => {
+    calls++;
+    return route.fulfill(calls === 1 ? {status:429,json:{message:'Hết hạn mức'}} : {json:{configured:false}});
+  });
+  await page.evaluate(() => runMaterialMatches([sheet.groups[0].rows[0]]));
+  assert.equal(await page.evaluate(() => materialMatchJob().pending.length),1);
+  await page.getByRole('button',{name:'Tiếp tục',exact:true}).click();
+  await page.waitForFunction(() => materialMatchJob().pending.length === 0);
+  assert.equal(calls,2);
+};
+
 cases['23.1'] = async page => {
   await page.setViewportSize({width:690,height:560});
   await openMaterials(page);

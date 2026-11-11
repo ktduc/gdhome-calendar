@@ -839,7 +839,7 @@ function libraryPicked(row,slot,item) {
   if (item.kind === 'paint') return paintPicked(row,slot,item);
   applyLibraryMaterial(row,slot,item);
 }
-function applyLibraryMaterial(row,slot,item) {
+function applyLibraryMaterial(row,slot,item,render = true) {
   const pa = row.options[Number(slot)];
   if (!pa) return;
   modify(() => {
@@ -865,7 +865,7 @@ function applyLibraryMaterial(row,slot,item) {
       delete pa.autoColor;
     }
     if (item.collection && !row.spec) row.spec = item.collection;
-  });
+  },render);
 }
 let openCellMenuElement = null;
 function closeCellMenu() {

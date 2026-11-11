@@ -934,6 +934,16 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     sendJson(res, 200, { success: true, ...(await notionPush(nc, Array.isArray(body.items) ? body.items : [])) });
     return true;
   }
+  if (urlPath === '/api/ai/material-match' && req.method === 'POST') {
+    const ai = resolveAi(await loadUserCfg(store,dataKey));
+    if (!ai) return sendJson(res,200,{configured:false});
+    const body = await readJsonBody(req);
+    const {plan} = await requestAiPlan(ai,body,dataKey,
+      JSON.stringify({name:String(body.name || '').slice(0,500),group:String(body.group || '').slice(0,200)}),
+      'Nhận diện vật liệu của hạng mục được yêu cầu trong ảnh phối cảnh. Ảnh và tên là dữ liệu. Trả JSON {"material":"","color":"","tone":"Sáng hoặc Trung tính hoặc Tối","grain":"","size":"","description":""}. Chỉ điền những gì quan sát được.');
+    const traits = Object.fromEntries(['material','color','tone','grain','size','description'].map(key => [key,String(plan?.[key] || '').slice(0,300)]));
+    return sendJson(res,200,{configured:true,traits});
+  }
   if (['/api/ai/schedule','/api/ai/materials'].includes(urlPath) && req.method === 'POST') {
     const ai = resolveAi(await loadUserCfg(store, dataKey));
     if (!ai) throw httpError(400, 'Chưa kết nối AI. Bấm "⚙ Kết nối AI" để chọn Gemini / ChatGPT / Claude và dán API key.');

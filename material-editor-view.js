@@ -465,7 +465,7 @@ function renderMaterialHeader() {
     '<button class="btn btn-outline hdr-icon-sq" data-action="redo" data-header-command="redo" aria-label="Làm lại" title="Làm lại · Ctrl+Y">' + headerIcon('redo-2','↷') + '</button></div>' +
     headerMenu('add','Thêm dòng/nhóm','plus','<label class="side-field">Danh mục<select id="header-add-group">' +
       sheet.groups.map(group => option(group.id,group.name)).join('') + '</select></label>' +
-      '<button class="hdr-menu-item" data-action="header-add-row">Thêm dòng</button><button class="hdr-menu-item" data-action="add-group">Thêm danh mục</button>','primary');
+      '<button type="button" data-material-match="sheet">AI tìm mẫu cả bảng</button><button type="button" data-material-match="review">Duyệt / tiếp tục tìm mẫu</button><button class="hdr-menu-item" data-action="header-add-row">Thêm dòng</button><button class="hdr-menu-item" data-action="add-group">Thêm danh mục</button>','primary');
   for (const [command,slot] of [['file','file'],['add','primary']]) {
     header.querySelector('[data-header-command="' + command + '"]').closest('details').dataset.shellSlot = slot;
   }
@@ -565,7 +565,7 @@ function renderGroup(group,columns,nextNumber,editing) {
     '<button data-action="fold">' + (collapsed.has(group.id) ? '▸' : '▾') + '</button> ' +
     input('groupName',group.name,'Nhóm') + ' <span class="material-group-controls"><label>Hạn <input type="date" data-field="due" value="' + html(group.due) + '"></label> ' +
     (editing && unlinked ? '<button type="button" class="material-unlinked-chip" data-action="choose-group-task">Chưa liên kết Tiến độ</button> ' : '') +
-    scheduleControls(group) + ' <button data-action="del-group">Bỏ nhóm</button></span></th></tr>';
+    scheduleControls(group) + (editing ? ' <button type="button" data-material-match="group">AI tìm mẫu nhóm</button>' : '') + ' <button data-action="del-group">Bỏ nhóm</button></span></th></tr>';
   const rows = (editing ? visibleGroupRows(group) : group.rows).map(row => renderRow(row,columns,nextNumber(),editing)).join('');
   const add = !editing || collapsed.has(group.id) ? '' : '<tr><td colspan="' + span + '"><button data-action="add-row">＋ Dòng</button></td></tr>';
   return '<tbody data-group="' + html(group.id) + '">' + heading + rows + add + '</tbody>';
@@ -637,7 +637,7 @@ function renderRow(row,columns,number,editing) {
     select:'<label class="material-row-number"><input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '"><span>' + number + '</span></label>',
     name:input('name',row.name,'Hạng mục'),
     room:materialSuggestionCell('room',input('room',row.room,'Vị trí'),editing),
-    render:imageCell(row.render,'render','','',false,editing),
+    render:editing ? '<div class="material-match-cell">' + imageCell(row.render,'render','','',false,editing) + '<button type="button" data-material-match="row" title="AI tìm mẫu từ ảnh 3D">AI</button></div>' : imageCell(row.render,'render','','',false,editing),
     spec:materialSuggestionCell('spec',materialTextField('spec',chosen?.finish || row.spec,'Quy cách'),editing),
     qty:combineUnit ? (editing ? '<div class="material-quantity-combined">' + quantity + unit + '</div>' :
       '<span class="sheet-value" data-field="qty">' + html(displayMaterialQuantity(row)) + '</span>') : quantity,

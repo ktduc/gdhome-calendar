@@ -344,3 +344,5 @@
 .material-ai-render-grid img{width:100%;height:92px;object-fit:cover;background:#eee9e1;border-radius:5px}
 .material-ai-render-grid span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.8rem}
 #material-ai-form .material-ai-document input{width:auto;flex:none}
+.material-match-cell{position:relative;padding-right:30px}.material-match-cell>[data-material-match]{position:absolute;right:0;top:40%;padding:5px 2px;z-index:1}
+.material-match-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}.material-match-grid article{padding:8px;background:#eee9e1}.material-match-grid img{width:100%;height:100px;object-fit:contain}.material-match-grid strong{display:block}
