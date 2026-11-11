@@ -90,9 +90,16 @@ function catalogueDownloader(options = {}) {
 }
 const downloadCatalogueResource = catalogueDownloader({minimumIntervalMs:500});
 
-const decode = value => String(value || '').replace(/&(amp|quot|apos|lt|gt|nbsp|times|ndash|mdash|#\d+|#x[0-9a-f]+);/gi,(_,entity) => {
+// Thực thể có tên phân biệt hoa/thường (&Aacute; ≠ &aacute;) – các web Việt cũ (vd garis.vn) viết dấu bằng dạng này.
+const latinEntities = Object.fromEntries(('Agrave:À Aacute:Á Acirc:Â Atilde:Ã Egrave:È Eacute:É Ecirc:Ê Igrave:Ì Iacute:Í Ograve:Ò Oacute:Ó Ocirc:Ô Otilde:Õ ' +
+  'Ugrave:Ù Uacute:Ú Yacute:Ý agrave:à aacute:á acirc:â atilde:ã egrave:è eacute:é ecirc:ê igrave:ì iacute:í ograve:ò oacute:ó ocirc:ô otilde:õ ' +
+  'ugrave:ù uacute:ú yacute:ý ETH:Đ eth:đ Oslash:Ø oslash:ø ge:≥ le:≤ deg:° mu:μ micro:µ plusmn:± hellip:… lsquo:‘ rsquo:’ ldquo:“ rdquo:” ' +
+  'sup2:² sup3:³ frac12:½ frac14:¼ frac34:¾ bull:• middot:· reg:® copy:© trade:™').split(' ').map(pair => pair.split(':')));
+const decode = value => String(value || '').replace(/&(amp|quot|apos|lt|gt|nbsp|times|ndash|mdash|#\d+|#x[0-9a-f]+|[a-z]{2,6}\d{0,2});/gi,(whole,entity) => {
   const names = {amp:'&',quot:'"',apos:"'",lt:'<',gt:'>',nbsp:' ',times:'×',ndash:'–',mdash:'—'};
+  if (latinEntities[entity]) return latinEntities[entity];
   if (names[entity.toLowerCase()]) return names[entity.toLowerCase()];
+  if (entity[0] !== '#') return whole;
   const code = entity[1]?.toLowerCase() === 'x' ? parseInt(entity.slice(2),16) : Number(entity.slice(1));
   return code >= 0 && code <= 0x10ffff ? String.fromCodePoint(code) : '';
 }).trim();
@@ -457,6 +464,33 @@ function garisProductLinks(html,base) {
   }
   return [...links];
 }
+// Trải bảng HTML thành lưới ô, điền lại ô gộp (rowspan/colspan). carried[i] = ô i lấy từ dòng trên xuống.
+function garisGrid(table) {
+  const pending = [], grid = [];
+  for (const tr of table.matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)) {
+    const cells = [], carried = [], wide = [];
+    let column = 0;
+    const fill = () => { while (pending[column]?.left > 0) { carried[column] = true; cells[column] = pending[column].text; pending[column++].left--; } };
+    for (const cell of tr[1].matchAll(/<t[dh]\b([^>]*)>([\s\S]*?)<\/t[dh]\s*>/gi)) {
+      fill();
+      const attrs = attributes('<td ' + cell[1] + '>'), text = readable(cell[2]);
+      const span = Math.max(1,Math.min(20,Number(attrs.colspan) || 1)), down = Math.max(1,Math.min(60,Number(attrs.rowspan) || 1));
+      // Ô gộp ngang: chữ nằm ở cột đầu, các cột sau để trống (wide = ô này không thuộc riêng cột nào).
+      if (span > 1) wide[column] = true;
+      for (let i = 0; i < span; i++) { cells[column] = i ? '' : text; if (down > 1) pending[column] = {text:i ? '' : text,left:down-1}; column++; }
+    }
+    fill();
+    if (cells.some(Boolean)) grid.push({cells:Array.from(cells,value => value || ''),carried,wide});
+  }
+  return grid;
+}
+// Tên cột trên web → trường dữ liệu. Cột lạ (Góc mở, Loại ray, Màu sắc…) giữ lại trong ghi chú kèm tên cột.
+function garisColumn(label) {
+  const plain = label.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/đ/gi,'d').toLowerCase();
+  const field = /don gia|^gia\b/.test(plain) ? 'price' : /don vi/.test(plain) ? 'unit' : /ten san pham/.test(plain) ? 'name' : /quy cach/.test(plain) ? 'spec' :
+    /lot long/.test(plain) ? 'innerWidth' : /khoang ho/.test(plain) ? 'clearance' : /tu tieu chuan|kich thuoc tu|phu bi|khoang tu/.test(plain) ? 'cabinetWidth' : '';
+  return {field,label:label.replace(/\s*\((?:mm|vn[dđ]|lw|ld|lh)\)\s*/gi,' ').replace(/\s*\bmm\s*$/i,'').replace(/\s+/g,' ').trim()};
+}
 function garisProduct(html,url,path,validate) {
   const name = readable(html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i)?.[1]);
   const images = [];
@@ -482,16 +516,36 @@ function garisProduct(html,url,path,validate) {
     ...(subgroup ? [{key:'web-garis-danh-muc',label:'Danh mục',order:1,values:[subgroup]}] : [])]);
   const common = {brand:'Garis',supplier:'garis.vn',image,imageAlternates,lineId:'garis-' + new URL(url).pathname.replace(/\W+/g,'-'),
     lineName:name,detail:url,subgroup:subgroup || group,sourceFacets,tags:[group,subgroup].filter(Boolean)};
+  // Bảng mã của Garis không cố định cột (4–7 cột, có trang tách dòng tiêu đề thành bảng riêng, có ô gộp rowspan/colspan)
+  // → đọc theo TÊN CỘT ở dòng tiêu đề "Mã sản phẩm / Mã đặt hàng", không theo vị trí.
   const rows = [];
+  let header = null;
   for (const table of html.matchAll(/<table\b[^>]*>[\s\S]*?<\/table\s*>/gi)) {
-    for (const row of table[0].matchAll(/<tr\b[^>]*>([\s\S]*?)<\/tr\s*>/gi)) {
-      const cells = [...row[1].matchAll(/<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]\s*>/gi)].map(cell => readable(cell[1]));
-      const variant = require('./product-lines').tableRow(cells.join(' | '));
-      if (!variant) continue;
-      // Bảng web: Mã | Quy cách | Tủ tiêu chuẩn | Khoảng hở | Lọt lòng | Đơn vị | Đơn giá
-      const price = parsePrice(cells[6]);
-      rows.push({...common,...variant,name:variant.code,cabinetWidth:cells[2] || variant.cabinetWidth,clearance:cells[3] || variant.clearance,
-        innerWidth:cells[4] || '',unit:cells[5] || variant.unit,...(price ? {price,priceUnit:cells[5] || 'Bộ'} : {})});
+    for (const {cells,carried,wide} of garisGrid(table[0])) {
+      const first = cells[0] || '';
+      if (/^mã\s*(sản phẩm|đặt hàng|hàng|sp)\b/i.test(first)) { header = cells.map(garisColumn); continue; }
+      if (!header) continue;
+      const amount = (cells.at(-1) || '').match(/\d{1,3}(?:[.,]\d{3})+/)?.[0];
+      // Sản phẩm bán theo bộ nhiều món: dòng "Tổng" mới là giá của cả bộ.
+      if (/^tổng\b/i.test(first)) { const price = parsePrice(amount || ''); if (price && rows.length) Object.assign(rows.at(-1),{price,priceUnit:rows.at(-1).unit || 'Bộ'}); continue; }
+      const code = first.replace(/\.\s+/g,'.').replace(/\s*\/\s*/g,'/').replace(/\s+/g,'/').toUpperCase();
+      // Ô mã được gộp từ dòng trên = món lẻ của cùng mã → bỏ; dòng không phải mã (bảng thông số lẫn vào) → bỏ.
+      if (carried[0] || !/^[A-Z]{1,6}\d[A-Z0-9./-]*$/.test(code) || rows.some(row => row.code === code)) continue;
+      const row = {...common,code,name:code,spec:'',cabinetWidth:'',clearance:'',innerWidth:'',unit:'',kemTu:'',note:''};
+      const notes = [];
+      cells.forEach((value,index) => {
+        const column = header[index];
+        if (!index || !column || !value || /^[-–—]+$/.test(value)) return;
+        if (wide[index]) notes.push(value);
+        else if (column.field === 'price') { const price = parsePrice(value.match(/\d{1,3}(?:[.,]\d{3})+/)?.[0] || ''); if (price) row.price = price; }
+        else if (column.field === 'spec') row.spec ||= value.replace(/\s*([*×])\s*/g,'$1');
+        else if (column.field === 'name') row.name = value;
+        else if (column.field && !row[column.field]) row[column.field] = value;
+        else notes.push(column.label + ': ' + value);
+      });
+      row.note = notes.join('; ').slice(0,300);
+      if (row.price) row.priceUnit = row.unit || 'Bộ';
+      rows.push(row);
     }
   }
   if (rows.length) return rows;
@@ -528,7 +582,8 @@ async function importGaris(startUrl,load,validate,maxItems,onProgress) {
     } catch (error) { warnings.push(error.message); }
     onProgress?.({done:++done,total:products.size,items:items.length});
   }
-  const groups = normalizeSourceFacets(items.flatMap(item => item.sourceFacets),200);
+  // normalizeSourceFacets chỉ đọc 100 nhóm đầu → gom trùng trước, không thì web nhiều mã bị mất danh mục trong bộ lọc.
+  const groups = normalizeSourceFacets([...new Map(items.flatMap(item => item.sourceFacets).map(group => [group.key + '|' + group.values.join('|'),group])).values()],200);
   return {items:items.slice(0,maxItems),warnings,sourceFilterGroups:groups,crawled:{categories:pages.length,products:products.size}};
 }
 
