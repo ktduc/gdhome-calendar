@@ -290,6 +290,47 @@ cases['multi-delete'] = async page => {
   }
 };
 
+cases['sort-time'] = async page => {
+  await page.goto('/');
+  await page.locator('.project-owner-header').first().waitFor();
+  await page.locator('#btn-view-msproject').click();
+  // 3 nút nối/sắp xếp nằm gọn trong thanh bên ở mọi độ rộng
+  for (const width of [1280,1440,1920,2560]) {
+    await page.setViewportSize({width,height:900});
+    for (const id of ['btn-auto-link-stages','btn-auto-relink-stages','btn-sort-stages-by-time']) {
+      const fit = await page.locator('#'+id).evaluate(el => el.scrollWidth <= el.clientWidth + 1 && el.getBoundingClientRect().right <= el.closest('.sb-autolink-row').getBoundingClientRect().right + 1);
+      assert.ok(fit,id+' không tràn chữ ở '+width);
+    }
+  }
+  const before = await page.evaluate(() => AppState.tasks.filter(t => t.id.startsWith('st-')).map(t => t.id).join());
+  await page.locator('#btn-sort-stages-by-time').click();
+  await page.waitForFunction(() => AppState.tasks.filter(t => t.id.startsWith('st-')).map(t => t.id).join() === 'st-a,st-b,st-y,st-x');
+  assert.equal(await page.evaluate(() => AppState.calendars.find(c => c.id === 'c1').hasManualTaskOrder),true);
+  // Ctrl+Z trả lại thứ tự cũ
+  await page.locator('body').click({position:{x:5,y:300}});
+  await page.keyboard.press('Control+z');
+  await page.waitForFunction(b => AppState.tasks.filter(t => t.id.startsWith('st-')).map(t => t.id).join() === b,before);
+};
+
+cases['library-undo'] = async page => {
+  await page.goto('/tools');
+  await page.locator('.gd-tools-menu summary').waitFor();
+  await page.evaluate(async () => { await GDHomeAssets.loadLibrary(true); GDHomeAssets.openLibrary({categoryId:'cat-6'}); });
+  const dialog = page.locator('.asset-library-dialog');
+  const history = dialog.locator('.asset-history');
+  await history.waitFor();
+  const name = 'Hạng mục thử hoàn tác';
+  await page.evaluate(n => fetch('/api/library/categories',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}),name);
+  await page.evaluate(() => GDHomeAssets.loadLibrary(true));
+  await history.getByRole('button',{name:'↶ Hoàn tác'}).click();
+  await page.waitForFunction(n => GDHomeAssets.loadLibrary().then(l => !l.categories.some(c => c.name === n)),name);
+  await dialog.locator('h2').click();
+  await page.keyboard.press('Control+y');                     // phím tắt Làm lại
+  await page.waitForFunction(n => GDHomeAssets.loadLibrary().then(l => l.categories.some(c => c.name === n)),name);
+  const box = await history.boundingBox(), close = await dialog.locator('.close-dialog').boundingBox();
+  assert.ok(box.x + box.width <= close.x + 1 && Math.abs(box.y - close.y) < 20,'Nút Hoàn tác/Làm lại nằm cạnh nút đóng');
+};
+
 cases['24.1'] = async page => {
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();
@@ -5285,6 +5326,11 @@ async function main() {
       const caseSchedule = structuredClone(schedule);
       if (key === '24.1') caseSchedule.mspCustomTitlePrefix = 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
       if (['13.3','17.2'].includes(key)) caseSchedule.projectOwners.push({id:'gd13-other',name:'Dự án thứ hai'});
+      if (key === 'sort-time') caseSchedule.tasks.push(
+        {id:'st-x',calendarId:'c1',title:'X',startDate:'2026-11-08',endDate:'2026-11-08',predecessors:[]},
+        {id:'st-b',calendarId:'c1',title:'B',startDate:'2026-11-10',endDate:'2026-11-11',predecessors:[{id:'st-a',type:'FS',lag:0}]},
+        {id:'st-y',calendarId:'c1',title:'Y',startDate:'2026-11-05',endDate:'2026-11-05',predecessors:[]},
+        {id:'st-a',calendarId:'c1',title:'A',startDate:'2026-11-02',endDate:'2026-11-03',predecessors:[]});
       if (key === 'multi-delete') {
         caseSchedule.projectOwners.push({id:'pB',name:'Nhà phố B'});
         caseSchedule.calendars.push({id:'cB',ownerId:'pB',name:'Phần thô',visible:true,color:'#06c'});

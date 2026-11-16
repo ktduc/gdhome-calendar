@@ -571,6 +571,41 @@ function sortAllTasksChronologically(resetManual = false) {
   AppState.tasks = sortedAll;
 }
 
+// Sắp lại theo dòng thời gian trong các giai đoạn đã chọn; việc đã NỐI với nhau (cùng giai đoạn) luôn đứng liền nhau.
+// Mỗi chuỗi nối xếp theo ngày sớm nhất của chuỗi; trong chuỗi cũng theo ngày. Giữ nguyên vị trí khối của từng giai đoạn.
+function sortTasksByTimeKeepLinked(calIds) {
+  const byDate = (a, b) => (a.startDate || '').localeCompare(b.startDate || '') || (a.endDate || '').localeCompare(b.endDate || '');
+  const parent = new Map();
+  const find = id => { while (parent.get(id) !== id) id = parent.get(id); return id; };
+  const inScope = AppState.tasks.filter(t => calIds.has(t.calendarId));
+  const byId = new Map(inScope.map(t => [t.id, t]));
+  inScope.forEach(t => parent.set(t.id, t.id));
+  inScope.forEach(t => (t.predecessors || []).forEach(l => {
+    const p = byId.get(l.id);
+    if (p && p.calendarId === t.calendarId) parent.set(find(t.id), find(p.id));
+  }));
+  const sortedByCal = new Map();
+  calIds.forEach(cid => {
+    const groups = new Map();
+    inScope.filter(t => t.calendarId === cid).forEach(t => {
+      const root = find(t.id);
+      if (!groups.has(root)) groups.set(root, []);
+      groups.get(root).push(t);
+    });
+    const list = [...groups.values()].map(g => g.sort(byDate)).sort((a, b) => byDate(a[0], b[0])).flat();
+    sortedByCal.set(cid, list);
+  });
+  const cursor = new Map();
+  AppState.tasks = AppState.tasks.map(t => {
+    if (!sortedByCal.has(t.calendarId)) return t;
+    const i = cursor.get(t.calendarId) || 0;
+    cursor.set(t.calendarId, i + 1);
+    return sortedByCal.get(t.calendarId)[i];
+  });
+  // Giữ thứ tự vừa xếp, không để bước tự xếp theo ngày tách chuỗi nối
+  AppState.calendars.forEach(c => { if (calIds.has(c.id)) c.hasManualTaskOrder = true; });
+}
+
 // Chuẩn hóa dữ liệu
 function normalizeAppState() {
   for (const field of Object.keys(scheduleTextDefaults)) {
@@ -8785,5 +8820,13 @@ window.addEventListener('DOMContentLoaded', () => {
     let n = 0;
     cals.forEach(c => { n += autoLinkStage(c.id, AppState.tasks, { markAuto: true }); });
     syncAllFromMSProject(`↺ Đã nối lại ${n} liên kết trong ${cals.length} giai đoạn (Ctrl+Z để hoàn tác)`);
+  });
+  const btnSort = document.getElementById('btn-sort-stages-by-time');
+  if (btnSort) btnSort.addEventListener('click', () => {
+    const timelineOn = !!document.querySelector('.msp-split-workspace') && !!document.querySelector('.msp-split-workspace').offsetParent;
+    const cals = timelineOn && typeof getMspTargetCalendars === 'function' ? getMspTargetCalendars() : [getActiveCalendar()].filter(Boolean);
+    if (!cals.length) return;
+    sortTasksByTimeKeepLinked(new Set(cals.map(c => c.id)));
+    syncAllFromMSProject(`⇅ Đã sắp lại theo thời gian trong ${cals.length} giai đoạn, giữ các việc đã nối liền nhau (Ctrl+Z để hoàn tác)`);
   });
 });

@@ -3977,6 +3977,28 @@ window.GDHomeAssets = (() => {
 
   function openLibrary({groupName,categoryId,onPick} = {}) {
     const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
+    // Hoàn tác / Làm lại mọi thay đổi của Dữ liệu dùng chung (lịch sử giữ trên server, 20 bước)
+    dialog.querySelector('h2').insertAdjacentHTML('afterend','<div class="asset-history" role="group" aria-label="Lịch sử thay đổi">' +
+      '<button type="button" data-history="undo" title="Hoàn tác thay đổi vừa làm (Ctrl+Z)">↶ Hoàn tác</button>' +
+      '<button type="button" data-history="redo" title="Làm lại (Ctrl+Y)">↷ Làm lại</button></div>');
+    async function libraryHistory(kind) {
+      if (isGuest()) return toast('Đăng nhập để dùng Hoàn tác / Làm lại.');
+      try {
+        const result = await libraryCall('history/' + kind,{});
+        toast(result.empty ? (kind === 'undo' ? 'Không còn thay đổi nào để hoàn tác.' : 'Không còn thay đổi nào để làm lại.')
+          : (kind === 'undo' ? '↶ Đã hoàn tác' : '↷ Đã làm lại'));
+      } catch (error) { toast(error.message); }
+    }
+    dialog.querySelectorAll('[data-history]').forEach(button => button.onclick = () => libraryHistory(button.dataset.history));
+    dialog.addEventListener('keydown',event => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key !== 'z' && key !== 'y') return;
+      event.stopPropagation();                                 // không để Ctrl+Z lọt xuống hoàn tác Lịch tiến độ phía sau
+      if (event.target.closest('input,textarea,select,[contenteditable="true"]')) return; // ô nhập: hoàn tác chữ như thường
+      event.preventDefault();
+      libraryHistory(key === 'y' || event.shiftKey ? 'redo' : 'undo');
+    });
     const searchId = 'asset-search-' + uid();
     let current = categoryId || null, query = '', status = '';
     let uploadDisplay, imageObserver, searchTimer;

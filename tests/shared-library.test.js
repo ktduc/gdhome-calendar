@@ -259,3 +259,40 @@ test('GĐ20.4 gộp mã theo tài khoản, giữ ảnh đích, nối PA và hoà
   assert.ok(undone.data.items.some(item => item.id === source.id));
   assert.deepEqual((await options()).map(pa => pa.libraryItemId),[source.id,target.id,undefined]);
 });
+
+test('Dữ liệu dùng chung: Hoàn tác / Làm lại mọi thay đổi, bỏ qua thao tác ngầm', async () => {
+  const { call } = harness();
+  const user = 'undo-redo@example.com';
+  const list = async () => (await call('/api/library',null,user)).data;
+  const category = (await list()).categories[5].id;
+  const added = await call('/api/library/items',{ categoryId:category,items:[{ full:a,thumb:b,name:'Gạch A' }] },user);
+  const id = added.data.items.find(item => item.full).id;
+  await call('/api/library/items/update',{ id,name:'Gạch A đổi tên' },user);
+  await call('/api/library/items/update',{ id,used:true },user);              // đếm lượt dùng: không vào lịch sử
+  await call('/api/library/preferences',{ showPrices:true },user);            // bật/tắt hiện giá: không vào lịch sử
+  let undone = await call('/api/library/history/undo',{},user);
+  assert.equal(undone.data.items.find(item => item.id === id).name,'Gạch A');
+  assert.deepEqual(undone.data.history,{undo:1,redo:1});
+  undone = await call('/api/library/history/undo',{},user);
+  assert.equal(undone.data.items.some(item => item.id === id),false,'Hoàn tác cả bước thêm ảnh');
+  assert.equal((await call('/api/library/history/undo',{},user)).data.empty,true);
+  const redone = await call('/api/library/history/redo',{},user);
+  assert.equal(redone.data.items.find(item => item.id === id).name,'Gạch A');
+  assert.ok(redone.data._version > undone.data._version,'Phiên bản luôn tăng');
+  // Thay đổi mới xoá nhánh Làm lại
+  await call('/api/library/categories',{ name:'Hạng mục mới' },user);
+  assert.equal((await call('/api/library/history/redo',{},user)).data.empty,true);
+  // Tài khoản khác không đụng lịch sử của nhau
+  assert.equal((await call('/api/library/history/undo',{},'khac@example.com')).data.empty,true);
+});
+
+test('Hoàn tác thư viện không đổi tuỳ chọn hiện giá', async () => {
+  const { call } = harness();
+  const user = 'undo-price@example.com';
+  await call('/api/library',null,user);
+  await call('/api/library/categories',{ name:'HM thử' },user);
+  await call('/api/library/preferences',{ showPrices:true },user);
+  const undone = await call('/api/library/history/undo',{},user);
+  assert.equal(undone.data.showPrices,true);
+  assert.equal(undone.data.categories.some(c => c.name === 'HM thử'),false);
+});

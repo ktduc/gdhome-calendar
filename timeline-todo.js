@@ -153,6 +153,14 @@
       if (!task) toast(`Hạng mục "${item.title}" đã xoá khỏi Timeline – việc trở lại danh sách`);
       patch(item, body, () => Object.assign(item, body)).finally(() => st.linkPending.delete(item.id));
     }
+    // Đổi màu cũ (tím/cam) của dự án TODO sang be ghi / navy – chạy 1 lần rồi thôi
+    let recolored = false;
+    const todoCal = AppState.calendars.find(c => c.id === TODO_CAL_ID);
+    if (todoCal && OLD_TODO_COLORS[todoCal.color]) { todoCal.color = OLD_TODO_COLORS[todoCal.color]; recolored = true; }
+    for (const task of AppState.tasks) {
+      if (task.calendarId === TODO_CAL_ID && OLD_TODO_COLORS[task.color]) { task.color = OLD_TODO_COLORS[task.color]; recolored = true; }
+    }
+    if (recolored) syncAllFromMSProject();
     // Hạng mục tạo thẳng trong dự án TODO (gõ trên Timeline) -> tự thêm việc tương ứng vào danh sách
     for (const task of AppState.tasks) {
       if (task.calendarId !== TODO_CAL_ID || task.todoId || st.linkPending.has(task.id) || !task.title) continue;
@@ -173,7 +181,9 @@
   // ------------------------------------------------------------------ DỰ ÁN "TODO" RIÊNG (giống dự án NOTION, luôn nằm cuối)
   const TODO_OWNER_ID = 'owner_todo';
   const TODO_CAL_ID = 'cal_todo';
-  const TODO_COLOR = '#7c3aed';
+  const TODO_COLOR = '#8c7d6b';                             // be ghi (đồng bộ cửa sổ Todo)
+  const TODO_STAR_COLOR = '#4d6188';                        // xanh navy dịu cho việc có sao
+  const OLD_TODO_COLORS = {'#7c3aed': TODO_COLOR, '#f59e0b': TODO_STAR_COLOR};
   function ensureTodoStage() {
     if (!Array.isArray(AppState.projectOwners)) AppState.projectOwners = [];
     let owner = AppState.projectOwners.find(o => o.id === TODO_OWNER_ID);
@@ -195,7 +205,7 @@
     if (!cal) return;
     cal.visible = true;
     const ownTasks = AppState.tasks.filter(x => x.calendarId === cal.id && x.color);
-    const color = cal.id === TODO_CAL_ID ? (item.star ? '#f59e0b' : TODO_COLOR)
+    const color = cal.id === TODO_CAL_ID ? (item.star ? TODO_STAR_COLOR : TODO_COLOR)
       : ownTasks.length ? ownTasks[ownTasks.length - 1].color : (cal.color || '#1565c0');
     // Việc trong dự án TODO độc lập nhau: mã "task_td_" để không bị "Tự nối việc mới tạo"
     const task = {id: (cal.id === TODO_CAL_ID ? 'task_td_' : 'task_') + Date.now(), calendarId: cal.id, title: item.title, startDate: date, endDate: date,

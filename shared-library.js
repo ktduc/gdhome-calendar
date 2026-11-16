@@ -196,14 +196,35 @@ function missingCategories(library,names) {
   return out;
 }
 
-async function mutate(store, key, change, persist = data => store.put(key,data)) {
+// Hoàn tác / Làm lại chung cho Dữ liệu dùng chung: lưu bản trước mỗi thay đổi (trong bộ nhớ server).
+// shortcut: mất lịch sử khi server khởi động lại, tối đa 20 bước / 40 MB mỗi tài khoản – đủ cho sửa nhầm vừa làm.
+const HISTORY_STEPS = 20, HISTORY_CHARS = 40e6;
+const histories = new Map();
+function historyOf(key) {
+  if (!histories.has(key)) histories.set(key,{undo:[],redo:[]});
+  return histories.get(key);
+}
+function pushHistory(list,snapshot) {
+  list.push(snapshot);
+  let size = list.reduce((sum,item) => sum + item.length,0);
+  while (list.length > HISTORY_STEPS || (list.length > 1 && size > HISTORY_CHARS)) size -= list.shift().length;
+}
+const stripVersion = json => json.replace(/"_version":\d+,?/,'');
+
+async function mutate(store, key, change, persist = data => store.put(key,data), {history = true} = {}) {
   const previous = queues.get(key) || Promise.resolve();
   const run = previous.catch(() => {}).then(async () => {
     const data = normalize(await store.get(key));
+    const before = history ? JSON.stringify(data) : '';
     const result = await change(data);
     data.brands = brands.normalize(data.brands,data.items);
     data._version += 1;
     await persist(data,result);
+    if (history && stripVersion(before) !== stripVersion(JSON.stringify(data))) {
+      const h = historyOf(key);
+      pushHistory(h.undo,before);
+      h.redo = [];
+    }
     return { data, result };
   });
   queues.set(key, run);
@@ -294,17 +315,31 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
     if (groups.length && missingCategories(normalize(stored),groups).length) {
       const {data} = await mutate(store,key,data => {
         for (const name of missingCategories(data,groups)) data.categories.push({id:'cat-' + crypto.randomUUID().slice(0,8),name:shortName(name),source:text(name,160)});
-      });
+      },undefined,{history:false});
       return sendJson(res,200,data);
     }
     if (!stored?.paintSeeded || !stored?.woodSeeded) {
-      const {data} = await mutate(store,key,() => {});
+      const {data} = await mutate(store,key,() => {},undefined,{history:false});
       return sendJson(res,200,data);
     }
     return sendJson(res,200,normalize(stored));
   }
   if (req.method !== 'POST') fail(405, 'Phương thức không hỗ trợ.');
   const body = await readJsonBody(req);
+  if (urlPath === '/api/library/history/undo' || urlPath === '/api/library/history/redo') {
+    const undo = urlPath.endsWith('/undo');
+    const h = historyOf(key);
+    const from = undo ? h.undo : h.redo, to = undo ? h.redo : h.undo;
+    if (!from.length) return sendJson(res,200,{empty:true,history:{undo:h.undo.length,redo:h.redo.length}});
+    const target = from.pop();
+    const {data} = await mutate(store,key,data => {
+      pushHistory(to,JSON.stringify(data));                   // bản hiện tại sang phía bên kia
+      const restored = normalize(JSON.parse(target)), showPrices = data.showPrices;
+      for (const field of Object.keys(data)) if (field !== '_version') delete data[field];
+      Object.assign(data,restored,{_version:data._version,showPrices}); // tuỳ chọn xem không bị hoàn tác
+    },undefined,{history:false});
+    return sendJson(res,200,{...data,history:{undo:h.undo.length,redo:h.redo.length}});
+  }
   if (urlPath === '/api/library/brands') {
     const {data} = await mutate(store,key,data => {
       if (Array.isArray(body.order)) {
@@ -358,7 +393,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
   }
   if (urlPath === '/api/library/preferences') {
     if (typeof body.showPrices !== 'boolean') fail(400,'Thiết lập hiện giá không hợp lệ.');
-    const {data} = await mutate(store,key,data => { data.showPrices = body.showPrices; });
+    const {data} = await mutate(store,key,data => { data.showPrices = body.showPrices; },undefined,{history:false});
     return sendJson(res,200,data);
   }
   if (urlPath === '/api/library/items') {
@@ -504,7 +539,7 @@ async function handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, 
         item.used = Math.min(1e6,(item.used || 0) + 1);
         item.lastUsedAt = Date.now();
       }
-    });
+    },undefined,{history:!Object.keys(body || {}).every(field => field === 'id' || field === 'used')}); // chỉ đếm lượt dùng: không vào lịch sử
     return sendJson(res, 200, data);
   }
   if (urlPath === '/api/library/items/delete') {

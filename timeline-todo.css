@@ -163,7 +163,8 @@
 }
 .gd-todo-star:hover { color: #d97706; background: rgba(255, 251, 235, .9); }
 .gd-todo-star.on { color: #f59e0b; }
-.gd-todo-list li.starred:not(.done) { background: rgba(255, 244, 214, .62); }
+.gd-todo-list li.starred:not(.done) { background: rgba(77, 97, 136, .17); box-shadow: inset 3px 0 0 rgba(77, 97, 136, .6), 0 1px 2px rgba(50, 42, 34, .06); }
+.gd-todo-list li.starred:not(.done)[draggable="true"]:hover { background: rgba(77, 97, 136, .24); }
 .gd-todo-assign-row { flex-basis: 100%; padding: 4px 0 2px 38px; }
 .gd-todo-assign-row select { width: 100%; padding: 5px; border: 1px solid rgba(125, 110, 93, .45); border-radius: 8px; font: inherit; font-size: 12px; background: #fff; }
 .gd-todo-list li.gd-todo-insert-before { box-shadow: inset 0 3px 0 var(--todo-accent); }
@@ -191,17 +192,17 @@
 /* Gợi ý chỗ thả trên Timeline */
 .gd-todo-drop-hint.column {
   position: absolute; top: 0; bottom: 0; z-index: 4; pointer-events: none;
-  background: rgba(124, 58, 237, .14); border-left: 2px dashed #7c3aed; border-right: 2px dashed #7c3aed;
+  background: rgba(140, 125, 107, .16); border-left: 2px dashed #8c7d6b; border-right: 2px dashed #8c7d6b;
 }
 .gd-todo-drop-hint.to-project { background: rgba(22, 163, 74, .18) !important; border-color: #16a34a !important; }
 .gd-todo-day-badge {
   position: absolute; top: 1px; right: 1px; z-index: 2;
   min-width: 15px; height: 15px; padding: 0 3px;
   border: 0; border-radius: 999px;
-  background: #7c3aed; color: #fff;
+  background: #8c7d6b; color: #fff;
   font: 700 9.5px/15px Roboto, system-ui, sans-serif; cursor: pointer;
 }
-.gd-todo-day-badge.star { background: #f59e0b; }
+.gd-todo-day-badge.star { background: #4d6188; }
 .gd-todo-flash { animation: gdTodoFlash 1.6s ease; }
 @keyframes gdTodoFlash { 0%, 60% { background: #fef08a; } 100% { background: transparent; } }
 
@@ -211,5 +212,5 @@
 /* ★ cạnh ô nhập: bật thì việc mới tự gắn sao */
 .gd-todo-add button.gd-todo-star-new { width: 30px; height: 36px; flex: none; border-radius: 10px; font-size: 19px; background: transparent; color: #a39a8f; }
 .gd-todo-add button.gd-todo-star-new:hover { background: rgba(255, 251, 235, .8); color: #d97706; }
-.gd-todo-add button.gd-todo-star-new.on { color: #f59e0b; background: rgba(255, 244, 214, .7); }
-.gd-todo-add textarea.star-on { border-color: rgba(245, 158, 11, .55); background: rgba(255, 248, 228, .6); }
+.gd-todo-add button.gd-todo-star-new.on { color: #f59e0b; background: rgba(77, 97, 136, .18); }
+.gd-todo-add textarea.star-on { border-color: rgba(77, 97, 136, .5); background: rgba(77, 97, 136, .08); }
