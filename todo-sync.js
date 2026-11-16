@@ -235,9 +235,17 @@ function todoSync({secret, env = process.env, fetchFn = fetch, clock = () => new
         item.msModified = r.lastModifiedDateTime;
         item.syncedAt = item.updatedAt;
       }
+      // Việc trên web chưa liên kết mà bên Microsoft đã có việc trùng tên (vd. liên kết lại sau khi ngắt) -> ghép, không tạo bản sao
+      const titleKey = value => String(value || '').trim().toLocaleLowerCase('vi');
+      const unlinked = data.items.filter(item => !item.msId && !item.deleted && !item.done);
       for (const r of remote.values()) {
         if (known.has(r.id)) continue;
         const f = remoteFields(r);
+        const same = unlinked.find(item => !item.msId && titleKey(item.title) === titleKey(f.title));
+        if (same) {
+          Object.assign(same, f, {msId:r.id, msModified:r.lastModifiedDateTime, updatedAt:now, syncedAt:now});
+          continue;
+        }
         data.items.push({id:'td_' + crypto.randomUUID(), ...f, order:topOrder(data.items), createdAt:now, updatedAt:now,
           msId:r.id, msModified:r.lastModifiedDateTime, syncedAt:now});
       }
@@ -308,8 +316,8 @@ function todoSync({secret, env = process.env, fetchFn = fetch, clock = () => new
         if (body.listId !== data.ms.listId) {
           data.ms.listId = String(body.listId || '').slice(0, 300);
           data.ms.listName = cleanTitle(body.listName);
-          data.items.forEach(item => { delete item.msId; delete item.msModified; delete item.syncedAt; });
-          data.items = data.items.filter(item => !item.deleted);
+          // Việc đã đồng bộ thuộc danh sách cũ -> bỏ khỏi web (vẫn còn bên Microsoft); việc chưa từng đồng bộ thì đưa sang danh sách mới
+          data.items = data.items.filter(item => !item.msId && !item.deleted);
           await syncData(dataKey, data);
         }
         return view(data);

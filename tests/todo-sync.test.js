@@ -10,9 +10,10 @@ function memStore() {
 // Giả lập Microsoft Graph + đăng nhập Microsoft
 function fakeMs() {
   const tasks = new Map();
+  const lists = {L1: tasks, L2: new Map()};                     // L1 = Tasks (mặc định), L2 = danh sách khác
   let seq = 0, tick = 0;
   const stamp = () => new Date(Date.UTC(2026, 10, 16, 0, 0, ++tick)).toISOString();
-  const add = (title, extra = {}) => { const id = 'ms' + (++seq); tasks.set(id, {id, title, status: 'notStarted', lastModifiedDateTime: stamp(), ...extra}); return id; };
+  const add = (title, extra = {}, list = tasks) => { const id = 'ms' + (++seq); list.set(id, {id, title, status: 'notStarted', lastModifiedDateTime: stamp(), ...extra}); return id; };
   const calls = [];
   const json = (status, body) => ({ok: status < 400, status, json: async () => body});
   async function fetchFn(url, opts = {}) {
@@ -24,20 +25,21 @@ function fakeMs() {
       return json(200, {access_token: 'AT', refresh_token: 'RT2', expires_in: 3600});
     }
     if (url.endsWith('/me?$select=mail,userPrincipalName')) return json(200, {mail: 'a@b.c'});
-    if (url.endsWith('/me/todo/lists')) return json(200, {value: [{id: 'L1', displayName: 'Tasks', wellknownListName: 'defaultList'}]});
-    const m = url.match(/\/lists\/L1\/tasks(?:\/([^?]+))?(\?.*)?$/);
-    if (!m) return json(404, {});
-    const id = m[1] && decodeURIComponent(m[1]);
+    if (url.endsWith('/me/todo/lists')) return json(200, {value: [{id: 'L1', displayName: 'Tasks', wellknownListName: 'defaultList'}, {id: 'L2', displayName: 'Công trình'}]});
+    const m = url.match(/\/lists\/(L\d)\/tasks(?:\/([^?]+))?(\?.*)?$/);
+    if (!m || !lists[m[1]]) return json(404, {});
+    const tasks = lists[m[1]];
+    const id = m[2] && decodeURIComponent(m[2]);
     const body = opts.body ? JSON.parse(opts.body) : {};
     if (!id && method === 'GET') return json(200, {value: [...tasks.values()].filter(t => t.status !== 'completed')});
-    if (!id && method === 'POST') { const nid = add(body.title, {status: body.status, importance: body.importance, dueDateTime: body.dueDateTime}); return json(201, tasks.get(nid)); }
+    if (!id && method === 'POST') { const nid = add(body.title, {status: body.status, importance: body.importance, dueDateTime: body.dueDateTime}, tasks); return json(201, tasks.get(nid)); }
     if (!tasks.has(id)) return json(404, {});
     if (method === 'GET') return json(200, tasks.get(id));
     if (method === 'PATCH') { Object.assign(tasks.get(id), body, {lastModifiedDateTime: stamp()}); return json(200, tasks.get(id)); }
     if (method === 'DELETE') { tasks.delete(id); return {ok: true, status: 204, json: async () => ({})}; }
     return json(400, {});
   }
-  return {tasks, add, fetchFn, calls, touch: (id, patch) => Object.assign(tasks.get(id), patch, {lastModifiedDateTime: stamp()})};
+  return {tasks, lists, add, fetchFn, calls, touch: (id, patch) => Object.assign(tasks.get(id), patch, {lastModifiedDateTime: stamp()})};
 }
 
 const env = {MS_TODO_CLIENT_ID: 'cid', MS_TODO_CLIENT_SECRET: 'sec', MS_TODO_REDIRECT_URI: 'https://x/api/todos/ms/callback'};
@@ -181,4 +183,40 @@ test('todo: quyền Microsoft hết hạn -> báo liên kết lại, không làm
   await sync2.handle({method: 'POST'}, {}, '/api/todos/sync', {store: h.store, dataKey: 'u@x.com', readJsonBody: async () => ({}), sendJson: (r, s, o) => { out = o; }});
   assert.equal(out.ms.linked, false);
   assert.equal(out.items.length, 1);
+});
+
+test('todo: đổi danh sách qua lại không đẩy việc về danh sách cũ, không nhân bản', async () => {
+  const ms = fakeMs();
+  const h = harness(ms);
+  await link(h);
+  await h.call('POST', '/api/todos', {title: 'Việc A'});
+  await h.call('POST', '/api/todos', {title: 'Việc B'});
+  await h.call('POST', '/api/todos/sync');
+  assert.equal(ms.lists.L1.size, 2);
+  // Trong app Microsoft To Do: chuyển A, B sang danh sách L2 (= xoá ở L1, tạo mới ở L2)
+  for (const [id, t] of [...ms.lists.L1]) { ms.lists.L1.delete(id); ms.add(t.title, {}, ms.lists.L2); }
+  let v = await h.call('POST', '/api/todos/ms/list', {listId: 'L2', listName: 'Công trình'});
+  assert.deepEqual(v.items.map(i => i.title).sort(), ['Việc A', 'Việc B']);
+  assert.equal(ms.lists.L2.size, 2, 'Không đẩy thêm bản sao sang L2');
+  // Chọn lại danh sách mặc định: chỉ thấy việc của L1 (đang trống), không đẩy việc về L1
+  v = await h.call('POST', '/api/todos/ms/list', {listId: 'L1', listName: 'Tasks'});
+  assert.deepEqual(v.items.filter(i => !i.done).map(i => i.title), []);
+  assert.equal(ms.lists.L1.size, 0, 'Không nhảy việc về Tasks');
+  // Đổi tiếp sang L2 lần nữa: vẫn đúng 2 việc
+  v = await h.call('POST', '/api/todos/ms/list', {listId: 'L2', listName: 'Công trình'});
+  assert.equal(v.items.length, 2);
+  assert.equal(ms.lists.L2.size, 2);
+});
+
+test('todo: liên kết lại sau khi ngắt không nhân bản việc đã có bên Microsoft', async () => {
+  const ms = fakeMs();
+  const h = harness(ms);
+  await link(h);
+  await h.call('POST', '/api/todos', {title: 'Việc C'});
+  await h.call('POST', '/api/todos/sync');
+  await h.call('POST', '/api/todos/ms/unlink');
+  await link(h);
+  const v = await h.call('POST', '/api/todos/sync');
+  assert.equal(ms.lists.L1.size, 1, 'Ghép theo tên, không tạo bản thứ 2');
+  assert.equal(v.items.filter(i => i.title === 'Việc C').length, 1);
 });
