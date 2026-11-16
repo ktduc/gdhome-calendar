@@ -163,7 +163,7 @@
 }
 .gd-todo-star:hover { color: #d97706; background: rgba(255, 251, 235, .9); }
 .gd-todo-star.on { color: #f59e0b; }
-.gd-todo-list li.starred:not(.done) { background: rgba(77, 97, 136, .17); box-shadow: inset 3px 0 0 rgba(77, 97, 136, .6), 0 1px 2px rgba(50, 42, 34, .06); }
+.gd-todo-list li.starred:not(.done) { background: rgba(77, 97, 136, .17); }
 .gd-todo-list li.starred:not(.done)[draggable="true"]:hover { background: rgba(77, 97, 136, .24); }
 .gd-todo-assign-row { flex-basis: 100%; padding: 4px 0 2px 38px; }
 .gd-todo-assign-row select { width: 100%; padding: 5px; border: 1px solid rgba(125, 110, 93, .45); border-radius: 8px; font: inherit; font-size: 12px; background: #fff; }
