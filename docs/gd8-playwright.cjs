@@ -92,25 +92,66 @@ cases['todo'] = async page => {
   await panel.locator('.gd-todo-add input').fill('Đặt rèm');
   await panel.locator('.gd-todo-add input').press('Enter');
   await panel.locator('li[draggable="true"]').getByText('Đặt rèm').waitFor();
-  // Kéo "Gọi thợ điện" vào dòng dự án c1 trên Gantt
+  await panel.locator('.gd-todo-add input').fill('Hỏi BQL');
+  await panel.locator('.gd-todo-add input').press('Enter');
+  await panel.locator('li[draggable="true"]').getByText('Hỏi BQL').waitFor();
+  const titles = () => panel.locator('li[draggable="true"] .gd-todo-title').allTextContents();
+  assert.deepEqual(await titles(),['Hỏi BQL','Đặt rèm','Gọi thợ điện'],'Việc mới lên đầu');
+  // Kéo thả đổi thứ tự: "Gọi thợ điện" lên đầu
+  await panel.locator('li[draggable="true"]',{hasText:'Gọi thợ điện'}).dragTo(panel.locator('li[draggable="true"]',{hasText:'Hỏi BQL'}),{targetPosition:{x:40,y:3}});
+  await page.waitForFunction(() => document.querySelector('#gd-todo-list li .gd-todo-title').textContent === 'Gọi thợ điện');
+  assert.deepEqual(await titles(),['Gọi thợ điện','Hỏi BQL','Đặt rèm']);
+  // Sao ưu tiên: "Đặt rèm" lên đầu
+  await panel.locator('li',{hasText:'Đặt rèm'}).locator('.gd-todo-star').click();
+  await page.waitForFunction(() => document.querySelector('#gd-todo-list li .gd-todo-title').textContent === 'Đặt rèm');
+  let saved = await page.request.get('/api/todos').then(r => r.json());
+  assert.equal(saved.items.find(i => i.title === 'Đặt rèm').star,true);
+  const sortedSaved = saved.items.filter(i => !i.star).sort((a,b) => a.order-b.order).map(i => i.title);
+  assert.deepEqual(sortedSaved,['Gọi thợ điện','Hỏi BQL'],'Thứ tự lưu trên server');
+  // Thả lên Timeline (không giữ Shift) -> chỉ hẹn ngày, KHÔNG tạo hạng mục dự án
   const row = page.locator('#msp-gantt-rows-layer .msp-gantt-row[data-cal-id="c1"]').first();
   await row.scrollIntoViewIfNeeded();
   const colWidth = await page.evaluate(() => _mspTimelineInfo.colWidth);
+  const tasksBefore = await page.evaluate(() => AppState.tasks.length);
   await panel.locator('li[draggable="true"]',{hasText:'Gọi thợ điện'}).dragTo(row,{targetPosition:{x:colWidth*3+5,y:8}});
+  const day3 = await page.evaluate(() => mspDateFromIndex(3));
+  await page.waitForFunction(d => GDTimelineTodo.state.items.find(i => i.title === 'Gọi thợ điện').due === d,day3);
+  assert.equal(await page.evaluate(() => AppState.tasks.length),tasksBefore,'Không tạo hạng mục khi chỉ thả');
+  await page.locator('#msp-gantt-days-row .msp-gantt-day-cell').nth(3).locator('.gd-todo-day-badge').waitFor();
+  // Bấm 📁 chọn dự án -> tạo hạng mục đúng ngày đã hẹn
+  const li = panel.locator('li',{hasText:'Gọi thợ điện'});
+  await li.hover();
+  await li.locator('[data-act="assign"]').click();
+  await li.locator('.gd-todo-assign-select').selectOption('c1');
   const task = await page.waitForFunction(() => AppState.tasks.find(t => t.title === 'Gọi thợ điện' && t.todoId)).then(h => h.jsonValue());
   assert.equal(task.calendarId,'c1');
-  assert.equal(task.startDate,task.endDate);
-  assert.equal(task.startDate,await page.evaluate(() => mspDateFromIndex(3)));
+  assert.equal(task.startDate,day3);
   await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('.gd-todo-due.linked').waitFor();
-  let saved = await page.request.get('/api/todos').then(r => r.json());
-  const todo = saved.items.find(i => i.title === 'Gọi thợ điện');
+  await page.waitForFunction(() => !document.querySelector('#msp-gantt-days-row .gd-todo-day-badge'));
+  saved = await page.request.get('/api/todos').then(r => r.json());
+  let todo = saved.items.find(i => i.title === 'Gọi thợ điện');
   assert.equal(todo.taskId,task.id);
-  assert.equal(todo.due,task.startDate);
+  assert.equal(todo.due,day3);
+  // Xoá hạng mục trên Timeline -> việc bỏ liên kết, trở lại danh sách
+  await page.evaluate(id => { AppState.tasks = AppState.tasks.filter(t => t.id !== id); syncAllFromMSProject(); },task.id);
+  await page.waitForFunction(() => !GDTimelineTodo.state.items.find(i => i.title === 'Gọi thợ điện').taskId);
+  await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('[data-act="assign"]').waitFor({state:'attached'});
+  await page.waitForFunction(() => fetch('/api/todos').then(r => r.json()).then(v => !v.items.find(i => i.title === 'Gọi thợ điện').taskId));
+  // Xếp lại vào dự án rồi tick xong
+  await li.hover();
+  await li.locator('[data-act="assign"]').click();
+  await li.locator('.gd-todo-assign-select').selectOption('c1');
+  const task2 = await page.waitForFunction(() => AppState.tasks.find(t => t.title === 'Gọi thợ điện' && t.todoId)).then(h => h.jsonValue());
+  await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('.gd-todo-due.linked').waitFor();
+  // Đổi ngày hạng mục trên Timeline -> hạn của việc đổi theo
+  await page.evaluate(id => { const t = AppState.tasks.find(x => x.id === id); t.endDate = mspDateFromIndex(6); syncAllFromMSProject(); },task2.id);
+  await page.waitForFunction(() => GDTimelineTodo.state.items.find(i => i.title === 'Gọi thợ điện').due === mspDateFromIndex(6));
+  const taskId2 = task2.id;
   // Tick hoàn thành -> ẩn khỏi danh sách, hạng mục lên 100%
   await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('.gd-todo-chk').click();
   await panel.locator('li',{hasText:'Gọi thợ điện'}).waitFor({state:'detached'});
-  assert.equal(await page.evaluate(id => AppState.tasks.find(t => t.id === id).progress,task.id),100);
-  assert.match(await page.locator('#gd-todo-toggle').textContent(),/1/);
+  assert.equal(await page.evaluate(id => AppState.tasks.find(t => t.id === id).progress,taskId2),100);
+  assert.match(await page.locator('#gd-todo-toggle').textContent(),/2/);
   await panel.locator('[data-act="done"]').click();
   await panel.locator('li.done',{hasText:'Gọi thợ điện'}).waitFor();
   saved = await page.request.get('/api/todos').then(r => r.json());

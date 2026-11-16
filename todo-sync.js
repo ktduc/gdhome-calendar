@@ -32,7 +32,13 @@ function cleanDate(value) {
 
 function publicItem(item) {
   return {id:item.id, title:item.title, done:!!item.done, due:item.due || '', taskId:item.taskId || '',
+    star:!!item.star, order:typeof item.order === 'number' ? item.order : 0,
     createdAt:item.createdAt, updatedAt:item.updatedAt, doneAt:item.doneAt || '', msLinked:!!item.msId};
+}
+
+// Việc mới luôn lên đầu danh sách (giống Microsoft To Do)
+function topOrder(items) {
+  return items.reduce((min, item) => Math.min(min, typeof item.order === 'number' ? item.order : 0), 0) - 1;
 }
 
 function todoSync({secret, env = process.env, fetchFn = fetch, clock = () => new Date()} = {}) {
@@ -170,11 +176,11 @@ function todoSync({secret, env = process.env, fetchFn = fetch, clock = () => new
   }
 
   function remoteFields(r) {
-    return {title:cleanTitle(r.title) || '(không tên)', done:r.status === 'completed',
+    return {title:cleanTitle(r.title) || '(không tên)', done:r.status === 'completed', star:r.importance === 'high',
       due:r.dueDateTime && r.dueDateTime.dateTime ? String(r.dueDateTime.dateTime).slice(0, 10) : ''};
   }
   function toRemote(item) {
-    return {title:item.title, status:item.done ? 'completed' : 'notStarted',
+    return {title:item.title, status:item.done ? 'completed' : 'notStarted', importance:item.star ? 'high' : 'normal',
       dueDateTime:item.due ? {dateTime:item.due + 'T00:00:00', timeZone:TZ} : null};
   }
 
@@ -230,7 +236,7 @@ function todoSync({secret, env = process.env, fetchFn = fetch, clock = () => new
       for (const r of remote.values()) {
         if (known.has(r.id)) continue;
         const f = remoteFields(r);
-        data.items.push({id:'td_' + crypto.randomUUID(), ...f, createdAt:now, updatedAt:now,
+        data.items.push({id:'td_' + crypto.randomUUID(), ...f, order:topOrder(data.items), createdAt:now, updatedAt:now,
           msId:r.id, msModified:r.lastModifiedDateTime, syncedAt:now});
       }
       for (const item of data.items) {
@@ -262,10 +268,21 @@ function todoSync({secret, env = process.env, fetchFn = fetch, clock = () => new
       if (!title) return sendJson(res, 400, {message:'Nhập nội dung công việc.'});
       return sendJson(res, 200, await withData(store, dataKey, data => {
         const now = nowIso();
-        const item = {id:'td_' + crypto.randomUUID(), title, done:false, due:cleanDate(body.due), createdAt:now, updatedAt:now};
+        const item = {id:'td_' + crypto.randomUUID(), title, done:false, due:cleanDate(body.due), star:!!body.star,
+          order:topOrder(data.items), createdAt:now, updatedAt:now};
         data.items.push(item);
         prune(data);
         return {item:publicItem(item), ...view(data)};
+      }));
+    }
+    // Kéo thả đổi thứ tự: nhận danh sách id theo thứ tự mới (thứ tự chỉ lưu trên web, Graph không có API thứ tự)
+    if (urlPath === '/api/todos/order' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const ids = Array.isArray(body.ids) ? body.ids.map(String).slice(0, MAX_ITEMS) : [];
+      return sendJson(res, 200, await withData(store, dataKey, data => {
+        const byId = new Map(data.items.map(item => [item.id, item]));
+        ids.forEach((id, index) => { const item = byId.get(id); if (item) item.order = index; });
+        return view(data);
       }));
     }
     if (urlPath === '/api/todos/sync' && method === 'POST') {
@@ -323,6 +340,7 @@ function todoSync({secret, env = process.env, fetchFn = fetch, clock = () => new
           }
           if (body.due !== undefined) item.due = cleanDate(body.due);
           if (body.taskId !== undefined) item.taskId = String(body.taskId || '').slice(0, 120);
+          if (body.star !== undefined) item.star = !!body.star;
           if (body.done !== undefined) {
             item.done = !!body.done;
             item.doneAt = item.done ? now : '';

@@ -100,13 +100,29 @@
   background: #f8fafc; color: #475569; font-size: 11px; cursor: pointer;
 }
 .gd-todo-due.linked { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
-.gd-todo-del {
-  flex: none; width: 22px; height: 22px;
+.gd-todo-due.overdue { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+.gd-todo-list li { flex-wrap: wrap; position: relative; }
+.gd-todo-mini {
+  flex: none; width: 22px; height: 22px; padding: 0;
   border: 0; border-radius: 4px; background: transparent;
-  color: #94a3b8; font-size: 16px; cursor: pointer; opacity: 0;
+  color: #94a3b8; font-size: 13px; cursor: pointer; opacity: 0;
 }
-.gd-todo-list li:hover .gd-todo-del, .gd-todo-del:focus-visible { opacity: 1; }
+.gd-todo-del { font-size: 16px; }
+.gd-todo-list li:hover .gd-todo-mini, .gd-todo-mini:focus-visible { opacity: 1; }
 .gd-todo-del:hover { background: #fee2e2; color: #b91c1c; }
+.gd-todo-assign:hover { background: #eff6ff; }
+.gd-todo-star {
+  flex: none; width: 24px; height: 24px; padding: 0;
+  border: 0; border-radius: 4px; background: transparent;
+  color: #94a3b8; font-size: 17px; line-height: 1; cursor: pointer;
+}
+.gd-todo-star:hover { color: #d97706; background: #fffbeb; }
+.gd-todo-star.on { color: #f59e0b; }
+.gd-todo-list li.starred:not(.done) { background: #fffbeb; }
+.gd-todo-assign-row { flex-basis: 100%; padding: 4px 0 2px 38px; }
+.gd-todo-assign-row select { width: 100%; padding: 5px; border: 1px solid #93c5fd; border-radius: 6px; font: inherit; font-size: 12px; }
+.gd-todo-list li.gd-todo-insert-before { box-shadow: inset 0 2px 0 #2563eb; }
+.gd-todo-list li.gd-todo-insert-after { box-shadow: inset 0 -2px 0 #2563eb; }
 .gd-todo-empty { justify-content: center; color: #64748b; padding: 18px 6px !important; }
 .gd-todo-sep { color: #64748b; font-size: 11px; font-weight: 600; text-transform: uppercase; padding-top: 10px !important; }
 
@@ -127,7 +143,18 @@
 .gd-todo-err { color: #b91c1c; font-size: 11px; }
 
 /* Gợi ý chỗ thả trên Timeline */
-.gd-todo-drop-hint { background: rgba(22, 163, 74, .18) !important; border-color: #16a34a !important; }
-.gd-todo-drop-row { outline: 2px dashed #16a34a; outline-offset: -2px; }
+.gd-todo-drop-hint.column {
+  position: absolute; top: 0; bottom: 0; z-index: 4; pointer-events: none;
+  background: rgba(245, 158, 11, .16); border-left: 2px dashed #f59e0b; border-right: 2px dashed #f59e0b;
+}
+.gd-todo-drop-hint.to-project { background: rgba(22, 163, 74, .18) !important; border-color: #16a34a !important; }
+.gd-todo-day-badge {
+  position: absolute; top: 1px; right: 1px; z-index: 2;
+  min-width: 15px; height: 15px; padding: 0 3px;
+  border: 0; border-radius: 999px;
+  background: #2563eb; color: #fff;
+  font: 700 9.5px/15px Roboto, system-ui, sans-serif; cursor: pointer;
+}
+.gd-todo-day-badge.star { background: #f59e0b; }
 .gd-todo-flash { animation: gdTodoFlash 1.6s ease; }
 @keyframes gdTodoFlash { 0%, 60% { background: #fef08a; } 100% { background: transparent; } }

@@ -30,7 +30,7 @@ function fakeMs() {
     const id = m[1] && decodeURIComponent(m[1]);
     const body = opts.body ? JSON.parse(opts.body) : {};
     if (!id && method === 'GET') return json(200, {value: [...tasks.values()].filter(t => t.status !== 'completed')});
-    if (!id && method === 'POST') { const nid = add(body.title, {status: body.status, dueDateTime: body.dueDateTime}); return json(201, tasks.get(nid)); }
+    if (!id && method === 'POST') { const nid = add(body.title, {status: body.status, importance: body.importance, dueDateTime: body.dueDateTime}); return json(201, tasks.get(nid)); }
     if (!tasks.has(id)) return json(404, {});
     if (method === 'GET') return json(200, tasks.get(id));
     if (method === 'PATCH') { Object.assign(tasks.get(id), body, {lastModifiedDateTime: stamp()}); return json(200, tasks.get(id)); }
@@ -140,6 +140,29 @@ test('todo: đồng bộ 2 chiều với Microsoft To Do', async () => {
   ms.tasks.delete(msId);
   v = await h.call('POST', '/api/todos/sync');
   assert.equal(v.items.some(i => i.id === third.item.id), false);
+});
+
+test('todo: việc mới lên đầu, kéo thả đổi thứ tự, sao ưu tiên đồng bộ "Quan trọng"', async () => {
+  const ms = fakeMs();
+  const h = harness(ms);
+  const a = await h.call('POST', '/api/todos', {title: 'A'});
+  const b = await h.call('POST', '/api/todos', {title: 'B'});
+  let v = await h.call('GET', '/api/todos');
+  const sorted = items => items.slice().sort((x, y) => x.order - y.order).map(i => i.title);
+  assert.deepEqual(sorted(v.items), ['B', 'A']);
+  v = await h.call('POST', '/api/todos/order', {ids: [a.item.id, b.item.id]});
+  assert.deepEqual(sorted(v.items), ['A', 'B']);
+  await link(h);
+  await h.call('PATCH', '/api/todos/' + b.item.id, {star: true});
+  await h.call('POST', '/api/todos/sync');
+  assert.equal([...ms.tasks.values()].find(t => t.title === 'B').importance, 'high');
+  assert.equal([...ms.tasks.values()].find(t => t.title === 'A').importance, 'normal');
+  const aId = [...ms.tasks.values()].find(t => t.title === 'A').id;
+  ms.touch(aId, {importance: 'high'});
+  v = await h.call('POST', '/api/todos/sync');
+  assert.equal(v.items.find(i => i.title === 'A').star, true);
+  // Thứ tự không bị đồng bộ làm xáo trộn
+  assert.deepEqual(sorted(v.items), ['A', 'B']);
 });
 
 test('todo: quyền Microsoft hết hạn -> báo liên kết lại, không làm hỏng danh sách', async () => {
