@@ -29,6 +29,7 @@ const { handleProjectHub } = require('./project-hub');
 const { getStorageKind } = require('./object-storage');
 const { driveBackup } = require('./drive-backup');
 const { handleWorkApi } = require('./work-manager');
+const { todoSync } = require('./todo-sync');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -48,6 +49,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET ||
 const SESSION_DAYS = 30;
 integrations.setSecret(SESSION_SECRET);
 const backups = driveBackup({secret:SESSION_SECRET,dataDir:DATA_DIR});
+const todos = todoSync({secret:SESSION_SECRET});
 const SHARED_KEY = 'shared'; // dữ liệu chung (khi không bật đăng nhập) = data.json cũ
 
 // Chỉ cho phép tải các file giao diện, KHÔNG cho tải data.json / backups / server.js / .bat qua trình duyệt
@@ -63,7 +65,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css', 'timeline-todo.js', 'timeline-todo.css']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -520,7 +522,7 @@ async function handleApi(req, res, urlPath) {
       googleClientId: GOOGLE_CLIENT_ID || null,
       storage: store ? store.kind : 'file',
       objectStorage: getStorageKind(),
-      features: {...integrations.features(),driveBackup:AUTH_MODE === 'google' && backups.available}
+      features: {...integrations.features(),driveBackup:AUTH_MODE === 'google' && backups.available,msTodo:todos.available}
     });
     return;
   }
@@ -554,6 +556,15 @@ async function handleApi(req, res, urlPath) {
       if (AUTH_MODE === 'google') linked = await backups.callback(store,new URL(req.url,'http://localhost').searchParams);
     } catch { console.error('[DRIVE] Không hoàn tất được liên kết OAuth.'); }
     res.writeHead(303,{Location:'/tools?drive-backup=' + (linked ? 'linked' : 'error'),
+      'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
+    return res.end();
+  }
+
+  if (urlPath === '/api/todos/ms/callback' && req.method === 'GET') {
+    let linked = false;
+    try { linked = await todos.callback(store,new URL(req.url,'http://localhost').searchParams); }
+    catch { console.error('[MS TODO] Không hoàn tất được liên kết OAuth.'); }
+    res.writeHead(303,{Location:'/?ms-todo=' + (linked ? 'linked' : 'error'),
       'Cache-Control':'no-store','Referrer-Policy':'no-referrer'});
     return res.end();
   }
@@ -601,6 +612,9 @@ async function handleApi(req, res, urlPath) {
   }
   if (urlPath === '/api/library' || urlPath.startsWith('/api/library/')) {
     return handleLibrary(req, urlPath, { res, store, dataKey, readJsonBody, sendJson });
+  }
+  if (urlPath === '/api/todos' || urlPath.startsWith('/api/todos/')) {
+    return todos.handle(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
   }
   if (urlPath === '/api/work' || urlPath.startsWith('/api/work/')) {
     return handleWorkApi(req, res, urlPath, { sendJson, readJsonBody, dataKey, store, defaultSchedule: defaultData });

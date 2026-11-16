@@ -1,0 +1,133 @@
+/* Việc cần làm trên Timeline (timeline-todo.js) – chỉ hiện trong #msproject-view-wrapper */
+.gd-todo-toggle {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 900;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 14px;
+  border: 1px solid #1d4ed8;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font: 600 13px/1 Roboto, system-ui, sans-serif;
+  box-shadow: 0 4px 14px rgba(15, 23, 42, .22);
+  cursor: pointer;
+}
+.gd-todo-toggle b {
+  min-width: 18px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #fff;
+  color: #1d4ed8;
+  font-size: 11px;
+  text-align: center;
+}
+.gd-todo-toggle.active { background: #1e40af; }
+.gd-todo-toggle:focus-visible, .gd-todo-panel button:focus-visible { outline: 2px solid #f59e0b; outline-offset: 2px; }
+
+.gd-todo-panel {
+  position: fixed;
+  right: 18px;
+  bottom: 64px;
+  z-index: 901;
+  width: min(340px, calc(100vw - 32px));
+  max-height: min(70vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .22);
+  font: 13px/1.35 Roboto, system-ui, sans-serif;
+  color: #0f172a;
+}
+.gd-todo-panel[hidden] { display: none; }
+.gd-todo-panel.dragging { opacity: .55; }
+
+.gd-todo-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 10px 8px 14px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.gd-todo-head strong { font-size: 14px; }
+.gd-todo-status { flex: 1; min-width: 0; color: #64748b; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-todo-status.err { color: #b91c1c; }
+.gd-todo-icon {
+  width: 26px; height: 26px;
+  border: 0; border-radius: 6px;
+  background: transparent; color: #475569;
+  font-size: 16px; cursor: pointer;
+}
+.gd-todo-icon:hover { background: #f1f5f9; }
+
+.gd-todo-add { display: flex; gap: 6px; padding: 10px 12px 4px; }
+.gd-todo-add input {
+  flex: 1; min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid #cbd5e1; border-radius: 6px;
+  font: inherit;
+}
+.gd-todo-add input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, .18); }
+.gd-todo-add button {
+  width: 32px; border: 0; border-radius: 6px;
+  background: #2563eb; color: #fff; font-size: 18px; cursor: pointer;
+}
+.gd-todo-hint { margin: 2px 12px 6px; color: #64748b; font-size: 11px; }
+
+.gd-todo-list { list-style: none; margin: 0; padding: 0 6px 6px; overflow-y: auto; flex: 1; min-height: 60px; }
+.gd-todo-list li {
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 6px;
+  border-radius: 6px;
+}
+.gd-todo-list li[draggable="true"] { cursor: grab; }
+.gd-todo-list li[draggable="true"]:hover { background: #f1f5f9; }
+.gd-todo-list li[draggable="true"]:active { cursor: grabbing; }
+.gd-todo-grip { color: #94a3b8; font-size: 11px; letter-spacing: -2px; user-select: none; }
+.gd-todo-list li.done .gd-todo-grip { visibility: hidden; }
+.gd-todo-chk { width: 16px; height: 16px; margin: 0; accent-color: #16a34a; cursor: pointer; flex: none; }
+.gd-todo-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.gd-todo-list li.done .gd-todo-title { color: #94a3b8; text-decoration: line-through; }
+.gd-todo-edit { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid #2563eb; border-radius: 4px; font: inherit; }
+.gd-todo-due {
+  flex: none; padding: 2px 6px;
+  border: 1px solid #e2e8f0; border-radius: 999px;
+  background: #f8fafc; color: #475569; font-size: 11px; cursor: pointer;
+}
+.gd-todo-due.linked { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.gd-todo-del {
+  flex: none; width: 22px; height: 22px;
+  border: 0; border-radius: 4px; background: transparent;
+  color: #94a3b8; font-size: 16px; cursor: pointer; opacity: 0;
+}
+.gd-todo-list li:hover .gd-todo-del, .gd-todo-del:focus-visible { opacity: 1; }
+.gd-todo-del:hover { background: #fee2e2; color: #b91c1c; }
+.gd-todo-empty { justify-content: center; color: #64748b; padding: 18px 6px !important; }
+.gd-todo-sep { color: #64748b; font-size: 11px; font-weight: 600; text-transform: uppercase; padding-top: 10px !important; }
+
+.gd-todo-foot { border-top: 1px solid #e2e8f0; padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+.gd-todo-link { align-self: flex-start; padding: 0; border: 0; background: none; color: #2563eb; font: inherit; font-size: 12px; cursor: pointer; }
+.gd-todo-link:hover { text-decoration: underline; }
+.gd-todo-ms { font-size: 12px; color: #334155; }
+.gd-todo-ms-row { display: flex; align-items: center; gap: 10px; }
+.gd-todo-ms-row span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.gd-todo-ms-lists select { width: 100%; margin-top: 6px; padding: 5px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; }
+.gd-todo-ms-btn {
+  width: 100%; padding: 7px 10px;
+  border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc;
+  font: 600 12px Roboto, system-ui, sans-serif; color: #0f172a; cursor: pointer;
+}
+.gd-todo-ms-btn:hover { background: #eff6ff; border-color: #93c5fd; }
+.gd-todo-muted { color: #94a3b8; }
+.gd-todo-err { color: #b91c1c; font-size: 11px; }
+
+/* Gợi ý chỗ thả trên Timeline */
+.gd-todo-drop-hint { background: rgba(22, 163, 74, .18) !important; border-color: #16a34a !important; }
+.gd-todo-drop-row { outline: 2px dashed #16a34a; outline-offset: -2px; }
+.gd-todo-flash { animation: gdTodoFlash 1.6s ease; }
+@keyframes gdTodoFlash { 0%, 60% { background: #fef08a; } 100% { background: transparent; } }

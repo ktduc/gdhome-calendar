@@ -71,6 +71,56 @@ cases['24.2'] = async page => {
   }
 };
 
+cases['todo'] = async page => {
+  await page.goto('/');
+  await page.locator('.project-owner-header').first().waitFor();
+  assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false,'Bảng Lịch không hiện Todo');
+  await page.locator('#btn-view-msproject').click();
+  for (const width of [1280,1440,1920,2560]) {
+    await page.setViewportSize({width,height:900});
+    const box = await page.locator('#gd-todo-toggle').boundingBox();
+    assert.ok(box && box.x + box.width <= width,'Nút Todo nằm trong màn hình '+width);
+  }
+  await page.setViewportSize({width:1440,height:900});
+  await page.locator('#gd-todo-toggle').click();
+  const panel = page.locator('#gd-todo-panel');
+  await panel.waitFor();
+  assert.match(await panel.locator('.gd-todo-ms').textContent(),/chưa cấu hình/);
+  await panel.locator('.gd-todo-add input').fill('Gọi thợ điện');
+  await panel.locator('.gd-todo-add input').press('Enter');
+  await panel.locator('li[draggable="true"]').getByText('Gọi thợ điện').waitFor();
+  await panel.locator('.gd-todo-add input').fill('Đặt rèm');
+  await panel.locator('.gd-todo-add input').press('Enter');
+  await panel.locator('li[draggable="true"]').getByText('Đặt rèm').waitFor();
+  // Kéo "Gọi thợ điện" vào dòng dự án c1 trên Gantt
+  const row = page.locator('#msp-gantt-rows-layer .msp-gantt-row[data-cal-id="c1"]').first();
+  await row.scrollIntoViewIfNeeded();
+  const colWidth = await page.evaluate(() => _mspTimelineInfo.colWidth);
+  await panel.locator('li[draggable="true"]',{hasText:'Gọi thợ điện'}).dragTo(row,{targetPosition:{x:colWidth*3+5,y:8}});
+  const task = await page.waitForFunction(() => AppState.tasks.find(t => t.title === 'Gọi thợ điện' && t.todoId)).then(h => h.jsonValue());
+  assert.equal(task.calendarId,'c1');
+  assert.equal(task.startDate,task.endDate);
+  assert.equal(task.startDate,await page.evaluate(() => mspDateFromIndex(3)));
+  await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('.gd-todo-due.linked').waitFor();
+  let saved = await page.request.get('/api/todos').then(r => r.json());
+  const todo = saved.items.find(i => i.title === 'Gọi thợ điện');
+  assert.equal(todo.taskId,task.id);
+  assert.equal(todo.due,task.startDate);
+  // Tick hoàn thành -> ẩn khỏi danh sách, hạng mục lên 100%
+  await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('.gd-todo-chk').click();
+  await panel.locator('li',{hasText:'Gọi thợ điện'}).waitFor({state:'detached'});
+  assert.equal(await page.evaluate(id => AppState.tasks.find(t => t.id === id).progress,task.id),100);
+  assert.match(await page.locator('#gd-todo-toggle').textContent(),/1/);
+  await panel.locator('[data-act="done"]').click();
+  await panel.locator('li.done',{hasText:'Gọi thợ điện'}).waitFor();
+  saved = await page.request.get('/api/todos').then(r => r.json());
+  assert.equal(saved.items.find(i => i.title === 'Gọi thợ điện').done,true);
+  // Về Bảng Lịch: Todo ẩn
+  await page.locator('#btn-view-calendar').click();
+  assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false);
+  assert.equal(await panel.isVisible(),false);
+};
+
 cases['24.1'] = async page => {
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();
@@ -5066,6 +5116,7 @@ async function main() {
       const caseSchedule = structuredClone(schedule);
       if (key === '24.1') caseSchedule.mspCustomTitlePrefix = 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
       if (['13.3','17.2'].includes(key)) caseSchedule.projectOwners.push({id:'gd13-other',name:'Dự án thứ hai'});
+      if (key === 'todo') caseSchedule.tasks.push({id:'todo-base',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-06'});
       if (key === '17.2') {
         caseSchedule.calendars.push({id:'other-cal',ownerId:'gd13-other',name:'Khác',visible:true,color:'#a00'});
         caseSchedule.tasks.push({id:'gd17-task',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-03'});
