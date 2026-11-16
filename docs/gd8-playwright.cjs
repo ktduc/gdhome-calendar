@@ -86,14 +86,14 @@ cases['todo'] = async page => {
   const panel = page.locator('#gd-todo-panel');
   await panel.waitFor();
   assert.match(await panel.locator('.gd-todo-ms').textContent(),/chưa cấu hình/);
-  await panel.locator('.gd-todo-add input').fill('Gọi thợ điện');
-  await panel.locator('.gd-todo-add input').press('Enter');
+  await panel.locator('.gd-todo-add textarea').fill('Gọi thợ điện');
+  await panel.locator('.gd-todo-add textarea').press('Enter');
   await panel.locator('li[draggable="true"]').getByText('Gọi thợ điện').waitFor();
-  await panel.locator('.gd-todo-add input').fill('Đặt rèm');
-  await panel.locator('.gd-todo-add input').press('Enter');
+  await panel.locator('.gd-todo-add textarea').fill('Đặt rèm');
+  await panel.locator('.gd-todo-add textarea').press('Enter');
   await panel.locator('li[draggable="true"]').getByText('Đặt rèm').waitFor();
-  await panel.locator('.gd-todo-add input').fill('Hỏi BQL');
-  await panel.locator('.gd-todo-add input').press('Enter');
+  await panel.locator('.gd-todo-add textarea').fill('Hỏi BQL');
+  await panel.locator('.gd-todo-add textarea').press('Enter');
   await panel.locator('li[draggable="true"]').getByText('Hỏi BQL').waitFor();
   const titles = () => panel.locator('li[draggable="true"] .gd-todo-title').allTextContents();
   assert.deepEqual(await titles(),['Hỏi BQL','Đặt rèm','Gọi thợ điện'],'Việc mới lên đầu');
@@ -140,7 +140,10 @@ cases['todo'] = async page => {
   await page.evaluate(id => { AppState.tasks = AppState.tasks.filter(t => t.id !== id); syncAllFromMSProject(); },task.id);
   await page.waitForFunction(() => !GDTimelineTodo.state.items.find(i => i.title === 'Gọi thợ điện').taskId);
   await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('[data-act="assign"]').waitFor({state:'attached'});
-  await page.waitForFunction(() => fetch('/api/todos').then(r => r.json()).then(v => !v.items.find(i => i.title === 'Gọi thợ điện').taskId));
+  await page.waitForFunction(() => fetch('/api/todos').then(r => r.json()).then(v => {
+    const i = v.items.find(x => x.title === 'Gọi thợ điện');
+    return !i.taskId && !i.due;                                  // xoá hạng mục -> bỏ luôn ngày
+  }));
   // Xếp lại vào dự án rồi tick xong
   await li.hover();
   await li.locator('[data-act="assign"]').click();
@@ -164,11 +167,42 @@ cases['todo'] = async page => {
   await page.evaluate(() => { AppState.tasks.push({id:'task_manual_todo',calendarId:'cal_todo',title:'Mua sơn lót',startDate:mspDateFromIndex(8),endDate:mspDateFromIndex(8),predecessors:[]}); syncAllFromMSProject(); });
   await panel.locator('li',{hasText:'Mua sơn lót'}).locator('.gd-todo-due.linked').waitFor();
   assert.equal(await page.evaluate(() => GDTimelineTodo.state.items.find(i => i.title === 'Mua sơn lót').due),await page.evaluate(() => mspDateFromIndex(8)));
-  page.once('dialog',dialog => dialog.accept());
   const manual = panel.locator('li',{hasText:'Mua sơn lót'});
   await manual.hover();
   await manual.locator('[data-act="del"]').click();
+  const ask = page.locator('dialog.gd-ask');                     // hộp xác nhận giao diện web, không phải của Chrome
+  await ask.getByText('Mua sơn lót').waitFor();
+  await ask.locator('[data-ask="ok"]').click();
   await page.waitForFunction(() => !AppState.tasks.some(t => t.id === 'task_manual_todo'));
+  // Nhập nhiều dòng: Shift+Enter xuống dòng, Enter lưu; ô sửa cao đúng bằng chữ hiển thị
+  const addBox = panel.locator('.gd-todo-add textarea');
+  await addBox.click();
+  await page.keyboard.type('Dòng một');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('Dòng hai');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('Dòng ba');
+  const addHeight = (await addBox.boundingBox()).height;
+  assert.ok(addHeight > 50,'Ô thêm việc cao theo 3 dòng: '+addHeight);
+  await page.keyboard.press('Enter');
+  const multiTitle = panel.locator('li .gd-todo-title',{hasText:'Dòng một'});
+  await multiTitle.waitFor();
+  assert.equal(await multiTitle.textContent(),'Dòng một\nDòng hai\nDòng ba');
+  const shown = await multiTitle.boundingBox();
+  assert.ok(shown.height >= 50,'Hiện đủ 3 dòng: '+shown.height);
+  await page.waitForFunction(() => !GDTimelineTodo.state.items.some(i => String(i.id).startsWith('tmp_')));
+  await multiTitle.dblclick();
+  const editBox = panel.locator('textarea.gd-todo-edit');
+  const editing = await editBox.boundingBox();
+  assert.ok(Math.abs(editing.height - shown.height) <= 2 && Math.abs(editing.width - shown.width) <= 2,
+    'Ô sửa trùng khung chữ: '+JSON.stringify({shown,editing}));
+  await page.keyboard.press('Escape');
+  // Đậm nhạt theo tuỳ chọn Timeline
+  await page.evaluate(() => { AppState.mspFontWeight = 'bold'; applyMspFontWeight(); });
+  assert.equal(await panel.evaluate(el => getComputedStyle(el.querySelector('.gd-todo-title')).fontWeight),'600');
+  await page.evaluate(() => { AppState.mspFontWeight = 'light'; applyMspFontWeight(); });
+  assert.equal(await panel.evaluate(el => getComputedStyle(el.querySelector('.gd-todo-title')).fontWeight),'300');
+  await page.evaluate(() => { AppState.mspFontWeight = 'normal'; applyMspFontWeight(); });
   // Cửa sổ cao gần hết màn hình, nút nổi ẩn khi đang mở
   const panelBox = await panel.boundingBox();
   assert.ok(panelBox.height >= 900 - 90,'Cửa sổ Todo cao hết màn hình: '+panelBox.height);
@@ -177,6 +211,52 @@ cases['todo'] = async page => {
   await page.locator('#btn-view-calendar').click();
   assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false);
   assert.equal(await panel.isVisible(),false);
+};
+
+cases['multi-delete'] = async page => {
+  const nativeDialogs = [];
+  page.on('dialog',dialog => { nativeDialogs.push(dialog.message()); dialog.dismiss(); });
+  await page.goto('/');
+  await page.locator('.project-owner-header').first().waitFor();
+  await page.locator('#btn-view-msproject').click();
+  await page.locator('.msp-task-bar[data-task-id="md-a1"]').waitFor();
+  // Chọn nhiều việc ở 2 dự án khác nhau (như giữ Shift/Ctrl bấm chọn)
+  await page.evaluate(() => { AppState.selectedTaskIds = ['md-a1','md-a2','md-b1']; renderMSProjectView(); });
+  await page.locator('.msp-task-bar[data-task-id="md-b1"]').click({button:'right'});
+  const menu = page.locator('#custom-context-menu');
+  await menu.getByText('Xóa 3 công việc đã chọn').click();
+  const ask = page.locator('dialog.gd-ask');
+  await ask.waitFor();
+  assert.equal(await ask.locator('h2').textContent(),'Xoá 3 hạng mục?');
+  const groups = await ask.locator('.gd-ask-group').allTextContents();
+  assert.deepEqual(groups.map(g => g.replace(/\s*\(\d+\)$/,'')),['Căn hộ mẫu GĐ8 · Thi công','Nhà phố B · Phần thô']);
+  assert.deepEqual(await ask.locator('li').allTextContents(),['Đổ trần','Xây tường','Ép cọc']);
+  // Huỷ -> không xoá gì
+  await ask.locator('[data-ask="cancel"]').click();
+  await ask.waitFor({state:'detached'});
+  assert.equal(await page.evaluate(() => AppState.tasks.filter(t => t.id.startsWith('md-')).length),4);
+  // Đồng ý -> xoá đúng 3 việc đã chọn, giữ việc còn lại
+  await page.locator('.msp-task-bar[data-task-id="md-a1"]').click({button:'right'});
+  await menu.getByText('Xóa 3 công việc đã chọn').click();
+  await ask.locator('[data-ask="ok"]').click();
+  await page.waitForFunction(() => AppState.tasks.filter(t => t.id.startsWith('md-')).map(t => t.id).join() === 'md-a3');
+  assert.deepEqual(await page.evaluate(() => AppState.selectedTaskIds),[]);
+  // Xoá 1 việc lẻ cũng dùng hộp của web
+  await page.locator('.msp-task-bar[data-task-id="md-a3"]').click({button:'right'});
+  await menu.getByText('Xóa công việc này').click();
+  assert.equal(await ask.locator('h2').textContent(),'Xoá hạng mục?');
+  await ask.locator('[data-ask="ok"]').click();
+  await page.waitForFunction(() => !AppState.tasks.some(t => t.id === 'md-a3'));
+  for (const width of [1280,2560]) {
+    await page.setViewportSize({width,height:900});
+    await page.evaluate(() => { GDHomeShell.confirm({title:'Thử',groups:[{title:'A',items:['1']}]}); });
+    await ask.waitFor();
+    const box = await ask.boundingBox();
+    assert.ok(box.x >= 0 && box.x + box.width <= width,'Hộp xác nhận nằm trong màn hình '+width);
+    await page.keyboard.press('Escape');
+    await ask.waitFor({state:'detached'});
+  }
+  assert.deepEqual(nativeDialogs,[],'Không còn hộp thoại của Chrome');
 };
 
 cases['24.1'] = async page => {
@@ -5174,6 +5254,15 @@ async function main() {
       const caseSchedule = structuredClone(schedule);
       if (key === '24.1') caseSchedule.mspCustomTitlePrefix = 'TIẾN ĐỘ THIẾT KẾ DỰ KIẾN -';
       if (['13.3','17.2'].includes(key)) caseSchedule.projectOwners.push({id:'gd13-other',name:'Dự án thứ hai'});
+      if (key === 'multi-delete') {
+        caseSchedule.projectOwners.push({id:'pB',name:'Nhà phố B'});
+        caseSchedule.calendars.push({id:'cB',ownerId:'pB',name:'Phần thô',visible:true,color:'#06c'});
+        caseSchedule.tasks.push(
+          {id:'md-a1',calendarId:'c1',title:'Đổ trần',startDate:'2026-11-02',endDate:'2026-11-03',predecessors:[]},
+          {id:'md-a2',calendarId:'c1',title:'Xây tường',startDate:'2026-11-04',endDate:'2026-11-05',predecessors:[]},
+          {id:'md-a3',calendarId:'c1',title:'Trát',startDate:'2026-11-06',endDate:'2026-11-07',predecessors:[]},
+          {id:'md-b1',calendarId:'cB',title:'Ép cọc',startDate:'2026-11-02',endDate:'2026-11-04',predecessors:[]});
+      }
       if (key === 'todo') caseSchedule.tasks.push({id:'todo-base',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-06'});
       if (key === '17.2') {
         caseSchedule.calendars.push({id:'other-cal',ownerId:'gd13-other',name:'Khác',visible:true,color:'#a00'});

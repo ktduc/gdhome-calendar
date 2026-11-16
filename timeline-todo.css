@@ -1,13 +1,17 @@
 /* Việc cần làm trên Timeline (timeline-todo.js) – chỉ hiện trong #msproject-view-wrapper
-   Tông tím (khác màu web), nền kính mờ kiểu iOS, cửa sổ cao hết màn hình */
+   Tông be ghi trầm, nền kính mờ trong suốt kiểu iOS, cửa sổ cao hết màn hình */
 .gd-todo-panel, .gd-todo-toggle {
-  --todo-accent: #7c3aed;
-  --todo-accent-dark: #5b21b6;
-  --todo-accent-soft: rgba(124, 58, 237, .12);
-  --todo-text: #1e1b2e;
-  --todo-muted: #5b5670;
-  --todo-line: rgba(91, 33, 182, .14);
+  --todo-accent: #7d6e5d;
+  --todo-accent-dark: #5a4e41;
+  --todo-accent-soft: rgba(125, 110, 93, .14);
+  --todo-text: #2b2620;
+  --todo-muted: #6f675d;
+  --todo-line: rgba(90, 78, 65, .16);
+  --todo-fw: 400;
 }
+.gd-todo-panel.fw-light { --todo-fw: 300; }
+.gd-todo-panel.fw-bold { --todo-fw: 600; }
+.gd-todo-panel.fw-heavy { --todo-fw: 800; }
 .gd-todo-toggle {
   position: fixed;
   right: 18px;
@@ -19,12 +23,12 @@
   padding: 9px 14px;
   border: 1px solid rgba(255, 255, 255, .35);
   border-radius: 999px;
-  background: rgba(124, 58, 237, .88);
-  -webkit-backdrop-filter: blur(12px) saturate(170%);
-  backdrop-filter: blur(12px) saturate(170%);
+  background: rgba(110, 98, 84, .82);
+  -webkit-backdrop-filter: blur(12px) saturate(140%);
+  backdrop-filter: blur(12px) saturate(140%);
   color: #fff;
   font: 600 13px/1 Roboto, system-ui, sans-serif;
-  box-shadow: 0 6px 20px rgba(76, 29, 149, .32);
+  box-shadow: 0 6px 20px rgba(60, 50, 40, .3);
   cursor: pointer;
 }
 .gd-todo-toggle b {
@@ -49,17 +53,19 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: linear-gradient(180deg, rgba(245, 240, 255, .78), rgba(236, 228, 255, .72));
-  -webkit-backdrop-filter: blur(22px) saturate(180%);
-  backdrop-filter: blur(22px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, .65);
+  background: linear-gradient(180deg, rgba(238, 233, 225, .5), rgba(226, 220, 211, .44));
+  -webkit-backdrop-filter: blur(26px) saturate(130%);
+  backdrop-filter: blur(26px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, .55);
   border-radius: 16px;
-  box-shadow: 0 18px 48px rgba(46, 16, 101, .28), inset 0 1px 0 rgba(255, 255, 255, .7);
-  font: 13px/1.35 Roboto, system-ui, sans-serif;
+  box-shadow: 0 18px 48px rgba(50, 42, 34, .22), inset 0 1px 0 rgba(255, 255, 255, .6);
+  font: 13px/1.4 Roboto, system-ui, sans-serif;
+  font-weight: var(--todo-fw);
   color: var(--todo-text);
 }
+.gd-todo-panel strong, .gd-todo-panel b { font-weight: max(600, var(--todo-fw)); }
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .gd-todo-panel { background: #f3eeff; }
+  .gd-todo-panel { background: #ece7df; }
 }
 .gd-todo-panel[hidden] { display: none; }
 .gd-todo-panel.dragging { opacity: .6; }
@@ -82,18 +88,19 @@
 }
 .gd-todo-icon:hover { background: var(--todo-accent-soft); color: var(--todo-accent-dark); }
 
-.gd-todo-add { display: flex; gap: 6px; padding: 12px 12px 4px; }
-.gd-todo-add input {
+.gd-todo-add { display: flex; align-items: flex-start; gap: 6px; padding: 12px 12px 4px; }
+.gd-todo-add textarea {
   flex: 1; min-width: 0;
   padding: 8px 11px;
-  border: 1px solid rgba(124, 58, 237, .22); border-radius: 10px;
-  background: rgba(255, 255, 255, .75);
+  border: 1px solid rgba(90, 78, 65, .22); border-radius: 10px;
+  background: rgba(255, 255, 255, .55);
   color: var(--todo-text);
-  font: inherit;
+  font: inherit; font-weight: inherit; line-height: inherit;
+  resize: none; overflow: hidden; max-height: 40vh;
 }
-.gd-todo-add input:focus { outline: none; border-color: var(--todo-accent); box-shadow: 0 0 0 3px rgba(124, 58, 237, .18); }
+.gd-todo-add textarea:focus { outline: none; border-color: var(--todo-accent); box-shadow: 0 0 0 3px rgba(125, 110, 93, .2); }
 .gd-todo-add button {
-  width: 36px; border: 0; border-radius: 10px;
+  width: 36px; height: 36px; flex: none; border: 0; border-radius: 10px;
   background: var(--todo-accent); color: #fff; font-size: 18px; cursor: pointer;
 }
 .gd-todo-add button:hover { background: var(--todo-accent-dark); }
@@ -105,31 +112,45 @@
   margin-bottom: 4px;
   padding: 7px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, .62);
-  box-shadow: 0 1px 2px rgba(46, 16, 101, .06);
+  background: rgba(255, 255, 255, .42);
+  box-shadow: 0 1px 2px rgba(50, 42, 34, .06);
 }
 .gd-todo-list li.gd-todo-empty, .gd-todo-list li.gd-todo-sep { background: none; box-shadow: none; }
 .gd-todo-list li[draggable="true"] { cursor: grab; }
-.gd-todo-list li[draggable="true"]:hover { background: rgba(255, 255, 255, .9); }
+.gd-todo-list li[draggable="true"]:hover { background: rgba(255, 255, 255, .7); }
 .gd-todo-list li[draggable="true"]:active { cursor: grabbing; }
-.gd-todo-grip { color: #94a3b8; font-size: 11px; letter-spacing: -2px; user-select: none; }
+.gd-todo-list li { align-items: flex-start; }
+.gd-todo-list li > * { margin-top: 1px; }
+.gd-todo-grip { color: #a39a8f; font-size: 11px; letter-spacing: -2px; user-select: none; line-height: 18px; }
 .gd-todo-list li.done .gd-todo-grip { visibility: hidden; }
-.gd-todo-chk { width: 16px; height: 16px; margin: 0; accent-color: #16a34a; cursor: pointer; flex: none; }
-.gd-todo-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.gd-todo-list li.done .gd-todo-title { color: #94a3b8; text-decoration: line-through; }
-.gd-todo-edit { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--todo-accent); border-radius: 6px; font: inherit; }
+.gd-todo-chk { width: 16px; height: 16px; margin: 2px 0 0; accent-color: #6b8e5a; cursor: pointer; flex: none; }
+/* Chữ hiển thị và ô sửa dùng cùng khung, cùng xuống dòng -> nhập 3 dòng thì hiện 3 dòng */
+.gd-todo-title, .gd-todo-edit {
+  flex: 1; min-width: 0;
+  margin: 0; padding: 0 2px;
+  font: inherit; font-weight: inherit; line-height: 18px;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  color: inherit;
+}
+.gd-todo-edit {
+  display: block; border: 0; border-radius: 4px;
+  background: rgba(255, 255, 255, .7);
+  box-shadow: 0 0 0 2px var(--todo-accent);
+  resize: none; overflow: hidden; outline: none;
+}
+.gd-todo-list li.done .gd-todo-title { color: #a39a8f; text-decoration: line-through; }
 .gd-todo-due {
   flex: none; padding: 2px 7px;
-  border: 1px solid rgba(91, 33, 182, .16); border-radius: 999px;
-  background: rgba(255, 255, 255, .8); color: var(--todo-muted); font-size: 11px; cursor: pointer;
+  border: 1px solid rgba(90, 78, 65, .18); border-radius: 999px;
+  background: rgba(255, 255, 255, .6); color: var(--todo-muted); font-size: 11px; cursor: pointer;
 }
-.gd-todo-due.linked { border-color: rgba(124, 58, 237, .35); background: var(--todo-accent-soft); color: var(--todo-accent-dark); }
+.gd-todo-due.linked { border-color: rgba(125, 110, 93, .4); background: var(--todo-accent-soft); color: var(--todo-accent-dark); }
 .gd-todo-due.overdue { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
 .gd-todo-list li { flex-wrap: wrap; position: relative; }
 .gd-todo-mini {
   flex: none; width: 22px; height: 22px; padding: 0;
   border: 0; border-radius: 6px; background: transparent;
-  color: #8b85a0; font-size: 13px; cursor: pointer; opacity: 0;
+  color: #9a9084; font-size: 13px; cursor: pointer; opacity: 0;
 }
 .gd-todo-del { font-size: 16px; }
 .gd-todo-list li:hover .gd-todo-mini, .gd-todo-mini:focus-visible { opacity: 1; }
@@ -138,18 +159,18 @@
 .gd-todo-star {
   flex: none; width: 24px; height: 24px; padding: 0;
   border: 0; border-radius: 6px; background: transparent;
-  color: #a39cb8; font-size: 17px; line-height: 1; cursor: pointer;
+  color: #a39a8f; font-size: 17px; line-height: 1; cursor: pointer;
 }
 .gd-todo-star:hover { color: #d97706; background: rgba(255, 251, 235, .9); }
 .gd-todo-star.on { color: #f59e0b; }
-.gd-todo-list li.starred:not(.done) { background: rgba(255, 247, 222, .9); }
+.gd-todo-list li.starred:not(.done) { background: rgba(255, 244, 214, .62); }
 .gd-todo-assign-row { flex-basis: 100%; padding: 4px 0 2px 38px; }
-.gd-todo-assign-row select { width: 100%; padding: 5px; border: 1px solid rgba(124, 58, 237, .4); border-radius: 8px; font: inherit; font-size: 12px; background: #fff; }
+.gd-todo-assign-row select { width: 100%; padding: 5px; border: 1px solid rgba(125, 110, 93, .45); border-radius: 8px; font: inherit; font-size: 12px; background: #fff; }
 .gd-todo-list li.gd-todo-insert-before { box-shadow: inset 0 3px 0 var(--todo-accent); }
 .gd-todo-list li.gd-todo-insert-after { box-shadow: inset 0 -3px 0 var(--todo-accent); }
 .gd-todo-empty { justify-content: center; color: var(--todo-muted); padding: 18px 6px !important; }
 .gd-todo-sep { color: var(--todo-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; padding-top: 10px !important; }
-.gd-todo-list li.done { background: rgba(255, 255, 255, .35); }
+.gd-todo-list li.done { background: rgba(255, 255, 255, .22); }
 
 .gd-todo-foot { border-top: 1px solid var(--todo-line); padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 6px; }
 .gd-todo-link { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--todo-accent-dark); font: inherit; font-size: 12px; cursor: pointer; }
@@ -157,14 +178,14 @@
 .gd-todo-ms { font-size: 12px; color: var(--todo-text); }
 .gd-todo-ms-row { display: flex; align-items: center; gap: 10px; }
 .gd-todo-ms-row span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.gd-todo-ms-lists select { width: 100%; margin-top: 6px; padding: 5px; border: 1px solid rgba(124, 58, 237, .3); border-radius: 8px; font: inherit; background: #fff; }
+.gd-todo-ms-lists select { width: 100%; margin-top: 6px; padding: 5px; border: 1px solid rgba(125, 110, 93, .35); border-radius: 8px; font: inherit; background: #fff; }
 .gd-todo-ms-btn {
   width: 100%; padding: 8px 10px;
-  border: 1px solid rgba(124, 58, 237, .3); border-radius: 10px; background: rgba(255, 255, 255, .8);
+  border: 1px solid rgba(125, 110, 93, .35); border-radius: 10px; background: rgba(255, 255, 255, .6);
   font: 600 12px Roboto, system-ui, sans-serif; color: var(--todo-accent-dark); cursor: pointer;
 }
 .gd-todo-ms-btn:hover { background: #fff; border-color: var(--todo-accent); }
-.gd-todo-muted { color: #8b85a0; }
+.gd-todo-muted { color: #9a9084; }
 .gd-todo-err { color: #b91c1c; font-size: 11px; }
 
 /* Gợi ý chỗ thả trên Timeline */

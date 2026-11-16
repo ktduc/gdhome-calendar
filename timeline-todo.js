@@ -25,6 +25,15 @@
     const w = document.getElementById('msproject-view-wrapper');
     return !!(w && w.offsetParent !== null && w.style.display !== 'none');
   };
+  // Ô nhập cao theo nội dung (1 dòng -> nhiều dòng)
+  const autosize = (el) => { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; };
+  // Chữ đậm/nhạt theo tuỳ chọn "Độ đậm chữ" của Timeline
+  function applyFontWeight() {
+    if (!root) return;
+    const fw = (typeof AppState !== 'undefined' && AppState.mspFontWeight) || 'normal';
+    root.classList.remove('fw-light', 'fw-bold', 'fw-heavy');
+    if (fw !== 'normal') root.classList.add('fw-' + fw);
+  }
   const scheduleReady = () => typeof _scheduleReady === 'undefined' || _scheduleReady || (typeof _guestMode !== 'undefined' && _guestMode);
 
   async function api(path, options = {}) {
@@ -124,14 +133,14 @@
   }
 
   // ------------------------------------------------------------------ GIỮ TODO KHỚP VỚI TIMELINE
-  // Hạng mục bị xoá -> bỏ liên kết (việc quay lại danh sách, giữ ngày); đổi ngày/tên/100% -> cập nhật việc
+  // Hạng mục bị xoá -> bỏ liên kết và bỏ ngày (việc quay lại danh sách); đổi ngày/tên/100% -> cập nhật việc
   function checkLinks() {
     if (!st.loaded || !scheduleReady() || !Array.isArray(AppState.tasks)) return;
     for (const item of st.items) {
       if (!item.taskId || st.linkPending.has(item.id) || String(item.id).startsWith('tmp_')) continue;
       const task = linkedTask(item);
       const body = {};
-      if (!task) body.taskId = '';
+      if (!task) { body.taskId = ''; body.due = ''; }       // hạng mục bị xoá -> bỏ luôn ngày
       else {
         if (task.endDate && task.endDate !== item.due) body.due = task.endDate;
         if (task.title && task.title !== item.title) body.title = task.title;
@@ -363,6 +372,12 @@
 
   // Vẽ lại dấu + kiểm tra liên kết mỗi khi Timeline vẽ lại
   function hookRender() {
+    if (typeof applyMspFontWeight === 'function' && !applyMspFontWeight.__gdTodo) {
+      const origFw = applyMspFontWeight;
+      const fw = function () { const out = origFw.apply(this, arguments); applyFontWeight(); return out; };
+      fw.__gdTodo = true;
+      window.applyMspFontWeight = fw;
+    }
     if (typeof renderMSProjectView !== 'function' || renderMSProjectView.__gdTodo) return;
     const orig = renderMSProjectView;
     const wrapped = function () {
@@ -398,7 +413,7 @@
         <button type="button" class="gd-todo-icon" data-act="close" title="Đóng">×</button>
       </header>
       <form class="gd-todo-add" autocomplete="off">
-        <input type="text" maxlength="255" placeholder="Thêm việc… (Enter)" aria-label="Thêm việc cần làm">
+        <textarea rows="1" maxlength="255" placeholder="Thêm việc… (Shift+Enter xuống dòng)" aria-label="Thêm việc cần làm"></textarea>
         <button type="submit" title="Thêm">+</button>
       </form>
       <p class="gd-todo-hint">Kéo ⋮⋮ để sắp xếp. Thả lên Timeline → vào dự án <b>TODO</b>; giữ <b>Shift</b> khi thả lên dòng dự án khác (hoặc bấm 📁) để xếp vào dự án đó.</p>
@@ -409,7 +424,14 @@
       </footer>`;
     wrapper.appendChild(root);
     listEl = root.querySelector('#gd-todo-list');
-    inputEl = root.querySelector('.gd-todo-add input');
+    inputEl = root.querySelector('.gd-todo-add textarea');
+    inputEl.addEventListener('input', () => autosize(inputEl));
+    inputEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+        e.preventDefault();
+        root.querySelector('.gd-todo-add').requestSubmit();
+      }
+    });
     statusEl = root.querySelector('#gd-todo-status');
     msEl = root.querySelector('#gd-todo-ms');
 
@@ -418,6 +440,7 @@
       e.preventDefault();
       const v = inputEl.value;
       inputEl.value = '';
+      autosize(inputEl);
       addTodo(v);
     });
     root.addEventListener('click', onClick);
@@ -473,12 +496,18 @@
     const li = listEl.querySelector(`li[data-id="${CSS.escape(id)}"]`);
     if (!item || !li) return;
     st.editingId = id;
+    // Ô sửa cùng khung chữ với dòng hiển thị: xuống dòng y hệt, cao theo nội dung
     const span = li.querySelector('.gd-todo-title');
-    const input = document.createElement('input');
+    const input = document.createElement('textarea');
     input.className = 'gd-todo-edit';
+    input.rows = 1;
     input.value = item.title;
     input.maxLength = 255;
+    input.style.width = span.getBoundingClientRect().width + 'px';
     span.replaceWith(input);
+    autosize(input);
+    input.style.width = '';
+    input.addEventListener('input', () => autosize(input));
     input.focus();
     input.select();
     let finished = false;
@@ -494,7 +523,7 @@
       } else render();
     };
     input.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') finish(true);
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); finish(true); }
       if (e.key === 'Escape') finish(false);
     });
     input.addEventListener('blur', () => finish(true));
@@ -512,7 +541,8 @@
     else if (act === 'star' && item) patch(item, {star: !item.star}, () => { item.star = !item.star; });
     else if (act === 'assign' && item) { st.assignId = st.assignId === item.id ? null : item.id; render(); }
     else if (act === 'del' && item) {
-      if (confirm(`Xoá việc "${item.title}"?${st.ms.linked && item.msLinked ? '\n(Xoá cả trong Microsoft To Do)' : ''}`)) {
+      if (await GDHomeShell.confirm({title: 'Xoá việc?', groups: [{items: [item.title]}],
+        message: st.ms.linked && item.msLinked ? 'Xoá cả trong Microsoft To Do.' : '', okText: 'Xoá', danger: true})) {
         const task = linkedTask(item);
         mutate('/api/todos/' + item.id, 'DELETE', null, () => { st.items = st.items.filter(i => i !== item); });
         if (task && task.calendarId === TODO_CAL_ID) {          // thanh của việc trong dự án TODO xoá theo
@@ -532,7 +562,7 @@
         if (url && /^https:\/\/login\.microsoftonline\.com\//.test(url)) location.href = url;
       } catch (err) { toast(err.message); }
     } else if (act === 'ms-unlink') {
-      if (!confirm('Ngắt đồng bộ Microsoft To Do? Việc đã có vẫn giữ ở cả 2 nơi.')) return;
+      if (!await GDHomeShell.confirm({title: 'Ngắt đồng bộ Microsoft To Do?', message: 'Việc đã có vẫn giữ ở cả 2 nơi.', okText: 'Ngắt đồng bộ'})) return;
       try { applyView(await api('/api/todos/ms/unlink', {method: 'POST'})); } catch (err) { toast(err.message); }
     } else if (act === 'ms-lists') {
       try {
@@ -601,6 +631,7 @@
     toggleBtn.innerHTML = `☑ Việc cần làm${open.length ? ` <b>${open.length}</b>` : ''}`;
     toggleBtn.classList.toggle('active', st.open);
     root.hidden = !st.open;
+    applyFontWeight();
     if (!st.open || st.editingId) return;
     let html = open.map(itemHtml).join('');
     if (!st.loaded) html = '<li class="gd-todo-empty">Đang tải…</li>';

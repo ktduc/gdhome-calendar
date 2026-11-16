@@ -1020,7 +1020,7 @@ async function handleGoogleCredential(response) {
     const guestData = getGuestSavedData();
     const hasGuestWork = guestData && Array.isArray(guestData.tasks) && guestData.tasks.length > 0;
     const copyGuestToAccount = (wasGuest || hasGuestWork) && hasGuestWork
-      ? confirm('Chép dữ liệu đang làm ở chế độ khách vào tài khoản?')
+      ? await GDHomeShell.confirm({ title: 'Dữ liệu chế độ khách', message: 'Chép dữ liệu đang làm ở chế độ khách vào tài khoản?', okText: 'Chép vào tài khoản', cancelText: 'Không chép' })
       : false;
 
     _guestMode = false;
@@ -1030,11 +1030,11 @@ async function handleGoogleCredential(response) {
     _currentUser = result.user;
 
     if (!copyGuestToAccount && result.isNewUser && result.legacyAvailable) {
-      const ok = confirm(
-        `Chào ${result.user.name || result.user.email}!\n\n` +
-        'Tài khoản này chưa có dữ liệu. Bạn có muốn CHÉP dữ liệu tiến độ dùng chung trước đây vào tài khoản của mình không?\n\n' +
-        '• [OK] = Chép sang (dữ liệu chung cũ vẫn giữ nguyên)\n• [Cancel / Huỷ] = Bắt đầu với bảng trống'
-      );
+      const ok = await GDHomeShell.confirm({
+        title: `Chào ${result.user.name || result.user.email}!`,
+        message: 'Tài khoản này chưa có dữ liệu. Bạn có muốn CHÉP dữ liệu tiến độ dùng chung trước đây vào tài khoản của mình không?\n(Dữ liệu chung cũ vẫn giữ nguyên)',
+        okText: 'Chép sang', cancelText: 'Bắt đầu bảng trống'
+      });
       if (ok) {
         await apiFetch('/api/import-legacy', { method: 'POST', body: '{}' });
       }
@@ -1094,8 +1094,8 @@ function hideLoginOverlay() {
   _loginOverlayShown = false;
 }
 
-function signOut() {
-  if (!confirm(`Đăng xuất tài khoản ${_currentUser ? _currentUser.email : ''}?`)) return;
+async function signOut() {
+  if (!await GDHomeShell.confirm({ title: 'Đăng xuất', message: `Đăng xuất tài khoản ${_currentUser ? _currentUser.email : ''}?`, okText: 'Đăng xuất' })) return;
   setSession(null);
   _guestMode = false;
   try { localStorage.removeItem(GUEST_FLAG_KEY); } catch (e) { /* bỏ qua */ }
@@ -1187,7 +1187,7 @@ async function apiFetch(url, options = {}, allowPrompt = true) {
     return res;
   }
   if (res.status === 401 && allowPrompt) {
-    const entered = prompt('Trang này đã được đặt mật khẩu. Nhập mật khẩu để xem & lưu tiến độ:');
+    const entered = await GDHomeShell.prompt('Trang này đã được đặt mật khẩu. Nhập mật khẩu để xem & lưu tiến độ:', '', { type: 'password', okText: 'Mở khoá' });
     if (entered) {
       try { localStorage.setItem(APP_KEY_STORAGE, entered.trim()); } catch (e) { /* bỏ qua */ }
       return apiFetch(url, options, false);
@@ -1344,12 +1344,12 @@ async function syncWithBackend() {
         ((typeof localBaseVersion === 'number' && serverVersion < localBaseVersion) ||
           (localBaseVersion === null && _localSavedAt && (!serverUpdatedAt || _localSavedAt > serverUpdatedAt)));
       if (!localHadPending && serverLooksOlder) {
-        const keepLocal = confirm(
-          'Dữ liệu trên server đang CŨ HƠN dữ liệu đã lưu trên trình duyệt này (có thể server vừa cập nhật / khởi động lại).\n\n' +
-          `• Trên máy này: ${localTaskCount} việc\n• Trên server: ${(serverData.tasks || []).length} việc\n\n` +
-          '• [OK] = GIỮ bản trên máy này và gửi lại lên server (khuyên dùng)\n' +
-          '• [Cancel / Huỷ] = Dùng bản trên server'
-        );
+        const keepLocal = await GDHomeShell.confirm({
+          title: 'Server đang có bản cũ hơn',
+          message: 'Dữ liệu trên server đang CŨ HƠN dữ liệu đã lưu trên trình duyệt này (có thể server vừa cập nhật / khởi động lại).\n\n' +
+            `• Trên máy này: ${localTaskCount} việc\n• Trên server: ${(serverData.tasks || []).length} việc`,
+          okText: 'Giữ bản máy này (khuyên dùng)', cancelText: 'Dùng bản server'
+        });
         if (keepLocal) {
           _serverVersion = serverVersion;
           normalizeAppState();
@@ -1371,11 +1371,12 @@ async function syncWithBackend() {
       }
 
       if (localHadPending && localBaseVersion !== serverVersion) {
-        const keepServer = confirm(
-          'Trình duyệt này có thay đổi CHƯA LƯU lên server, nhưng dữ liệu trên server cũng đã được sửa từ máy khác.\n\n' +
-          '• [OK] = Dùng bản trên SERVER (bỏ thay đổi chưa lưu của máy này)\n' +
-          '• [Cancel / Huỷ] = Dùng bản của MÁY NÀY và ghi đè lên server'
-        );
+        const keepServer = await GDHomeShell.confirm({
+          title: 'Dữ liệu bị sửa ở 2 nơi',
+          message: 'Trình duyệt này có thay đổi CHƯA LƯU lên server, nhưng dữ liệu trên server cũng đã được sửa từ máy khác.\n\n' +
+            '• Dùng bản SERVER: bỏ thay đổi chưa lưu của máy này\n• Dùng bản MÁY NÀY: ghi đè lên server',
+          okText: 'Dùng bản server', cancelText: 'Dùng bản máy này'
+        });
         _serverVersion = serverVersion;
         if (keepServer) {
           applyServerData(result.data);
@@ -1505,11 +1506,12 @@ async function handleSaveConflict(result) {
   if (_conflictDialogOpen) return;
   _conflictDialogOpen = true;
   try {
-    const keepServer = confirm(
-      'Dữ liệu trên server vừa được sửa từ một máy/trình duyệt khác.\n\n' +
-      '• [OK] = Tải bản mới nhất từ SERVER (bỏ thay đổi vừa làm ở máy này)\n' +
-      '• [Cancel / Huỷ] = Giữ bản của MÁY NÀY và ghi đè lên server'
-    );
+    const keepServer = await GDHomeShell.confirm({
+      title: 'Server vừa được sửa ở máy khác',
+      message: 'Dữ liệu trên server vừa được sửa từ một máy/trình duyệt khác.\n\n' +
+        '• Tải bản SERVER: bỏ thay đổi vừa làm ở máy này\n• Giữ bản MÁY NÀY: ghi đè lên server',
+      okText: 'Tải bản server', cancelText: 'Giữ bản máy này'
+    });
     if (keepServer) {
       if (typeof result.version === 'number') _serverVersion = result.version;
       applyServerData(result.data);
@@ -1901,9 +1903,9 @@ function renderCalendarSidebar() {
     renameOwnerBtn.className = 'owner-mini-btn';
     renameOwnerBtn.title = `Đổi tên dự án "${owner.name}"`;
     renameOwnerBtn.textContent = '✎';
-    renameOwnerBtn.addEventListener('click', (e) => {
+    renameOwnerBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
-      const newOwnerName = prompt('Tên dự án (VD: VĂN PHÒNG B4 PHẠM NGỌC THẠCH, NHÀ A DŨNG - HẢI PHÒNG...):', owner.name);
+      const newOwnerName = await GDHomeShell.prompt('Tên dự án (VD: VĂN PHÒNG B4 PHẠM NGỌC THẠCH, NHÀ A DŨNG - HẢI PHÒNG...):', owner.name);
       if (newOwnerName && newOwnerName.trim()) {
         renameProjectAndSync(owner, newOwnerName.trim());
         syncCustomerInputWithActiveCalendar();
@@ -2075,9 +2077,15 @@ function renderCalendarSidebar() {
         delBtn.className = 'cal-action-btn';
         delBtn.title = 'Xóa danh mục lịch này';
         delBtn.innerHTML = '<i data-lucide="trash-2"></i>';
-        delBtn.addEventListener('click', (e) => {
+        delBtn.addEventListener('click', async (e) => {
           e.stopPropagation();
-          if (confirm(`Bạn có chắc muốn xóa hẳn danh mục lịch "${cal.name}" và toàn bộ các công việc bên trong không?`)) {
+          const inside = AppState.tasks.filter(t => t.calendarId === cal.id);
+          if (await GDHomeShell.confirm({
+            title: `Xoá danh mục "${cal.name}"?`,
+            message: inside.length ? `Xoá hẳn danh mục lịch và ${inside.length} công việc bên trong:` : 'Danh mục đang trống.',
+            groups: inside.length ? [{ items: inside.slice(0, 200).map(t => t.title) }] : [],
+            okText: 'Xoá danh mục', danger: true
+          })) {
             AppState.tasks = AppState.tasks.filter(t => t.calendarId !== cal.id);
             AppState.calendars = AppState.calendars.filter(c => c.id !== cal.id);
             normalizeAppState();
@@ -2235,8 +2243,8 @@ function setupSidebarEvents() {
 
   const addOwnerBtn = document.getElementById('btn-add-project-owner');
   if (addOwnerBtn) {
-    addOwnerBtn.addEventListener('click', () => {
-      const ownerName = prompt('Tên DỰ ÁN mới (VD: VĂN PHÒNG B4 PHẠM NGỌC THẠCH, NHÀ A DŨNG - HẢI PHÒNG...):');
+    addOwnerBtn.addEventListener('click', async () => {
+      const ownerName = await GDHomeShell.prompt('Tên DỰ ÁN mới (VD: VĂN PHÒNG B4 PHẠM NGỌC THẠCH, NHÀ A DŨNG - HẢI PHÒNG...):', '', { okText: 'Tạo dự án' });
       if (ownerName && ownerName.trim()) {
         const newOwner = {
           id: 'owner_' + Date.now(),
@@ -2353,14 +2361,20 @@ function setupSidebarEvents() {
     closeCalendarCategoryModal();
   });
 
-  document.getElementById('btn-clear-active-calendar').addEventListener('click', () => {
+  document.getElementById('btn-clear-active-calendar').addEventListener('click', async () => {
     const activeCal = getActiveCalendar();
-    const count = AppState.tasks.filter(t => t.calendarId === activeCal.id).length;
+    const inside = AppState.tasks.filter(t => t.calendarId === activeCal.id);
+    const count = inside.length;
     if (count === 0) {
-      alert(`Danh mục lịch "${activeCal.name}" hiện đang trống, không có công việc nào để xóa.`);
+      GDHomeShell.alert(`Danh mục lịch "${activeCal.name}" hiện đang trống, không có công việc nào để xóa.`);
       return;
     }
-    if (confirm(`Bạn có chắc chắn muốn XÓA TOÀN BỘ ${count} công việc thuộc lịch "${activeCal.name}" không?\n(Các danh mục lịch khác vẫn được giữ nguyên)`)) {
+    if (await GDHomeShell.confirm({
+      title: `Xoá toàn bộ ${count} công việc?`,
+      message: `Thuộc lịch "${activeCal.name}". Các danh mục lịch khác vẫn được giữ nguyên.`,
+      groups: [{ items: inside.slice(0, 200).map(t => t.title) }],
+      okText: `Xoá ${count} việc`, danger: true
+    })) {
       AppState.tasks = AppState.tasks.filter(t => t.calendarId !== activeCal.id);
       saveToBackend();
       renderCalendarSidebar();
@@ -3402,10 +3416,10 @@ function renderTitleLibrary(onPick) {
     chip.title = it.mine ? 'Bấm để tạo việc ngay • Chuột phải để xoá khỏi "Của tôi"' : 'Bấm để tạo việc ngay với tiêu đề này';
     chip.addEventListener('click', () => onPick(it.title));
     if (it.mine) {
-      chip.addEventListener('contextmenu', (e) => {
+      chip.addEventListener('contextmenu', async (e) => {
         e.preventDefault();
         e.stopPropagation();
-        if (confirm(`Xoá "${it.title}" khỏi danh sách "Của tôi"?`)) {
+        if (await GDHomeShell.confirm({ message: `Xoá "${it.title}" khỏi danh sách "Của tôi"?`, okText: 'Xoá', danger: true })) {
           AppState.customTaskTitles = (AppState.customTaskTitles || []).filter(t => t !== it.title);
           saveToBackend();
           renderTitleLibrary(onPick);
@@ -3881,7 +3895,7 @@ function setupExportModal() {
       const sD = document.getElementById('export-start-date').value;
       const eD = document.getElementById('export-end-date').value;
       if (!sD || !eD || sD > eD) {
-        alert('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc!');
+        GDHomeShell.alert('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc!');
         return;
       }
       const customWeeks = generateWeeksBetweenDates(sD, eD);
@@ -3995,7 +4009,7 @@ function executeExportWeeksSlice(weeksSlice, includeBranding = true, scale = 2, 
         activeBtn.innerHTML = originalText;
         activeBtn.disabled = false;
       }
-      alert('Lỗi kết xuất ảnh: ' + err.message);
+      GDHomeShell.alert('Lỗi kết xuất ảnh: ' + err.message);
     });
   }, 150);
 }
@@ -4034,7 +4048,7 @@ function setupEvents() {
     const e = document.getElementById('end-month-input').value;
     if (!s || !e) return;
     if (s > e) {
-      alert('Tháng bắt đầu phải trước tháng kết thúc!');
+      GDHomeShell.alert('Tháng bắt đầu phải trước tháng kết thúc!');
       return;
     }
     AppState.startMonth = s;
@@ -4175,7 +4189,7 @@ function setupEvents() {
     const progress = progressEl ? parseInt(progressEl.value || '0', 10) : 0;
 
     if (startDate > endDate) {
-      alert('Ngày bắt đầu không được sau ngày kết thúc!');
+      GDHomeShell.alert('Ngày bắt đầu không được sau ngày kết thúc!');
       return;
     }
 
@@ -4226,15 +4240,10 @@ function setupEvents() {
     closeTaskModal();
   });
 
-  document.getElementById('btn-delete-task').addEventListener('click', () => {
+  document.getElementById('btn-delete-task').addEventListener('click', async () => {
     const id = document.getElementById('task-id').value;
-    if (id && confirm('Bạn có chắc chắn muốn xoá công việc này không?')) {
-      AppState.tasks = AppState.tasks.filter(t => t.id !== id);
-      saveToBackend();
-      renderCalendarSidebar();
-      renderCalendar();
-      closeTaskModal();
-    }
+    const task = id && AppState.tasks.find(t => t.id === id);
+    if (task && await confirmAndDeleteTasks([task])) closeTaskModal();
   });
 
   document.getElementById('btn-today').addEventListener('click', () => {
@@ -4740,6 +4749,37 @@ function showCustomContextMenu(x, y, headerText, items) {
   menu.style.top = `${Math.max(8, Math.min(y, maxTop))}px`;
 }
 
+// Xoá 1 hoặc nhiều hạng mục: hộp xác nhận liệt kê việc, gom theo DỰ ÁN · GIAI ĐOẠN
+function taskGroupTitle(task) {
+  const cal = AppState.calendars.find(c => c.id === task.calendarId);
+  const owner = cal && (AppState.projectOwners || []).find(o => o.id === cal.ownerId);
+  return [owner && owner.name, cal && cal.name].filter(Boolean).join(' · ') || 'Không rõ dự án';
+}
+
+async function confirmAndDeleteTasks(tasks) {
+  tasks = tasks.filter(Boolean);
+  if (!tasks.length) return false;
+  const groups = new Map();
+  tasks.forEach(t => {
+    const key = taskGroupTitle(t);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(t.title || '(không tên)');
+  });
+  const ok = await GDHomeShell.confirm({
+    title: tasks.length > 1 ? `Xoá ${tasks.length} hạng mục?` : 'Xoá hạng mục?',
+    message: groups.size > 1 ? `Các hạng mục thuộc ${groups.size} dự án / giai đoạn khác nhau. Ctrl+Z để hoàn tác.` : 'Ctrl+Z để hoàn tác.',
+    groups: [...groups].map(([title, items]) => ({ title, items })),
+    okText: tasks.length > 1 ? `Xoá ${tasks.length} mục` : 'Xoá',
+    danger: true
+  });
+  if (!ok) return false;
+  const ids = new Set(tasks.map(t => t.id));
+  AppState.tasks = AppState.tasks.filter(t => !ids.has(t.id));
+  if (Array.isArray(AppState.selectedTaskIds)) AppState.selectedTaskIds = AppState.selectedTaskIds.filter(id => !ids.has(id));
+  syncAllFromMSProject(tasks.length > 1 ? `Đã xoá ${tasks.length} hạng mục!` : `Đã xoá "${tasks[0].title}"!`);
+  return true;
+}
+
 function openTaskContextMenu(e, task) {
   if (!task) return;
   hideFloatingTooltip();
@@ -4803,17 +4843,11 @@ function openTaskContextMenu(e, task) {
     },
     { divider: true },
     {
-      label: '🗑️ Xóa công việc này',
+      label: isPartOfMulti ? `🗑️ Xóa ${selectedIds.length} công việc đã chọn` : '🗑️ Xóa công việc này',
       danger: true,
-      onClick: () => {
-        if (confirm(`Xóa hạng mục "${task.title}"?`)) {
-          AppState.tasks = AppState.tasks.filter(t => t.id !== task.id);
-          if (Array.isArray(AppState.selectedTaskIds)) {
-            AppState.selectedTaskIds = AppState.selectedTaskIds.filter(id => id !== task.id);
-          }
-          syncAllFromMSProject(`Đã xóa "${task.title}"!`);
-        }
-      }
+      onClick: () => confirmAndDeleteTasks(isPartOfMulti
+        ? AppState.tasks.filter(t => selectedIds.includes(t.id))
+        : [task])
     }
   ]);
 }
@@ -6586,13 +6620,9 @@ function renderMSProjectView() {
 
         // 2) Nút × xóa nhanh công việc
         taskRowEl.querySelector('.msp-row-icon-btn.del').addEventListener('click', () => {
-          if (confirm(`Xóa hạng mục "${task.title}"?`)) {
-            AppState.tasks = AppState.tasks.filter(t => t.id !== task.id);
-            if (Array.isArray(AppState.selectedTaskIds)) {
-              AppState.selectedTaskIds = AppState.selectedTaskIds.filter(id => id !== task.id);
-            }
-            syncAllFromMSProject(`Đã xóa "${task.title}" và đồng bộ sang Bảng Lịch!`);
-          }
+          // Đang chọn nhiều việc (gồm việc này) -> xoá cả nhóm
+          const sel = Array.isArray(AppState.selectedTaskIds) ? AppState.selectedTaskIds : [];
+          confirmAndDeleteTasks(sel.length > 1 && sel.includes(task.id) ? AppState.tasks.filter(t => sel.includes(t.id)) : [task]);
         });
 
         // 3) Sửa trực tiếp Tên công việc
@@ -6667,7 +6697,7 @@ function renderMSProjectView() {
           const newEnd = endInput.value;
           if (!newEnd) return;
           if (newEnd < task.startDate) {
-            alert('Ngày kết thúc không được nhỏ hơn ngày bắt đầu!');
+            GDHomeShell.alert('Ngày kết thúc không được nhỏ hơn ngày bắt đầu!');
             endInput.value = task.endDate;
             return;
           }
@@ -7056,8 +7086,8 @@ function renderMspProjectHeaderRow(og, oIdx, ctx) {
     syncAllFromMSProject(`Đã đổi tên dự án thành "${owner.name}" và đồng bộ tiêu đề Bảng Lịch & Timeline!`);
   });
   ownerInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') ownerInput.blur(); });
-  rowEl.querySelector('.msp-add-stage-btn').addEventListener('click', () => {
-    const name = prompt(`Tên giai đoạn mới cho dự án "${owner.name}" (VD: THI CÔNG PHẦN THÔ, HOÀN THIỆN, NỘI THẤT...):`);
+  rowEl.querySelector('.msp-add-stage-btn').addEventListener('click', async () => {
+    const name = await GDHomeShell.prompt(`Tên giai đoạn mới cho dự án "${owner.name}" (VD: THI CÔNG PHẦN THÔ, HOÀN THIỆN, NỘI THẤT...):`, '', { okText: 'Thêm giai đoạn' });
     if (!name || !name.trim()) return;
     const pal = getActivePaletteColors();
     const stage = {
@@ -7647,7 +7677,7 @@ function exportMSProjectXMLFile() {
 // Mở và đọc file định dạng Microsoft Project (.xml, .csv, .json)
 function importMSProjectFile(file) {
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     const content = e.target.result;
     const ext = (file.name.split('.').pop() || '').toLowerCase();
 
@@ -7675,7 +7705,7 @@ function importMSProjectFile(file) {
       const taskNodes = Array.from(xmlDoc.getElementsByTagName('Task'));
 
       if (taskNodes.length === 0) {
-        alert('Không tìm thấy dữ liệu công việc (<Task>) hợp lệ trong file MS Project này!');
+        GDHomeShell.alert('Không tìm thấy dữ liệu công việc (<Task>) hợp lệ trong file MS Project này!');
         return;
       }
 
@@ -7802,7 +7832,7 @@ function importMSProjectFile(file) {
       });
 
       if (importedTasks.length === 0) {
-        alert('File không có hạng mục công việc con nào để hiển thị!');
+        GDHomeShell.alert('File không có hạng mục công việc con nào để hiển thị!');
         return;
       }
 
@@ -7817,11 +7847,12 @@ function importMSProjectFile(file) {
       });
 
       // Hỏi người dùng muốn Gộp thêm vào dự án hiện tại hay Thay thế bằng dự án vừa mở
-      const replaceMode = confirm(
-        `Đã đọc được ${importedCalendars.length} dự án và ${importedTasks.length} hạng mục từ file "${file.name}".\n\n` +
-        `• Bấm [OK] để MỞ ĐÈ (Thay thế bảng hiện tại bằng file vừa mở).\n` +
-        `• Bấm [Cancel / Huỷ] để GỘP THÊM vào danh sách dự án hiện tại.`
-      );
+      const replaceMode = await GDHomeShell.confirm({
+        title: 'Mở file MS Project',
+        message: `Đã đọc được ${importedCalendars.length} dự án và ${importedTasks.length} hạng mục từ file "${file.name}".\n\n` +
+          '• Mở đè: thay thế bảng hiện tại bằng file vừa mở\n• Gộp thêm: thêm vào danh sách dự án hiện tại',
+        okText: 'Mở đè', cancelText: 'Gộp thêm'
+      });
 
       if (replaceMode) {
         AppState.projectOwners = importedOwners.length ? importedOwners : AppState.projectOwners;
@@ -7848,7 +7879,7 @@ function importMSProjectFile(file) {
       syncAllFromMSProject(`✅ Đã mở thành công ${importedTasks.length} hạng mục từ file MS Project "${file.name}"!`);
     } catch (err) {
       console.error(err);
-      alert('Lỗi khi đọc file MS Project: ' + err.message);
+      GDHomeShell.alert('Lỗi khi đọc file MS Project: ' + err.message);
     }
   };
   reader.readAsText(file, 'utf-8');
@@ -7857,7 +7888,7 @@ function importMSProjectFile(file) {
 function importFromCSVContent(csvText, fileName) {
   const lines = csvText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   if (lines.length < 2) {
-    alert('File CSV trống hoặc không đúng định dạng!');
+    GDHomeShell.alert('File CSV trống hoặc không đúng định dạng!');
     return;
   }
   const rainbowPalette = ['#cc0000', '#e65100', '#f57c00', '#d4a017', '#2e7d32', '#00897b', '#0288d1', '#3949ab', '#7b1fa2'];
@@ -7894,7 +7925,7 @@ function importFromCSVContent(csvText, fileName) {
     }
   }
   if (newTasks.length === 0) {
-    alert('Không tìm thấy dòng ngày tháng hợp lệ (YYYY-MM-DD) trong file CSV!');
+    GDHomeShell.alert('Không tìm thấy dòng ngày tháng hợp lệ (YYYY-MM-DD) trong file CSV!');
     return;
   }
   AppState.calendars.push(newCal);
@@ -8070,7 +8101,7 @@ function exportMSProjectSheet(scale = 2, mode = 'download') {
         activeBtn.innerHTML = originalText;
         activeBtn.disabled = false;
       }
-      alert('Lỗi kết xuất ảnh Timeline: ' + err.message);
+      GDHomeShell.alert('Lỗi kết xuất ảnh Timeline: ' + err.message);
     });
   }, 150);
 }
@@ -8739,12 +8770,12 @@ window.addEventListener('DOMContentLoaded', () => {
     syncAllFromMSProject(`🔗 Đã tự nối ${n} liên kết trong ${cals.length} giai đoạn (Ctrl+Z để hoàn tác)`);
   });
   const btnRe = document.getElementById('btn-auto-relink-stages');
-  if (btnRe) btnRe.addEventListener('click', () => {
+  if (btnRe) btnRe.addEventListener('click', async () => {
     const timelineOn = !!document.querySelector('.msp-split-workspace') && !!document.querySelector('.msp-split-workspace').offsetParent;
     const cals = timelineOn && typeof getMspTargetCalendars === 'function' ? getMspTargetCalendars() : [getActiveCalendar()].filter(Boolean);
     if (!cals.length) return;
     const names = cals.map(c => c.name).slice(0, 4).join(', ') + (cals.length > 4 ? '…' : '');
-    if (!confirm(`Nối lại TOÀN BỘ liên kết trong ${cals.length} giai đoạn đang hiển thị (${names}) theo quy tắc mới?\n\nCác liên kết hiện có giữa các việc trong những giai đoạn này sẽ được thay thế. Ctrl+Z để hoàn tác.`)) return;
+    if (!await GDHomeShell.confirm(`Nối lại TOÀN BỘ liên kết trong ${cals.length} giai đoạn đang hiển thị (${names}) theo quy tắc mới?\n\nCác liên kết hiện có giữa các việc trong những giai đoạn này sẽ được thay thế. Ctrl+Z để hoàn tác.`)) return;
     const calIds = new Set(cals.map(c => c.id));
     const taskCal = new Map(AppState.tasks.map(t => [t.id, t.calendarId]));
     AppState.tasks.forEach(t => {

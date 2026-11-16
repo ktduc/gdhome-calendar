@@ -949,3 +949,26 @@ body.is-sidebar-collapsed .app-sidebar,
 /* GĐ24. The work page uses the shared sidebar toggle with its own grid wrapper. */
 body.is-sidebar-collapsed .work-app-layout{grid-template-columns:minmax(0,1fr)}
 body.is-sidebar-collapsed .work-app-layout>.shell-sidebar{display:none!important}
+
+/* Hộp xác nhận / thông báo / nhập chữ dùng chung (GDHomeShell.confirm/alert/prompt) – thay hộp của Chrome */
+.shell-dialog.gd-ask{box-sizing:border-box;margin:auto;width:min(92vw,440px);padding:18px 18px 14px;font:14px/1.45 var(--gd-font,system-ui,sans-serif)}
+.shell-dialog.gd-ask::backdrop{background:rgba(30,26,22,.32);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px)}
+.gd-ask h2{margin:0 0 8px}
+.gd-ask.is-danger h2{color:var(--gd-danger,#d93025)}
+.gd-ask-message{margin:0 0 12px;white-space:pre-line;color:var(--gd-ink,#1e293b)}
+.gd-ask-list{max-height:min(46vh,380px);overflow:auto;margin:0 0 12px;padding:8px 10px;border:1px solid var(--gd-dialog-border,#d8d2c8);border-radius:8px;background:rgba(255,255,255,.65)}
+.gd-ask-group{margin:6px 0 2px;font-weight:600;font-size:12.5px;color:#5a4e41;text-transform:uppercase;letter-spacing:.2px}
+.gd-ask-group:first-child{margin-top:0}
+.gd-ask-group span{font-weight:400;color:#8a7f72}
+.gd-ask-list ul{margin:0 0 4px;padding-left:18px}
+.gd-ask-list li{margin:2px 0;white-space:pre-line;overflow-wrap:anywhere}
+.gd-ask-input{box-sizing:border-box;width:100%;margin:0 0 12px;padding:8px 10px;font:inherit;border:1px solid var(--gd-dialog-border,#d8d2c8);border-radius:8px;background:#fff}
+.gd-ask-input:focus{outline:none;border-color:#8a7f72;box-shadow:0 0 0 3px rgba(125,110,93,.2)}
+.gd-ask-actions{display:flex;justify-content:flex-end;gap:8px}
+.gd-ask-btn{min-width:84px;height:var(--gd-btn-height,32px);padding:0 14px;border:1px solid var(--gd-dialog-border,#d8d2c8);border-radius:8px;background:#fff;color:var(--gd-ink,#1e293b);font:600 13px var(--gd-font,system-ui,sans-serif);cursor:pointer}
+.gd-ask-btn:hover{background:#ece7df}
+.gd-ask-btn.is-primary{background:#5a4e41;border-color:#5a4e41;color:#fff}
+.gd-ask-btn.is-primary:hover{background:#463c32}
+.gd-ask.is-danger .gd-ask-btn.is-primary{background:var(--gd-danger,#d93025);border-color:var(--gd-danger,#d93025)}
+.gd-ask.is-danger .gd-ask-btn.is-primary:hover{background:var(--gd-danger-hover,#b31412)}
+.gd-ask-btn:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}

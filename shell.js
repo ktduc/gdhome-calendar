@@ -108,6 +108,46 @@ window.GDHomeShell = (() => {
     return element;
   }
 
+  // Hộp xác nhận / thông báo / nhập chữ theo giao diện web (thay confirm/alert/prompt của Chrome)
+  // ask({title,message,groups:[{title,items:[...]}],okText,cancelText,danger,input:{value,type,placeholder}})
+  // -> Promise: true/false (xác nhận), chuỗi/null (nhập chữ)
+  function ask(options) {
+    const opts = typeof options === 'string' ? {message:options} : (options || {});
+    return new Promise(resolve => {
+      const element = document.createElement('dialog');
+      element.className = 'shell-dialog gd-ask' + (opts.danger ? ' is-danger' : '');
+      element.setAttribute('aria-label',opts.title || 'Thông báo');
+      const groups = (opts.groups || []).filter(group => group && group.items && group.items.length);
+      const total = groups.reduce((sum,group) => sum + group.items.length,0);
+      element.innerHTML =
+        (opts.title ? '<h2>' + escape(opts.title) + '</h2>' : '') +
+        (opts.message ? '<p class="gd-ask-message">' + escape(opts.message) + '</p>' : '') +
+        (groups.length ? '<div class="gd-ask-list">' + groups.map(group =>
+          (group.title ? '<div class="gd-ask-group">' + escape(group.title) + (groups.length > 1 || total > group.items.length ? ' <span>(' + group.items.length + ')</span>' : '') + '</div>' : '') +
+          '<ul>' + group.items.map(item => '<li>' + escape(item) + '</li>').join('') + '</ul>').join('') + '</div>' : '') +
+        (opts.input ? '<input class="gd-ask-input" type="' + (opts.input.type === 'password' ? 'password' : 'text') + '" placeholder="' + escape(opts.input.placeholder || '') + '">' : '') +
+        '<div class="gd-ask-actions">' +
+        (opts.alert ? '' : '<button type="button" class="gd-ask-btn" data-ask="cancel">' + escape(opts.cancelText || 'Huỷ') + '</button>') +
+        '<button type="button" class="gd-ask-btn is-primary" data-ask="ok">' + escape(opts.okText || (opts.alert ? 'Đã hiểu' : 'Đồng ý')) + '</button></div>';
+      document.body.append(element);
+      const input = element.querySelector('.gd-ask-input');
+      if (input) input.value = opts.input.value == null ? '' : String(opts.input.value);
+      let result = opts.input ? null : false;
+      const done = value => { result = value; element.close(); };
+      element.querySelector('[data-ask="ok"]').onclick = () => done(opts.input ? input.value : true);
+      const cancel = element.querySelector('[data-ask="cancel"]');
+      if (cancel) cancel.onclick = () => done(opts.input ? null : false);
+      if (input) input.addEventListener('keydown',event => { if (event.key === 'Enter' && !event.isComposing) { event.preventDefault(); done(input.value); } });
+      element.addEventListener('close',() => { element.remove(); resolve(opts.alert ? undefined : result); },{once:true});
+      element.showModal();
+      (input || element.querySelector(opts.danger && cancel ? '[data-ask="cancel"]' : '[data-ask="ok"]')).focus();
+      if (input) input.select();
+    });
+  }
+  const confirmBox = options => ask(options);
+  const alertBox = options => ask({...(typeof options === 'string' ? {message:options} : options),alert:true});
+  const promptBox = (message,value = '',extra = {}) => ask({message,input:{value,...extra},okText:extra.okText || 'Lưu'});
+
   function aiNotice(id,{state,body,label,onAction,onClose}) {
     let panel = document.getElementById(id);
     if (!panel) {
@@ -253,7 +293,7 @@ window.GDHomeShell = (() => {
           body: hubJobBody(job),
           label: 'Huỷ',
           onAction: async () => {
-            if (!confirm('Bạn muốn huỷ tiến trình phân tích AI đang chạy?')) return;
+            if (!await confirmBox({title:'Huỷ phân tích AI',message:'Bạn muốn huỷ tiến trình phân tích AI đang chạy?',okText:'Huỷ tiến trình',cancelText:'Tiếp tục chạy',danger:true})) return;
             await fetch('/api/project-hub/jobs/cancel', {
               method: 'POST',
               headers: getShellAuthHeaders(),
@@ -479,7 +519,7 @@ window.GDHomeShell = (() => {
 
     if (!container.dataset.shellAccountBound) {
       container.dataset.shellAccountBound = '1';
-      container.addEventListener('click', event => {
+      container.addEventListener('click', async event => {
         const actionBtn = event.target.closest('[data-shell-account-action]');
         if (!actionBtn) return;
         const action = actionBtn.dataset.shellAccountAction;
@@ -495,7 +535,7 @@ window.GDHomeShell = (() => {
           else if (window.GDHomeConnections) window.GDHomeConnections.open('drive');
           else toast('Bản sao lưu tự động được lưu trên máy chủ.');
         } else if (action === 'logout') {
-          if (confirm('Bạn muốn đăng xuất khỏi tài khoản này?')) {
+          if (await confirmBox({title:'Đăng xuất',message:'Bạn muốn đăng xuất khỏi tài khoản này?',okText:'Đăng xuất'})) {
             localStorage.removeItem('gdhome_token');
             localStorage.removeItem('gdhome_session');
             localStorage.removeItem('gdhome_guest');
@@ -645,5 +685,5 @@ window.GDHomeShell = (() => {
     else start();
   }
 
-  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
+  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
 })();

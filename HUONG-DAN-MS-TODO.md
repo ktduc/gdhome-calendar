@@ -43,7 +43,9 @@ Mở Timeline, bấm **☑ Việc cần làm**, rồi bấm **Liên kết Micros
 - **Việc đã thành hạng mục:** hạn của việc đi theo hạng mục.
   - Hạng mục đổi ngày hoặc đổi tên thì việc đổi theo.
   - Hạng mục lên 100% thì việc được tick xong.
-  - Hạng mục bị xoá thì việc trở về danh sách và giữ ngày hẹn.
+  - Hạng mục bị xoá thì việc trở về danh sách, bỏ luôn ngày (bên Microsoft To Do cũng bỏ hạn).
+- Nội dung việc được nhiều dòng: Enter để lưu, Shift+Enter để xuống dòng.
+- Chữ trong cửa sổ đậm hay nhạt theo tuỳ chọn **Độ đậm chữ** của Timeline.
 
 ## 5. Người khác muốn dùng
 App "GD HOME Tools" trên Entra dùng chung cho mọi người, không cần tạo thêm.

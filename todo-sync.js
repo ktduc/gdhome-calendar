@@ -22,7 +22,9 @@ function storeKeyFor(dataKey) {
 }
 
 function cleanTitle(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE);
+  // Giữ xuống dòng (Shift+Enter), gộp khoảng trắng thừa, tối đa 2 dòng trống liền nhau
+  return String(value || '').replace(/\r\n?/g, '\n').replace(/[^\S\n]+/g, ' ').replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n').trim().slice(0, MAX_TITLE);
 }
 
 function cleanDate(value) {

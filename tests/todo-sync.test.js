@@ -80,6 +80,8 @@ test('todo: thêm, sửa, tick xong, xoá – lưu riêng theo tài khoản', as
   assert.equal(v.items.length, 0);
   assert.ok(h.store.m.has(storeKeyFor('u@x.com')));
   assert.equal((await h.call('POST', '/api/todos', {title: '   '})).status, 400);
+  const multi = await h.call('POST', '/api/todos', {title: ' Dòng 1  \r\n  Dòng 2\n\n\n\nDòng 3 '});
+  assert.equal(multi.item.title, 'Dòng 1\nDòng 2\n\nDòng 3', 'Giữ xuống dòng');
 });
 
 test('todo: không có cấu hình Microsoft thì báo chưa sẵn sàng', async () => {
