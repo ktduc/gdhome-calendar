@@ -14,7 +14,8 @@
   const DRAG_TYPE = 'application/x-gd-todo';
   const SYNC_EVERY_MS = 60000;
   const st = {items: [], ms: {available: false}, loaded: false, loading: false, open: false, showDone: false,
-    busy: false, lastSync: 0, dragId: null, syncTimer: null, editingId: null, assignId: null, linkPending: new Set()};
+    busy: false, lastSync: 0, dragId: null, syncTimer: null, editingId: null, assignId: null, linkPending: new Set(),
+    starNew: false};                                   // ★ cạnh ô nhập: bật thì việc mới tự gắn sao
   let root, listEl, inputEl, toggleBtn, statusEl, msEl;
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
@@ -102,7 +103,8 @@
     title = String(title || '').trim();
     if (!title) return;
     const order = st.items.reduce((m, i) => Math.min(m, i.order || 0), 0) - 1;
-    await mutate('/api/todos', 'POST', {title}, () => st.items.push({id: 'tmp_' + Date.now(), title, done: false, due: '', taskId: '', star: false, order}));
+    const star = st.starNew;
+    await mutate('/api/todos', 'POST', {title, star}, () => st.items.push({id: 'tmp_' + Date.now(), title, done: false, due: '', taskId: '', star, order}));
   }
 
   function linkedTask(item) {
@@ -414,6 +416,7 @@
       </header>
       <form class="gd-todo-add" autocomplete="off">
         <textarea rows="1" maxlength="255" placeholder="Thêm việc… (Shift+Enter xuống dòng)" aria-label="Thêm việc cần làm"></textarea>
+        <button type="button" class="gd-todo-star gd-todo-star-new" data-act="star-new" aria-pressed="false"></button>
         <button type="submit" title="Thêm">+</button>
       </form>
       <p class="gd-todo-hint">Kéo ⋮⋮ để sắp xếp. Thả lên Timeline → vào dự án <b>TODO</b>; giữ <b>Shift</b> khi thả lên dòng dự án khác (hoặc bấm 📁) để xếp vào dự án đó.</p>
@@ -477,7 +480,19 @@
       setTimeout(() => root.classList.add('dragging'), 0);
     });
     try { st.open = localStorage.getItem('gd_todo_open') === '1'; } catch (e) { /* bỏ qua */ }
+    try { st.starNew = localStorage.getItem('gd_todo_star_new') === '1'; } catch (e) { /* bỏ qua */ }
+    renderStarNew();
     return true;
+  }
+
+  function renderStarNew() {
+    const b = root && root.querySelector('.gd-todo-star-new');
+    if (!b) return;
+    b.textContent = st.starNew ? '★' : '☆';
+    b.classList.toggle('on', st.starNew);
+    b.setAttribute('aria-pressed', st.starNew ? 'true' : 'false');
+    b.title = st.starNew ? 'Đang bật: việc mới tự gắn sao ưu tiên (bấm để tắt)' : 'Bật để việc mới tự gắn sao ưu tiên';
+    inputEl && inputEl.classList.toggle('star-on', st.starNew);
   }
 
   function setOpen(open) {
@@ -538,6 +553,12 @@
     if (act === 'close') setOpen(false);
     else if (act === 'sync') sync(false);
     else if (act === 'done') { st.showDone = !st.showDone; render(); }
+    else if (act === 'star-new') {
+      st.starNew = !st.starNew;
+      try { localStorage.setItem('gd_todo_star_new', st.starNew ? '1' : '0'); } catch (err) { /* bỏ qua */ }
+      renderStarNew();
+      inputEl.focus();
+    }
     else if (act === 'star' && item) patch(item, {star: !item.star}, () => { item.star = !item.star; });
     else if (act === 'assign' && item) { st.assignId = st.assignId === item.id ? null : item.id; render(); }
     else if (act === 'del' && item) {

@@ -220,6 +220,23 @@ cases['todo'] = async page => {
   await page.evaluate(() => { AppState.mspFontWeight = 'light'; applyMspFontWeight(); });
   assert.equal(await panel.evaluate(el => getComputedStyle(el.querySelector('.gd-todo-title')).fontWeight),'300');
   await page.evaluate(() => { AppState.mspFontWeight = 'normal'; applyMspFontWeight(); });
+  // ★ cạnh ô nhập: bật -> việc mới tự gắn sao (nhớ sau khi tải lại); tắt -> việc mới không sao
+  const starNew = panel.locator('.gd-todo-star-new');
+  assert.equal(await starNew.getAttribute('aria-pressed'),'false');
+  await starNew.click();
+  assert.equal(await starNew.getAttribute('aria-pressed'),'true');
+  await addBox.fill('Việc gấp có sao');
+  await addBox.press('Enter');
+  await panel.locator('li.starred',{hasText:'Việc gấp có sao'}).waitFor();
+  await page.waitForFunction(() => fetch('/api/todos').then(r => r.json()).then(v => v.items.find(i => i.title === 'Việc gấp có sao')?.star === true));
+  await starNew.click();
+  await addBox.fill('Việc thường');
+  await addBox.press('Enter');
+  await panel.locator('li[draggable="true"]',{hasText:'Việc thường'}).waitFor();
+  assert.equal(await panel.locator('li',{hasText:'Việc thường'}).getAttribute('class').then(c => c.includes('starred')),false);
+  await starNew.click();
+  assert.equal(await page.evaluate(() => localStorage.getItem('gd_todo_star_new')),'1');
+  await starNew.click();
   // Cửa sổ cao gần hết màn hình, nút nổi ẩn khi đang mở
   const panelBox = await panel.boundingBox();
   assert.ok(panelBox.height >= 900 - 90,'Cửa sổ Todo cao hết màn hình: '+panelBox.height);
