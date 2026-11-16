@@ -2,8 +2,8 @@
 // GD HOME - VIỆC CẦN LÀM (TODO) TRÊN TIMELINE
 // - Chỉ hiện khi đang ở chế độ Timeline (nằm trong #msproject-view-wrapper)
 // - Kéo thả trong danh sách để đổi thứ tự; ★ bên phải = ưu tiên (đồng bộ "Quan trọng" của Microsoft To Do)
-// - Kéo việc thả lên Timeline -> đặt NGÀY cho việc (vẫn nằm trong danh sách To Do, chưa thuộc dự án nào)
-//   Giữ Shift khi thả lên dòng dự án, hoặc bấm 📁 trên việc -> xếp thành hạng mục của dự án
+// - Kéo việc thả lên Timeline -> thành hạng mục trong dự án riêng "TODO" (giống dự án NOTION, luôn ở cuối)
+//   Giữ Shift khi thả lên dòng dự án khác, hoặc bấm 📁 trên việc -> xếp/chuyển sang dự án đó
 // - Hạng mục bị xoá / đổi ngày / đổi tên / lên 100% trên Timeline -> việc cập nhật theo
 // - Tick hoàn thành -> việc ẩn khỏi danh sách (xem lại ở "Đã xong")
 // - Đồng bộ 2 chiều Microsoft To Do (qua /api/todos, server giữ quyền truy cập)
@@ -142,16 +142,52 @@
       if (!task) toast(`Hạng mục "${item.title}" đã xoá khỏi Timeline – việc trở lại danh sách`);
       patch(item, body, () => Object.assign(item, body)).finally(() => st.linkPending.delete(item.id));
     }
+    // Hạng mục tạo thẳng trong dự án TODO (gõ trên Timeline) -> tự thêm việc tương ứng vào danh sách
+    for (const task of AppState.tasks) {
+      if (task.calendarId !== TODO_CAL_ID || task.todoId || st.linkPending.has(task.id) || !task.title) continue;
+      st.linkPending.add(task.id);
+      api('/api/todos', {method: 'POST', body: {title: task.title, due: task.endDate || ''}})
+        .then(v => {
+          task.todoId = v.item.id;
+          saveToBackend();
+          applyView(v);
+          const item = st.items.find(i => i.id === v.item.id);
+          if (item) return patch(item, {taskId: task.id}, () => { item.taskId = task.id; });
+        })
+        .catch(e => toast('Không thêm được việc: ' + e.message))
+        .finally(() => st.linkPending.delete(task.id));
+    }
+  }
+
+  // ------------------------------------------------------------------ DỰ ÁN "TODO" RIÊNG (giống dự án NOTION, luôn nằm cuối)
+  const TODO_OWNER_ID = 'owner_todo';
+  const TODO_CAL_ID = 'cal_todo';
+  const TODO_COLOR = '#7c3aed';
+  function ensureTodoStage() {
+    if (!Array.isArray(AppState.projectOwners)) AppState.projectOwners = [];
+    let owner = AppState.projectOwners.find(o => o.id === TODO_OWNER_ID);
+    if (!owner) owner = {id: TODO_OWNER_ID, name: 'TODO', collapsed: false};
+    else AppState.projectOwners = AppState.projectOwners.filter(o => o !== owner);
+    AppState.projectOwners.push(owner);                      // luôn ở cuối, dưới NOTION
+    let cal = AppState.calendars.find(c => c.id === TODO_CAL_ID);
+    if (!cal) {
+      cal = {id: TODO_CAL_ID, ownerId: TODO_OWNER_ID, name: 'VIỆC CẦN LÀM', customerName: 'VIỆC CẦN LÀM', color: TODO_COLOR, visible: true, isTodo: true};
+      AppState.calendars.push(cal);
+    }
+    cal.visible = true;
+    return cal;
   }
 
   // ------------------------------------------------------------------ TẠO HẠNG MỤC TỪ VIỆC
   function createTaskFromTodo(item, calId, date) {
-    const cal = AppState.calendars.find(c => c.id === calId);
+    const cal = calId === TODO_CAL_ID ? ensureTodoStage() : AppState.calendars.find(c => c.id === calId);
     if (!cal) return;
     cal.visible = true;
     const ownTasks = AppState.tasks.filter(x => x.calendarId === cal.id && x.color);
-    const color = ownTasks.length ? ownTasks[ownTasks.length - 1].color : (cal.color || '#1565c0');
-    const task = {id: 'task_' + Date.now(), calendarId: cal.id, title: item.title, startDate: date, endDate: date,
+    const color = cal.id === TODO_CAL_ID ? (item.star ? '#f59e0b' : TODO_COLOR)
+      : ownTasks.length ? ownTasks[ownTasks.length - 1].color : (cal.color || '#1565c0');
+    // Việc trong dự án TODO độc lập nhau: mã "task_td_" để không bị "Tự nối việc mới tạo"
+    const task = {id: (cal.id === TODO_CAL_ID ? 'task_td_' : 'task_') + Date.now(), calendarId: cal.id, title: item.title, startDate: date, endDate: date,
       color, skipSundays: true, showCount: true, note: '', predecessors: [], todoId: item.id};
     AppState.tasks.push(task);
     st.linkPending.add(item.id);
@@ -259,8 +295,10 @@
       e.dataTransfer.dropEffect = 'copy';
       showTimelineHint(t);
       if (typeof showFloatingTooltip === 'function') {
-        showFloatingTooltip(t.calId ? `Thả để xếp vào ${calName(t.calId)} • ${fmtDate(t.date)}`
-          : `Thả để hẹn ngày ${fmtDate(t.date)} (giữ Shift + thả lên dòng dự án để xếp vào dự án)`, e.clientX, e.clientY);
+        const dragging = st.items.find(i => i.id === st.dragId);
+        showFloatingTooltip(dragging && linkedTask(dragging) ? `Thả để dời sang ${fmtDate(t.date)}`
+          : t.calId ? `Thả để xếp vào ${calName(t.calId)} • ${fmtDate(t.date)}`
+          : `Thả vào dự án TODO • ${fmtDate(t.date)} (giữ Shift + thả lên dòng dự án khác để xếp vào dự án đó)`, e.clientX, e.clientY);
       }
     });
     document.addEventListener('drop', (e) => {
@@ -273,8 +311,8 @@
       if (!item || (!lt && !t)) return;
       e.preventDefault();
       if (lt) reorder(dragId, lt.li.dataset.id, lt.after);
-      else if (t.calId && !item.taskId) createTaskFromTodo(item, t.calId, t.date);
-      else setDue(item, t.date);
+      else if (item.taskId && linkedTask(item)) setDue(item, t.date);       // đã có hạng mục: dời ngày
+      else createTaskFromTodo(item, t.calId || TODO_CAL_ID, t.date);        // mặc định vào dự án TODO
     });
     document.addEventListener('dragend', endDrag);
   }
@@ -363,7 +401,7 @@
         <input type="text" maxlength="255" placeholder="Thêm việc… (Enter)" aria-label="Thêm việc cần làm">
         <button type="submit" title="Thêm">+</button>
       </form>
-      <p class="gd-todo-hint">Kéo ⋮⋮ để sắp xếp. Thả lên Timeline để hẹn ngày; giữ <b>Shift</b> khi thả lên dòng dự án (hoặc bấm 📁) để xếp vào dự án.</p>
+      <p class="gd-todo-hint">Kéo ⋮⋮ để sắp xếp. Thả lên Timeline → vào dự án <b>TODO</b>; giữ <b>Shift</b> khi thả lên dòng dự án khác (hoặc bấm 📁) để xếp vào dự án đó.</p>
       <ul class="gd-todo-list" id="gd-todo-list"></ul>
       <footer class="gd-todo-foot">
         <button type="button" class="gd-todo-link" data-act="done"></button>
@@ -392,7 +430,13 @@
       if (e.target.matches('.gd-todo-assign-select')) {
         const item = st.items.find(i => i.id === e.target.closest('li').dataset.id);
         st.assignId = null;
-        if (item && e.target.value) createTaskFromTodo(item, e.target.value, item.due || todayStr());
+        const task = item && linkedTask(item);
+        if (item && e.target.value && task) {
+          task.calendarId = e.target.value;
+          const cal = AppState.calendars.find(c => c.id === task.calendarId);
+          if (cal) cal.visible = true;
+          syncAllFromMSProject(`Đã chuyển "${item.title}" sang ${calName(task.calendarId)}`);
+        } else if (item && e.target.value) createTaskFromTodo(item, e.target.value, item.due || todayStr());
         else render();
       }
     });
@@ -469,7 +513,12 @@
     else if (act === 'assign' && item) { st.assignId = st.assignId === item.id ? null : item.id; render(); }
     else if (act === 'del' && item) {
       if (confirm(`Xoá việc "${item.title}"?${st.ms.linked && item.msLinked ? '\n(Xoá cả trong Microsoft To Do)' : ''}`)) {
+        const task = linkedTask(item);
         mutate('/api/todos/' + item.id, 'DELETE', null, () => { st.items = st.items.filter(i => i !== item); });
+        if (task && task.calendarId === TODO_CAL_ID) {          // thanh của việc trong dự án TODO xoá theo
+          AppState.tasks = AppState.tasks.filter(t => t !== task);
+          syncAllFromMSProject();
+        }
       }
     } else if (act === 'goto' && item) {
       const task = linkedTask(item);
@@ -538,7 +587,7 @@
       <input type="checkbox" class="gd-todo-chk" ${item.done ? 'checked' : ''} ${pending ? 'disabled' : ''} aria-label="Hoàn thành">
       <span class="gd-todo-title" title="Nháy đúp để sửa">${esc(item.title)}</span>
       ${dueLabel ? `<button type="button" class="gd-todo-due ${task ? 'linked' : ''} ${overdue ? 'overdue' : ''}" data-act="goto" title="${task ? 'Đã xếp vào ' + esc(calName(task.calendarId)) + ' – bấm để tới hạng mục' : 'Hẹn ngày (Microsoft To Do)'}">${dueLabel}</button>` : ''}
-      ${pending || item.done || task ? '' : '<button type="button" class="gd-todo-mini gd-todo-assign" data-act="assign" title="Xếp vào dự án trên Timeline">📁</button>'}
+      ${pending || item.done ? '' : `<button type="button" class="gd-todo-mini gd-todo-assign" data-act="assign" title="${task ? 'Chuyển sang dự án khác' : 'Xếp vào dự án trên Timeline'}">📁</button>`}
       ${pending ? '' : '<button type="button" class="gd-todo-mini gd-todo-del" data-act="del" title="Xoá">×</button>'}
       <button type="button" class="gd-todo-star ${item.star ? 'on' : ''}" data-act="star" ${pending ? 'disabled' : ''} aria-pressed="${item.star ? 'true' : 'false'}" title="${item.star ? 'Bỏ ưu tiên' : 'Đánh dấu ưu tiên (Quan trọng)'}">${item.star ? '★' : '☆'}</button>
       ${st.assignId === item.id ? `<div class="gd-todo-assign-row">${assignSelect()}</div>` : ''}

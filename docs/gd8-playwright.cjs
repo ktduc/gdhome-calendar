@@ -108,26 +108,30 @@ cases['todo'] = async page => {
   assert.equal(saved.items.find(i => i.title === 'Đặt rèm').star,true);
   const sortedSaved = saved.items.filter(i => !i.star).sort((a,b) => a.order-b.order).map(i => i.title);
   assert.deepEqual(sortedSaved,['Gọi thợ điện','Hỏi BQL'],'Thứ tự lưu trên server');
-  // Thả lên Timeline (không giữ Shift) -> chỉ hẹn ngày, KHÔNG tạo hạng mục dự án
+  // Thả lên Timeline (không giữ Shift) -> vào dự án TODO riêng, nằm cuối (dưới NOTION)
+  await page.evaluate(() => { AppState.projectOwners.push({id:'owner_notion',name:'NOTION'}); });
   const row = page.locator('#msp-gantt-rows-layer .msp-gantt-row[data-cal-id="c1"]').first();
   await row.scrollIntoViewIfNeeded();
   const colWidth = await page.evaluate(() => _mspTimelineInfo.colWidth);
-  const tasksBefore = await page.evaluate(() => AppState.tasks.length);
   await panel.locator('li[draggable="true"]',{hasText:'Gọi thợ điện'}).dragTo(row,{targetPosition:{x:colWidth*3+5,y:8}});
   const day3 = await page.evaluate(() => mspDateFromIndex(3));
-  await page.waitForFunction(d => GDTimelineTodo.state.items.find(i => i.title === 'Gọi thợ điện').due === d,day3);
-  assert.equal(await page.evaluate(() => AppState.tasks.length),tasksBefore,'Không tạo hạng mục khi chỉ thả');
-  await page.locator('#msp-gantt-days-row .msp-gantt-day-cell').nth(3).locator('.gd-todo-day-badge').waitFor();
-  // Bấm 📁 chọn dự án -> tạo hạng mục đúng ngày đã hẹn
+  const todoTask = await page.waitForFunction(() => AppState.tasks.find(t => t.title === 'Gọi thợ điện' && t.todoId)).then(h => h.jsonValue());
+  assert.equal(todoTask.calendarId,'cal_todo');
+  assert.equal(todoTask.startDate,day3);
+  assert.deepEqual(todoTask.predecessors,[],'Việc TODO không tự nối');
+  assert.deepEqual(await page.evaluate(() => AppState.projectOwners.slice(-2).map(o => o.id)),['owner_notion','owner_todo']);
+  await page.locator('#msp-gantt-rows-layer .msp-gantt-row[data-cal-id="cal_todo"]').first().waitFor();
+  await page.locator('#msp-table-body [data-cal-id="cal_todo"]').first().waitFor();
+  const tableText = await page.evaluate(() => [...document.querySelectorAll('#msp-table-body input, #msp-table-body .msp-tr')].map(e => e.value || e.textContent).join(' | '));
+  assert.match(tableText,/TODO/,'Dự án TODO hiện trong bảng: '+tableText.slice(-300));
+  await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('.gd-todo-due.linked').waitFor();
+  // Bấm 📁 chọn dự án khác -> chuyển hạng mục sang dự án đó
   const li = panel.locator('li',{hasText:'Gọi thợ điện'});
   await li.hover();
   await li.locator('[data-act="assign"]').click();
   await li.locator('.gd-todo-assign-select').selectOption('c1');
-  const task = await page.waitForFunction(() => AppState.tasks.find(t => t.title === 'Gọi thợ điện' && t.todoId)).then(h => h.jsonValue());
-  assert.equal(task.calendarId,'c1');
-  assert.equal(task.startDate,day3);
-  await panel.locator('li',{hasText:'Gọi thợ điện'}).locator('.gd-todo-due.linked').waitFor();
-  await page.waitForFunction(() => !document.querySelector('#msp-gantt-days-row .gd-todo-day-badge'));
+  await page.waitForFunction(id => AppState.tasks.find(t => t.id === id).calendarId === 'c1',todoTask.id);
+  const task = await page.evaluate(id => AppState.tasks.find(t => t.id === id),todoTask.id);
   saved = await page.request.get('/api/todos').then(r => r.json());
   let todo = saved.items.find(i => i.title === 'Gọi thợ điện');
   assert.equal(todo.taskId,task.id);
@@ -156,6 +160,19 @@ cases['todo'] = async page => {
   await panel.locator('li.done',{hasText:'Gọi thợ điện'}).waitFor();
   saved = await page.request.get('/api/todos').then(r => r.json());
   assert.equal(saved.items.find(i => i.title === 'Gọi thợ điện').done,true);
+  // Hạng mục gõ thẳng trong dự án TODO -> tự có việc trong danh sách; xoá việc -> thanh TODO xoá theo
+  await page.evaluate(() => { AppState.tasks.push({id:'task_manual_todo',calendarId:'cal_todo',title:'Mua sơn lót',startDate:mspDateFromIndex(8),endDate:mspDateFromIndex(8),predecessors:[]}); syncAllFromMSProject(); });
+  await panel.locator('li',{hasText:'Mua sơn lót'}).locator('.gd-todo-due.linked').waitFor();
+  assert.equal(await page.evaluate(() => GDTimelineTodo.state.items.find(i => i.title === 'Mua sơn lót').due),await page.evaluate(() => mspDateFromIndex(8)));
+  page.once('dialog',dialog => dialog.accept());
+  const manual = panel.locator('li',{hasText:'Mua sơn lót'});
+  await manual.hover();
+  await manual.locator('[data-act="del"]').click();
+  await page.waitForFunction(() => !AppState.tasks.some(t => t.id === 'task_manual_todo'));
+  // Cửa sổ cao gần hết màn hình, nút nổi ẩn khi đang mở
+  const panelBox = await panel.boundingBox();
+  assert.ok(panelBox.height >= 900 - 90,'Cửa sổ Todo cao hết màn hình: '+panelBox.height);
+  assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false);
   // Về Bảng Lịch: Todo ẩn
   await page.locator('#btn-view-calendar').click();
   assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false);

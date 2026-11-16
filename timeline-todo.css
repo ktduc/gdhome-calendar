@@ -1,4 +1,13 @@
-/* Việc cần làm trên Timeline (timeline-todo.js) – chỉ hiện trong #msproject-view-wrapper */
+/* Việc cần làm trên Timeline (timeline-todo.js) – chỉ hiện trong #msproject-view-wrapper
+   Tông tím (khác màu web), nền kính mờ kiểu iOS, cửa sổ cao hết màn hình */
+.gd-todo-panel, .gd-todo-toggle {
+  --todo-accent: #7c3aed;
+  --todo-accent-dark: #5b21b6;
+  --todo-accent-soft: rgba(124, 58, 237, .12);
+  --todo-text: #1e1b2e;
+  --todo-muted: #5b5670;
+  --todo-line: rgba(91, 33, 182, .14);
+}
 .gd-todo-toggle {
   position: fixed;
   right: 18px;
@@ -8,12 +17,14 @@
   align-items: center;
   gap: 6px;
   padding: 9px 14px;
-  border: 1px solid #1d4ed8;
+  border: 1px solid rgba(255, 255, 255, .35);
   border-radius: 999px;
-  background: #2563eb;
+  background: rgba(124, 58, 237, .88);
+  -webkit-backdrop-filter: blur(12px) saturate(170%);
+  backdrop-filter: blur(12px) saturate(170%);
   color: #fff;
   font: 600 13px/1 Roboto, system-ui, sans-serif;
-  box-shadow: 0 4px 14px rgba(15, 23, 42, .22);
+  box-shadow: 0 6px 20px rgba(76, 29, 149, .32);
   cursor: pointer;
 }
 .gd-todo-toggle b {
@@ -21,140 +32,157 @@
   padding: 2px 6px;
   border-radius: 999px;
   background: #fff;
-  color: #1d4ed8;
+  color: var(--todo-accent-dark);
   font-size: 11px;
   text-align: center;
 }
-.gd-todo-toggle.active { background: #1e40af; }
+.gd-todo-toggle.active { display: none; }
 .gd-todo-toggle:focus-visible, .gd-todo-panel button:focus-visible { outline: 2px solid #f59e0b; outline-offset: 2px; }
 
 .gd-todo-panel {
   position: fixed;
-  right: 18px;
-  bottom: 64px;
+  top: 60px;
+  right: 12px;
+  bottom: 12px;
   z-index: 901;
-  width: min(340px, calc(100vw - 32px));
-  max-height: min(70vh, 640px);
+  width: min(350px, calc(100vw - 24px));
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(15, 23, 42, .22);
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(245, 240, 255, .78), rgba(236, 228, 255, .72));
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 16px;
+  box-shadow: 0 18px 48px rgba(46, 16, 101, .28), inset 0 1px 0 rgba(255, 255, 255, .7);
   font: 13px/1.35 Roboto, system-ui, sans-serif;
-  color: #0f172a;
+  color: var(--todo-text);
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .gd-todo-panel { background: #f3eeff; }
 }
 .gd-todo-panel[hidden] { display: none; }
-.gd-todo-panel.dragging { opacity: .55; }
+.gd-todo-panel.dragging { opacity: .6; }
 
 .gd-todo-head {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 10px 10px 8px 14px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 12px 10px 10px 16px;
+  border-bottom: 1px solid var(--todo-line);
 }
-.gd-todo-head strong { font-size: 14px; }
-.gd-todo-status { flex: 1; min-width: 0; color: #64748b; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gd-todo-head strong { font-size: 15px; color: var(--todo-accent-dark); letter-spacing: .2px; }
+.gd-todo-status { flex: 1; min-width: 0; color: var(--todo-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .gd-todo-status.err { color: #b91c1c; }
 .gd-todo-icon {
-  width: 26px; height: 26px;
-  border: 0; border-radius: 6px;
-  background: transparent; color: #475569;
+  width: 28px; height: 28px;
+  border: 0; border-radius: 8px;
+  background: transparent; color: var(--todo-muted);
   font-size: 16px; cursor: pointer;
 }
-.gd-todo-icon:hover { background: #f1f5f9; }
+.gd-todo-icon:hover { background: var(--todo-accent-soft); color: var(--todo-accent-dark); }
 
-.gd-todo-add { display: flex; gap: 6px; padding: 10px 12px 4px; }
+.gd-todo-add { display: flex; gap: 6px; padding: 12px 12px 4px; }
 .gd-todo-add input {
   flex: 1; min-width: 0;
-  padding: 7px 10px;
-  border: 1px solid #cbd5e1; border-radius: 6px;
+  padding: 8px 11px;
+  border: 1px solid rgba(124, 58, 237, .22); border-radius: 10px;
+  background: rgba(255, 255, 255, .75);
+  color: var(--todo-text);
   font: inherit;
 }
-.gd-todo-add input:focus { outline: none; border-color: #2563eb; box-shadow: 0 0 0 2px rgba(37, 99, 235, .18); }
+.gd-todo-add input:focus { outline: none; border-color: var(--todo-accent); box-shadow: 0 0 0 3px rgba(124, 58, 237, .18); }
 .gd-todo-add button {
-  width: 32px; border: 0; border-radius: 6px;
-  background: #2563eb; color: #fff; font-size: 18px; cursor: pointer;
+  width: 36px; border: 0; border-radius: 10px;
+  background: var(--todo-accent); color: #fff; font-size: 18px; cursor: pointer;
 }
-.gd-todo-hint { margin: 2px 12px 6px; color: #64748b; font-size: 11px; }
+.gd-todo-add button:hover { background: var(--todo-accent-dark); }
+.gd-todo-hint { margin: 4px 14px 8px; color: var(--todo-muted); font-size: 11px; }
 
-.gd-todo-list { list-style: none; margin: 0; padding: 0 6px 6px; overflow-y: auto; flex: 1; min-height: 60px; }
+.gd-todo-list { list-style: none; margin: 0; padding: 0 8px 8px; overflow-y: auto; flex: 1; min-height: 60px; }
 .gd-todo-list li {
   display: flex; align-items: center; gap: 6px;
-  padding: 6px 6px;
-  border-radius: 6px;
+  margin-bottom: 4px;
+  padding: 7px 8px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .62);
+  box-shadow: 0 1px 2px rgba(46, 16, 101, .06);
 }
+.gd-todo-list li.gd-todo-empty, .gd-todo-list li.gd-todo-sep { background: none; box-shadow: none; }
 .gd-todo-list li[draggable="true"] { cursor: grab; }
-.gd-todo-list li[draggable="true"]:hover { background: #f1f5f9; }
+.gd-todo-list li[draggable="true"]:hover { background: rgba(255, 255, 255, .9); }
 .gd-todo-list li[draggable="true"]:active { cursor: grabbing; }
 .gd-todo-grip { color: #94a3b8; font-size: 11px; letter-spacing: -2px; user-select: none; }
 .gd-todo-list li.done .gd-todo-grip { visibility: hidden; }
 .gd-todo-chk { width: 16px; height: 16px; margin: 0; accent-color: #16a34a; cursor: pointer; flex: none; }
 .gd-todo-title { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .gd-todo-list li.done .gd-todo-title { color: #94a3b8; text-decoration: line-through; }
-.gd-todo-edit { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid #2563eb; border-radius: 4px; font: inherit; }
+.gd-todo-edit { flex: 1; min-width: 0; padding: 3px 6px; border: 1px solid var(--todo-accent); border-radius: 6px; font: inherit; }
 .gd-todo-due {
-  flex: none; padding: 2px 6px;
-  border: 1px solid #e2e8f0; border-radius: 999px;
-  background: #f8fafc; color: #475569; font-size: 11px; cursor: pointer;
+  flex: none; padding: 2px 7px;
+  border: 1px solid rgba(91, 33, 182, .16); border-radius: 999px;
+  background: rgba(255, 255, 255, .8); color: var(--todo-muted); font-size: 11px; cursor: pointer;
 }
-.gd-todo-due.linked { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.gd-todo-due.linked { border-color: rgba(124, 58, 237, .35); background: var(--todo-accent-soft); color: var(--todo-accent-dark); }
 .gd-todo-due.overdue { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
 .gd-todo-list li { flex-wrap: wrap; position: relative; }
 .gd-todo-mini {
   flex: none; width: 22px; height: 22px; padding: 0;
-  border: 0; border-radius: 4px; background: transparent;
-  color: #94a3b8; font-size: 13px; cursor: pointer; opacity: 0;
+  border: 0; border-radius: 6px; background: transparent;
+  color: #8b85a0; font-size: 13px; cursor: pointer; opacity: 0;
 }
 .gd-todo-del { font-size: 16px; }
 .gd-todo-list li:hover .gd-todo-mini, .gd-todo-mini:focus-visible { opacity: 1; }
 .gd-todo-del:hover { background: #fee2e2; color: #b91c1c; }
-.gd-todo-assign:hover { background: #eff6ff; }
+.gd-todo-assign:hover { background: var(--todo-accent-soft); }
 .gd-todo-star {
   flex: none; width: 24px; height: 24px; padding: 0;
-  border: 0; border-radius: 4px; background: transparent;
-  color: #94a3b8; font-size: 17px; line-height: 1; cursor: pointer;
+  border: 0; border-radius: 6px; background: transparent;
+  color: #a39cb8; font-size: 17px; line-height: 1; cursor: pointer;
 }
-.gd-todo-star:hover { color: #d97706; background: #fffbeb; }
+.gd-todo-star:hover { color: #d97706; background: rgba(255, 251, 235, .9); }
 .gd-todo-star.on { color: #f59e0b; }
-.gd-todo-list li.starred:not(.done) { background: #fffbeb; }
+.gd-todo-list li.starred:not(.done) { background: rgba(255, 247, 222, .9); }
 .gd-todo-assign-row { flex-basis: 100%; padding: 4px 0 2px 38px; }
-.gd-todo-assign-row select { width: 100%; padding: 5px; border: 1px solid #93c5fd; border-radius: 6px; font: inherit; font-size: 12px; }
-.gd-todo-list li.gd-todo-insert-before { box-shadow: inset 0 2px 0 #2563eb; }
-.gd-todo-list li.gd-todo-insert-after { box-shadow: inset 0 -2px 0 #2563eb; }
-.gd-todo-empty { justify-content: center; color: #64748b; padding: 18px 6px !important; }
-.gd-todo-sep { color: #64748b; font-size: 11px; font-weight: 600; text-transform: uppercase; padding-top: 10px !important; }
+.gd-todo-assign-row select { width: 100%; padding: 5px; border: 1px solid rgba(124, 58, 237, .4); border-radius: 8px; font: inherit; font-size: 12px; background: #fff; }
+.gd-todo-list li.gd-todo-insert-before { box-shadow: inset 0 3px 0 var(--todo-accent); }
+.gd-todo-list li.gd-todo-insert-after { box-shadow: inset 0 -3px 0 var(--todo-accent); }
+.gd-todo-empty { justify-content: center; color: var(--todo-muted); padding: 18px 6px !important; }
+.gd-todo-sep { color: var(--todo-muted); font-size: 11px; font-weight: 600; text-transform: uppercase; padding-top: 10px !important; }
+.gd-todo-list li.done { background: rgba(255, 255, 255, .35); }
 
-.gd-todo-foot { border-top: 1px solid #e2e8f0; padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
-.gd-todo-link { align-self: flex-start; padding: 0; border: 0; background: none; color: #2563eb; font: inherit; font-size: 12px; cursor: pointer; }
+.gd-todo-foot { border-top: 1px solid var(--todo-line); padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.gd-todo-link { align-self: flex-start; padding: 0; border: 0; background: none; color: var(--todo-accent-dark); font: inherit; font-size: 12px; cursor: pointer; }
 .gd-todo-link:hover { text-decoration: underline; }
-.gd-todo-ms { font-size: 12px; color: #334155; }
+.gd-todo-ms { font-size: 12px; color: var(--todo-text); }
 .gd-todo-ms-row { display: flex; align-items: center; gap: 10px; }
 .gd-todo-ms-row span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
-.gd-todo-ms-lists select { width: 100%; margin-top: 6px; padding: 5px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; }
+.gd-todo-ms-lists select { width: 100%; margin-top: 6px; padding: 5px; border: 1px solid rgba(124, 58, 237, .3); border-radius: 8px; font: inherit; background: #fff; }
 .gd-todo-ms-btn {
-  width: 100%; padding: 7px 10px;
-  border: 1px solid #cbd5e1; border-radius: 6px; background: #f8fafc;
-  font: 600 12px Roboto, system-ui, sans-serif; color: #0f172a; cursor: pointer;
+  width: 100%; padding: 8px 10px;
+  border: 1px solid rgba(124, 58, 237, .3); border-radius: 10px; background: rgba(255, 255, 255, .8);
+  font: 600 12px Roboto, system-ui, sans-serif; color: var(--todo-accent-dark); cursor: pointer;
 }
-.gd-todo-ms-btn:hover { background: #eff6ff; border-color: #93c5fd; }
-.gd-todo-muted { color: #94a3b8; }
+.gd-todo-ms-btn:hover { background: #fff; border-color: var(--todo-accent); }
+.gd-todo-muted { color: #8b85a0; }
 .gd-todo-err { color: #b91c1c; font-size: 11px; }
 
 /* Gợi ý chỗ thả trên Timeline */
 .gd-todo-drop-hint.column {
   position: absolute; top: 0; bottom: 0; z-index: 4; pointer-events: none;
-  background: rgba(245, 158, 11, .16); border-left: 2px dashed #f59e0b; border-right: 2px dashed #f59e0b;
+  background: rgba(124, 58, 237, .14); border-left: 2px dashed #7c3aed; border-right: 2px dashed #7c3aed;
 }
 .gd-todo-drop-hint.to-project { background: rgba(22, 163, 74, .18) !important; border-color: #16a34a !important; }
 .gd-todo-day-badge {
   position: absolute; top: 1px; right: 1px; z-index: 2;
   min-width: 15px; height: 15px; padding: 0 3px;
   border: 0; border-radius: 999px;
-  background: #2563eb; color: #fff;
+  background: #7c3aed; color: #fff;
   font: 700 9.5px/15px Roboto, system-ui, sans-serif; cursor: pointer;
 }
 .gd-todo-day-badge.star { background: #f59e0b; }
 .gd-todo-flash { animation: gdTodoFlash 1.6s ease; }
 @keyframes gdTodoFlash { 0%, 60% { background: #fef08a; } 100% { background: transparent; } }
+
+/* Thu gọn trên màn hình thấp */
+@media (max-height: 560px) { .gd-todo-panel { top: 8px; bottom: 8px; } }

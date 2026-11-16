@@ -36,8 +36,10 @@ Mở Timeline, bấm **☑ Việc cần làm**, rồi bấm **Liên kết Micros
 - Thứ tự kéo thả chỉ lưu trên web. Microsoft không cho ứng dụng ngoài đọc hay ghi thứ tự.
 
 ## 4. Kéo việc lên Timeline
-- **Thả thường:** chỉ hẹn ngày cho việc. Việc vẫn nằm trong danh sách To Do, chưa thuộc dự án nào. Tiêu đề ngày trên Timeline có số đếm; số màu cam nghĩa là có việc gắn sao.
-- **Giữ Shift khi thả lên dòng dự án, hoặc bấm 📁 trên việc rồi chọn dự án:** việc thành hạng mục của dự án đó.
+- **Thả thường:** việc thành hạng mục trong dự án riêng **TODO → VIỆC CẦN LÀM**. Dự án này luôn nằm cuối danh sách, dưới dự án NOTION, và chỉnh được như mọi dự án khác (kéo thanh, sửa ngày, nối việc…).
+- **Gõ thêm hạng mục ngay trong dự án TODO:** hạng mục đó tự thành việc trong danh sách.
+- **Xoá việc trong danh sách:** thanh của việc đó trong dự án TODO cũng bị xoá.
+- **Giữ Shift khi thả lên dòng dự án khác, hoặc bấm 📁 trên việc rồi chọn dự án:** việc vào dự án đó. Nếu việc đã có thanh thì thanh được chuyển sang dự án mới.
 - **Việc đã thành hạng mục:** hạn của việc đi theo hạng mục.
   - Hạng mục đổi ngày hoặc đổi tên thì việc đổi theo.
   - Hạng mục lên 100% thì việc được tick xong.
