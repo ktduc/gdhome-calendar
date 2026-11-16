@@ -64,8 +64,8 @@ function openMaterialLightbox(row,slot,initialIndex = 0) {
       renderEditor();
       refresh();
     },
-    remove(index) {
-      if (!confirm('Xoá ảnh này khỏi ô?')) return false;
+    async remove(index) {
+      if (!await GDHomeShell.confirm('Xoá ảnh này khỏi ô?')) return false;
       modify(() => removeMaterialImage(list,index,slot === 'render' ? null : row.options[Number(slot)]),true,true);
       return true;
     },

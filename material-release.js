@@ -87,13 +87,13 @@ async function historyDialog(archived) {
     '<ol>' + [...result.audit].reverse().map(entry => '<li>' + html(vnDate(entry.at) + ' · ' + entry.actor + ' · ' +
       ({ published:'Phát hành',revoked:'Thu hồi', 'customer-signed':'Bên A ký','company-signed':'Bên B ký','change-requested':'Yêu cầu đổi','draft-choice':'Sửa phương án bản nháp', 'sheet-archived':'Lưu trữ bảng','sheet-restored':'Khôi phục bảng' })[entry.event] +
       (entry.reason ? ' · '+entry.reason : entry.row ? ' · '+entry.row+' · '+(entry.previous.code || '—')+' → '+(entry.next.code || '—') : '')) + '</li>').join('') + '</ol>');
-  element.onclick = event => {
+  element.onclick = async event => {
     const { printRevision,company,revoke } = event.target.dataset;
     const view = result.revisions.find(r => r.id === (printRevision || company || revoke));
     if (!view) return;
     if (printRevision) { element.close(); return showPrint(view,'/api/materials/assets/',authHeaders()).catch(showError); }
     if (company) { element.close(); return companyDialog(view,result._version); }
-    if (confirm('Thu hồi link bản này?')) safeRelease(async () => {
+    if (await GDHomeShell.confirm('Thu hồi link bản này?')) safeRelease(async () => {
       const saved = await post(releasePath(),{ _version:result._version,action:'revoke',revisionId:view.id });
       if (saved._version === materials._version+1) materials._version = saved._version;
       element.close(); await historyDialog();
@@ -145,7 +145,7 @@ async function runDirectExport(mode) {
   if (!filtered.groups.length) {
     if (mode === 'copy') showCopyResult(null,new Error('Phạm vi xuất không có dòng vật liệu nào. Hãy kiểm tra Cài đặt xuất.'));
     else if (window.GDHomeShell?.toast) GDHomeShell.toast('Phạm vi xuất không có dòng vật liệu nào. Hãy kiểm tra Cài đặt xuất.');
-    else alert('Phạm vi xuất không có dòng vật liệu nào.');
+    else GDHomeShell.alert('Phạm vi xuất không có dòng vật liệu nào.');
     return;
   }
   if (mode === 'copy') {
@@ -294,7 +294,7 @@ async function exportStatsImage(copy,watermark = true) {
   downloadCanvas(canvas,'GD-HOME-vat-lieu.png',watermark);
 }
 async function exportPurchasing() {
-  const includePrice = confirm('Thêm cột giá vào bản Excel mua hàng?');
+  const includePrice = await GDHomeShell.confirm({message:'Thêm cột giá vào bản Excel mua hàng?',okText:'Có giá',cancelText:'Không giá'});
   const XLSX = await loadXlsx();
   const chosenRows = sheet.groups.flatMap(group => group.rows.filter(row => row.chosen != null && row.decision === 'chosen' &&
     (!sheetRoom || row.room === sheetRoom)).map(row => ({group,row,pa:row.options[row.chosen]})));

@@ -7,6 +7,23 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { chromium } = require(process.env.PLAYWRIGHT_PATH || 'playwright');
 const cases = {};
+// Trả lời hộp xác nhận / nhập chữ của web (GDHomeShell.ask) – thay cho dialog.accept() của Chrome
+function autoAccept(page,value = null,times = 1) {
+  return page.evaluate(({value,times}) => {
+    let left = times;
+    const answer = () => {
+      const box = document.querySelector('dialog.gd-ask[open]:not([data-auto])');
+      if (!box) return;
+      box.dataset.auto = '1';
+      const input = box.querySelector('.gd-ask-input');
+      if (input && value !== null) input.value = value;
+      setTimeout(() => box.querySelector('[data-ask="ok"]').click(),0);
+      if (--left <= 0) observer.disconnect();
+    };
+    const observer = new MutationObserver(answer);
+    observer.observe(document.body,{childList:true});
+  },{value,times});
+}
 function webPhoto(label,width = 320,height = 320) {
   const {PNG} = require('pngjs');
   const color = require('node:crypto').createHash('sha256').update(label).digest();
@@ -214,8 +231,6 @@ cases['todo'] = async page => {
 };
 
 cases['multi-delete'] = async page => {
-  const nativeDialogs = [];
-  page.on('dialog',dialog => { nativeDialogs.push(dialog.message()); dialog.dismiss(); });
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();
   await page.locator('#btn-view-msproject').click();
@@ -256,7 +271,6 @@ cases['multi-delete'] = async page => {
     await page.keyboard.press('Escape');
     await ask.waitFor({state:'detached'});
   }
-  assert.deepEqual(nativeDialogs,[],'Không còn hộp thoại của Chrome');
 };
 
 cases['24.1'] = async page => {
@@ -909,7 +923,7 @@ cases['8.1'] = async page => {
   await button.focus();
   const before = await viewPosition(page);
   assert.ok(before.top > 0 && before.left > 0,'test must start below and to the right of the first row');
-  page.once('dialog',dialog => dialog.accept());
+  await autoAccept(page);
   await button.click();
   await row.waitFor({state:'detached'});
   await page.waitForFunction(() => document.activeElement?.closest('[data-row]')?.dataset.row === 'g8-r2');
@@ -923,7 +937,7 @@ cases['8.1'] = async page => {
   await next.scrollIntoViewIfNeeded();
   const mobileBefore = await viewPosition(page);
   assert.ok(mobileBefore.page > 0,'test phải có cuộn cả trang');
-  page.once('dialog',dialog => dialog.accept());
+  await autoAccept(page);
   await next.click();
   await page.waitForFunction(() => document.activeElement?.closest('[data-row]')?.dataset.row === 'g8-r3');
   const mobileAfter = await viewPosition(page);
@@ -983,7 +997,7 @@ cases['8.4'] = async page => {
   await select('g1-r4').click({modifiers:['Shift']});
   await select('g1-r6').click({modifiers:['Control']});
   await page.getByText('Đã chọn 5 dòng',{exact:true}).waitFor();
-  page.once('dialog',dialog => dialog.accept());
+  await autoAccept(page);
   await page.keyboard.press('Delete');
   assert.equal(await page.locator('tr[data-row]').count(),145);
   await page.keyboard.press('Control+z');
@@ -1256,9 +1270,9 @@ cases['9.5'] = async page => {
   await page.locator('.asset-view-dialog').waitFor({state:'detached'});
   assert.match(await pa.locator('.material-image-thumb img').first().getAttribute('style'),/--view:scale\(2\)/);
   assert.equal(await lightbox.locator('output').textContent(),'2 / 2');
-  page.once('dialog',dialog => dialog.accept());
+  await autoAccept(page);
   await lightbox.getByRole('button',{name:'Xoá ảnh'}).click();
-  assert.equal(await lightbox.locator('output').textContent(),'1 / 1');
+  await page.waitForFunction(() => document.querySelector('dialog.material-lightbox output')?.textContent === '1 / 1');
   await page.keyboard.press('Escape');
   await lightbox.waitFor({state:'detached'});
   await photo.click();
@@ -2497,7 +2511,7 @@ cases['17.0'] = async page => {
   assert.equal(data.added.length,1);
   await page.locator('[data-library-summary]').filter({hasText:'1 ảnh mẫu'}).waitFor();
   await page.locator('.material-sidebar-actions [data-action=open-library]').click();
-  page.on('dialog',dialog => dialog.accept());
+  await autoAccept(page,null,1e9);
   await page.locator('.asset-library-dialog [data-asset-remove]').click();
   await page.locator('.asset-library-dialog').getByText('Chưa có ảnh trong hạng mục này.').waitFor();
   await page.keyboard.press('Escape');
@@ -2534,7 +2548,7 @@ cases['18.1'] = async page => {
   assert.equal(data.added.length,1);
   await page.locator('[data-library-summary]').filter({hasText:'1 ảnh mẫu'}).waitFor();
   await page.locator('.material-sidebar-actions [data-action=open-library]').click();
-  page.on('dialog',dialog => dialog.accept());
+  await autoAccept(page,null,1e9);
   await page.locator('.asset-library-dialog [data-asset-remove]').click();
   await page.locator('.asset-library-dialog [data-asset-remove]').waitFor({state:'detached',timeout:100});
   await page.keyboard.press('Escape');
@@ -2567,7 +2581,7 @@ cases['18.1'] = async page => {
     return route.fulfill({status:503,json:{message:'Máy chủ đang bận'}});
   });
   await row.locator('[data-action=del-row]').dispatchEvent('click');
-  await row.waitFor({state:'detached',timeout:100});
+  await row.waitFor({state:'detached',timeout:1000}); // trước khi máy chủ (chậm 1,5 s) trả lời
   await page.locator('#notice').getByText(/Đã khôi phục mục vừa xoá/).waitFor();
   await row.waitFor();
 };
@@ -3052,7 +3066,7 @@ cases['19.4'] = async page => {
   await dialog.locator('[data-bulk-select]').first().click();
   await dialog.locator('[data-bulk-select]').last().click({modifiers:['Shift']});
   assert.equal(await dialog.locator('[data-bulk-select]:checked').count(),3);
-  page.once('dialog',prompt => prompt.accept('mờ'));
+  await autoAccept(page,'mờ');
   await dialog.locator('[data-bulk=addTags]').click();
   await dialog.locator('[data-facet=tags][data-value="mờ"]').waitFor();
   const read = () => page.request.get('/api/library').then(r => r.json()).then(data => data.items.filter(item => ids.includes(item.id)));
@@ -3463,7 +3477,7 @@ cases['20-drive-menu'] = async page => {
   await section.getByText(/Lần gần nhất.*4 tệp/).waitFor();
   assert.equal(manual,1);
   assert.equal(await section.getByRole('link',{name:'Mở thư mục Drive'}).getAttribute('href'),'https://drive.google.com/drive/folders/test-folder');
-  page.once('dialog',dialog => dialog.accept());
+  await autoAccept(page);
   await section.getByRole('button',{name:'Hủy liên kết'}).click();
   await section.getByRole('button',{name:'Liên kết thư mục Drive'}).waitFor();
   assert.equal(linked,false);
@@ -3518,7 +3532,7 @@ cases['20-library-ui'] = async page => {
 
   const source = library.locator('[data-cat="' + sourceId + '"]');
   await source.click({button:'right'});
-  page.once('dialog',prompt => prompt.accept('Kho gạch cũ đã đổi tên'));
+  await autoAccept(page,'Kho gạch cũ đã đổi tên');
   await menu.getByRole('button',{name:'Sửa tên hạng mục'}).click();
   await source.getByText('Kho gạch cũ đã đổi tên',{exact:true}).waitFor();
   await source.click({button:'right'});
@@ -3566,11 +3580,11 @@ cases['20-category-merge-target'] = async page => {
 
   await target.click({button:'right'});
   await menu.getByRole('button',{name:'Xoá hạng mục'}).waitFor();
-  page.once('dialog',prompt => prompt.accept('Kho gỗ hợp nhất'));
+  await autoAccept(page,'Kho gỗ hợp nhất');
   await menu.getByRole('button',{name:'Sửa tên hạng mục'}).click();
   await target.getByText('Kho gỗ hợp nhất',{exact:true}).waitFor();
   await library.getByLabel('Thao tác hạng mục').click();
-  page.once('dialog',confirm => confirm.accept());
+  await autoAccept(page);
   await library.locator('[data-cat-delete]').click();
   await page.getByText(/Hạng mục còn mẫu/).waitFor();
 
@@ -3581,7 +3595,7 @@ cases['20-category-merge-target'] = async page => {
   assert.ok(moved.ok());
   await page.evaluate(() => GDHomeAssets.loadLibrary(true));
   await target.click({button:'right'});
-  page.once('dialog',confirm => confirm.accept());
+  await autoAccept(page);
   await menu.getByRole('button',{name:'Xoá hạng mục'}).click();
   await target.waitFor({state:'detached'});
   const reloaded = await page.request.get('/api/library').then(response => response.json());
@@ -3693,7 +3707,7 @@ cases['21.5'] = async page => {
   });
   const library = page.locator('.asset-library-dialog');
   await library.getByRole('tab',{name:'Thuộc tính'}).click();
-  page.once('dialog',prompt => prompt.accept('Chống trượt'));
+  await autoAccept(page,'Chống trượt');
   await library.getByRole('button',{name:'Thêm nhóm tuỳ chỉnh'}).click();
   await library.locator('[data-attribute-key] option:checked').filter({hasText:'Chống trượt'}).waitFor({state:'attached'});
   const custom = await library.locator('[data-attribute-key]').inputValue();
@@ -3842,7 +3856,7 @@ cases['20.11'] = async page => {
   await library.locator('[data-attribute-target]').selectOption('Hãng mẫu B');
   await library.locator('[data-attribute-merge]').click();
   await row('Hãng mẫu B').getByText('2',{exact:true}).waitFor();
-  page.once('dialog',prompt => prompt.accept());
+  await autoAccept(page);
   await row('Hãng mẫu B').locator('[data-attribute-action=delete]').click();
   await row('Hãng mẫu B').waitFor({state:'detached'});
   const data = await page.request.get('/api/library').then(r => r.json());
@@ -4705,7 +4719,7 @@ cases['21.11'] = async page => {
   await library.getByRole('button',{name:'Bỏ Loại Vân Gỗ Walnut'}).click();
   await card('MS 7013').waitFor();
   await oak.check();
-  page.once('dialog',prompt => prompt.accept('Gỗ sồi mờ'));
+  await autoAccept(page,'Gỗ sồi mờ');
   await library.getByRole('button',{name:'Lưu bộ lọc',exact:true}).click();
   await library.locator('[data-filter-preset] option').filter({hasText:'Gỗ sồi mờ'}).waitFor({state:'attached'});
   await page.reload();
@@ -5281,6 +5295,11 @@ async function main() {
       page.setDefaultTimeout(4000);
       const pageErrors = [];
       page.on('pageerror',error => pageErrors.push(error.message));
+      // Không còn hộp confirm/alert/prompt của Chrome – mọi hộp phải là GDHomeShell
+      page.on('dialog',dialog => {
+        if (dialog.type() === 'beforeunload') return dialog.accept().catch(() => {});
+        pageErrors.push('Hộp Chrome: '+dialog.message()); dialog.dismiss().catch(() => {});
+      });
       try {
         await cases[key](page,{browser,fixture,schedule:caseSchedule,dir});
         assert.deepEqual(pageErrors,[],'Lỗi JavaScript trên trang');

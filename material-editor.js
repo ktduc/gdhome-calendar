@@ -563,7 +563,7 @@ document.addEventListener('click', async event => {
       case 'new': createSheet(byId('project-filter').value,'Bảng chốt mã mới',makeTemplate()); break;
       case 'copy': {
         const options = materials.sheets.map((s,i) => (i+1) + '. ' + s.title).join('\n');
-        const index = Number(prompt('Chọn số bảng nguồn:\n' + options)) - 1;
+        const index = Number(await GDHomeShell.prompt('Chọn số bảng nguồn:\n' + options)) - 1;
         const source = materials.sheets[index];
         if (source) createSheet(byId('project-filter').value,source.title,source.groups.map(g => ({
           ...newGroup(g.name), rows:g.rows.map(duplicate)
@@ -632,7 +632,7 @@ document.addEventListener('click', async event => {
         break;
       }
       case 'del-group':
-        if (canRemoveRows(group.rows) && confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1));
+        if (canRemoveRows(group.rows) && await GDHomeShell.confirm('Bỏ nhóm và các dòng khỏi bản nháp?')) modify(() => sheet.groups.splice(sheet.groups.indexOf(group),1));
         break;
       case 'add-row': { const created = newRow(); modify(() => group.rows.push(created)); revealCreated('[data-row="' + created.id + '"]'); break; }
       case 'del-row': removeMaterialRows([row]); break;

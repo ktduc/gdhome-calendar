@@ -1055,7 +1055,7 @@ window.GDHomeAssets = (() => {
     body.querySelector('[data-attribute-key]').onchange = event => { state.attributeKey = event.target.value; state.attributeMessage = ''; paint(); };
     body.querySelector('[data-attribute-add]').onclick = () => editLibraryAttribute(data,key);
     body.querySelector('[data-attribute-group-add]').onclick = async () => {
-      const name = prompt('Tên nhóm thuộc tính tuỳ chỉnh:')?.trim();
+      const name = (await GDHomeShell.prompt('Tên nhóm thuộc tính tuỳ chỉnh:'))?.trim();
       if (!name) return;
       const group = {key:'custom-'+uid().replace(/[^a-z0-9]/gi,'').slice(0,24),name};
       try {
@@ -1067,11 +1067,11 @@ window.GDHomeAssets = (() => {
     body.querySelector('[data-attribute-merge]').onclick = () => apply({action:'merge',
       names:[...body.querySelectorAll('[data-attribute-select]:checked')].map(box => box.value),
       target:body.querySelector('[data-attribute-target]').value});
-    body.querySelectorAll('[data-attribute-action]').forEach(button => button.onclick = () => {
+    body.querySelectorAll('[data-attribute-action]').forEach(button => button.onclick = async () => {
       const row = rows[Number(button.closest('tr').dataset.attributeRow)], action = button.dataset.attributeAction;
       if (action === 'edit') return editLibraryAttribute(data,key,row);
       if (action === 'delete') {
-        if (row.count && !confirm('Xoá “' + row.name + '” khỏi ' + row.count + ' mẫu đang dùng?')) return;
+        if (row.count && !await GDHomeShell.confirm('Xoá “' + row.name + '” khỏi ' + row.count + ' mẫu đang dùng?')) return;
         return apply({action,previous:row.name,confirm:true});
       }
       apply({action:'move',previous:row.name,step:action === 'up' ? -1 : 1});
@@ -4000,12 +4000,12 @@ window.GDHomeAssets = (() => {
       paint();
     }
     async function renameCategory(category) {
-      const name = prompt('Đổi tên hạng mục:',category.name);
+      const name = await GDHomeShell.prompt('Đổi tên hạng mục:',category.name);
       if (!name?.trim()) return;
       try { await saveCategory(name.trim(),category.id); } catch (error) { toast(error.message); }
     }
     async function removeManagedCategory(category) {
-      if (!confirm('Xoá hạng mục "' + category.name + '"?')) return;
+      if (!await GDHomeShell.confirm('Xoá hạng mục "' + category.name + '"?')) return;
       try {
         await deleteCategory(category.id);
         undoToken = guestUndo = null;
@@ -4212,7 +4212,7 @@ window.GDHomeAssets = (() => {
         if (input.checked) changeCategory(input.closest('[data-cat]').dataset.cat);
       });
       body.querySelector('[data-cat-add]').onclick = async () => {
-        const name = prompt('Tên hạng mục mới (vd: Gạch ốp lát, Sàn gỗ, Rèm):');
+        const name = await GDHomeShell.prompt('Tên hạng mục mới (vd: Gạch ốp lát, Sàn gỗ, Rèm):');
         if (!name?.trim()) return;
         try { const result = await saveCategory(name.trim()); changeCategory(result.category?.id || current); } catch (error) { toast(error.message); }
       };
@@ -4267,9 +4267,9 @@ window.GDHomeAssets = (() => {
         try { await libraryCall('filter-presets',patch,guest => { attributeCatalog().saveFilterPreset(guest,patch); }); }
         catch (error) { toast(error.message); }
       };
-      body.querySelector('[data-save-preset]')?.addEventListener('click',() => {
+      body.querySelector('[data-save-preset]')?.addEventListener('click',async () => {
         const previous = presets.find(item => item.id === viewState.presetId);
-        const name = prompt('Tên bộ lọc nhanh',previous?.name || '')?.trim();
+        const name = (await GDHomeShell.prompt('Tên bộ lọc nhanh',previous?.name || ''))?.trim();
         if (!name) return;
         const same = presets.find(item => fold(item.name) === fold(name));
         const id = same?.id || uid();
@@ -4326,7 +4326,7 @@ window.GDHomeAssets = (() => {
         items.forEach(item => selected.add(item.id));
         paint();
       };
-      body.querySelectorAll('[data-bulk]').forEach(button => button.onclick = () => {
+      body.querySelectorAll('[data-bulk]').forEach(button => button.onclick = async () => {
         const key = button.dataset.bulk;
         const ids = [...selected];
         if (key === 'undo') return applyBulk({undo:undoToken});
@@ -4352,11 +4352,11 @@ window.GDHomeAssets = (() => {
           return;
         }
         if (key === 'delete') {
-          if (confirm('Xoá các mẫu đã chọn?')) applyBulk({ids,delete:true});
+          if (await GDHomeShell.confirm('Xoá các mẫu đã chọn?')) applyBulk({ids,delete:true});
           return;
         }
         const hint = key === 'categoryId' ? '\n' + data.categories.map((item,index) => (index+1) + '. ' + item.name).join('\n') : '';
-        const value = prompt(button.textContent + hint);
+        const value = await GDHomeShell.prompt(button.textContent + hint);
         if (value === null) return;
         if (key === 'categoryId') {
           const categoryId = data.categories[Number(value)-1]?.id;
@@ -4420,13 +4420,13 @@ window.GDHomeAssets = (() => {
         changeCategoryOrder(order);
       });
       body.querySelector('[data-manage-suppliers]')?.addEventListener('click',async () => {
-        const previousName = prompt('Chọn tên để sửa hoặc để trống để thêm: ' + (data.suppliers || []).map(item => item.name).join(', '));
+        const previousName = await GDHomeShell.prompt('Chọn tên để sửa hoặc để trống để thêm: ' + (data.suppliers || []).map(item => item.name).join(', '));
         if (previousName === null) return;
         const previous = data.suppliers?.find(item => item.name === previousName);
-        const name = prompt('Tên đơn vị cung cấp:',previous?.name || '');
+        const name = await GDHomeShell.prompt('Tên đơn vị cung cấp:',previous?.name || '');
         if (!name?.trim()) return;
-        const phone = prompt('Số điện thoại:',previous?.phone || '');
-        const note = prompt('Ghi chú:',previous?.note || '');
+        const phone = await GDHomeShell.prompt('Số điện thoại:',previous?.phone || '');
+        const note = await GDHomeShell.prompt('Ghi chú:',previous?.note || '');
         if (phone === null || note === null) return;
         try { await libraryCall('suppliers',{previousName,name,phone,note},guest => {
           guest.suppliers = [...(guest.suppliers || []).filter(item => item.name !== previousName && item.name !== name),{name,phone,note}];
@@ -4507,7 +4507,7 @@ window.GDHomeAssets = (() => {
         updateItem({id:item.id,hidden:!item.hidden}).catch(error => toast(error.message));
       });
       body.querySelectorAll('[data-asset-remove]').forEach(button => button.onclick = async () => {
-        if (!confirm('Xoá ảnh khỏi dữ liệu dùng chung? Các bảng đã dùng ảnh này vẫn giữ ảnh.')) return;
+        if (!await GDHomeShell.confirm('Xoá ảnh khỏi dữ liệu dùng chung? Các bảng đã dùng ảnh này vẫn giữ ảnh.')) return;
         try { await deleteItems([button.closest('[data-asset-id]').dataset.assetId]); } catch (error) { toast(error.message); }
       });
       body.querySelectorAll('[data-asset-pick]').forEach(button => button.onclick = () => {
@@ -4575,7 +4575,7 @@ window.GDHomeAssets = (() => {
           if (item.full) window.open(await assetUrl(item.full),'_blank');
         });
         list.querySelectorAll('[data-asset-remove]').forEach(button => button.onclick = async () => {
-          if (!confirm('Xoá ảnh 3D khỏi dự án?')) return;
+          if (!await GDHomeShell.confirm('Xoá ảnh 3D khỏi dự án?')) return;
           const documentId = button.closest('[data-asset-id]').dataset.assetId;
           if (!removedRenders.has(projectId)) removedRenders.set(projectId,new Set());
           const removed = removedRenders.get(projectId);

@@ -84,8 +84,8 @@ function canRemoveRows(rows) {
   return false;
 }
 
-function removeMaterialRows(rows) {
-  if (!rows.length || !canRemoveRows(rows) || !confirm('Xoá ' + rows.length + ' dòng khỏi bản nháp?')) return;
+async function removeMaterialRows(rows) {
+  if (!rows.length || !canRemoveRows(rows) || !await GDHomeShell.confirm('Xoá ' + rows.length + ' dòng khỏi bản nháp?')) return;
   const ids = new Set(rows.map(row => row.id));
   modify(() => {
     for (const group of sheet.groups) group.rows = group.rows.filter(row => !ids.has(row.id));

@@ -119,7 +119,7 @@ async function openNotionCustomers() {
       const calendarName = materials.projects.find(p => p.id === selectedProject)?.name;
       if (create && !profile.project?.trim()) { message.textContent = 'Ghép cột Dự án và chọn dòng có tên.'; return; }
       if (!create && profile.project && profile.project !== calendarName &&
-          !confirm('Đổi tên dự án dùng chung theo tên trong Notion?')) return;
+          !await GDHomeShell.confirm('Đổi tên dự án dùng chung theo tên trong Notion?')) return;
       button.disabled = true;
       try {
         await flushSave();

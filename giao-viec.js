@@ -23,7 +23,7 @@
 
   const byId = id => document.getElementById(id);
   const escape = str => GDHomeShell?.escape ? GDHomeShell.escape(str) : String(str ?? '');
-  const toast = msg => GDHomeShell?.toast ? GDHomeShell.toast(msg, byId('work-toast')) : alert(msg);
+  const toast = msg => GDHomeShell?.toast ? GDHomeShell.toast(msg, byId('work-toast')) : GDHomeShell.alert(msg);
 
   function getHeaders() {
     return GDHomeShell?.authHeaders ? GDHomeShell.authHeaders() : { 'Content-Type': 'application/json' };
@@ -361,14 +361,14 @@
       GDHomeShell?.saveStatus(byId('save-status'), 'saved');
       toast('Đã lưu thông tin nhà thầu: ' + result.contractor.name);
     } catch (err) {
-      alert(err.message);
+      GDHomeShell.alert(err.message);
       GDHomeShell?.saveStatus(byId('save-status'), 'error');
     }
   }
 
   async function deleteContractor(id) {
     const c = state.contractors.find(item => item.id === id);
-    if (!c || !confirm(`Bạn chắc chắn muốn xoá nhà thầu "${c.name}"?`)) return;
+    if (!c || !await GDHomeShell.confirm(`Bạn chắc chắn muốn xoá nhà thầu "${c.name}"?`)) return;
 
     try {
       GDHomeShell?.saveStatus(byId('save-status'), 'saving');
@@ -383,7 +383,7 @@
       GDHomeShell?.saveStatus(byId('save-status'), 'saved');
       toast(`Đã xoá nhà thầu ${c.name}`);
     } catch (err) {
-      alert(err.message);
+      GDHomeShell.alert(err.message);
     }
   }
 
@@ -505,14 +505,14 @@
       GDHomeShell?.saveStatus(byId('save-status'), 'saved');
       toast('Đã lưu phiếu giao việc thành công');
     } catch (err) {
-      alert(err.message);
+      GDHomeShell.alert(err.message);
       GDHomeShell?.saveStatus(byId('save-status'), 'error');
     }
   }
 
   async function deleteAssignment(id) {
     const a = state.assignments.find(item => item.id === id);
-    if (!a || !confirm(`Bạn chắc chắn muốn xoá phiếu giao việc cho "${a.contractorName}"?`)) return;
+    if (!a || !await GDHomeShell.confirm(`Bạn chắc chắn muốn xoá phiếu giao việc cho "${a.contractorName}"?`)) return;
 
     try {
       GDHomeShell?.saveStatus(byId('save-status'), 'saving');
@@ -527,7 +527,7 @@
       GDHomeShell?.saveStatus(byId('save-status'), 'saved');
       toast('Đã xoá phiếu giao việc.');
     } catch (err) {
-      alert(err.message);
+      GDHomeShell.alert(err.message);
     }
   }
 
@@ -745,11 +745,11 @@
   async function executePdfBuild() {
     const selectedPages = state.pdfPages.filter(p => p.selected);
     if (!selectedPages.length) {
-      alert('Vui lòng chọn ít nhất 1 trang PDF để ghép.');
+      GDHomeShell.alert('Vui lòng chọn ít nhất 1 trang PDF để ghép.');
       return;
     }
     if (!state.pdfSourceBytes) {
-      alert('Chưa có dữ liệu PDF nguồn.');
+      GDHomeShell.alert('Chưa có dữ liệu PDF nguồn.');
       return;
     }
 
@@ -905,7 +905,7 @@
       toast('Đã tạo thành công file PDF: ' + outputFilename);
     } catch (err) {
       console.error(err);
-      alert('Lỗi tạo PDF: ' + err.message);
+      GDHomeShell.alert('Lỗi tạo PDF: ' + err.message);
     } finally {
       buildBtn.disabled = false;
       buildBtn.innerHTML = '<i data-lucide="file-check"></i> Tạo PDF';
@@ -917,12 +917,12 @@
   // -------------------------------------------------------------------------
   function exportAssignmentsExcel() {
     if (typeof XLSX === 'undefined') {
-      alert('Thư viện Excel chưa được nạp.');
+      GDHomeShell.alert('Thư viện Excel chưa được nạp.');
       return;
     }
     const list = state.assignments;
     if (!list.length) {
-      alert('Không có phiếu giao việc nào để xuất.');
+      GDHomeShell.alert('Không có phiếu giao việc nào để xuất.');
       return;
     }
 

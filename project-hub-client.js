@@ -10,7 +10,7 @@
 
   function toast(msg) {
     if (window.GDHomeShell?.toast) GDHomeShell.toast(msg, byId('hub-toast'));
-    else alert(msg);
+    else GDHomeShell.alert(msg);
   }
 
   function getAuthToken() {
@@ -581,10 +581,10 @@
             figure.innerHTML = `<p style="color:#fca5a5;padding:20px">Lỗi tải ảnh: ${escape(err.message)}</p>`;
           });
         },
-        remove(idx) {
+        async remove(idx) {
           const item = docs[idx];
           if (!item) return false;
-          if (!confirm(`Xoá ảnh "${item.name}"?`)) return false;
+          if (!await GDHomeShell.confirm(`Xoá ảnh "${item.name}"?`)) return false;
           docs.splice(idx, 1);
           window.deleteDoc(item.id, true);
           return true;
@@ -627,7 +627,7 @@
   };
 
   window.deleteDoc = async (docId, skipConfirm = false) => {
-    if (!skipConfirm && !confirm('Bạn chắc chắn muốn xoá tài liệu này?')) return;
+    if (!skipConfirm && !await GDHomeShell.confirm('Bạn chắc chắn muốn xoá tài liệu này?')) return;
     const prevDocs = [...(currentProject?.hub?.documents || [])];
     const removed = prevDocs.find(d => d.id === docId);
     const nextDocs = prevDocs.filter(d => d.id !== docId);
@@ -1039,7 +1039,7 @@
               body: GDHomeShell.hubJobBody ? GDHomeShell.hubJobBody(job) : `<strong>${escape(job.projectName || 'Dự án')}</strong>: ${escape(job.step)} (${job.progress}%)`,
               label: 'Huỷ',
               onAction: async () => {
-                if (!confirm('Huỷ phân tích AI?')) return;
+                if (!await GDHomeShell.confirm('Huỷ phân tích AI?')) return;
                 await api('/api/project-hub/jobs/cancel', { jobId });
               }
             });
@@ -1216,7 +1216,7 @@
 
     byId('btn-apply-schedule').onclick = async () => {
       if (!currentProjectId) return;
-      if (!confirm('Đẩy danh sách công việc này vào Lịch Tiến Độ của dự án?')) return;
+      if (!await GDHomeShell.confirm('Đẩy danh sách công việc này vào Lịch Tiến Độ của dự án?')) return;
       try {
         await api('/api/project-hub/push/schedule', { projectId: currentProjectId, apply: true });
         toast('Đã đẩy thành công sang Tiến độ thi công!');
@@ -1240,7 +1240,7 @@
 
     byId('btn-apply-materials').onclick = async () => {
       if (!currentProjectId) return;
-      if (!confirm('Tạo bảng Chốt mã vật liệu mới cho dự án này từ các nhóm đã đề xuất?')) return;
+      if (!await GDHomeShell.confirm('Tạo bảng Chốt mã vật liệu mới cho dự án này từ các nhóm đã đề xuất?')) return;
       try {
         await api('/api/project-hub/push/materials', { projectId: currentProjectId, apply: true });
         toast('Đã đẩy thành công sang Chốt mã vật liệu!');

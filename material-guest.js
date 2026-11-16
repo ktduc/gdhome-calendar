@@ -96,7 +96,7 @@ function guestMaterialAsset(name) {
 
 async function importGuestMaterials() {
   const previous = guestMaterialState();
-  if (!previous.sheets?.length || !confirm('Chép các bảng Chốt mã đang làm ở chế độ khách vào tài khoản?')) return;
+  if (!previous.sheets?.length || !await GDHomeShell.confirm('Chép các bảng Chốt mã đang làm ở chế độ khách vào tài khoản?')) return;
   const assets = new Map();
   async function upload(name) {
     if (!assets.has(name)) assets.set(name,await storeMaterialImage(guestMaterialAsset(name)));

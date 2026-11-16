@@ -144,7 +144,14 @@ window.GDHomeShell = (() => {
       if (input) input.select();
     });
   }
-  const confirmBox = options => ask(options);
+  // Câu hỏi dạng chữ: tự nhận câu xoá / thu hồi / huỷ -> nút đỏ ghi đúng việc
+  const confirmBox = options => {
+    if (typeof options !== 'string') return ask(options);
+    const verb = /^(?:bạn (?:có )?chắc(?: chắn)? muốn )?(xoá|xóa|bỏ|thu hồi|huỷ|hủy|dừng)/i.exec(options.trim());
+    const okText = verb ? verb[1].charAt(0).toUpperCase() + verb[1].slice(1).toLowerCase() : undefined;
+    // "Huỷ phân tích?" -> tránh 2 nút cùng chữ "Huỷ"
+    return ask({message:options,danger:!!verb,okText,cancelText:verb && /^h[uủ]ỷ|^hủy/i.test(verb[1]) ? 'Không' : undefined});
+  };
   const alertBox = options => ask({...(typeof options === 'string' ? {message:options} : options),alert:true});
   const promptBox = (message,value = '',extra = {}) => ask({message,input:{value,...extra},okText:extra.okText || 'Lưu'});
 
@@ -209,7 +216,7 @@ window.GDHomeShell = (() => {
       if (command === 'crop') {
         try { await crop(index,element,show); } catch (error) { onError?.(error); }
       }
-      if (command === 'remove' && remove(index)) {
+      if (command === 'remove' && await remove(index)) {
         if (!count()) return element.close();
         index = Math.min(index,count()-1);
         show();

@@ -70,7 +70,7 @@ function copyCanvasToClipboard(canvas, { watermark = true, notify = alert, fallb
   applyAntiEditWatermark(canvas, watermark);
   canvas.toBlob(async (blob) => {
     if (!blob) {
-      alert('Không thể tạo dữ liệu ảnh để copy.');
+      GDHomeShell.alert('Không thể tạo dữ liệu ảnh để copy.');
       return;
     }
     try {

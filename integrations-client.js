@@ -51,11 +51,11 @@ window.GDHomeConnections = (() => {
         section.querySelectorAll('button').forEach(button => { button.disabled = false; });
       }
     }
-    section.onclick = event => {
+    section.onclick = async event => {
       const button = event.target.closest('[data-drive-action]');
       if (!button) return;
       const action = button.dataset.driveAction;
-      if (action === 'unlink' && !confirm('Dừng sao lưu hằng ngày và hủy liên kết thư mục Drive?')) return;
+      if (action === 'unlink' && !await GDHomeShell.confirm('Dừng sao lưu hằng ngày và hủy liên kết thư mục Drive?')) return;
       button.disabled = true;
       refresh(action);
     };
