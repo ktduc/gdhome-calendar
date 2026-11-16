@@ -678,17 +678,20 @@
     renderStatus();
   }
 
+  // Nút ẩn nhanh ở đáy cửa sổ (không phải cuộn lên nút × trên cùng)
+  const HIDE_BTN = '<button type="button" class="gd-todo-hide" data-act="close" title="Ẩn cửa sổ Việc cần làm">Ẩn ✕</button>';
   function renderMs() {
     const ms = st.ms || {};
     if (!ms.available) {
-      msEl.innerHTML = '<span class="gd-todo-muted" title="Quản trị cần đặt MS_TODO_CLIENT_ID, MS_TODO_CLIENT_SECRET, MS_TODO_REDIRECT_URI trên Render">Microsoft To Do: máy chủ chưa cấu hình</span>';
+      msEl.innerHTML = '<span class="gd-todo-muted" title="Quản trị cần đặt MS_TODO_CLIENT_ID, MS_TODO_CLIENT_SECRET, MS_TODO_REDIRECT_URI trên Render">Microsoft To Do: máy chủ chưa cấu hình</span>' + HIDE_BTN;
     } else if (!ms.linked) {
-      msEl.innerHTML = '<button type="button" class="gd-todo-ms-btn" data-act="ms-connect">Liên kết Microsoft To Do</button>' +
+      msEl.innerHTML = '<button type="button" class="gd-todo-ms-btn" data-act="ms-connect">Liên kết Microsoft To Do</button>' + HIDE_BTN +
         (ms.error ? `<div class="gd-todo-err">${esc(ms.error)}</div>` : '');
     } else {
       msEl.innerHTML = `<div class="gd-todo-ms-row"><span title="${esc(ms.account)}">↔ ${esc(ms.listName || 'To Do')}</span>
         <button type="button" class="gd-todo-link" data-act="ms-lists">Đổi danh sách</button>
-        <button type="button" class="gd-todo-link" data-act="ms-unlink">Ngắt</button></div>
+        <button type="button" class="gd-todo-link" data-act="ms-unlink">Ngắt</button>
+        <button type="button" class="gd-todo-hide" data-act="close" title="Ẩn cửa sổ Việc cần làm">Ẩn ✕</button></div>
         <div class="gd-todo-ms-lists"></div>
         ${ms.error ? `<div class="gd-todo-err">${esc(ms.error)}</div>` : ''}`;
     }

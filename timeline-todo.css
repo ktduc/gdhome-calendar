@@ -214,3 +214,15 @@
 .gd-todo-add button.gd-todo-star-new:hover { background: rgba(255, 251, 235, .8); color: #d97706; }
 .gd-todo-add button.gd-todo-star-new.on { color: #f59e0b; background: rgba(77, 97, 136, .18); }
 .gd-todo-add textarea.star-on { border-color: rgba(77, 97, 136, .5); background: rgba(77, 97, 136, .08); }
+
+/* Nút "Ẩn ✕" ở đáy cửa sổ – tắt nhanh không phải cuộn lên */
+.gd-todo-ms { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.gd-todo-ms > div { flex-basis: 100%; }
+.gd-todo-ms > .gd-todo-ms-btn, .gd-todo-ms > .gd-todo-muted { flex: 1; width: auto; min-width: 0; }
+.gd-todo-hide {
+  flex: none; height: 26px; padding: 0 10px;
+  border: 1px solid rgba(90, 78, 65, .25); border-radius: 8px;
+  background: rgba(255, 255, 255, .6); color: var(--todo-accent-dark);
+  font: 600 12px Roboto, system-ui, sans-serif; cursor: pointer;
+}
+.gd-todo-hide:hover { background: #fff; border-color: var(--todo-accent); }

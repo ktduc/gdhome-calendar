@@ -103,6 +103,14 @@ cases['todo'] = async page => {
   const panel = page.locator('#gd-todo-panel');
   await panel.waitFor();
   assert.match(await panel.locator('.gd-todo-ms').textContent(),/chưa cấu hình/);
+  // Nút "Ẩn ✕" ở đáy cửa sổ đóng nhanh, nằm trong khung nhìn
+  const hideBtn = panel.locator('.gd-todo-ms [data-act="close"]');
+  const hb = await hideBtn.boundingBox();
+  assert.ok(hb && hb.y + hb.height <= 900,'Nút Ẩn nằm trong màn hình');
+  await hideBtn.click();
+  await panel.waitFor({state:'hidden'});
+  await page.locator('#gd-todo-toggle').click();
+  await panel.waitFor();
   await panel.locator('.gd-todo-add textarea').fill('Gọi thợ điện');
   await panel.locator('.gd-todo-add textarea').press('Enter');
   await panel.locator('li[draggable="true"]').getByText('Gọi thợ điện').waitFor();
