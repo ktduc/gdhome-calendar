@@ -217,7 +217,7 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 #material-image-scope [role=status]{margin:0}
 #material-image-scope button{justify-self:start}
 :root{--material-square:92px;--material-group-fill:#eef2f5;--material-column-fill:#dceaf6}
-@page material-board{size:A4 landscape;margin:9mm}
+@page material-board{size:A4;margin:9mm}   /* anh Đức: PDF bảng chốt mã khổ dọc */
 .material-paper{box-sizing:border-box;margin:0;padding:0;border:0;border-radius:0;background:white;color:#172438;font:13px/1.35 var(--gd-font)}
 .material-paper-heading{padding:12px 14px 10px}
 .material-paper-heading h1{margin:4px 0 6px;text-align:center;font-size:20px;line-height:1.25}

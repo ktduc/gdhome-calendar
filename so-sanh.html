@@ -6,13 +6,14 @@
   <title>Bảng so sánh · GD HOME</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Condensed:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@500;600;700&family=Roboto:wght@400;500;700&family=Roboto+Condensed:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/shell.css?v=gd26">
-  <link rel="stylesheet" href="/tools.css?v=gd18d">
+  <link rel="stylesheet" href="/tools.css?v=gd26">
   <link rel="stylesheet" href="/asset-library.css?v=undo1">
-  <link rel="stylesheet" href="/so-sanh.css?v=cmp4">
+  <link rel="stylesheet" href="/so-sanh.css?v=cmp5">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
   <script src="/shell.js?v=gd25" defer></script>
   <script src="/image-compression.js?v=gd20.14.3" defer></script>
   <script src="/material-template.js" defer></script>
@@ -21,7 +22,7 @@
   <script src="/catalogue-import-history.js?v=gd20.12" defer></script>
   <script src="/asset-library.js?v=undo1" defer></script>
   <script src="/integrations-client.js?v=dlg1" defer></script>
-  <script src="/so-sanh.js?v=cmp4" defer></script>
+  <script src="/so-sanh.js?v=cmp5" defer></script>
 <link rel="stylesheet" href="/timeline-todo.css?v=todo9">
 <script src="/timeline-todo.js?v=todo9" defer></script>
 </head>
@@ -36,6 +37,21 @@
       <details class="gd-tools-menu" data-shell-menu></details>
     </div>
     <div class="header-right">
+      <!-- Copy ảnh ▾: cùng kiểu nút tách như Lịch / Chốt mã / Dự án, đứng trước Hoàn tác -->
+      <div class="hdr-split-group shell-copy-controls" data-shell-slot="copy" id="cmp-image-actions">
+        <button type="button" class="btn btn-success hdr-split-main" data-out="copy" title="Copy ảnh bảng đang mở để Ctrl+V vào Zalo, Word…">Copy ảnh</button>
+        <details class="hdr-dropdown">
+          <summary class="btn btn-success hdr-split-caret" aria-label="Tuỳ chọn xuất"><span class="hdr-caret">▾</span></summary>
+          <div class="hdr-dropdown-menu">
+            <button type="button" class="hdr-menu-item" data-out="copy">Copy ảnh bảng</button>
+            <button type="button" class="hdr-menu-item" data-out="png">Tải PNG</button>
+            <button type="button" class="hdr-menu-item" data-out="pdf">Tải PDF bảng này</button>
+            <hr style="margin:4px 0;border:0;border-top:1px solid #cbd5e1">
+            <button type="button" class="hdr-menu-item" data-out="pdf-cat">Tải PDF hạng mục đang chọn</button>
+            <button type="button" class="hdr-menu-item" data-out="pdf-all">Tải PDF toàn bộ danh mục</button>
+          </div>
+        </details>
+      </div>
       <div class="hdr-undo-group">
         <button type="button" class="btn btn-outline hdr-icon-sq" id="cmp-undo" title="Hoàn tác (Ctrl+Z)" aria-label="Hoàn tác" disabled>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg>
@@ -68,39 +84,41 @@
     </aside>
 
     <main class="cmp-main">
-      <div class="cmp-toolbar" id="cmp-toolbar" hidden>
-        <label>Hạng mục <select id="cmp-cat-select"></select></label>
-        <div class="cmp-seg" role="group" aria-label="Bố cục">
-          <button type="button" data-cols="2">2 cột</button>
-          <button type="button" data-cols="3">3 cột</button>
-        </div>
-        <div class="cmp-seg" role="group" aria-label="Thu phóng">
-          <button type="button" data-zoom="fit" title="Thu nhỏ vừa vùng làm việc">Vừa khung</button>
-          <button type="button" data-zoom="full" title="Xem đúng 100% để sửa kỹ">100%</button>
-        </div>
-        <button type="button" class="btn btn-outline btn-sm" id="cmp-approve"></button>
-        <span class="cmp-spacer"></span>
-        <button type="button" class="btn btn-outline btn-sm" id="cmp-delete">Xoá bảng</button>
-        <button type="button" class="btn btn-success btn-sm" id="cmp-copy" title="Copy ảnh bảng để dán vào Zalo, Word…">Copy ảnh</button>
-        <button type="button" class="btn btn-success btn-sm" id="cmp-export">Tải PNG</button>
-      </div>
-      <div class="cmp-aibar" id="cmp-aibar" hidden>
-        <textarea id="cmp-notes" rows="2" placeholder="Thông tin cho AI (không in lên bảng): dán chữ mô tả, thông số, link… Ảnh dán vào các ô ảnh bên dưới."></textarea>
-        <button type="button" class="btn btn-primary btn-sm" id="cmp-fill" title="AI điền các ô còn trống theo tên phương án, chữ ở đây và ảnh đã dán; chữ anh đã gõ được giữ nguyên">✨ AI điền bảng</button>
-        <button type="button" class="btn btn-outline btn-sm" id="cmp-prompt" title="Hết lượt AI: copy prompt sang ChatGPT / Claude / Gemini web, rồi dán câu trả lời về">📋 Prompt cho AI khác</button>
-      </div>
       <div class="cmp-stage" id="cmp-stage">
         <p class="cmp-empty" id="cmp-empty">Chọn một bảng ở danh mục bên trái, hoặc nhập ý tưởng để AI làm bảng mới.</p>
         <div id="cmp-sheet-wrap"></div>
       </div>
+      <!-- Tuỳ chỉnh bảng để bên phải: màn hình ngang còn trọn chiều cao cho khổ giấy -->
+      <aside class="cmp-panel" id="cmp-toolbar" hidden>
+        <label class="cmp-field">Hạng mục <select id="cmp-cat-select"></select></label>
+        <div class="cmp-field">Bố cục
+          <div class="cmp-seg" role="group" aria-label="Bố cục">
+            <button type="button" data-cols="2" title="2 phương án · A4 dọc">2 cột · dọc</button>
+            <button type="button" data-cols="3" title="3 phương án · A4 ngang">3 cột · ngang</button>
+          </div>
+        </div>
+        <div class="cmp-panel-row">
+          <button type="button" class="btn btn-outline btn-sm" id="cmp-approve"></button>
+          <button type="button" class="btn btn-outline btn-sm" id="cmp-delete">Xoá bảng</button>
+        </div>
+        <div class="cmp-aibar" id="cmp-aibar">
+          <label for="cmp-notes"><strong>Thông tin cho AI</strong> <small>(không in lên bảng)</small></label>
+          <textarea id="cmp-notes" rows="8" placeholder="Dán chữ mô tả, thông số, link… Ảnh thì dán vào các ô ảnh trên bảng."></textarea>
+          <button type="button" class="btn btn-primary btn-sm" id="cmp-fill" title="AI điền các ô còn trống theo tên phương án, chữ ở đây và ảnh đã dán; chữ anh đã gõ được giữ nguyên">✨ AI điền bảng</button>
+          <button type="button" class="btn btn-outline btn-sm" id="cmp-prompt" title="Hết lượt AI: copy prompt chữ + prompt ảnh sang ChatGPT / Claude / Gemini web">📋 Prompt cho AI khác</button>
+        </div>
+      </aside>
     </main>
   </div>
   <input type="file" id="cmp-file" accept="image/*" hidden>
   <dialog class="shell-dialog gd-ask cmp-prompt-dlg" id="cmp-prompt-dlg">
     <h2>Gửi bảng này qua AI khác</h2>
     <p class="gd-ask-message">1. Copy prompt, dán vào ChatGPT / Claude / Gemini (đính kèm ảnh các cột nếu có).<br>2. Copy câu trả lời của AI, dán vào ô dưới rồi bấm Điền bảng. Chữ anh đã gõ được giữ nguyên.</p>
-    <textarea id="cmp-prompt-text" readonly rows="9"></textarea>
+    <textarea id="cmp-prompt-text" readonly rows="7"></textarea>
     <textarea id="cmp-prompt-answer" rows="5" placeholder="Dán câu trả lời của AI (đoạn JSON {…}) vào đây"></textarea>
+    <h3 class="cmp-img-head">Prompt tạo ảnh – mỗi cột 1 prompt, gửi riêng để nhận ảnh rời</h3>
+    <p class="gd-ask-message">AI vẽ xong: copy ảnh → bấm chọn ô ảnh của cột đó → Ctrl+V.</p>
+    <div id="cmp-img-prompts"></div>
     <div class="gd-ask-actions">
       <button type="button" class="gd-ask-btn" data-pr="close">Đóng</button>
       <button type="button" class="gd-ask-btn" data-pr="copy">📋 Copy prompt</button>

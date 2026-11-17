@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;0,700;1,400&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/shell.css?v=gd26">
-  <link rel="stylesheet" href="/tools.css?v=gd18d">
+  <link rel="stylesheet" href="/tools.css?v=gd26">
   <link rel="stylesheet" href="/project-hub.css?v=gd15">
   <link rel="stylesheet" href="/asset-library.css?v=undo1">
   <script src="/shell.js?v=gd25" defer></script>
@@ -54,13 +54,17 @@
         </div>
       </details>
 
-      <details class="hdr-split-group hdr-dropdown" data-shell-slot="copy" id="menu-copy">
-        <summary class="btn btn-success">Copy ảnh ▾</summary>
-        <div class="hdr-dropdown-menu">
-          <button type="button" class="hdr-menu-item" id="btn-copy-matrix">Sao chép ảnh ma trận soát</button>
-          <button type="button" class="hdr-menu-item" id="btn-copy-quote">Sao chép tóm tắt báo giá</button>
-        </div>
-      </details>
+      <!-- Copy ảnh: nút tách giống Lịch / Chốt mã / So sánh (nút chính + ▾) -->
+      <div class="hdr-split-group shell-copy-controls" data-shell-slot="copy" id="menu-copy">
+        <button type="button" class="btn btn-success hdr-split-main" id="btn-copy-matrix" title="Sao chép kết quả soát bản vẽ">Copy ảnh</button>
+        <details class="hdr-dropdown">
+          <summary class="btn btn-success hdr-split-caret" aria-label="Tuỳ chọn sao chép"><span class="hdr-caret">▾</span></summary>
+          <div class="hdr-dropdown-menu">
+            <button type="button" class="hdr-menu-item" onclick="document.getElementById('btn-copy-matrix').click()">Sao chép ma trận soát</button>
+            <button type="button" class="hdr-menu-item" id="btn-copy-quote">Sao chép tóm tắt báo giá</button>
+          </div>
+        </details>
+      </div>
 
       <div class="hdr-undo-group" data-shell-slot="undo">
         <button type="button" class="hdr-icon-sq" id="btn-undo" title="Hoàn tác (Ctrl+Z)" disabled>↶</button>

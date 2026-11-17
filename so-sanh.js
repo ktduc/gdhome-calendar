@@ -11,7 +11,7 @@
   const PALETTE = ['#7d8f69', '#7a2e2e', '#4d6188', '#8c7d6b', '#5f7f8c', '#9a6b3f', '#6b5b8c'];
   let doc = null, version = 0, current = null, saveTimer = null;
   let queue = {jobs: [], avgMs: 45000, now: Date.now()}, queueTimer = null, clockSkew = 0;
-  let zoomFit = true, activeSlot = null;
+  let activeSlot = null;
 
   async function api(url, options = {}) {
     const res = await fetch(url, {...options, headers: GDHomeShell.authHeaders()});
@@ -234,9 +234,10 @@
   function sheetHtml(b) {
     const cat = catOf(b), n = b.columns.length;
     const cols = fn => `<div class="cs-grid" style="--n:${n}">${b.columns.map(fn).join('')}</div>`;
-    return `<div class="cs-sheet ${b.status === 'new' ? 'is-new' : ''}" id="cs-sheet" style="--cat:${esc(cat.color)}">
+    // A4 tỷ lệ 1:√2 – 2 phương án khổ dọc 1000×1414, 3 phương án khổ ngang 1414×1000
+    return `<div class="cs-sheet ${n === 3 ? 'is-land' : ''} ${b.status === 'new' ? 'is-new' : ''}" id="cs-sheet" style="--cat:${esc(cat.color)}">
       <div class="cs-head">
-        <div class="cs-logo"><img src="/gdhome-icon.png" alt=""><b>GD HOME</b></div>
+        <div class="cs-logo"><img src="/gdhome-logo.png" alt="GD HOME"></div>
         <div class="cs-title"><div contenteditable="plaintext-only" data-f="title" ${ph('SO SÁNH')}>${esc(b.title)}</div>
           <div contenteditable="plaintext-only" data-f="heading" ${ph('TIÊU ĐỀ SO SÁNH')}>${esc(b.heading)}</div></div>
         <div class="cs-tab"><span>${esc(cat.name)}</span></div>
@@ -253,15 +254,14 @@
     </div>`;
   }
 
-  // Khổ thiết kế 1000px: "Vừa khung" thu nhỏ theo vùng làm việc, "100%" để sửa kỹ (khi xuất ảnh luôn 100%)
+  // Luôn thu cả trang giấy vừa vùng làm việc (khi xuất ảnh/PDF luôn đúng 100%)
   function fit() {
-    const sheet = byId('cs-sheet');
-    if (sheet) sheet.style.zoom = zoomFit ? Math.min(1, (byId('cmp-stage').clientWidth - 40) / 1000) : 1;
-    document.querySelectorAll('[data-zoom]').forEach(btn => btn.classList.toggle('active', (btn.dataset.zoom === 'fit') === zoomFit));
+    const sheet = byId('cs-sheet'), stage = byId('cmp-stage');
+    if (sheet) sheet.style.zoom = Math.min(1, (stage.clientWidth - 40) / sheet.offsetWidth, (stage.clientHeight - 40) / sheet.offsetHeight);
   }
-  // Khổ cố định (A4 dọc 1000×1414): nhiều chữ hơn dự kiến thì dòng tự sát lại / chữ nhỏ dần cho vừa khổ
-  function tighten() {
-    const sheet = byId('cs-sheet'), body = sheet?.querySelector('.cs-body');
+  // Khổ cố định: nhiều chữ hơn dự kiến thì dòng tự sát lại / chữ nhỏ dần cho vừa khổ
+  function tighten(sheet = byId('cs-sheet')) {
+    const body = sheet?.querySelector('.cs-body');
     if (!body) return;
     let k = 1;
     sheet.style.setProperty('--k', k);
@@ -338,33 +338,72 @@
     } catch { toast('Trình duyệt chặn đọc clipboard: bấm chọn ô ảnh rồi nhấn Ctrl+V.'); }
   }
 
-  // ---------------------------------------------------------------- ẢNH XUẤT (Copy / Tải PNG)
-  async function renderCanvas() {
-    const sheet = byId('cs-sheet');
-    if (!sheet || !window.html2canvas) throw new Error('Chưa tải được công cụ xuất ảnh, thử lại sau.');
+  // ---------------------------------------------------------------- XUẤT (Copy ảnh / PNG / PDF 1 bảng, 1 hạng mục, toàn bộ)
+  // Dựng bảng ngoài màn hình ở 100% rồi chụp: dùng chung cho bảng đang mở và xuất nhiều bảng
+  async function renderCanvas(b) {
+    if (!window.html2canvas) throw new Error('Chưa tải được công cụ xuất ảnh, thử lại sau.');
+    const box = Object.assign(document.createElement('div'), {className: 'cs-offscreen', innerHTML: sheetHtml(b)});
+    const sheet = box.firstElementChild;
+    sheet.removeAttribute('id');
     sheet.classList.add('is-exporting');
-    sheet.style.zoom = 1;
+    document.body.append(box);
     try {
-      await Promise.all([...sheet.querySelectorAll('img')].map(img => img.complete ? null : img.decode().catch(() => null)));
+      await Promise.all([...sheet.querySelectorAll('img[data-asset]')].map(async img => {
+        try { img.src = await GDHomeAssets.assetUrl(img.dataset.asset); await img.decode(); } catch { /* ảnh lỗi: để ô trống */ }
+      }).concat(document.fonts.ready));
+      await Promise.all([...sheet.querySelectorAll('img')].map(img => img.decode().catch(() => null)));
+      tighten(sheet);
       return await html2canvas(sheet, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true});
-    } finally { sheet.classList.remove('is-exporting'); fit(); }
+    } finally { box.remove(); }
   }
-  async function exportPng() {
-    try {
-      const canvas = await renderCanvas(), b = board();
-      const a = document.createElement('a');
-      a.download = 'So-sanh_' + (b.heading || 'bang').replace(/[\\/:*?"<>|]+/g, '').slice(0, 80) + '.png';
-      a.href = canvas.toDataURL('image/png');
-      a.click();
-    } catch (error) { GDHomeShell.alert('Lỗi xuất ảnh: ' + error.message); }
+  const fileName = (name, ext) => 'So-sanh_' + String(name || 'bang').replace(/[\\/:*?"<>|]+/g, '').slice(0, 80) + '.' + ext;
+  function download(href, name) { Object.assign(document.createElement('a'), {href, download: name}).click(); }
+  // Thứ tự xuất = thứ tự trên danh mục (hạng mục, rồi bảng mới, rồi bảng đã duyệt)
+  function boardsInOrder(catId) {
+    return doc.categories.filter(c => !catId || c.id === catId).flatMap(cat => {
+      const list = doc.boards.filter(b => b.categoryId === cat.id);
+      return [...list.filter(b => b.status === 'new'), ...list.filter(b => b.status !== 'new')];
+    });
   }
-  async function copyPng() {
+  // PDF: mọi trang cùng chiều rộng 210 mm (bảng dọc cao 297, bảng ngang cao 148,5) nên cuộn đọc đều nhau
+  async function exportPdf(list, name) {
+    if (!window.jspdf) throw new Error('Chưa tải được công cụ PDF, thử lại sau.');
+    if (!list.length) throw new Error('Chưa có bảng nào để xuất.');
+    let pdf = null;
+    for (const [i, b] of list.entries()) {
+      toast(`Đang xuất PDF ${i + 1}/${list.length}…`);
+      const canvas = await renderCanvas(b), size = [210, 210 * canvas.height / canvas.width];
+      const orientation = size[1] >= size[0] ? 'portrait' : 'landscape';   // jsPDF tự đảo cạnh nếu sai hướng
+      if (!pdf) pdf = new window.jspdf.jsPDF({unit: 'mm', format: size, orientation, compress: true});
+      else pdf.addPage(size, orientation);
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, size[0], size[1]);
+    }
+    pdf.save(fileName(name, 'pdf'));
+    toast('Đã tải PDF ' + list.length + ' bảng.');
+  }
+  async function output(mode) {
+    const b = board();
     try {
-      const canvas = await renderCanvas();
+      if (mode === 'pdf-all') return await exportPdf(boardsInOrder(), 'toan-bo-danh-muc');
+      if (!b) return toast('Chọn một bảng trước.');
+      if (mode === 'pdf-cat') return await exportPdf(boardsInOrder(b.categoryId), catOf(b).name);
+      if (mode === 'pdf') return await exportPdf([b], b.heading);
+      const canvas = await renderCanvas(b);
+      if (mode === 'png') return download(canvas.toDataURL('image/png'), fileName(b.heading, 'png'));
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
       toast('Đã copy ảnh bảng so sánh – dán (Ctrl+V) vào Zalo, Word…');
-    } catch (error) { GDHomeShell.alert('Không copy được ảnh: ' + error.message); }
+    } catch (error) { GDHomeShell.alert('Không xuất được: ' + error.message); }
+  }
+
+  // Prompt tạo ảnh: mỗi cột 1 prompt riêng để AI trả về ảnh rời, đúng tỷ lệ ô ảnh của khổ giấy
+  function imagePrompts(b) {
+    const ratio = b.columns.length === 3 ? '4:3 (landscape)' : '1:1 (square)';
+    return b.columns.map(c => `Photorealistic interior design photo for a product comparison board (Vietnam interior fit-out).
+Subject: "${c.name || b.heading}"${c.desc ? ' – ' + c.desc.replace(/\n/g, '; ') : ''}.
+Comparison topic: ${b.heading || b.idea || ''}.
+Show this option clearly as the main subject, realistic materials and construction details, soft natural light, clean modern Vietnamese apartment or neutral studio background.
+Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no logo, no collage.`);
   }
 
   // ---------------------------------------------------------------- SỰ KIỆN
@@ -424,6 +463,8 @@
         const {prompt} = await post('/api/compare/prompt', {board: b, categories: doc.categories.map(c => c.name)});
         byId('cmp-prompt-text').value = prompt;
         byId('cmp-prompt-answer').value = '';
+        byId('cmp-img-prompts').innerHTML = imagePrompts(b).map((text, i) => `<div class="cmp-img-prompt"><div><b>Cột ${i + 1}: ${esc(b.columns[i].name || '')}</b>
+          <button type="button" class="gd-ask-btn" data-pr="copy-img" data-i="${i}">📋 Copy prompt ảnh</button></div><textarea readonly rows="3">${esc(text)}</textarea></div>`).join('');
         dlg.dataset.board = b.id;
         dlg.showModal();
       } catch (error) { GDHomeShell.alert(error.message); }
@@ -431,10 +472,11 @@
     dlg.onclick = async e => {
       const act = e.target.closest('[data-pr]')?.dataset.pr;
       if (act === 'close') return dlg.close();
-      if (act === 'copy') {
-        try { await navigator.clipboard.writeText(byId('cmp-prompt-text').value); }
-        catch { byId('cmp-prompt-text').select(); document.execCommand('copy'); }
-        return toast('Đã copy prompt – dán vào ChatGPT / Claude / Gemini.');
+      if (act === 'copy' || act === 'copy-img') {
+        const area = act === 'copy' ? byId('cmp-prompt-text') : e.target.closest('.cmp-img-prompt').querySelector('textarea');
+        try { await navigator.clipboard.writeText(area.value); }
+        catch { area.select(); document.execCommand('copy'); }
+        return toast(act === 'copy' ? 'Đã copy prompt chữ – dán vào ChatGPT / Claude / Gemini.' : 'Đã copy prompt ảnh – gửi riêng để AI vẽ 1 ảnh rời.');
       }
       if (act !== 'apply') return;
       const target = doc.boards.find(x => x.id === dlg.dataset.board);
@@ -503,7 +545,6 @@
       renderSheet();
       save();
     });
-    document.querySelectorAll('[data-zoom]').forEach(btn => btn.onclick = () => { zoomFit = btn.dataset.zoom === 'fit'; fit(); });
     byId('cmp-approve').onclick = () => {
       const b = board();
       b.status = b.status === 'new' ? 'ok' : 'new';
@@ -518,8 +559,12 @@
       renderAll();
       save();
     };
-    byId('cmp-export').onclick = exportPng;
-    byId('cmp-copy').onclick = copyPng;
+    byId('cmp-image-actions').onclick = e => {
+      const btn = e.target.closest('[data-out]');
+      if (!btn) return;
+      btn.closest('details')?.removeAttribute('open');
+      output(btn.dataset.out);
+    };
     byId('cmp-undo').onclick = undo;
     byId('cmp-redo').onclick = redo;
     document.addEventListener('keydown', e => {
@@ -570,7 +615,7 @@
       if (file && activeSlot !== null) uploadBlob(activeSlot, file);
     };
     new ResizeObserver(fit).observe(byId('cmp-stage'));
-    document.fonts?.ready.then(tighten);   // font Roboto Condensed tải xong thì đo lại cho vừa khổ
+    document.fonts?.ready.then(() => { tighten(); fit(); });   // font Roboto Condensed tải xong thì đo lại cho vừa khổ
     document.addEventListener('visibilitychange', () => { if (!document.hidden) pollQueue(); });
   }
 

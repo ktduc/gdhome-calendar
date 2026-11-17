@@ -396,6 +396,10 @@ cases['so-sanh'] = async page => {
     // Bố cục 3 cột rồi về 2 cột
     await page.locator('.cmp-seg [data-cols="3"]').click();
     assert.equal(await sheet.locator('.cs-band .cs-name').count(),3);
+    // 3 phương án = A4 ngang 1414×1000, cả trang thu vừa vùng làm việc; chữ hạng mục xoay (không dùng writing-mode)
+    const land = await page.evaluate(() => { const s = document.getElementById('cs-sheet'), st = document.getElementById('cmp-stage').getBoundingClientRect(), r = s.getBoundingClientRect();
+      return {w: s.offsetWidth, h: s.offsetHeight, fits: r.bottom <= st.bottom + 1 && r.right <= st.right + 1, wm: getComputedStyle(s.querySelector('.cs-tab span')).writingMode}; });
+    assert.deepEqual(land,{w:1414,h:1000,fits:true,wm:'horizontal-tb'},JSON.stringify(land));
     await page.locator('.cmp-seg [data-cols="2"]').click();
     assert.equal(await page.locator('#cs-sheet .cs-band .cs-name').count(),2);
     // Ctrl+V ảnh (chụp màn hình / file đã copy) vào ô ảnh đang chọn
@@ -423,10 +427,18 @@ cases['so-sanh'] = async page => {
       return b && b.status === 'ok' && b.heading.endsWith('(2026)') && b.columns[0].desc.endsWith(' sửa') && b.columns[1].image?.full;
     }));
     assert.equal(await page.locator('#cmp-tree li.is-new').count(),1);
-    // 100% / Vừa khung
-    await page.locator('[data-zoom="full"]').click();
-    assert.equal(await sheet.evaluate(el => el.style.zoom),'1');
-    await page.locator('[data-zoom="fit"]').click();
+    // Logo chuẩn + menu Copy ảnh ▾ trên header: PDF toàn bộ danh mục (mỗi trang rộng 210 mm)
+    assert.ok(await page.locator('#cs-sheet .cs-logo img[src="/gdhome-logo.png"]').count());
+    await page.locator('#cmp-image-actions summary').click();
+    // Thay hàm lưu file của jsPDF để đọc số trang / khổ trang (trình duyệt test không nhận tải về)
+    await page.waitForFunction(() => window.jspdf);
+    await page.evaluate(() => { window.jspdf.jsPDF.API.save = function (name) {
+      window.__pdf = {name, sizes: Array.from({length: this.getNumberOfPages()}, (_, i) => { this.setPage(i + 1); return [this.getPageWidth(), Math.round(this.getPageHeight())]; })};
+    }; });
+    await page.locator('#cmp-image-actions [data-out="pdf-all"]').click();
+    const pdf = await (await page.waitForFunction(() => window.__pdf,null,{timeout:30000})).jsonValue();
+    assert.equal(pdf.name,'So-sanh_toan-bo-danh-muc.pdf');
+    assert.deepEqual(pdf.sizes,[[210,149],[210,297]],'Bảng 3 cột trang ngang, bảng 2 cột trang dọc, cùng chiều rộng 210 mm');
     // Header: tài khoản sát phải, có nút sáng/tối và Todo
     const right = await page.locator('.shell-account').evaluate(el => el.getBoundingClientRect().right);
     assert.ok(right > page.viewportSize().width - 40,'Ô tài khoản sát phải: '+right);

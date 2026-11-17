@@ -30,7 +30,7 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cmp-boards li.is-active button { outline: 2px solid #5a4e41; outline-offset: -2px; }
 .cmp-boards li.cmp-sep { height: 1px; margin: 4px 6px; background: #e2e8f0; }
 
-.cmp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.cmp-main { flex: 1; min-width: 0; display: flex; flex-direction: row; }
 .cmp-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 8px 14px; background: #fff; border-bottom: 1px solid #dadce0; font-size: 13px; }
 .cmp-toolbar[hidden] { display: none; }
 .cmp-toolbar select { margin-left: 4px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; }
@@ -44,15 +44,16 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 /* ---------------- Bảng so sánh (khổ thiết kế 1000px, thu nhỏ vừa màn hình bằng zoom) ---------------- */
 .cs-sheet { --cat: #7d8f69; --k: 1; width: 1000px; height: 1414px; display: flex; flex-direction: column; overflow: hidden; margin: 0 auto; background: #e6e6e6; color: #1a1a1a; font-family: 'Roboto Condensed', 'Roboto', sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
 .cs-sheet.is-new { outline: 4px solid #f5c451; }
-.cs-head { flex: none; position: relative; display: grid; grid-template-columns: 170px 1fr 70px; align-items: center; height: 150px; background: #e6e6e6; border-top: 8px solid var(--cat); }
-.cs-logo { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.cs-logo img { width: 72px; height: 72px; object-fit: contain; }
-.cs-logo b { font: 700 15px 'Roboto', sans-serif; letter-spacing: .3px; padding: 0 6px 4px; border-bottom: 2px solid #8b1c1c; }
-.cs-title { text-align: center; font-weight: 500; line-height: 1.15; }
-.cs-title [data-f=title] { font-size: 30px; }
-.cs-title [data-f=heading] { font-size: 30px; }
-.cs-tab { align-self: stretch; background: var(--cat); display: flex; align-items: center; justify-content: center; }
-.cs-tab span { writing-mode: vertical-rl; transform: rotate(180deg); color: #fff; font: 700 17px 'Roboto', sans-serif; letter-spacing: 1px; }
+.cs-head { flex: none; position: relative; display: grid; grid-template-columns: 230px 1fr 70px; align-items: center; height: 150px; background: #e6e6e6; border-top: 8px solid var(--cat); }
+.cs-logo { justify-self: center; }
+.cs-logo img { display: block; width: 180px; height: auto; }        /* logo chuẩn gdhome-logo.png (nền trong suốt) */
+/* Gotham là font bản quyền, không có trên web font: dùng Montserrat (dáng gần Gotham nhất, đủ dấu tiếng Việt) */
+.cs-title { text-align: center; font-family: 'Montserrat', 'Gotham', sans-serif; font-weight: 600; line-height: 1.2; letter-spacing: .2px; }
+.cs-title [data-f=title] { font-size: 26px; }
+.cs-title [data-f=heading] { font-size: 25px; }
+/* Chữ dọc bằng xoay (html2canvas không hỗ trợ writing-mode nên ảnh xuất bị vỡ chữ) */
+.cs-tab { position: relative; align-self: stretch; background: var(--cat); overflow: hidden; }
+.cs-tab span { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-90deg); white-space: nowrap; color: #fff; font: 700 17px 'Roboto', sans-serif; letter-spacing: 1px; }
 .cs-grid { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); column-gap: 44px; padding: 0 48px; }
 .cs-images { flex: none; background: #fff; padding: 36px 0; }
 .cs-img { position: relative; aspect-ratio: 1; background: #f1f1f1; overflow: hidden; display: flex; align-items: center; justify-content: center; }
@@ -81,7 +82,7 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cs-sheet.is-exporting [contenteditable]:empty::before, .cs-sheet.is-exporting .cs-img-tools { display: none; }
 .cs-sheet.is-exporting { outline: 0; box-shadow: none; }
 .cs-sheet.is-overflow:not(.is-exporting) .cs-body { box-shadow: inset 0 -4px 0 #d93025; }   /* nhỏ hết mức vẫn tràn: báo viền đỏ dưới */
-.cmp-body .header-right .hdr-undo-group { margin-left: auto; }   /* như các trang khác: đẩy cụm nút + tài khoản sát phải */
+.cmp-body .header-right #cmp-image-actions { flex: none; width: auto; margin-left: auto; }   /* như các trang khác: cụm Copy ảnh + hoàn tác + tài khoản sát phải */
 
 /* Tiến trình hàng đợi AI (chạy nền trên máy chủ) */
 .cmp-progress { display: flex; flex-direction: column; gap: 5px; padding: 8px; border-radius: 8px; background: #fff7e0; border: 1px solid #f5d98a; font-size: 12px; }
@@ -122,3 +123,28 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cmp-aibar .btn { white-space: nowrap; }
 .cmp-prompt-dlg { width: min(92vw, 760px); }
 .cmp-prompt-dlg textarea { box-sizing: border-box; width: 100%; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #d8d2c8; border-radius: 8px; font: 12.5px/1.45 ui-monospace, Consolas, monospace; resize: vertical; }
+
+/* Khổ A4 ngang cho 3 phương án */
+.cs-sheet.is-land { width: 1414px; height: 1000px; }
+.cs-sheet.is-land .cs-head { height: 130px; }
+.cs-sheet.is-land .cs-images { padding: 24px 0; }
+.cs-sheet.is-land .cs-img { aspect-ratio: 4 / 3; }
+.cs-sheet.is-land .cs-body { padding-bottom: 18px; }
+.cs-offscreen { position: fixed; left: -30000px; top: 0; }
+
+/* Tuỳ chỉnh bảng: panel bên phải */
+.cmp-panel { flex: none; width: 280px; display: flex; flex-direction: column; gap: 12px; padding: 12px; background: #fff; border-left: 1px solid #dadce0; overflow: auto; font-size: 13px; }
+.cmp-panel[hidden] { display: none; }
+.cmp-field { display: flex; flex-direction: column; gap: 4px; font-weight: 600; color: #475569; }
+.cmp-field select { margin: 0; padding: 5px 6px; font-weight: 400; }
+.cmp-panel .cmp-seg { display: flex; }
+.cmp-panel .cmp-seg button { flex: 1; }
+.cmp-panel-row { display: flex; gap: 6px; }
+.cmp-panel-row .btn { flex: 1; }
+.cmp-panel .cmp-aibar { flex-direction: column; align-items: stretch; padding: 10px; border: 1px solid #d8d2c8; border-radius: 10px; background: #faf8f4; }
+.cmp-panel .cmp-aibar small { color: #64748b; font-weight: 400; }
+.cmp-panel .cmp-aibar textarea { min-height: 140px; max-height: 50vh; }
+.cmp-img-head { margin: 6px 0 2px; font-size: 14px; }
+.cmp-img-prompt > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.cmp-img-prompt .gd-ask-btn { min-width: 0; }
+.cmp-prompt-dlg { max-height: 92vh; overflow: auto; }
