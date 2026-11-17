@@ -464,9 +464,11 @@ Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no l
   }
 
   // Ảnh ghép: Gemini thường chỉ vẽ 1 ảnh mỗi lượt -> xin 1 ảnh chia ô (đồng bộ phong cách), web tự cắt vào từng cột
-  const gridFor = n => n <= 3 ? [n, 1] : n === 4 ? [2, 2] : [3, 2];          // [số cột, số hàng] của ảnh ghép
+  // Chỉ dùng tỷ lệ Gemini có sẵn mà mỗi ô ra đúng hình vuông: 1:1 = lưới 2×2 (2–4 PA), 3:2 = lưới 3×2 (5–6 PA).
+  // Ô thừa để trắng ở cuối (góc dưới phải) -> logo Gemini ở góc ảnh thường rơi vào ô trắng, không đè lên ảnh.
+  const gridFor = n => n <= 4 ? [2, 2] : [3, 2];          // [số cột, số hàng] của ảnh ghép
   function collagePrompt(b) {
-    const n = b.columns.length, [C, R] = gridFor(n), ratio = {'2x1': '16:9', '3x1': '21:9', '2x2': '1:1', '3x2': '3:2'}[C + 'x' + R];
+    const n = b.columns.length, [C, R] = gridFor(n), ratio = C === R ? '1:1' : '3:2';
     return `Create ONE single image (aspect ratio ${ratio}) laid out as a clean grid of ${C} columns × ${R} row(s) of equal square panels separated by thin pure white gutters, read left-to-right, top-to-bottom:
 ${b.columns.map((c, i) => `Panel ${i + 1}: ${subjectOf(b, c)}`).join('\n')}${n < C * R ? `\nLeave the last ${C * R - n} panel plain white.` : ''}
 Comparison topic: ${b.heading || b.idea || ''}.
@@ -623,8 +625,15 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       if (act !== 'apply') return;
       const target = doc.boards.find(x => x.id === dlg.dataset.board);
       if (!target) return dlg.close();
+      // Ô trả lời trống: hiểu là vừa copy câu trả lời của AI khác -> tự lấy từ clipboard (như Ctrl+V)
+      const answer = byId('cmp-prompt-answer');
+      if (!answer.value.trim()) {
+        try { answer.value = await navigator.clipboard.readText(); }
+        catch { return toast('Trình duyệt chặn đọc clipboard: bấm vào ô trả lời, Ctrl+V rồi bấm Điền bảng.'); }
+        if (!answer.value.trim()) return toast('Clipboard đang trống: copy câu trả lời của AI rồi bấm lại.');
+      }
       try {
-        const {board: made, issues} = await post('/api/compare/import', {board: target, raw: byId('cmp-prompt-answer').value});
+        const {board: made, issues} = await post('/api/compare/import', {board: target, raw: answer.value});
         fillBoard(target, made);
         dlg.close();
         renderAll();

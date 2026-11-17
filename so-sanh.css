@@ -154,3 +154,6 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cs-title [data-f=heading] { white-space: nowrap; overflow: hidden; }   /* 1 dòng, chữ tự co trong tighten() */
 .cmp-pr-row { display: flex; justify-content: flex-end; margin: -4px 0 10px; }
 .cs-board:not(.is-exporting) .cs-name:empty { box-shadow: 0 0 0 1px #d93025; background: rgba(217,48,37,.06); }   /* phương án chưa đặt tên */
+.cmp-img-all { flex-wrap: wrap; }
+.cmp-prompt-dlg .gd-ask-btn { height: auto; min-height: var(--gd-btn-height, 32px); white-space: nowrap; line-height: 1.2; }   /* nút không bị dính 2 dòng chữ */
+.cmp-panel .cmp-aibar #cmp-fill { background: #eef0f2; color: #475569; border-color: #d0d5db; }    /* AI của web: nút phụ màu xám */

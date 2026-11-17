@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/shell.css?v=gd26">
   <link rel="stylesheet" href="/tools.css?v=gd26">
   <link rel="stylesheet" href="/asset-library.css?v=undo1">
-  <link rel="stylesheet" href="/so-sanh.css?v=cmp8">
+  <link rel="stylesheet" href="/so-sanh.css?v=cmp9">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
@@ -24,7 +24,7 @@
   <script src="/integrations-client.js?v=dlg1" defer></script>
   <script src="/export-canvas.js?v=wm2" defer></script>
   <script src="/gemini-mark.js?v=gm2" defer></script>
-  <script src="/so-sanh.js?v=cmp8" defer></script>
+  <script src="/so-sanh.js?v=cmp9" defer></script>
 <link rel="stylesheet" href="/timeline-todo.css?v=todo9">
 <script src="/timeline-todo.js?v=todo9" defer></script>
 </head>
@@ -112,8 +112,8 @@
         <div class="cmp-aibar" id="cmp-aibar">
           <label for="cmp-notes"><strong>Thông tin cho AI</strong> <small>(không in lên bảng)</small></label>
           <textarea id="cmp-notes" rows="8" placeholder="Dán chữ mô tả, thông số, link… Ảnh thì dán vào các ô ảnh trên bảng."></textarea>
-          <button type="button" class="btn btn-primary btn-sm" id="cmp-fill" title="AI điền các ô còn trống theo tên phương án, chữ ở đây và ảnh đã dán; chữ anh đã gõ được giữ nguyên">✨ AI điền bảng</button>
-          <button type="button" class="btn btn-outline btn-sm" id="cmp-prompt" title="Hết lượt AI: copy prompt chữ + prompt ảnh sang ChatGPT / Claude / Gemini web">📋 Prompt cho AI khác</button>
+          <button type="button" class="btn btn-primary btn-sm" id="cmp-prompt" title="Copy prompt chữ + prompt ảnh sang ChatGPT / Claude / Gemini web, rồi dán kết quả về">📋 Prompt cho AI khác</button>
+          <button type="button" class="btn btn-outline btn-sm" id="cmp-fill" title="AI của web điền các ô còn trống (tốn lượt AI); chữ anh đã gõ được giữ nguyên">✨ AI điền bảng</button>
         </div>
       </aside>
     </main>
@@ -125,11 +125,11 @@
     <textarea id="cmp-prompt-text" readonly rows="7"></textarea>
     <div class="cmp-pr-row"><button type="button" class="gd-ask-btn" data-pr="copy">📋 Copy prompt</button></div>
     <textarea id="cmp-prompt-answer" rows="5" placeholder="Dán câu trả lời của AI (đoạn JSON {…}) vào đây"></textarea>
-    <div class="cmp-pr-row"><button type="button" class="gd-ask-btn is-primary" data-pr="apply">Điền bảng</button></div>
+    <div class="cmp-pr-row"><button type="button" class="gd-ask-btn is-primary" data-pr="apply" title="Ô trống thì tự lấy câu trả lời vừa copy (như Ctrl+V)">Điền bảng</button></div>
     <h3 class="cmp-img-head">Prompt tạo ảnh</h3>
     <div class="cmp-img-all">
-      <button type="button" class="gd-ask-btn is-primary" data-pr="copy-collage">📋 Copy prompt 1 ảnh ghép (khuyên dùng)</button>
-      <button type="button" class="gd-ask-btn" data-pr="paste-collage">📥 Dán ảnh ghép → tách vào các cột</button>
+      <button type="button" class="gd-ask-btn is-primary" data-pr="copy-collage">📋 Copy prompt ảnh ghép</button>
+      <button type="button" class="gd-ask-btn" data-pr="paste-collage">📥 Dán ảnh ghép</button>
     </div>
     <p class="gd-ask-message">Gemini vẽ 1 ảnh chia ô cho tất cả phương án (cùng 1 lần nên đồng bộ). Copy ảnh đó rồi bấm "Dán ảnh ghép" (hoặc Ctrl+V khi hộp này đang mở): web tự cắt từng ô vuông vào đúng cột.</p>
     <textarea id="cmp-img-collage" readonly rows="3"></textarea>

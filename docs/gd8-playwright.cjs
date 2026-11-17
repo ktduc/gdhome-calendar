@@ -553,14 +553,14 @@ cases['so-sanh'] = async page => {
     // Ảnh ghép Gemini (2 ô có khe trắng): Ctrl+V khi hộp prompt mở -> tự cắt vào 2 cột
     await page.locator('#cmp-prompt').click();
     await page.locator('#cmp-prompt-dlg[open]').waitFor();
-    assert.match(await page.locator('#cmp-img-collage').inputValue(),/ONE single image \(aspect ratio 16:9\)[\s\S]*Panel 1: "Tay nắm tròn"[\s\S]*Panel 2: "Tay nắm dài"/);
+    assert.match(await page.locator('#cmp-img-collage').inputValue(),/ONE single image \(aspect ratio 1:1\)[\s\S]*Panel 1: "Tay nắm tròn"[\s\S]*Panel 2: "Tay nắm dài"/);
     assert.match(await page.locator('#cmp-img-collage').inputValue(),/crystal-clear[\s\S]*2K or 4K/,'Prompt ảnh trong trẻo + độ phân giải cao');
     assert.ok(await page.locator('#cmp-prompt-dlg .cmp-pr-row [data-pr="copy"]').isVisible() && await page.locator('#cmp-prompt-dlg .cmp-pr-row [data-pr="apply"]').isVisible(),'Nút Copy prompt / Điền bảng nằm sát ô');
     await page.evaluate(async () => {
-      const c = Object.assign(document.createElement('canvas'),{width:1600,height:900}), x = c.getContext('2d');
-      x.fillStyle = '#fff'; x.fillRect(0,0,1600,900);
-      x.fillStyle = '#c0392b'; x.fillRect(20,60,770,770);
-      x.fillStyle = '#2980b9'; x.fillRect(810,60,770,770);
+      const c = Object.assign(document.createElement('canvas'),{width:1024,height:1024}), x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0,0,1024,1024);
+      x.fillStyle = '#c0392b'; x.fillRect(8,8,496,496);
+      x.fillStyle = '#2980b9'; x.fillRect(520,8,496,496);
       const blob = await new Promise(r => c.toBlob(r,'image/png')), data = new DataTransfer();
       data.items.add(new File([blob],'ghep.png',{type:'image/png'}));
       document.getElementById('cmp-prompt-answer').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
