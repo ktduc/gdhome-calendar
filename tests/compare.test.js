@@ -124,3 +124,27 @@ test('so sánh: bảng tự làm – AI điền chỗ trống kèm ảnh, giữ 
   assert.equal(calls.length, 1);
   assert.ok(q.jobs[2].error.startsWith('Chưa làm: '));
 });
+
+test('so sánh: prompt cho AI khác + dán câu trả lời về; mô tả giữ xuống dòng', async () => {
+  const {parseAiJson} = require('../compare');
+  async function call(path, body) {
+    let out;
+    try { await handleCompare({method: 'POST'}, {}, path, {store: {get: async () => null}, dataKey: 'p@x.com', readJsonBody: async () => body, sendJson: (r, s, o) => { out = o; }}); }
+    catch (e) { out = {status: e.status, message: e.message}; }
+    return out;
+  }
+  const board = {id: 'cmp_tu_lam2', heading: 'Tay nắm', notes: 'Inox 304', columns: [
+    {name: 'Phương án A', desc: 'Dòng 1\nGiá thành: 2   Độ bền: 3', pros: [], cons: [], image: {full: 'a'.repeat(64) + '.webp'}}, {name: 'Tay nắm dài', pros: [], cons: []}]};
+  const {prompt} = await call('/api/compare/prompt', {board, categories: ['CỬA']});
+  assert.ok(prompt.startsWith('Bạn là kiến trúc sư'), 'Có lời nhắc hệ thống');
+  assert.ok(prompt.includes('Inox 304') && prompt.includes('ảnh 1 là của cột 1') && prompt.includes('DANH MỤC CÓ SẴN: CỬA'));
+  const answer = 'Đây là kết quả:\n```json\n' + JSON.stringify({heading: 'X', columns: [col('Tay nắm tròn'), col('Khác')]}) + '\n```';
+  const out = await call('/api/compare/import', {board, raw: answer});
+  assert.equal(out.board.columns[0].name, 'Tay nắm tròn');
+  assert.equal(out.board.columns[1].name, 'Tay nắm dài');
+  assert.equal(out.board.columns[0].desc, 'Dòng 1\nGiá thành: 2   Độ bền: 3', 'Giữ xuống dòng + khoảng cách');
+  assert.equal(out.board.columns[0].stats, '', 'Mô tả đã gõ thì không thêm dòng giá của AI');
+  assert.equal(out.board.heading, 'TAY NẮM');
+  assert.equal((await call('/api/compare/import', {board, raw: 'không có json'})).status, 400);
+  assert.throws(() => parseAiJson('{sai'), /JSON/);
+});

@@ -975,10 +975,11 @@ body.is-sidebar-collapsed .work-app-layout>.shell-sidebar{display:none!important
 
 /* ---------- Giao diện tối dùng chung (nút 🌙/☀ cạnh tài khoản) ----------
    shortcut: đảo màu toàn trang rồi đảo lại ảnh/video/canvas – màu thanh tiến độ hơi khác bản sáng; cần đẹp hơn thì viết biến màu riêng cho từng trang */
-html[data-theme="dark"] { filter: invert(1) hue-rotate(180deg); background: #fff; }
+/* contrast(.74): nền xám than ~#212121, chữ xám sáng – tối vừa phải, không đen sì */
+html[data-theme="dark"] { filter: invert(1) hue-rotate(180deg) contrast(.74); background: #fff; }
 /* Hộp thoại nằm ở lớp trên cùng, không ăn filter của html: đảo riêng */
-html[data-theme="dark"] dialog { filter: invert(1) hue-rotate(180deg); }
-html[data-theme="dark"] :is(img, video, canvas, picture, iframe, input[type="color"], .cs-sheet, .shell-user-avatar) { filter: invert(1) hue-rotate(180deg); }
+html[data-theme="dark"] dialog { filter: invert(1) hue-rotate(180deg) contrast(.74); }
+html[data-theme="dark"] :is(img, video, canvas, picture, iframe, input[type="color"], .cs-sheet, .shell-user-avatar) { filter: contrast(1.25) invert(1) hue-rotate(180deg); }  /* bù lại độ tương phản cho ảnh */
 html[data-theme="dark"] :is(.cs-sheet img, .shell-user-avatar img) { filter: none; }  /* bảng so sánh giữ đúng màu bản in */
 .shell-theme-toggle { width: 32px; height: 32px; margin-right: 6px; border: 1px solid #dadce0; border-radius: 8px; background: #fff; font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
 .shell-theme-toggle:hover { background: #f1f5f9; }

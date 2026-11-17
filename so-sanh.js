@@ -86,7 +86,7 @@
       if (!ai) return col;
       const pick = f => (col[f] && !(f === 'name' && DEFAULT_NAME.test(col[f]))) ? col[f] : ai[f] || col[f];
       const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, 3);
-      return {...col, kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: pick('stats'), pros: list('pros'), cons: list('cons')};
+      return {...col, kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: col.desc ? col.stats : pick('stats'), pros: list('pros'), cons: list('cons')};
     });
     if (!target.heading) target.heading = made.heading;
     target.status = 'new';
@@ -245,15 +245,11 @@
         ${c.image ? `<img data-asset="${esc(c.image.full)}" alt="">` : '<span class="cs-img-hint">Bấm chọn ô · Ctrl+V để dán ảnh</span>'}
         <div class="cs-img-tools"><button type="button" data-img="lib">Thư viện</button><button type="button" data-img="upload">Tải ảnh</button><button type="button" data-img="paste">Dán</button>${c.image ? '<button type="button" data-img="del">Xoá</button>' : ''}</div></div>`)}</div>
       <div class="cs-band">${cols((c, i) => `<div data-col="${i}">
-        <div class="cs-kicker" contenteditable="plaintext-only" data-f="kicker" ${ph('(Phương án A:)')}>${esc(c.kicker)}</div>
         <div class="cs-name" contenteditable="plaintext-only" data-f="name" ${ph('Tên phương án')}>${esc(c.name)}</div>
-        <div class="cs-desc" contenteditable="plaintext-only" data-f="desc" ${ph('Mô tả ngắn')}>${esc(c.desc)}</div>
-        <div class="cs-stats" contenteditable="plaintext-only" data-f="stats" ${ph('(Giá thành: 1   Độ cứng: 2)')}>${esc(c.stats)}</div></div>`)}</div>
-      <div class="cs-body">${cols((c, i) => `<div data-col="${i}">
-        <div class="cs-sec pros"><i>✓</i>ƯU ĐIỂM:</div>
-        <ul class="cs-list" contenteditable="true" data-f="pros">${(c.pros.length ? c.pros : ['']).map(t => `<li>${esc(t)}</li>`).join('')}</ul>
-        <div class="cs-sec cons"><i>✕</i>NHƯỢC ĐIỂM:</div>
-        <ul class="cs-list" contenteditable="true" data-f="cons">${(c.cons.length ? c.cons : ['']).map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`)}</div>
+        <div class="cs-desc" contenteditable="plaintext-only" data-f="desc" ${ph('Mô tả ngắn · Shift+Enter xuống dòng (vd Giá thành: 1   Độ cứng: 2)')}>${esc([c.desc, c.stats].filter(Boolean).join('\n'))}</div></div>`)}</div>
+      <div class="cs-body">${['pros', 'cons'].map(f => cols((c, i) => `<div data-col="${i}">
+        ${f === 'pros' ? '<div class="cs-sec pros"><i>✓</i>ƯU ĐIỂM:</div>' : '<div class="cs-sec cons"><i>✕</i>NHƯỢC ĐIỂM:</div>'}
+        <ul class="cs-list" contenteditable="true" data-f="${f}">${(c[f].length ? c[f] : ['']).map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`)).join('')}</div>
     </div>`;
   }
 
@@ -262,6 +258,15 @@
     const sheet = byId('cs-sheet');
     if (sheet) sheet.style.zoom = zoomFit ? Math.min(1, (byId('cmp-stage').clientWidth - 40) / 1000) : 1;
     document.querySelectorAll('[data-zoom]').forEach(btn => btn.classList.toggle('active', (btn.dataset.zoom === 'fit') === zoomFit));
+  }
+  // Khổ cố định (A4 dọc 1000×1414): nhiều chữ hơn dự kiến thì dòng tự sát lại / chữ nhỏ dần cho vừa khổ
+  function tighten() {
+    const sheet = byId('cs-sheet'), body = sheet?.querySelector('.cs-body');
+    if (!body) return;
+    let k = 1;
+    sheet.style.setProperty('--k', k);
+    while (body.scrollHeight > body.clientHeight + 1 && k > 0.6) sheet.style.setProperty('--k', k = Math.round((k - 0.04) * 100) / 100);
+    sheet.classList.toggle('is-overflow', body.scrollHeight > body.clientHeight + 1);
   }
 
   function renderSheet() {
@@ -275,6 +280,7 @@
     document.querySelectorAll('.cmp-seg [data-cols]').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.cols) === b.columns.length));
     byId('cmp-approve').textContent = b.status === 'new' ? '✓ Duyệt OK' : '↺ Đánh dấu cần xem lại';
     fit();
+    tighten();
     for (const img of document.querySelectorAll('#cs-sheet img[data-asset]')) {
       GDHomeAssets.assetUrl(img.dataset.asset).then(url => { img.src = url; }).catch(() => { img.alt = 'Ảnh chưa tải được'; });
     }
@@ -292,9 +298,11 @@
       // Xoá hết dòng thì trình duyệt có thể bỏ thẻ <li>: khi đó tách theo xuống dòng
       if (f === 'pros' || f === 'cons') col[f] = (el.querySelector('li') ? [...el.querySelectorAll('li')].map(li => li.textContent) : el.innerText.split('\n'))
         .map(s => s.trim()).filter(Boolean);
+      else if (f === 'desc') { col.desc = el.innerText.replace(/\n+$/, '').trim(); col.stats = ''; }   // mô tả + giá thành gộp 1 ô
       else col[f] = el.textContent.trim();
     }
     if (f === 'heading') renderTree();
+    tighten();
     save({typing: true});
   }
 
@@ -407,6 +415,39 @@
       } catch (error) { GDHomeShell.alert(error.message); }
       finally { btn.disabled = false; }
     };
+    // Hết lượt AI: copy prompt sang AI khác, dán câu trả lời về để điền bảng đang mở
+    const dlg = byId('cmp-prompt-dlg');
+    byId('cmp-prompt').onclick = async () => {
+      const b = board();
+      if (!b) return;
+      try {
+        const {prompt} = await post('/api/compare/prompt', {board: b, categories: doc.categories.map(c => c.name)});
+        byId('cmp-prompt-text').value = prompt;
+        byId('cmp-prompt-answer').value = '';
+        dlg.dataset.board = b.id;
+        dlg.showModal();
+      } catch (error) { GDHomeShell.alert(error.message); }
+    };
+    dlg.onclick = async e => {
+      const act = e.target.closest('[data-pr]')?.dataset.pr;
+      if (act === 'close') return dlg.close();
+      if (act === 'copy') {
+        try { await navigator.clipboard.writeText(byId('cmp-prompt-text').value); }
+        catch { byId('cmp-prompt-text').select(); document.execCommand('copy'); }
+        return toast('Đã copy prompt – dán vào ChatGPT / Claude / Gemini.');
+      }
+      if (act !== 'apply') return;
+      const target = doc.boards.find(x => x.id === dlg.dataset.board);
+      if (!target) return dlg.close();
+      try {
+        const {board: made, issues} = await post('/api/compare/import', {board: target, raw: byId('cmp-prompt-answer').value});
+        fillBoard(target, made);
+        dlg.close();
+        renderAll();
+        save();
+        toast(issues.length ? 'Đã điền bảng. Cần xem lại: ' + issues[0] : 'Đã điền bảng từ câu trả lời của AI.');
+      } catch (error) { GDHomeShell.alert(error.message); }
+    };
     byId('cmp-add-cat').onclick = async () => {
       const name = (await GDHomeShell.prompt('Tên hạng mục lớn (vd: VẬT LIỆU, CỬA, ĐIỆN NƯỚC):', '', {okText: 'Thêm'}))?.trim();
       if (!name) return;
@@ -453,7 +494,7 @@
     document.querySelectorAll('.cmp-seg [data-cols]').forEach(btn => btn.onclick = async () => {
       const b = board(), n = Number(btn.dataset.cols);
       if (!b || b.columns.length === n) return;
-      if (n === 3) b.columns.push({kicker: b.columns[0].kicker ? 'PHƯƠNG ÁN C:' : '', name: 'Phương án C', desc: '', stats: '', pros: [], cons: [], image: null});
+      if (n === 3) b.columns.push(blankCol('Phương án C'));
       else {
         const last = b.columns[2];
         if ((last.pros.length || last.cons.length || last.image) && !await GDHomeShell.confirm({message: `Bỏ cột "${last.name}" để về bố cục 2 cột?`, okText: 'Bỏ cột', danger: true})) return;
@@ -494,7 +535,8 @@
     wrap.addEventListener('input', e => { if (e.target.closest('[data-f]')) readField(e.target.closest('[data-f]')); });
     wrap.addEventListener('keydown', e => {
       // Dòng tiêu đề / tên: Enter = xong, không xuống dòng
-      if (e.key === 'Enter' && e.target.matches('[contenteditable="plaintext-only"]')) { e.preventDefault(); e.target.blur(); }
+      // Mô tả: Shift+Enter xuống dòng (dòng giá thành / tiêu chí)
+      if (e.key === 'Enter' && e.target.matches('[contenteditable="plaintext-only"]') && !(e.shiftKey && e.target.dataset.f === 'desc')) { e.preventDefault(); e.target.blur(); }
     });
     wrap.addEventListener('focusin', e => { const slot = e.target.closest('.cs-img'); if (slot) selectSlot(Number(slot.dataset.col)); });
     // Ctrl+V ở bất kỳ đâu trên trang: có ảnh trong clipboard thì đưa vào ô ảnh đang chọn (hoặc ô trống đầu tiên)
@@ -528,6 +570,7 @@
       if (file && activeSlot !== null) uploadBlob(activeSlot, file);
     };
     new ResizeObserver(fit).observe(byId('cmp-stage'));
+    document.fonts?.ready.then(tighten);   // font Roboto Condensed tải xong thì đo lại cho vừa khổ
     document.addEventListener('visibilitychange', () => { if (!document.hidden) pollQueue(); });
   }
 

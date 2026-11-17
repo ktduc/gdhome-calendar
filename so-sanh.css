@@ -42,9 +42,9 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cmp-empty { color: #64748b; text-align: center; margin-top: 60px; }
 
 /* ---------------- Bảng so sánh (khổ thiết kế 1000px, thu nhỏ vừa màn hình bằng zoom) ---------------- */
-.cs-sheet { --cat: #7d8f69; width: 1000px; margin: 0 auto; background: #e6e6e6; color: #1a1a1a; font-family: 'Roboto Condensed', 'Roboto', sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
+.cs-sheet { --cat: #7d8f69; --k: 1; width: 1000px; height: 1414px; display: flex; flex-direction: column; overflow: hidden; margin: 0 auto; background: #e6e6e6; color: #1a1a1a; font-family: 'Roboto Condensed', 'Roboto', sans-serif; box-shadow: 0 6px 24px rgba(0,0,0,.12); }
 .cs-sheet.is-new { outline: 4px solid #f5c451; }
-.cs-head { position: relative; display: grid; grid-template-columns: 170px 1fr 70px; align-items: center; height: 150px; background: #e6e6e6; border-top: 8px solid var(--cat); }
+.cs-head { flex: none; position: relative; display: grid; grid-template-columns: 170px 1fr 70px; align-items: center; height: 150px; background: #e6e6e6; border-top: 8px solid var(--cat); }
 .cs-logo { justify-self: center; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .cs-logo img { width: 72px; height: 72px; object-fit: contain; }
 .cs-logo b { font: 700 15px 'Roboto', sans-serif; letter-spacing: .3px; padding: 0 6px 4px; border-bottom: 2px solid #8b1c1c; }
@@ -54,32 +54,33 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cs-tab { align-self: stretch; background: var(--cat); display: flex; align-items: center; justify-content: center; }
 .cs-tab span { writing-mode: vertical-rl; transform: rotate(180deg); color: #fff; font: 700 17px 'Roboto', sans-serif; letter-spacing: 1px; }
 .cs-grid { display: grid; grid-template-columns: repeat(var(--n, 2), minmax(0, 1fr)); column-gap: 44px; padding: 0 48px; }
-.cs-images { background: #fff; padding: 36px 0; }
+.cs-images { flex: none; background: #fff; padding: 36px 0; }
 .cs-img { position: relative; aspect-ratio: 1; background: #f1f1f1; overflow: hidden; display: flex; align-items: center; justify-content: center; }
 .cs-img img { width: 100%; height: 100%; object-fit: cover; }
 .cs-img-tools { position: absolute; inset: auto 8px 8px 8px; display: flex; gap: 6px; justify-content: center; opacity: 0; transition: opacity .15s; }
 .cs-img:hover .cs-img-tools, .cs-img:focus-within .cs-img-tools, .cs-img.is-empty .cs-img-tools { opacity: 1; }
 .cs-img-tools button { border: 1px solid #d8d2c8; border-radius: 6px; background: rgba(255,255,255,.92); padding: 4px 8px; font: 600 12px 'Roboto', sans-serif; cursor: pointer; }
-.cs-band { background: #c9c9c9; padding: 14px 0 12px; }
+.cs-band { flex: none; background: #c9c9c9; padding: 14px 0 12px; }
 .cs-kicker { font-size: 21px; font-weight: 700; }
 .cs-name { font-size: 22px; font-weight: 700; }
 .cs-kicker:empty + .cs-name { margin-top: 0; }
-.cs-desc, .cs-stats { font-size: 14.5px; color: #6b6b6b; font-weight: 500; line-height: 1.15; }
-.cs-body { padding: 18px 0 40px; }
-.cs-sec { display: flex; align-items: center; gap: 8px; margin: 10px 0 4px; font-size: 21px; font-weight: 700; }
+.cs-desc { font-size: 14.5px; color: #6b6b6b; font-weight: 500; line-height: 1.25; white-space: pre-wrap; margin-top: 2px; }
+/* Khổ cố định: phần ưu/nhược lấp chỗ còn lại; nhiều chữ thì --k giảm dần (so-sanh.js tighten) cho dòng sát lại */
+.cs-body { flex: 1; min-height: 0; overflow: hidden; padding: calc(18px * var(--k)) 0 30px; }
+.cs-body > .cs-grid + .cs-grid { margin-top: calc(6px * var(--k)); }      /* 2 lưới riêng: tiêu đề NHƯỢC ĐIỂM các cột luôn thẳng hàng */
+.cs-sec { display: flex; align-items: center; gap: 8px; margin: calc(10px * var(--k)) 0 calc(4px * var(--k)); font-size: 21px; font-weight: 700; }
 .cs-sec i { width: 26px; height: 26px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center; font-style: normal; color: #fff; font-size: 16px; }
 .cs-sec.pros i { background: #21a35a; }
 .cs-sec.cons i { background: none; color: #c62828; font-size: 28px; font-weight: 700; }
-.cs-list { list-style: none; margin: 0 0 18px; padding: 0; font-size: 17px; font-weight: 500; line-height: 1.45; min-height: 80px; }
+.cs-list { list-style: none; margin: 0 0 calc(12px * var(--k)); padding: 0; font-size: calc(17px * (.7 + .3 * var(--k))); font-weight: 500; line-height: max(1.12, calc(1.45 - (1 - var(--k)) * 1.2)); min-height: calc(60px * var(--k)); }
 .cs-list li::before { content: '- '; }
 .cs-sheet [contenteditable] { outline: none; border-radius: 3px; }
 .cs-sheet [contenteditable]:hover { background: rgba(255,255,255,.45); }
 .cs-sheet [contenteditable]:focus { background: rgba(255,255,255,.75); box-shadow: 0 0 0 2px #f5c451; }
-.cs-sheet [contenteditable]:empty::before { content: attr(data-ph); color: #9ca3af; }
+.cs-sheet [contenteditable]:empty::before { content: attr(data-ph); color: inherit; opacity: .45; }   /* gợi ý chỉ nhạt hơn chữ thật 1 chút */
 .cs-sheet.is-exporting [contenteditable]:empty::before, .cs-sheet.is-exporting .cs-img-tools { display: none; }
 .cs-sheet.is-exporting { outline: 0; box-shadow: none; }
-.cs-stats { white-space: pre-wrap; }
-.cs-kicker:empty::before { font-size: 12px; font-weight: 400; }
+.cs-sheet.is-overflow:not(.is-exporting) .cs-body { box-shadow: inset 0 -4px 0 #d93025; }   /* nhỏ hết mức vẫn tràn: báo viền đỏ dưới */
 .cmp-body .header-right .hdr-undo-group { margin-left: auto; }   /* như các trang khác: đẩy cụm nút + tài khoản sát phải */
 
 /* Tiến trình hàng đợi AI (chạy nền trên máy chủ) */
@@ -119,3 +120,5 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cmp-aibar[hidden] { display: none; }
 .cmp-aibar textarea { flex: 1; min-width: 0; min-height: 36px; max-height: 160px; resize: vertical; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 13px; line-height: 1.4; }
 .cmp-aibar .btn { white-space: nowrap; }
+.cmp-prompt-dlg { width: min(92vw, 760px); }
+.cmp-prompt-dlg textarea { box-sizing: border-box; width: 100%; margin: 0 0 10px; padding: 8px 10px; border: 1px solid #d8d2c8; border-radius: 8px; font: 12.5px/1.45 ui-monospace, Consolas, monospace; resize: vertical; }

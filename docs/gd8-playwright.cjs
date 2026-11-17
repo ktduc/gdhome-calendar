@@ -475,6 +475,35 @@ cases['so-sanh'] = async page => {
     assert.equal(await page.locator('#cs-sheet [data-f="heading"]').textContent(),'Tay nắm cửa');
     await page.locator('#cs-sheet .cs-img[data-col="0"] img[data-asset]').waitFor();
     assert.equal(await page.locator('#cs-sheet [data-col="0"] [data-f="pros"] li').count(),3,'AI điền ưu điểm');
+    // Không còn dòng "Phương án A" nhỏ; mô tả + giá thành 1 ô, Shift+Enter xuống dòng
+    assert.equal(await page.locator('#cs-sheet [data-f="kicker"], #cs-sheet [data-f="stats"]').count(),0);
+    await page.locator('#cs-sheet .cs-band [data-col="1"] [data-f="desc"]').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Mô tả mới');
+    await page.keyboard.press('Shift+Enter');
+    await page.keyboard.type('Giá thành: 2');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => fetch('/api/compare').then(r => r.json()).then(d => d.boards.some(b => b.columns[1].desc === 'Mô tả mới\nGiá thành: 2')));
+    // Ưu/nhược 1 bên nhiều dòng: tiêu đề NHƯỢC ĐIỂM vẫn thẳng hàng; khổ cố định A4 dọc, nhiều dòng thì tự sát lại
+    const pros1 = page.locator('#cs-sheet [data-col="1"] [data-f="pros"]');
+    await pros1.click();
+    await page.keyboard.press('Control+End');
+    for (let i = 0; i < 16; i++) { await page.keyboard.press('Enter'); await page.keyboard.type('Ý thêm số ' + i + ' khá dài để xuống dòng trong cột so sánh, thêm vài chữ cho chắc chắn xuống dòng'); }
+    const layout = await page.evaluate(() => {
+      const s = document.getElementById('cs-sheet'), cons = [...s.querySelectorAll('.cs-sec.cons')].map(el => el.getBoundingClientRect().top);
+      const bd = s.querySelector('.cs-body'); return {cons, h: s.offsetHeight, w: s.offsetWidth, k: Number(getComputedStyle(s).getPropertyValue('--k')), dbg: [bd.scrollHeight, bd.clientHeight, s.querySelectorAll('[data-col="1"] [data-f=pros] li').length]};
+    });
+    assert.ok(Math.abs(layout.cons[0] - layout.cons[1]) < 1,'NHƯỢC ĐIỂM thẳng hàng '+layout.cons);
+    assert.deepEqual([layout.w,layout.h],[1000,1414],'Khổ cố định');
+    assert.ok(layout.k < 1,'Nhiều dòng thì dòng sát lại: '+JSON.stringify(layout));
+    // Prompt cho AI khác -> dán câu trả lời về
+    await page.locator('#cmp-prompt').click();
+    await page.locator('#cmp-prompt-dlg[open]').waitFor();
+    assert.ok((await page.locator('#cmp-prompt-text').inputValue()).includes('Tay nắm inox 304'));
+    await page.locator('#cmp-prompt-answer').fill('```json\n' + JSON.stringify({heading:'X',columns:[col('Khác 1'),col('Khác 2')]}) + '\n```');
+    await page.locator('#cmp-prompt-dlg [data-pr="apply"]').click();
+    await page.locator('#cmp-prompt-dlg').waitFor({state:'hidden'});
+    assert.equal(await page.locator('#cs-sheet .cs-band [data-col="1"] [data-f="name"]').textContent(),'Tay nắm dài','Dán kết quả vẫn giữ chữ của anh');
   } finally { integrations.compareBoard = original; }
 };
 

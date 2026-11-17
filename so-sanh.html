@@ -7,10 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Roboto+Condensed:wght@400;500;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/shell.css?v=gd25">
+  <link rel="stylesheet" href="/shell.css?v=gd26">
   <link rel="stylesheet" href="/tools.css?v=gd18d">
   <link rel="stylesheet" href="/asset-library.css?v=undo1">
-  <link rel="stylesheet" href="/so-sanh.css?v=cmp3">
+  <link rel="stylesheet" href="/so-sanh.css?v=cmp4">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="/shell.js?v=gd25" defer></script>
@@ -21,7 +21,7 @@
   <script src="/catalogue-import-history.js?v=gd20.12" defer></script>
   <script src="/asset-library.js?v=undo1" defer></script>
   <script src="/integrations-client.js?v=dlg1" defer></script>
-  <script src="/so-sanh.js?v=cmp3" defer></script>
+  <script src="/so-sanh.js?v=cmp4" defer></script>
 <link rel="stylesheet" href="/timeline-todo.css?v=todo9">
 <script src="/timeline-todo.js?v=todo9" defer></script>
 </head>
@@ -87,6 +87,7 @@
       <div class="cmp-aibar" id="cmp-aibar" hidden>
         <textarea id="cmp-notes" rows="2" placeholder="Thông tin cho AI (không in lên bảng): dán chữ mô tả, thông số, link… Ảnh dán vào các ô ảnh bên dưới."></textarea>
         <button type="button" class="btn btn-primary btn-sm" id="cmp-fill" title="AI điền các ô còn trống theo tên phương án, chữ ở đây và ảnh đã dán; chữ anh đã gõ được giữ nguyên">✨ AI điền bảng</button>
+        <button type="button" class="btn btn-outline btn-sm" id="cmp-prompt" title="Hết lượt AI: copy prompt sang ChatGPT / Claude / Gemini web, rồi dán câu trả lời về">📋 Prompt cho AI khác</button>
       </div>
       <div class="cmp-stage" id="cmp-stage">
         <p class="cmp-empty" id="cmp-empty">Chọn một bảng ở danh mục bên trái, hoặc nhập ý tưởng để AI làm bảng mới.</p>
@@ -95,5 +96,16 @@
     </main>
   </div>
   <input type="file" id="cmp-file" accept="image/*" hidden>
+  <dialog class="shell-dialog gd-ask cmp-prompt-dlg" id="cmp-prompt-dlg">
+    <h2>Gửi bảng này qua AI khác</h2>
+    <p class="gd-ask-message">1. Copy prompt, dán vào ChatGPT / Claude / Gemini (đính kèm ảnh các cột nếu có).<br>2. Copy câu trả lời của AI, dán vào ô dưới rồi bấm Điền bảng. Chữ anh đã gõ được giữ nguyên.</p>
+    <textarea id="cmp-prompt-text" readonly rows="9"></textarea>
+    <textarea id="cmp-prompt-answer" rows="5" placeholder="Dán câu trả lời của AI (đoạn JSON {…}) vào đây"></textarea>
+    <div class="gd-ask-actions">
+      <button type="button" class="gd-ask-btn" data-pr="close">Đóng</button>
+      <button type="button" class="gd-ask-btn" data-pr="copy">📋 Copy prompt</button>
+      <button type="button" class="gd-ask-btn is-primary" data-pr="apply">Điền bảng</button>
+    </div>
+  </dialog>
 </body>
 </html>

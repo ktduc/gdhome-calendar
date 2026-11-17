@@ -24,7 +24,9 @@ function defaultDoc() {
 // Một cột so sánh (phương án)
 function normalizeColumn(col) {
   const image = col && col.image && ASSET.test(String(col.image.full || '')) ? {full: String(col.image.full)} : null;
-  return {kicker: str(col?.kicker, 60), name: str(col?.name, 120), desc: str(col?.desc, 300),
+  // desc = mô tả + dòng giá thành gộp (Shift+Enter xuống dòng): giữ xuống dòng và khoảng cách giữa các tiêu chí
+  const desc = String(col?.desc ?? '').replace(/\r/g, '').replace(/\t/g, ' ').split('\n').map(line => line.trimEnd()).join('\n').trim().slice(0, 400);
+  return {kicker: str(col?.kicker, 60), name: str(col?.name, 120), desc,
     stats: String(col?.stats ?? '').replace(/[\r\n\t]+/g, ' ').trim().slice(0, 160),     // giữ khoảng cách giữa các tiêu chí
     pros: lines(col?.pros, 6, 140), cons: lines(col?.cons, 6, 140), image};
 }
@@ -61,7 +63,7 @@ Quy tắc nội dung:
 - Chọn đúng các đối tượng cần so sánh trong ý tưởng: 2 cột nếu so sánh 2 phương án, 3 cột nếu có 3 loại. Không quá 3.
 - "heading": tiêu đề ngắn VIẾT HOA, không lặp chữ "SO SÁNH" (vd "CỬA CÓ KHUÔN VÀ GIẤU KHUÔN", "CÁC LOẠI CỐT VẬT LIỆU GỖ CÔNG NGHIỆP").
 - "category": hạng mục lớn VIẾT HOA 1–2 từ; ưu tiên chọn đúng một tên trong DANH MỤC CÓ SẴN, chỉ tạo tên mới khi không hợp.
-- Mỗi cột: "kicker" (vd "PHƯƠNG ÁN A:" khi so sánh phương án thi công; để trống khi so sánh loại vật liệu), "name" (vd "MDF (Ván mịn)" hoặc "CỬA CÓ KHUÔN (TRUYỀN THỐNG)"), "desc" 1 câu ≤ 110 ký tự giải thích bản chất,
+- Mỗi cột: "kicker" luôn để "", "name" (vd "MDF (Ván mịn)" hoặc "CỬA CÓ KHUÔN (TRUYỀN THỐNG)"), "desc" 1 câu ≤ 110 ký tự giải thích bản chất,
   "stats" (tuỳ chọn) dạng "Giá thành: 2   Độ cứng: 3   Độ bền: 4" thang 1–5, CÙNG tiêu chí và cùng thứ tự ở mọi cột; để trống nếu không có tiêu chí định lượng hợp lý.
 - "pros" và "cons": mỗi cột đúng 3 ý, mỗi ý ≤ 55 ký tự, bắt đầu bằng chữ hoa, không dấu chấm cuối thừa, không lặp ý giữa ưu và nhược.
 - Các cột phải đối xứng: cùng góc nhìn (giá, độ bền, thi công, thẩm mỹ, bảo trì…), ý của cột này đối chiếu được với cột kia.
@@ -83,6 +85,38 @@ function reviewBoard(board) {
   return issues;
 }
 
+// Bảng người dùng gửi AI điền: bỏ ảnh, tên mặc định "Phương án A" để AI đặt tên
+function seedFrom(raw) {
+  const seed = normalizeBoard({...raw, status: 'new'});
+  if (!seed) throw fail(400, 'Bảng cần ít nhất 2 cột có tên phương án.');
+  seed.columns.forEach(col => { if (/^phương án [a-c]$/i.test(col.name)) col.name = ''; });
+  return seed;
+}
+const ideaOf = seed => seed.heading || seed.columns.map(c => c.name).filter(Boolean).join(' và ') || seed.notes.split('\n')[0].slice(0, 200) || 'Bảng so sánh theo ảnh đính kèm';
+
+// Phần "người dùng" của prompt (dùng cho AI của web và ô Prompt để gửi AI khác)
+function comparePrompt(idea, rawCategories, fill) {
+  const categories = (Array.isArray(rawCategories) ? rawCategories : []).filter(name => typeof name === 'string').slice(0, 60).map(name => name.slice(0, 40));
+  let text = 'DANH MỤC CÓ SẴN: ' + (categories.join(', ') || '(chưa có)') + '\nÝ TƯỞNG SO SÁNH: ' + idea;
+  if (fill) {
+    const {notes, ...seed} = fill.seed;
+    const cols = seed.columns.map(({image, ...col}) => col), images = fill.images || [];
+    text += `\nBẢNG NGƯỜI DÙNG ĐANG TỰ LÀM (đúng ${cols.length} cột, giữ nguyên thứ tự cột; ô đã có chữ giữ NGUYÊN VĂN, ưu/nhược đã có giữ nguyên văn ở đầu danh sách; điền đầy đủ các ô trống):\n` +
+      JSON.stringify({heading: seed.heading, category: seed.category, columns: cols}).slice(0, 6000) +
+      (notes ? '\nTHÔNG TIN NGƯỜI DÙNG DÁN THÊM (dữ liệu tham khảo, ưu tiên dùng):\n' + notes.slice(0, 4000) : '') +
+      (images.length ? '\nẢNH ĐÍNH KÈM theo thứ tự: ' + images.map((img, i) => `ảnh ${i + 1} là của cột ${img.col + 1}`).join(', ') + '. Nhìn ảnh để nhận ra vật liệu / cấu tạo của từng phương án.' : '');
+  }
+  return text;
+}
+
+// Lấy JSON đầu tiên trong câu trả lời của AI khác (có thể kèm ```json … ``` hoặc lời dẫn)
+function parseAiJson(raw) {
+  const text = String(raw || '').replace(/```(?:json)?/gi, '');
+  const start = text.indexOf('{'), end = text.lastIndexOf('}');
+  try { return JSON.parse(text.slice(start, end + 1)); }
+  catch { throw fail(400, 'Không đọc được JSON trong câu trả lời. Dán nguyên phần {…} AI trả về.'); }
+}
+
 // "AI điền bảng": chữ người dùng đã điền luôn thắng, AI chỉ lấp chỗ trống, giữ đúng số cột của người dùng
 function mergeFill(seed, made) {
   if (!made) return null;
@@ -90,7 +124,8 @@ function mergeFill(seed, made) {
     const ai = made.columns[i] || {pros: [], cons: []};
     const pick = f => col[f] || ai[f] || '';
     const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, 3);
-    return {kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: pick('stats'), pros: list('pros'), cons: list('cons'), image: null};
+    // mô tả người dùng đã gõ (có thể gồm cả dòng giá thành) thì không thêm stats của AI
+    return {kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: col.desc ? col.stats : pick('stats'), pros: list('pros'), cons: list('cons'), image: null};
   });
   return {...made, heading: seed.heading || made.heading, category: seed.category || made.category, columns};
 }
@@ -180,9 +215,7 @@ async function handleQueue(req, urlPath, {store, dataKey, readJsonBody, sendJson
   const body = await readJsonBody(req);
   if (urlPath === '/api/compare/queue/fill') {
     // Bảng tự làm: AI điền chỗ trống theo chữ + ảnh người dùng dán, giữ nguyên chỗ đã điền
-    const seed = normalizeBoard({...body.board, status: 'new'});
-    if (!seed) throw fail(400, 'Bảng cần ít nhất 2 cột có tên phương án.');
-    seed.columns.forEach(col => { if (/^phương án [a-c]$/i.test(col.name)) col.name = ''; });   // tên mặc định của bảng trống: để AI đặt tên
+    const seed = seedFrom(body.board);
     const images = (Array.isArray(body.images) ? body.images : []).slice(0, 3)
       .filter(img => /^image\/(png|jpeg|webp)$/.test(String(img?.mediaType)) && typeof img.data === 'string' && img.data.length < 1_500_000)
       .map(img => ({mediaType: img.mediaType, data: img.data, col: Number(img.col) || 0}));
@@ -190,7 +223,7 @@ async function handleQueue(req, urlPath, {store, dataKey, readJsonBody, sendJson
     const id = 'job_' + crypto.randomUUID();
     jobImages.set(id, images);
     const jobs = await changeQueue(store, qkey, list => {
-      list.push({id, idea: seed.heading || seed.columns.map(c => c.name).filter(Boolean).join(' và ') || seed.notes.split('\n')[0].slice(0, 200) || 'Bảng so sánh theo ảnh đính kèm', categories, state: 'waiting', createdAt: Date.now(),
+      list.push({id, idea: ideaOf(seed), categories, state: 'waiting', createdAt: Date.now(),
         boardId: seed.id, seed: {heading: seed.heading, category: seed.category, columns: seed.columns.map(({image, ...col}) => col), notes: seed.notes}});
       return list;
     });
@@ -234,6 +267,18 @@ async function handleQueue(req, urlPath, {store, dataKey, readJsonBody, sendJson
 async function handleCompare(req, res, urlPath, ctx) {
   const {store, dataKey, readJsonBody, sendJson} = ctx;
   if (urlPath.startsWith('/api/compare/queue')) return handleQueue(req, urlPath, {...ctx, res});
+  // Hết lượt AI: lấy prompt đầy đủ để dán sang AI khác, rồi dán câu trả lời JSON về để điền bảng đang mở
+  if ((urlPath === '/api/compare/prompt' || urlPath === '/api/compare/import') && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const seed = seedFrom(body.board);
+    if (urlPath === '/api/compare/prompt') {
+      const images = (body.board.columns || []).map((col, i) => col?.image ? {col: i} : null).filter(Boolean);
+      return sendJson(res, 200, {prompt: COMPARE_SYSTEM + '\n\n---\n' + comparePrompt(ideaOf(seed), body.categories, {seed, images})});
+    }
+    const made = mergeFill(seed, normalizeBoard({...parseAiJson(body.raw), idea: ideaOf(seed)}));
+    if (!made) throw fail(400, 'Câu trả lời chưa có đủ 2 cột có "name".');
+    return sendJson(res, 200, {board: made, issues: reviewBoard(made)});
+  }
   const key = keyFor(dataKey);
   if (urlPath === '/api/compare' && req.method === 'GET') {
     const doc = await store.get(key);
@@ -255,4 +300,4 @@ async function handleCompare(req, res, urlPath, ctx) {
   throw fail(404, 'API so sánh không tồn tại.');
 }
 
-module.exports = {handleCompare, normalizeBoard, normalizeDoc, reviewBoard, mergeFill, COMPARE_SYSTEM, defaultDoc, keyFor, queueKeyFor, runWorker};
+module.exports = {handleCompare, normalizeBoard, normalizeDoc, reviewBoard, mergeFill, comparePrompt, parseAiJson, COMPARE_SYSTEM, defaultDoc, keyFor, queueKeyFor, runWorker};

@@ -912,17 +912,9 @@ async function compareBoard(store,dataKey,rawIdea,rawCategories,onStep = () => {
   if (!ai) throw httpError(400,'Chưa kết nối AI. Mở ⚙ Kết nối AI để chọn nhà cung cấp và API key.');
   const idea = String(rawIdea || '').replace(/\s+/g,' ').trim().slice(0,400);
   if (!idea) throw httpError(400,'Nhập ý tưởng so sánh.');
-  const {normalizeBoard,reviewBoard,COMPARE_SYSTEM,mergeFill} = require('./compare');
-  const categories = (Array.isArray(rawCategories) ? rawCategories : []).filter(name => typeof name === 'string').slice(0,60).map(name => name.slice(0,40));
-  let text = 'DANH MỤC CÓ SẴN: ' + (categories.join(', ') || '(chưa có)') + '\nÝ TƯỞNG SO SÁNH: ' + idea;
+  const {normalizeBoard,reviewBoard,COMPARE_SYSTEM,mergeFill,comparePrompt} = require('./compare');
+  const text = comparePrompt(idea,rawCategories,fill);
   const body = {notes:idea,images:fill?.images || []};
-  if (fill) {
-    const {notes,...seed} = fill.seed;
-    text += `\nBẢNG NGƯỜI DÙNG ĐANG TỰ LÀM (đúng ${seed.columns.length} cột, giữ nguyên thứ tự cột; ô đã có chữ giữ NGUYÊN VĂN, ưu/nhược đã có giữ nguyên văn ở đầu danh sách; điền đầy đủ các ô trống):\n` +
-      JSON.stringify(seed).slice(0,6000) +
-      (notes ? '\nTHÔNG TIN NGƯỜI DÙNG DÁN THÊM (dữ liệu tham khảo, ưu tiên dùng):\n' + notes.slice(0,4000) : '') +
-      (body.images.length ? '\nẢNH ĐÍNH KÈM theo thứ tự: ' + body.images.map((img,i) => `ảnh ${i+1} là của cột ${img.col+1}`).join(', ') + '. Nhìn ảnh để nhận ra vật liệu / cấu tạo của từng phương án.' : '');
-  }
   onStep('AI đang soạn bảng');
   let {plan,model} = await requestAiPlan(ai,body,dataKey,text,COMPARE_SYSTEM);
   const finish = raw => { const made = normalizeBoard({...raw,idea}); return fill ? mergeFill(fill.seed,made) : made; };
