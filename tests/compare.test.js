@@ -11,6 +11,8 @@ test('so sánh: chuẩn hoá bảng AI, 2–3 cột, rà soát lỗi', () => {
   assert.deepEqual(six.layout, [3, 3]);
   assert.equal(normalizeBoard({columns: [col('A'), col('B'), col('C'), col('D'), col('E')], layout: [3, 3]}).layout, null, 'Thứ tự tờ sai số cột thì bỏ');
   assert.deepEqual(normalizeBoard({columns: [col('A'), col('B'), col('C'), col('D'), col('E')], layout: [3, 2]}).layout, [3, 2]);
+  assert.equal(normalizeBoard({columns: [col('A'), col('')], layout: [2]}).columns.length, 2, 'Bảng tự làm giữ phương án chưa đặt tên');
+  assert.equal(normalizeBoard({columns: [col('A'), col(''), col('B')]}).columns.length, 2, 'Bảng AI bỏ cột không tên');
   const b = normalizeBoard({heading: 'cửa có khuôn và giấu khuôn', category: 'cửa', columns: [col('A'), col('B'), col('C')]});
   assert.equal(b.columns.length, 3);
   assert.equal(b.heading, 'CỬA CÓ KHUÔN VÀ GIẤU KHUÔN');

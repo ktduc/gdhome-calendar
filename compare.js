@@ -33,7 +33,8 @@ function normalizeColumn(col) {
 
 // Chuẩn hoá 1 bảng (từ AI hoặc từ trình duyệt). Trả null nếu không đủ dữ liệu để dàn trang.
 function normalizeBoard(board, categories = []) {
-  const columns = (Array.isArray(board?.columns) ? board.columns : []).slice(0, 6).map(normalizeColumn).filter(col => col.name);
+  const columns = (Array.isArray(board?.columns) ? board.columns : []).slice(0, 6).map(normalizeColumn)
+    .filter(col => col.name || Array.isArray(board?.layout));   // bảng tự làm (có layout) được giữ cột chưa đặt tên
   // Thứ tự tờ khi 4–6 phương án: [2,2] [2,3] [3,2] [3,3] (2 = tờ dọc, 3 = tờ ngang); sai thì để trang tự chọn
   const layout = Array.isArray(board?.layout) && board.layout.every(n => n === 2 || n === 3) &&
     board.layout.length <= 2 && board.layout.reduce((a, b) => a + b, 0) === columns.length ? board.layout.slice() : null;
@@ -92,7 +93,7 @@ function reviewBoard(board) {
 function seedFrom(raw) {
   const seed = normalizeBoard({...raw, status: 'new'});
   if (!seed) throw fail(400, 'Bảng cần ít nhất 2 cột có tên phương án.');
-  seed.columns.forEach(col => { if (/^phương án [a-c]$/i.test(col.name)) col.name = ''; });
+  seed.columns.forEach(col => { if (/^phương án [a-f]$/i.test(col.name)) col.name = ''; });
   return seed;
 }
 const ideaOf = seed => seed.heading || seed.columns.map(c => c.name).filter(Boolean).join(' và ') || seed.notes.split('\n')[0].slice(0, 200) || 'Bảng so sánh theo ảnh đính kèm';

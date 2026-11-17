@@ -152,3 +152,5 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .export-watermark-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
 .cs-title { flex: 1; min-width: 0; }
 .cs-title [data-f=heading] { white-space: nowrap; overflow: hidden; }   /* 1 dòng, chữ tự co trong tighten() */
+.cmp-pr-row { display: flex; justify-content: flex-end; margin: -4px 0 10px; }
+.cs-board:not(.is-exporting) .cs-name:empty { box-shadow: 0 0 0 1px #d93025; background: rgba(217,48,37,.06); }   /* phương án chưa đặt tên */

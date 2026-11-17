@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/shell.css?v=gd26">
   <link rel="stylesheet" href="/tools.css?v=gd26">
   <link rel="stylesheet" href="/asset-library.css?v=undo1">
-  <link rel="stylesheet" href="/so-sanh.css?v=cmp7">
+  <link rel="stylesheet" href="/so-sanh.css?v=cmp8">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
@@ -23,8 +23,8 @@
   <script src="/asset-library.js?v=undo1" defer></script>
   <script src="/integrations-client.js?v=dlg1" defer></script>
   <script src="/export-canvas.js?v=wm2" defer></script>
-  <script src="/gemini-mark.js?v=gm1" defer></script>
-  <script src="/so-sanh.js?v=cmp7" defer></script>
+  <script src="/gemini-mark.js?v=gm2" defer></script>
+  <script src="/so-sanh.js?v=cmp8" defer></script>
 <link rel="stylesheet" href="/timeline-todo.css?v=todo9">
 <script src="/timeline-todo.js?v=todo9" defer></script>
 </head>
@@ -123,7 +123,9 @@
     <h2>Gửi bảng này qua AI khác</h2>
     <p class="gd-ask-message">1. Copy prompt, dán vào ChatGPT / Claude / Gemini (đính kèm ảnh các cột nếu có).<br>2. Copy câu trả lời của AI, dán vào ô dưới rồi bấm Điền bảng. Chữ anh đã gõ được giữ nguyên.</p>
     <textarea id="cmp-prompt-text" readonly rows="7"></textarea>
+    <div class="cmp-pr-row"><button type="button" class="gd-ask-btn" data-pr="copy">📋 Copy prompt</button></div>
     <textarea id="cmp-prompt-answer" rows="5" placeholder="Dán câu trả lời của AI (đoạn JSON {…}) vào đây"></textarea>
+    <div class="cmp-pr-row"><button type="button" class="gd-ask-btn is-primary" data-pr="apply">Điền bảng</button></div>
     <h3 class="cmp-img-head">Prompt tạo ảnh</h3>
     <div class="cmp-img-all">
       <button type="button" class="gd-ask-btn is-primary" data-pr="copy-collage">📋 Copy prompt 1 ảnh ghép (khuyên dùng)</button>
@@ -131,14 +133,12 @@
     </div>
     <p class="gd-ask-message">Gemini vẽ 1 ảnh chia ô cho tất cả phương án (cùng 1 lần nên đồng bộ). Copy ảnh đó rồi bấm "Dán ảnh ghép" (hoặc Ctrl+V khi hộp này đang mở): web tự cắt từng ô vuông vào đúng cột.</p>
     <textarea id="cmp-img-collage" readonly rows="3"></textarea>
-    <p class="gd-ask-message">Hoặc từng ảnh rời: copy prompt từng cột bên dưới, AI vẽ xong thì copy ảnh → bấm chọn ô ảnh của cột → Ctrl+V. Logo Gemini ở góc ảnh tự xoá khi dán.</p>
+    <p class="gd-ask-message">Ô ảnh ghép bị nhỏ, mờ? Trong cùng cuộc trò chuyện Gemini, gửi tiếp prompt "Cột 1, 2…" bên dưới: Gemini vẽ lại đúng ô đó thành ảnh riêng, nét, cùng phong cách. Copy ảnh → bấm chọn ô ảnh của cột → Ctrl+V. Logo Gemini ở góc tự xoá khi dán.</p>
     <div class="cmp-img-all"><button type="button" class="gd-ask-btn" data-pr="copy-all-img">📋 Copy prompt nhiều ảnh rời</button></div>
     <textarea id="cmp-img-all" readonly rows="3"></textarea>
     <div id="cmp-img-prompts"></div>
     <div class="gd-ask-actions">
       <button type="button" class="gd-ask-btn" data-pr="close">Đóng</button>
-      <button type="button" class="gd-ask-btn" data-pr="copy">📋 Copy prompt</button>
-      <button type="button" class="gd-ask-btn is-primary" data-pr="apply">Điền bảng</button>
     </div>
   </dialog>
 </body>

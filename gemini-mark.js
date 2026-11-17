@@ -5,18 +5,19 @@
 // removeGeminiMark(blob) -> Promise<Blob|null>  (null = không thấy logo, giữ ảnh gốc)
 // =========================================================================
 (function () {
-  // Ảnh 1024 px: logo 48 px, cách mép phải/dưới 96 px (đo trên ảnh mẫu). Thêm 2 vị trí cũ của Gemini để dò.
-  const GUESSES = W => [[W * 0.046875, W * 0.09375], [48, 32], [96, 64]];
+  // Ảnh 1024 px: logo 48 px, cách mép phải/dưới 96 px (đo trên ảnh mẫu). Ảnh ghép không vuông / cỡ khác: dò thêm vài cỡ, lề quen thuộc.
+  const GUESSES = (W, H) => { const M = Math.min(W, H); return [[M * 0.046875, M * 0.09375], [48, 96], [96, 192], [64, 128], [48, 32], [96, 64]]; };
   const star = (dx, dy, R) => Math.abs(dx / R) ** (2 / 3) + Math.abs(dy / R) ** (2 / 3);   // hình sao 4 cánh lõm (astroid)
 
-  function find(d, W) {
+  function find(d, W, H) {
     const L = (X, Y) => { const k = (Y * W + X) * 4; return 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2]; };
-    let best = null;
-    for (const [size, margin] of GUESSES(W)) {
-      const c0 = Math.round(W - margin - size / 2), box = Math.ceil(size * 0.8);
-      if (c0 - box < 0 || c0 + box >= W) continue;
+    const found = [];
+    for (const [size, margin] of GUESSES(W, H)) {
+      let best = null;
+      const x0 = Math.round(W - margin - size / 2), y0 = Math.round(H - margin - size / 2), box = Math.ceil(size * 0.8);
+      if (x0 - box < 0 || y0 - box < 0 || x0 + box + 6 >= W || y0 + box + 6 >= H) continue;
       for (let R = Math.round(size * 0.44); R <= Math.round(size * 0.56); R++) {
-        for (let cy = c0 - 6; cy <= c0 + 6; cy++) for (let cx = c0 - 6; cx <= c0 + 6; cx++) {
+        for (let cy = y0 - 6; cy <= y0 + 6; cy++) for (let cx = x0 - 6; cx <= x0 + 6; cx++) {
           let a = 0, a2 = 0, na = 0, b = 0, nb = 0;
           const lim = Math.ceil(R * 1.4);
           for (let dy = -lim; dy <= lim; dy += 2) for (let dx = -lim; dx <= lim; dx += 2) {
@@ -27,14 +28,15 @@
           if (!best || score - sd * 0.5 > best.rank) best = {cx, cy, R, score, sd, rank: score - sd * 0.5};
         }
       }
+      if (best) found.push(best);
     }
-    return best;
+    return found;    // mỗi vị trí dò 1 ứng viên; chọn theo độ khớp hình ở dưới
   }
 
   // Độ khớp hình: tương quan giữa độ sáng và mặt nạ ngôi sao trong ô vuông quanh tâm (mảng trắng tròn/vuông cho điểm thấp)
-  function shapeMatch(d, W, {cx, cy, R}, box = R) {
+  function shapeMatch(d, W, {cx, cy, R}, box = R, step = 1) {
     let n = 0, sx = 0, sy = 0, sxx = 0, syy = 0, sxy = 0;
-    for (let dy = -box; dy <= box; dy++) for (let dx = -box; dx <= box; dx++) {
+    for (let dy = -box; dy <= box; dy += step) for (let dx = -box; dx <= box; dx += step) {
       const k = ((cy + dy) * W + cx + dx) * 4, l = 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2], m = star(dx, dy, R) <= 1 ? 1 : 0;
       n++; sx += m; sy += l; sxx += m * m; syy += l * l; sxy += m * l;
     }
@@ -71,20 +73,20 @@
     let bmp;
     try { bmp = await createImageBitmap(blob); } catch { return null; }
     const W = bmp.width, H = bmp.height;
-    if (W < 300 || Math.abs(W - H) > 2) return null;                 // Gemini xuất ảnh vuông: ảnh khác bỏ qua
+    if (Math.min(W, H) < 300) return null;
     const canvas = Object.assign(document.createElement('canvas'), {width: W, height: H});
     const ctx = canvas.getContext('2d', {willReadFrequently: true});
     ctx.drawImage(bmp, 0, 0);
     const img = ctx.getImageData(0, 0, W, H), d = img.data;
-    let hit = find(d, W);
-    if (hit) {
+    let hit = null;
+    for (const cand of find(d, W, H)) {
       // Tinh chỉnh tâm ±3 px và bán kính theo độ khớp hình (đầu cánh nhọn dài hơn phần sáng giữa)
       let top = null;
-      for (let R = Math.round(hit.R * 0.9); R <= Math.round(hit.R * 1.35); R++) for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
-        const corr = shapeMatch(d, W, {cx: hit.cx + dx, cy: hit.cy + dy, R}, Math.ceil(hit.R * 1.4));
-        if (!top || corr > top.corr) top = {cx: hit.cx + dx, cy: hit.cy + dy, R, corr};
+      for (let R = Math.round(cand.R * 0.9); R <= Math.round(cand.R * 1.35); R++) for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+        const corr = shapeMatch(d, W, {cx: cand.cx + dx, cy: cand.cy + dy, R}, Math.ceil(cand.R * 1.4), 2);
+        if (!top || corr > top.corr) top = {cx: cand.cx + dx, cy: cand.cy + dy, R, corr};
       }
-      hit = {...hit, ...top};
+      if (!hit || top.corr > hit.corr) hit = {...cand, ...top};
     }
     removeGeminiMark.last = hit;   // để kiểm thử xem điểm dò
     // Ngôi sao là lớp trắng mờ phẳng: sáng hơn xung quanh rõ, đều màu bên trong và đúng hình sao 4 cánh lõm

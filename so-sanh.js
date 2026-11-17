@@ -77,7 +77,7 @@
   }
 
   // ---------------------------------------------------------------- BẢNG TỰ LÀM + AI ĐIỀN
-  const DEFAULT_NAME = /^phương án [a-c]$/i;
+  const DEFAULT_NAME = /^phương án [a-f]$/i;   // tên tạm cũ: coi như chưa đặt tên
   const blankCol = name => ({kicker: '', name, desc: '', stats: '', pros: [], cons: [], image: null});
   // Kết quả AI về: chữ anh đang có (kể cả sửa trong lúc AI chạy) luôn giữ, AI chỉ lấp ô trống; ảnh giữ nguyên
   function fillBoard(target, made) {
@@ -256,7 +256,7 @@
         ${c.image ? `<img data-asset="${esc(c.image.full)}" alt="">` : '<span class="cs-img-hint">Bấm chọn ô · Ctrl+V để dán ảnh</span>'}
         <div class="cs-img-tools"><button type="button" data-img="lib">Thư viện</button><button type="button" data-img="upload">Tải ảnh</button><button type="button" data-img="paste">Dán</button>${c.image ? '<button type="button" data-img="del">Xoá</button>' : ''}</div></div>`)}</div>
       <div class="cs-band">${cols((c, i) => `<div data-col="${i}">
-        <div class="cs-name" contenteditable="plaintext-only" data-f="name" ${ph('Tên phương án')}>${esc(c.name)}</div>
+        <div class="cs-name" contenteditable="plaintext-only" data-f="name" ${ph('Gõ tên loại phương án (vd Ghế lưng cao)')}>${esc(DEFAULT_NAME.test(c.name) ? '' : c.name)}</div>
         <div class="cs-desc" contenteditable="plaintext-only" data-f="desc" ${ph('Mô tả ngắn · Shift+Enter xuống dòng (vd Giá thành: 1   Độ cứng: 2)')}>${esc([c.desc, c.stats].filter(Boolean).join('\n'))}</div></div>`)}</div>
       <div class="cs-body">${['pros', 'cons'].map(f => cols((c, i) => `<div data-col="${i}">
         ${f === 'pros' ? '<div class="cs-sec pros"><i>✓</i>ƯU ĐIỂM:</div>' : '<div class="cs-sec cons"><i>✕</i>NHƯỢC ĐIỂM:</div>'}
@@ -347,11 +347,11 @@
     save();
     renderSheet();
   }
-  async function uploadBlob(col, blob) {
+  async function uploadBlob(col, blob, {skipMark = false} = {}) {
     try {
       toast('Đang tải ảnh…');
       // Ảnh Gemini: tự xoá logo ngôi sao ở góc (xử lý trên máy, không gọi AI)
-      const clean = await window.removeGeminiMark?.(blob).catch(() => null);
+      const clean = !skipMark && await window.removeGeminiMark?.(blob).catch(() => null);
       if (clean) { blob = clean; toast('Đã tự xoá logo Gemini ở góc ảnh.'); }
       const {full} = await GDHomeImages.compress(blob);
       setImage(col, await GDHomeAssets.storeAsset(full));
@@ -429,6 +429,8 @@
       if (!b) return toast('Chọn một bảng trước.');
       if (mode === 'pdf-cat') return await exportPdf(boardsInOrder(b.categoryId), catOf(b).name);
       if (mode === 'pdf') return await exportPdf([b], b.heading);
+      const unnamed = b.columns.filter(c => !c.name || DEFAULT_NAME.test(c.name)).length;
+      if (unnamed && !await GDHomeShell.confirm({message: 'Còn ' + unnamed + ' phương án chưa có tên (viền đỏ trên bảng). Vẫn xuất ảnh?', okText: 'Vẫn xuất'})) return;
       const canvas = await renderCanvas(b);
       if (mode === 'png') return download(canvas.toDataURL('image/png'), fileName(b.heading, 'png'));
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
@@ -437,21 +439,27 @@
     } catch (error) { GDHomeShell.alert('Không xuất được: ' + error.message); }
   }
 
+  // Phong cách ảnh anh Đức thích: trong trẻo, ánh sáng có chiều sâu, sinh động (ảnh tạp chí nội thất), tránh ảnh xám, phẳng, kiểu 3D
+  const PHOTO_STYLE = 'Style: bright, airy, crystal-clear editorial interior photography (premium interior magazine look). Natural daylight streaming in from a large window at the side, soft directional light with gentle shadows, visible depth and layered background with soft depth of field, crisp sharp details on the subject, fresh true-to-life colours with a slightly warm, inviting tone, light wood / warm white / beige palette, a few tasteful lifestyle props for a lively lived-in feel. Avoid flat, dull, grey, foggy, hazy, over-smoothed, plastic or CGI-looking renders.';
   // Prompt tạo ảnh: ảnh minh hoạ luôn vuông 1:1. Mỗi cột 1 prompt + 1 prompt gộp cho mọi cột
   const subjectOf = (b, c) => `"${c.name || b.heading}"${c.desc ? ' – ' + c.desc.replace(/\n/g, '; ') : ''}`;
   function allImagesPrompt(b) {
     return `Create ${b.columns.length} SEPARATE photorealistic images for an interior design comparison board (Vietnam interior fit-out), one image per option, in this order:
 ${b.columns.map((c, i) => `${i + 1}. ${subjectOf(b, c)}`).join('\n')}
 Comparison topic: ${b.heading || b.idea || ''}.
-All images must share the same style, camera angle, lighting and neutral modern Vietnamese apartment background so they compare fairly; each option clearly the main subject with realistic materials and construction details.
+All images must share the same camera angle, lighting and modern Vietnamese apartment setting so they compare fairly; each option clearly the main subject with realistic materials and construction details.
+${PHOTO_STYLE}
 Each image square 1:1. Output ${b.columns.length} individual images (not a grid, not a collage). No text, no labels, no watermark, no logo.`;
   }
   function imagePrompts(b) {
+    // Gửi tiếp trong cùng cuộc trò chuyện sau ảnh ghép: Gemini vẽ lại đúng ô đó thành ảnh riêng, nét, cùng phong cách
     const ratio = '1:1 (square)';
-    return b.columns.map(c => `Photorealistic interior design photo for a product comparison board (Vietnam interior fit-out).
+    return b.columns.map((c, i) => `If the grid image you just made is above in this chat: output Panel ${i + 1} ALONE as its own image at the highest resolution you can (2K/4K), keeping exactly the same subject, materials, colours, camera angle, lighting and background as in the grid.
+Otherwise create it from this description — photorealistic interior design photo for a product comparison board (Vietnam interior fit-out).
 Subject: ${subjectOf(b, c)}.
 Comparison topic: ${b.heading || b.idea || ''}.
-Show this option clearly as the main subject, realistic materials and construction details, soft natural light, clean modern Vietnamese apartment or neutral studio background.
+Show this option clearly as the main subject with realistic materials and construction details, in a modern Vietnamese apartment.
+${PHOTO_STYLE}
 Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no logo, no collage.`);
   }
 
@@ -462,7 +470,9 @@ Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no l
     return `Create ONE single image (aspect ratio ${ratio}) laid out as a clean grid of ${C} columns × ${R} row(s) of equal square panels separated by thin pure white gutters, read left-to-right, top-to-bottom:
 ${b.columns.map((c, i) => `Panel ${i + 1}: ${subjectOf(b, c)}`).join('\n')}${n < C * R ? `\nLeave the last ${C * R - n} panel plain white.` : ''}
 Comparison topic: ${b.heading || b.idea || ''}.
-All panels photorealistic with the same style, camera angle, lighting and neutral modern Vietnamese apartment background so they compare fairly; each subject centered and fully inside its square panel with realistic materials and construction details.
+All panels photorealistic with the same camera angle, lighting and modern Vietnamese apartment setting so they compare fairly; each subject centered and fully inside its square panel with realistic materials and construction details.
+${PHOTO_STYLE}
+Render at the highest resolution available (2K or 4K) so each panel stays sharp after cropping.
 No text, no labels, no numbers, no frames other than the white gutters, no watermark, no logo.`;
   }
   // Cắt ảnh ghép thành n ô: chia đều theo lưới, gọt viền trắng ở mép ô, rồi lấy hình vuông chính giữa
@@ -487,19 +497,36 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       for (let k = 0; k < limit && whiteLine(x0, y0, x1, y0); k++) y0++;
       for (let k = 0; k < limit && whiteLine(x0, y1, x1, y1); k++) y1--;
       const s = Math.min(x1 - x0 + 1, y1 - y0 + 1), sx = x0 + ((x1 - x0 + 1 - s) >> 1), sy = y0 + ((y1 - y0 + 1 - s) >> 1);
-      const tile = Object.assign(document.createElement('canvas'), {width: s, height: s});
-      tile.getContext('2d').drawImage(bmp, sx, sy, s, s, 0, 0, s, s);
-      tiles.push(await new Promise(resolve => tile.toBlob(resolve, 'image/png')));
+      tiles.push(await new Promise(resolve => sharpTile(ctx.canvas, sx, sy, s).toBlob(resolve, 'image/png')));
     }
     return tiles;
+  }
+  // Ô nhỏ (ảnh Gemini 1K chia nhiều ô): phóng lên 1024 px bằng nội suy chất lượng cao rồi làm nét nhẹ (unsharp mask 3×3)
+  function sharpTile(src, sx, sy, s) {
+    const size = Math.max(s, 1024), out = Object.assign(document.createElement('canvas'), {width: size, height: size});
+    const ctx = out.getContext('2d', {willReadFrequently: true});
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(src, sx, sy, s, s, 0, 0, size, size);
+    if (size === s) return out;
+    const img = ctx.getImageData(0, 0, size, size), d = img.data, o = new Uint8ClampedArray(d), amount = 0.6;
+    for (let y = 1; y < size - 1; y++) for (let x = 1; x < size - 1; x++) {
+      const k = (y * size + x) * 4;
+      for (let c = 0; c < 3; c++) {
+        const blur = (o[k + c] * 4 + o[k - 4 + c] + o[k + 4 + c] + o[k - size * 4 + c] + o[k + size * 4 + c]) / 8;
+        d[k + c] = o[k + c] + (o[k + c] - blur) * amount;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return out;
   }
   async function useCollage(blob) {
     const b = board();
     if (!b) return;
     try {
       toast('Đang tách ảnh ghép thành ' + b.columns.length + ' ô…');
+      blob = await window.removeGeminiMark?.(blob).catch(() => null) || blob;     // logo Gemini nằm ở góc ảnh ghép: xoá trước khi cắt
       const tiles = await splitCollage(blob, b.columns.length);
-      for (const [i, tile] of tiles.entries()) await uploadBlob(i, tile);
+      for (const [i, tile] of tiles.entries()) await uploadBlob(i, tile, {skipMark: true});   // đã xoá logo trên cả ảnh ghép
       toast('Đã đưa ' + tiles.length + ' ảnh vào các cột.');
     } catch (error) { GDHomeShell.alert('Không tách được ảnh ghép: ' + error.message); }
   }
@@ -524,7 +551,7 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
     byId('cmp-add-board').onclick = () => {
       const cat = doc.categories.find(c => c.id === board()?.categoryId) || doc.categories[0] || categoryFor('KHÁC');
       const b = {id: 'cmp_' + crypto.randomUUID(), categoryId: cat.id, category: '', title: 'SO SÁNH', heading: '',
-        columns: [blankCol('Phương án A'), blankCol('Phương án B')], idea: '', status: 'new', notes: '', createdAt: new Date().toISOString()};
+        columns: [blankCol(''), blankCol('')], layout: [2], idea: '', status: 'new', notes: '', createdAt: new Date().toISOString()};
       doc.boards.unshift(b);
       current = b.id;
       activeSlot = null;
@@ -656,7 +683,7 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       const filled = removed.filter(c => c.pros.length || c.cons.length || c.image || c.desc);
       if (filled.length && !await GDHomeShell.confirm({message: 'Bỏ ' + removed.length + ' phương án cuối: ' + removed.map(c => c.name).join(', ') + '?', okText: 'Bỏ', danger: true})) return renderSheet();
       b.columns = b.columns.slice(0, n);
-      while (b.columns.length < n) b.columns.push(blankCol('Phương án ' + 'ABCDEF'[b.columns.length]));
+      while (b.columns.length < n) b.columns.push(blankCol(''));
       b.layout = layout;
       renderSheet();
       save();

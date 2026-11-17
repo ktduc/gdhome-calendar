@@ -471,6 +471,7 @@ cases['so-sanh'] = async page => {
     // Bảng tự làm: + Bảng mới -> gõ tiêu đề, dán ảnh, dán chữ, sửa tên 1 cột -> ✨ AI điền chỗ trống
     await page.locator('#cmp-add-board').click();
     await page.waitForFunction(() => document.querySelectorAll('#cmp-tree [data-board]').length === 2);
+    assert.deepEqual(await page.locator('#cs-sheet .cs-name').allTextContents(),['',''],'Bảng mới: tên phương án để trống, không ghi Phương án A/B');
     await page.keyboard.type('Tay nắm cửa');
     await page.locator('#cs-sheet .cs-img[data-col="0"]').click({position:{x:20,y:20}});
     await page.evaluate(async () => {
@@ -553,6 +554,8 @@ cases['so-sanh'] = async page => {
     await page.locator('#cmp-prompt').click();
     await page.locator('#cmp-prompt-dlg[open]').waitFor();
     assert.match(await page.locator('#cmp-img-collage').inputValue(),/ONE single image \(aspect ratio 16:9\)[\s\S]*Panel 1: "Tay nắm tròn"[\s\S]*Panel 2: "Tay nắm dài"/);
+    assert.match(await page.locator('#cmp-img-collage').inputValue(),/crystal-clear[\s\S]*2K or 4K/,'Prompt ảnh trong trẻo + độ phân giải cao');
+    assert.ok(await page.locator('#cmp-prompt-dlg .cmp-pr-row [data-pr="copy"]').isVisible() && await page.locator('#cmp-prompt-dlg .cmp-pr-row [data-pr="apply"]').isVisible(),'Nút Copy prompt / Điền bảng nằm sát ô');
     await page.evaluate(async () => {
       const c = Object.assign(document.createElement('canvas'),{width:1600,height:900}), x = c.getContext('2d');
       x.fillStyle = '#fff'; x.fillRect(0,0,1600,900);
