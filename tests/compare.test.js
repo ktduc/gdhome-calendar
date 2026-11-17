@@ -6,8 +6,13 @@ const col = (name, extra = {}) => ({name, desc: 'Mô tả', stats: 'Giá thành:
 
 test('so sánh: chuẩn hoá bảng AI, 2–3 cột, rà soát lỗi', () => {
   assert.equal(normalizeBoard({columns: [col('Một')]}), null, 'Dưới 2 cột thì bỏ');
-  const b = normalizeBoard({heading: 'cửa có khuôn và giấu khuôn', category: 'cửa', columns: [col('A'), col('B'), col('C'), col('D')]});
-  assert.equal(b.columns.length, 3, 'Tối đa 3 cột');
+  const six = normalizeBoard({columns: 'ABCDEFG'.split('').map(n => col(n)), layout: [3, 3]});
+  assert.equal(six.columns.length, 6, 'Tối đa 6 phương án');
+  assert.deepEqual(six.layout, [3, 3]);
+  assert.equal(normalizeBoard({columns: [col('A'), col('B'), col('C'), col('D'), col('E')], layout: [3, 3]}).layout, null, 'Thứ tự tờ sai số cột thì bỏ');
+  assert.deepEqual(normalizeBoard({columns: [col('A'), col('B'), col('C'), col('D'), col('E')], layout: [3, 2]}).layout, [3, 2]);
+  const b = normalizeBoard({heading: 'cửa có khuôn và giấu khuôn', category: 'cửa', columns: [col('A'), col('B'), col('C')]});
+  assert.equal(b.columns.length, 3);
   assert.equal(b.heading, 'CỬA CÓ KHUÔN VÀ GIẤU KHUÔN');
   assert.equal(b.category, 'CỬA');
   assert.equal(b.status, 'new');

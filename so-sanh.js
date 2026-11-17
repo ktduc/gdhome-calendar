@@ -231,13 +231,23 @@
 
   // ---------------------------------------------------------------- DÀN TRANG
   const ph = text => `data-ph="${esc(text)}"`;
+  // Bố cục: số phương án mỗi tờ. Tờ 2 PA = khổ dọc 10000×12500, tờ 3 PA = khổ ngang 14600×12500 (bản vẽ anh Đức, 1 px = 10 đơn vị)
+  const LAYOUTS = {'2': [2], '3': [3], '2+2': [2, 2], '2+3': [2, 3], '3+2': [3, 2], '3+3': [3, 3]};
+  const defaultLayout = n => n <= 2 ? [2] : n === 3 ? [3] : n === 4 ? [2, 2] : n === 5 ? [2, 3] : [3, 3];
+  function layoutOf(b) {
+    const key = (b.layout || []).join('+');
+    return LAYOUTS[key] && LAYOUTS[key].reduce((x, y) => x + y, 0) === b.columns.length ? LAYOUTS[key] : defaultLayout(b.columns.length);
+  }
   function sheetHtml(b) {
-    const cat = catOf(b), n = b.columns.length;
-    const cols = fn => `<div class="cs-grid" style="--n:${n}">${b.columns.map(fn).join('')}</div>`;
-    // A4 tỷ lệ 1:√2 – 2 phương án khổ dọc 1000×1414, 3 phương án khổ ngang 1414×1000
-    return `<div class="cs-sheet ${n === 3 ? 'is-land' : ''} ${b.status === 'new' ? 'is-new' : ''}" id="cs-sheet" style="--cat:${esc(cat.color)}">
+    const cat = catOf(b), layout = layoutOf(b);
+    let start = 0;
+    const pages = layout.map((n, p) => {
+      const entries = b.columns.slice(start, start + n).map((c, j) => [c, start + j]);
+      start += n;
+      const cols = fn => `<div class="cs-grid" style="--n:${n}">${entries.map(([c, i]) => fn(c, i)).join('')}</div>`;
+      return `<div class="cs-sheet ${n === 3 ? 'is-land' : ''}" data-page="${p}">
       <div class="cs-head">
-        <div class="cs-logo"><img src="/gdhome-logo.png" alt="GD HOME"></div>
+        <div class="cs-logo"><img src="/gdhome-logo-sq.png" alt="GD HOME"></div>
         <div class="cs-title"><div contenteditable="plaintext-only" data-f="title" ${ph('SO SÁNH')}>${esc(b.title)}</div>
           <div contenteditable="plaintext-only" data-f="heading" ${ph('TIÊU ĐỀ SO SÁNH')}>${esc(b.heading)}</div></div>
         <div class="cs-tab"><span>${esc(cat.name)}</span></div>
@@ -252,21 +262,32 @@
         ${f === 'pros' ? '<div class="cs-sec pros"><i>✓</i>ƯU ĐIỂM:</div>' : '<div class="cs-sec cons"><i>✕</i>NHƯỢC ĐIỂM:</div>'}
         <ul class="cs-list" contenteditable="true" data-f="${f}">${(c[f].length ? c[f] : ['']).map(t => `<li>${esc(t)}</li>`).join('')}</ul></div>`)).join('')}</div>
     </div>`;
+    });
+    // Nhiều tờ: ghép cạnh nhau như bản vẽ, có vệt màu sát mép trên báo "còn tờ khác"
+    return `<div class="cs-board ${layout.length > 1 ? 'is-multi' : ''} ${b.status === 'new' ? 'is-new' : ''}" id="cs-sheet" style="--cat:${esc(cat.color)}">${pages.join('')}</div>`;
   }
 
-  // Luôn thu cả trang giấy vừa vùng làm việc (khi xuất ảnh/PDF luôn đúng 100%)
+  // Luôn thu cả bộ tờ vừa vùng làm việc (khi xuất ảnh/PDF luôn đúng 100%)
   function fit() {
-    const sheet = byId('cs-sheet'), stage = byId('cmp-stage');
-    if (sheet) sheet.style.zoom = Math.min(1, (stage.clientWidth - 40) / sheet.offsetWidth, (stage.clientHeight - 40) / sheet.offsetHeight);
+    const el = byId('cs-sheet'), stage = byId('cmp-stage');
+    if (el) el.style.zoom = Math.min(1, (stage.clientWidth - 40) / el.offsetWidth, (stage.clientHeight - 40) / el.offsetHeight);
   }
-  // Khổ cố định: nhiều chữ hơn dự kiến thì dòng tự sát lại / chữ nhỏ dần cho vừa khổ
-  function tighten(sheet = byId('cs-sheet')) {
-    const body = sheet?.querySelector('.cs-body');
-    if (!body) return;
-    let k = 1;
-    sheet.style.setProperty('--k', k);
-    while (body.scrollHeight > body.clientHeight + 1 && k > 0.6) sheet.style.setProperty('--k', k = Math.round((k - 0.04) * 100) / 100);
-    sheet.classList.toggle('is-overflow', body.scrollHeight > body.clientHeight + 1);
+  // Khổ cố định: nhiều dòng hơn thường lệ (4–5, tối đa ~7) thì dòng tự sát lại / chữ nhỏ dần cho vừa khổ, từng tờ riêng
+  function tighten(root = byId('cs-sheet')) {
+    for (const sheet of root ? root.querySelectorAll('.cs-sheet') : []) {
+      const body = sheet.querySelector('.cs-body');
+      let k = 1;
+      sheet.style.setProperty('--k', k);
+      while (body.scrollHeight > body.clientHeight + 1 && k > 0.6) sheet.style.setProperty('--k', k = Math.round((k - 0.04) * 100) / 100);
+      sheet.classList.toggle('is-overflow', body.scrollHeight > body.clientHeight + 1);
+    }
+    // Nhiều tờ ghép: phần ƯU ĐIỂM cao bằng nhau để tiêu đề NHƯỢC ĐIỂM thẳng hàng qua các tờ
+    const pros = root ? [...root.querySelectorAll('.cs-body > .cs-grid:first-child')] : [];
+    if (pros.length > 1) {
+      pros.forEach(g => { g.style.minHeight = ''; });
+      const tallest = Math.max(...pros.map(g => g.offsetHeight));
+      pros.forEach(g => { g.style.minHeight = tallest + 'px'; });
+    }
   }
 
   function renderSheet() {
@@ -277,7 +298,7 @@
     byId('cmp-sheet-wrap').innerHTML = b ? sheetHtml(b) : '';
     if (!b) return;
     byId('cmp-cat-select').innerHTML = doc.categories.map(c => `<option value="${esc(c.id)}" ${c.id === b.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
-    document.querySelectorAll('.cmp-seg [data-cols]').forEach(btn => btn.classList.toggle('active', Number(btn.dataset.cols) === b.columns.length));
+    byId('cmp-layout').value = layoutOf(b).join('+');
     byId('cmp-approve').textContent = b.status === 'new' ? '✓ Duyệt OK' : '↺ Đánh dấu cần xem lại';
     fit();
     tighten();
@@ -301,6 +322,8 @@
       else if (f === 'desc') { col.desc = el.innerText.replace(/\n+$/, '').trim(); col.stats = ''; }   // mô tả + giá thành gộp 1 ô
       else col[f] = el.textContent.trim();
     }
+    // Tiêu đề lặp ở mọi tờ: gõ ở tờ nào thì các tờ còn lại theo
+    if (!colEl) document.querySelectorAll(`#cs-sheet [data-f="${f}"]`).forEach(other => { if (other !== el) other.textContent = b[f]; });
     if (f === 'heading') renderTree();
     tighten();
     save({typing: true});
@@ -321,6 +344,9 @@
   async function uploadBlob(col, blob) {
     try {
       toast('Đang tải ảnh…');
+      // Ảnh Gemini: tự xoá logo ngôi sao ở góc (xử lý trên máy, không gọi AI)
+      const clean = await window.removeGeminiMark?.(blob).catch(() => null);
+      if (clean) { blob = clean; toast('Đã tự xoá logo Gemini ở góc ảnh.'); }
       const {full} = await GDHomeImages.compress(blob);
       setImage(col, await GDHomeAssets.storeAsset(full));
     } catch (error) { GDHomeShell.alert('Không tải được ảnh: ' + error.message); }
@@ -340,20 +366,27 @@
 
   // ---------------------------------------------------------------- XUẤT (Copy ảnh / PNG / PDF 1 bảng, 1 hạng mục, toàn bộ)
   // Dựng bảng ngoài màn hình ở 100% rồi chụp: dùng chung cho bảng đang mở và xuất nhiều bảng
-  async function renderCanvas(b) {
+  const WM_KEY = 'gd_cmp_watermark';
+  const watermarkOn = () => { try { return localStorage.getItem(WM_KEY) !== '0'; } catch { return true; } };
+  // perPage: PDF chụp từng tờ; không thì chụp cả bộ tờ ghép cạnh nhau (Copy ảnh / PNG)
+  async function renderCanvas(b, perPage = false) {
     if (!window.html2canvas) throw new Error('Chưa tải được công cụ xuất ảnh, thử lại sau.');
     const box = Object.assign(document.createElement('div'), {className: 'cs-offscreen', innerHTML: sheetHtml(b)});
-    const sheet = box.firstElementChild;
-    sheet.removeAttribute('id');
-    sheet.classList.add('is-exporting');
+    const root = box.firstElementChild;
+    root.removeAttribute('id');
+    root.classList.add('is-exporting');
     document.body.append(box);
     try {
-      await Promise.all([...sheet.querySelectorAll('img[data-asset]')].map(async img => {
+      await Promise.all([...root.querySelectorAll('img[data-asset]')].map(async img => {
         try { img.src = await GDHomeAssets.assetUrl(img.dataset.asset); await img.decode(); } catch { /* ảnh lỗi: để ô trống */ }
       }).concat(document.fonts.ready));
-      await Promise.all([...sheet.querySelectorAll('img')].map(img => img.decode().catch(() => null)));
-      tighten(sheet);
-      return await html2canvas(sheet, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true});
+      await Promise.all([...root.querySelectorAll('img')].map(img => img.decode().catch(() => null)));
+      tighten(root);
+      const shoot = async el => applyAntiEditWatermark(await html2canvas(el, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true}), watermarkOn());
+      if (!perPage) return await shoot(root);
+      const pages = [];
+      for (const page of root.querySelectorAll('.cs-sheet')) pages.push(await shoot(page));
+      return pages;
     } finally { box.remove(); }
   }
   const fileName = (name, ext) => 'So-sanh_' + String(name || 'bang').replace(/[\\/:*?"<>|]+/g, '').slice(0, 80) + '.' + ext;
@@ -365,18 +398,20 @@
       return [...list.filter(b => b.status === 'new'), ...list.filter(b => b.status !== 'new')];
     });
   }
-  // PDF: mọi trang cùng chiều rộng 210 mm (bảng dọc cao 297, bảng ngang cao 148,5) nên cuộn đọc đều nhau
+  // PDF: mỗi tờ 1 trang, mọi trang cùng chiều rộng 210 mm (tờ dọc cao 262,5, tờ ngang cao ~180) nên cuộn đọc đều nhau
   async function exportPdf(list, name) {
     if (!window.jspdf) throw new Error('Chưa tải được công cụ PDF, thử lại sau.');
     if (!list.length) throw new Error('Chưa có bảng nào để xuất.');
     let pdf = null;
     for (const [i, b] of list.entries()) {
       toast(`Đang xuất PDF ${i + 1}/${list.length}…`);
-      const canvas = await renderCanvas(b), size = [210, 210 * canvas.height / canvas.width];
-      const orientation = size[1] >= size[0] ? 'portrait' : 'landscape';   // jsPDF tự đảo cạnh nếu sai hướng
-      if (!pdf) pdf = new window.jspdf.jsPDF({unit: 'mm', format: size, orientation, compress: true});
-      else pdf.addPage(size, orientation);
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, size[0], size[1]);
+      for (const canvas of await renderCanvas(b, true)) {
+        const size = [210, 210 * canvas.height / canvas.width];
+        const orientation = size[1] >= size[0] ? 'portrait' : 'landscape';   // jsPDF tự đảo cạnh nếu sai hướng
+        if (!pdf) pdf = new window.jspdf.jsPDF({unit: 'mm', format: size, orientation, compress: true});
+        else pdf.addPage(size, orientation);
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.9), 'JPEG', 0, 0, size[0], size[1]);
+      }
     }
     pdf.save(fileName(name, 'pdf'));
     toast('Đã tải PDF ' + list.length + ' bảng.');
@@ -396,11 +431,19 @@
     } catch (error) { GDHomeShell.alert('Không xuất được: ' + error.message); }
   }
 
-  // Prompt tạo ảnh: mỗi cột 1 prompt riêng để AI trả về ảnh rời, đúng tỷ lệ ô ảnh của khổ giấy
+  // Prompt tạo ảnh: ảnh minh hoạ luôn vuông 1:1. Mỗi cột 1 prompt + 1 prompt gộp cho mọi cột
+  const subjectOf = (b, c) => `"${c.name || b.heading}"${c.desc ? ' – ' + c.desc.replace(/\n/g, '; ') : ''}`;
+  function allImagesPrompt(b) {
+    return `Create ${b.columns.length} SEPARATE photorealistic images for an interior design comparison board (Vietnam interior fit-out), one image per option, in this order:
+${b.columns.map((c, i) => `${i + 1}. ${subjectOf(b, c)}`).join('\n')}
+Comparison topic: ${b.heading || b.idea || ''}.
+All images must share the same style, camera angle, lighting and neutral modern Vietnamese apartment background so they compare fairly; each option clearly the main subject with realistic materials and construction details.
+Each image square 1:1. Output ${b.columns.length} individual images (not a grid, not a collage). No text, no labels, no watermark, no logo.`;
+  }
   function imagePrompts(b) {
-    const ratio = b.columns.length === 3 ? '4:3 (landscape)' : '1:1 (square)';
+    const ratio = '1:1 (square)';
     return b.columns.map(c => `Photorealistic interior design photo for a product comparison board (Vietnam interior fit-out).
-Subject: "${c.name || b.heading}"${c.desc ? ' – ' + c.desc.replace(/\n/g, '; ') : ''}.
+Subject: ${subjectOf(b, c)}.
 Comparison topic: ${b.heading || b.idea || ''}.
 Show this option clearly as the main subject, realistic materials and construction details, soft natural light, clean modern Vietnamese apartment or neutral studio background.
 Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no logo, no collage.`);
@@ -463,6 +506,7 @@ Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no l
         const {prompt} = await post('/api/compare/prompt', {board: b, categories: doc.categories.map(c => c.name)});
         byId('cmp-prompt-text').value = prompt;
         byId('cmp-prompt-answer').value = '';
+        byId('cmp-img-all').value = allImagesPrompt(b);
         byId('cmp-img-prompts').innerHTML = imagePrompts(b).map((text, i) => `<div class="cmp-img-prompt"><div><b>Cột ${i + 1}: ${esc(b.columns[i].name || '')}</b>
           <button type="button" class="gd-ask-btn" data-pr="copy-img" data-i="${i}">📋 Copy prompt ảnh</button></div><textarea readonly rows="3">${esc(text)}</textarea></div>`).join('');
         dlg.dataset.board = b.id;
@@ -472,11 +516,12 @@ Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no l
     dlg.onclick = async e => {
       const act = e.target.closest('[data-pr]')?.dataset.pr;
       if (act === 'close') return dlg.close();
-      if (act === 'copy' || act === 'copy-img') {
-        const area = act === 'copy' ? byId('cmp-prompt-text') : e.target.closest('.cmp-img-prompt').querySelector('textarea');
+      if (act === 'copy' || act === 'copy-img' || act === 'copy-all-img') {
+        const area = act === 'copy' ? byId('cmp-prompt-text') : act === 'copy-all-img' ? byId('cmp-img-all') : e.target.closest('.cmp-img-prompt').querySelector('textarea');
         try { await navigator.clipboard.writeText(area.value); }
         catch { area.select(); document.execCommand('copy'); }
-        return toast(act === 'copy' ? 'Đã copy prompt chữ – dán vào ChatGPT / Claude / Gemini.' : 'Đã copy prompt ảnh – gửi riêng để AI vẽ 1 ảnh rời.');
+        return toast({copy: 'Đã copy prompt chữ – dán vào ChatGPT / Claude / Gemini.', 'copy-img': 'Đã copy prompt ảnh – gửi riêng để AI vẽ 1 ảnh rời.',
+          'copy-all-img': 'Đã copy prompt tất cả ảnh – dán vào Gemini để nhận đủ ảnh 1 lần.'}[act]);
       }
       if (act !== 'apply') return;
       const target = doc.boards.find(x => x.id === dlg.dataset.board);
@@ -533,18 +578,19 @@ Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no l
     });
 
     byId('cmp-cat-select').onchange = e => { board().categoryId = e.target.value; renderAll(); save(); };
-    document.querySelectorAll('.cmp-seg [data-cols]').forEach(btn => btn.onclick = async () => {
-      const b = board(), n = Number(btn.dataset.cols);
-      if (!b || b.columns.length === n) return;
-      if (n === 3) b.columns.push(blankCol('Phương án C'));
-      else {
-        const last = b.columns[2];
-        if ((last.pros.length || last.cons.length || last.image) && !await GDHomeShell.confirm({message: `Bỏ cột "${last.name}" để về bố cục 2 cột?`, okText: 'Bỏ cột', danger: true})) return;
-        b.columns.pop();
-      }
+    // Số phương án + thứ tự tờ: thêm cột trống ở cuối, hoặc bỏ cột cuối (hỏi nếu cột đã có nội dung)
+    byId('cmp-layout').onchange = async e => {
+      const b = board(), layout = LAYOUTS[e.target.value], n = layout.reduce((x, y) => x + y, 0);
+      if (!b) return;
+      const removed = b.columns.slice(n);
+      const filled = removed.filter(c => c.pros.length || c.cons.length || c.image || c.desc);
+      if (filled.length && !await GDHomeShell.confirm({message: 'Bỏ ' + removed.length + ' phương án cuối: ' + removed.map(c => c.name).join(', ') + '?', okText: 'Bỏ', danger: true})) return renderSheet();
+      b.columns = b.columns.slice(0, n);
+      while (b.columns.length < n) b.columns.push(blankCol('Phương án ' + 'ABCDEF'[b.columns.length]));
+      b.layout = layout;
       renderSheet();
       save();
-    });
+    };
     byId('cmp-approve').onclick = () => {
       const b = board();
       b.status = b.status === 'new' ? 'ok' : 'new';
@@ -559,6 +605,9 @@ Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no l
       renderAll();
       save();
     };
+    // Sọc chìm chống chỉnh sửa (giống Chốt mã): mặc định bật, nhớ theo máy
+    byId('cmp-watermark').checked = watermarkOn();
+    byId('cmp-watermark').onchange = e => { try { localStorage.setItem(WM_KEY, e.target.checked ? '1' : '0'); } catch { /* bỏ qua */ } };
     byId('cmp-image-actions').onclick = e => {
       const btn = e.target.closest('[data-out]');
       if (!btn) return;

@@ -394,13 +394,23 @@ cases['so-sanh'] = async page => {
     await sheet.waitFor();
     assert.equal(await sheet.locator('.cs-tab').textContent(),'CỬA');
     // Bố cục 3 cột rồi về 2 cột
-    await page.locator('.cmp-seg [data-cols="3"]').click();
+    await page.locator('#cmp-layout').selectOption('3');
     assert.equal(await sheet.locator('.cs-band .cs-name').count(),3);
-    // 3 phương án = A4 ngang 1414×1000, cả trang thu vừa vùng làm việc; chữ hạng mục xoay (không dùng writing-mode)
-    const land = await page.evaluate(() => { const s = document.getElementById('cs-sheet'), st = document.getElementById('cmp-stage').getBoundingClientRect(), r = s.getBoundingClientRect();
-      return {w: s.offsetWidth, h: s.offsetHeight, fits: r.bottom <= st.bottom + 1 && r.right <= st.right + 1, wm: getComputedStyle(s.querySelector('.cs-tab span')).writingMode}; });
-    assert.deepEqual(land,{w:1414,h:1000,fits:true,wm:'horizontal-tb'},JSON.stringify(land));
-    await page.locator('.cmp-seg [data-cols="2"]').click();
+    // 3 phương án = tờ ngang 14600×12500 (1460×1250 px), cả trang thu vừa vùng làm việc; chữ hạng mục xoay (không dùng writing-mode)
+    const box = () => page.evaluate(() => { const s = document.getElementById('cs-sheet'), st = document.getElementById('cmp-stage').getBoundingClientRect(), r = s.getBoundingClientRect();
+      return {w: s.offsetWidth, h: s.offsetHeight, pages: [...s.querySelectorAll('.cs-sheet')].map(p => p.offsetWidth), multi: s.classList.contains('is-multi'),
+        fits: r.bottom <= st.bottom + 1 && r.right <= st.right + 1, wm: getComputedStyle(s.querySelector('.cs-tab span')).writingMode,
+        img: [...s.querySelectorAll('.cs-img')].map(i => i.offsetWidth + 'x' + i.offsetHeight)[0]}; });
+    assert.deepEqual(await box(),{w:1460,h:1250,pages:[1460],multi:false,fits:true,wm:'horizontal-tb',img:'400x400'});
+    // 5 phương án ngang + dọc: 2 tờ ghép cạnh nhau, có vệt màu trên cùng
+    await page.locator('#cmp-layout').selectOption('3+2');
+    assert.equal(await sheet.locator('.cs-band .cs-name').count(),5);
+    assert.deepEqual(await box(),{w:2460,h:1250,pages:[1460,1000],multi:true,fits:true,wm:'horizontal-tb',img:'400x400'});
+    assert.ok(parseFloat(await page.evaluate(() => getComputedStyle(document.querySelector('#cs-sheet .cs-head')).borderTopWidth)) > 2,'Nhiều tờ: có vệt trên');
+    const consTops = await page.evaluate(() => [...document.querySelectorAll('#cs-sheet .cs-sec.cons')].map(e => Math.round(e.getBoundingClientRect().top)));
+    assert.equal(new Set(consTops).size,1,'NHƯỢC ĐIỂM thẳng hàng qua 2 tờ: '+consTops);
+    await page.locator('#cmp-layout').selectOption('2');
+    assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#cs-sheet .cs-head')).borderTopWidth),'0px','1 tờ: không có vệt trên');
     assert.equal(await page.locator('#cs-sheet .cs-band .cs-name').count(),2);
     // Ctrl+V ảnh (chụp màn hình / file đã copy) vào ô ảnh đang chọn
     await page.locator('#cs-sheet .cs-img[data-col="1"]').click({position:{x:20,y:20}});
@@ -428,7 +438,7 @@ cases['so-sanh'] = async page => {
     }));
     assert.equal(await page.locator('#cmp-tree li.is-new').count(),1);
     // Logo chuẩn + menu Copy ảnh ▾ trên header: PDF toàn bộ danh mục (mỗi trang rộng 210 mm)
-    assert.ok(await page.locator('#cs-sheet .cs-logo img[src="/gdhome-logo.png"]').count());
+    assert.ok(await page.locator('#cs-sheet .cs-logo img[src="/gdhome-logo-sq.png"]').count());
     await page.locator('#cmp-image-actions summary').click();
     // Thay hàm lưu file của jsPDF để đọc số trang / khổ trang (trình duyệt test không nhận tải về)
     await page.waitForFunction(() => window.jspdf);
@@ -438,7 +448,7 @@ cases['so-sanh'] = async page => {
     await page.locator('#cmp-image-actions [data-out="pdf-all"]').click();
     const pdf = await (await page.waitForFunction(() => window.__pdf,null,{timeout:30000})).jsonValue();
     assert.equal(pdf.name,'So-sanh_toan-bo-danh-muc.pdf');
-    assert.deepEqual(pdf.sizes,[[210,149],[210,297]],'Bảng 3 cột trang ngang, bảng 2 cột trang dọc, cùng chiều rộng 210 mm');
+    assert.deepEqual(pdf.sizes,[[210,180],[210,263]],'Tờ ngang và tờ dọc cùng chiều rộng 210 mm');
     // Header: tài khoản sát phải, có nút sáng/tối và Todo
     const right = await page.locator('.shell-account').evaluate(el => el.getBoundingClientRect().right);
     assert.ok(right > page.viewportSize().width - 40,'Ô tài khoản sát phải: '+right);
@@ -506,12 +516,28 @@ cases['so-sanh'] = async page => {
       const bd = s.querySelector('.cs-body'); return {cons, h: s.offsetHeight, w: s.offsetWidth, k: Number(getComputedStyle(s).getPropertyValue('--k')), dbg: [bd.scrollHeight, bd.clientHeight, s.querySelectorAll('[data-col="1"] [data-f=pros] li').length]};
     });
     assert.ok(Math.abs(layout.cons[0] - layout.cons[1]) < 1,'NHƯỢC ĐIỂM thẳng hàng '+layout.cons);
-    assert.deepEqual([layout.w,layout.h],[1000,1414],'Khổ cố định');
+    assert.deepEqual([layout.w,layout.h],[1000,1250],'Khổ cố định');
     assert.ok(layout.k < 1,'Nhiều dòng thì dòng sát lại: '+JSON.stringify(layout));
     // Prompt cho AI khác -> dán câu trả lời về
     await page.locator('#cmp-prompt').click();
     await page.locator('#cmp-prompt-dlg[open]').waitFor();
     assert.ok((await page.locator('#cmp-prompt-text').inputValue()).includes('Tay nắm inox 304'));
+    assert.match(await page.locator('#cmp-img-all').inputValue(),/Create 2 SEPARATE[\s\S]*1\. "Tay nắm tròn"[\s\S]*2\. "Tay nắm dài"[\s\S]*square 1:1/);
+    // Logo Gemini (ngôi sao ở góc dưới phải ảnh vuông) tự xoá trên máy; ảnh không có logo giữ nguyên
+    const gem = await page.evaluate(async () => {
+      const make = withStar => { const c = Object.assign(document.createElement('canvas'),{width:1024,height:1024}), x = c.getContext('2d');
+        x.fillStyle = '#5a5040'; x.fillRect(0,0,1024,1024);
+        if (withStar) { x.fillStyle = 'rgba(255,255,255,.5)'; x.beginPath();
+          for (let t = 0; t <= Math.PI * 2; t += 0.01) { const px = 904 + 26 * Math.sign(Math.cos(t)) * Math.abs(Math.cos(t)) ** 3, py = 904 + 26 * Math.sign(Math.sin(t)) * Math.abs(Math.sin(t)) ** 3; t ? x.lineTo(px,py) : x.moveTo(px,py); }
+          x.fill(); }
+        return new Promise(r => c.toBlob(r,'image/png')); };
+      const out = await removeGeminiMark(await make(true)), none = await removeGeminiMark(await make(false));
+      const px = out && (() => createImageBitmap(out).then(b => { const c = Object.assign(document.createElement('canvas'),{width:1024,height:1024}).getContext('2d'); c.drawImage(b,0,0); return [...c.getImageData(904,904,1,1).data].slice(0,3); }))();
+      return {removed: !!out, none, center: px && await px};
+    });
+    assert.equal(gem.removed,true,'Thấy và xoá logo Gemini');
+    assert.equal(gem.none,null,'Ảnh không có logo thì không đụng');
+    assert.ok(Math.abs(gem.center[0] - 0x5a) < 6,'Tâm ngôi sao đã lấp bằng màu nền: ' + gem.center);
     await page.locator('#cmp-prompt-answer').fill('```json\n' + JSON.stringify({heading:'X',columns:[col('Khác 1'),col('Khác 2')]}) + '\n```');
     await page.locator('#cmp-prompt-dlg [data-pr="apply"]').click();
     await page.locator('#cmp-prompt-dlg').waitFor({state:'hidden'});

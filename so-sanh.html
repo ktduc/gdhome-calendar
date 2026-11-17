@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/shell.css?v=gd26">
   <link rel="stylesheet" href="/tools.css?v=gd26">
   <link rel="stylesheet" href="/asset-library.css?v=undo1">
-  <link rel="stylesheet" href="/so-sanh.css?v=cmp5">
+  <link rel="stylesheet" href="/so-sanh.css?v=cmp6">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
@@ -22,7 +22,9 @@
   <script src="/catalogue-import-history.js?v=gd20.12" defer></script>
   <script src="/asset-library.js?v=undo1" defer></script>
   <script src="/integrations-client.js?v=dlg1" defer></script>
-  <script src="/so-sanh.js?v=cmp5" defer></script>
+  <script src="/export-canvas.js?v=dlg1" defer></script>
+  <script src="/gemini-mark.js?v=gm1" defer></script>
+  <script src="/so-sanh.js?v=cmp6" defer></script>
 <link rel="stylesheet" href="/timeline-todo.css?v=todo9">
 <script src="/timeline-todo.js?v=todo9" defer></script>
 </head>
@@ -49,6 +51,8 @@
             <hr style="margin:4px 0;border:0;border-top:1px solid #cbd5e1">
             <button type="button" class="hdr-menu-item" data-out="pdf-cat">Tải PDF hạng mục đang chọn</button>
             <button type="button" class="hdr-menu-item" data-out="pdf-all">Tải PDF toàn bộ danh mục</button>
+            <hr style="margin:4px 0;border:0;border-top:1px solid #cbd5e1">
+            <label class="hdr-menu-item export-watermark-toggle"><span>Sọc chìm chống chỉnh sửa</span><input type="checkbox" id="cmp-watermark" checked></label>
           </div>
         </details>
       </div>
@@ -91,12 +95,16 @@
       <!-- Tuỳ chỉnh bảng để bên phải: màn hình ngang còn trọn chiều cao cho khổ giấy -->
       <aside class="cmp-panel" id="cmp-toolbar" hidden>
         <label class="cmp-field">Hạng mục <select id="cmp-cat-select"></select></label>
-        <div class="cmp-field">Bố cục
-          <div class="cmp-seg" role="group" aria-label="Bố cục">
-            <button type="button" data-cols="2" title="2 phương án · A4 dọc">2 cột · dọc</button>
-            <button type="button" data-cols="3" title="3 phương án · A4 ngang">3 cột · ngang</button>
-          </div>
-        </div>
+        <label class="cmp-field">Số phương án · thứ tự tờ
+          <select id="cmp-layout">
+            <option value="2">2 phương án · 1 tờ dọc</option>
+            <option value="3">3 phương án · 1 tờ ngang</option>
+            <option value="2+2">4 phương án · dọc + dọc</option>
+            <option value="2+3">5 phương án · dọc + ngang</option>
+            <option value="3+2">5 phương án · ngang + dọc</option>
+            <option value="3+3">6 phương án · ngang + ngang</option>
+          </select>
+        </label>
         <div class="cmp-panel-row">
           <button type="button" class="btn btn-outline btn-sm" id="cmp-approve"></button>
           <button type="button" class="btn btn-outline btn-sm" id="cmp-delete">Xoá bảng</button>
@@ -117,7 +125,10 @@
     <textarea id="cmp-prompt-text" readonly rows="7"></textarea>
     <textarea id="cmp-prompt-answer" rows="5" placeholder="Dán câu trả lời của AI (đoạn JSON {…}) vào đây"></textarea>
     <h3 class="cmp-img-head">Prompt tạo ảnh – mỗi cột 1 prompt, gửi riêng để nhận ảnh rời</h3>
-    <p class="gd-ask-message">AI vẽ xong: copy ảnh → bấm chọn ô ảnh của cột đó → Ctrl+V.</p>
+    <p class="gd-ask-message">AI vẽ xong: copy ảnh → bấm chọn ô ảnh của cột đó → Ctrl+V. Ảnh có logo Gemini ở góc sẽ tự xoá khi dán.</p>
+    <div class="cmp-img-all"><button type="button" class="gd-ask-btn is-primary" data-pr="copy-all-img">📋 Copy prompt tất cả ảnh</button>
+      <span>Gemini trả đủ ảnh trong 1 lần, các ảnh đồng bộ hơn</span></div>
+    <textarea id="cmp-img-all" readonly rows="3"></textarea>
     <div id="cmp-img-prompts"></div>
     <div class="gd-ask-actions">
       <button type="button" class="gd-ask-btn" data-pr="close">Đóng</button>
