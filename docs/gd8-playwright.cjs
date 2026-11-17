@@ -407,6 +407,23 @@ cases['so-sanh'] = async page => {
     assert.equal(await sheet.locator('.cs-band .cs-name').count(),5);
     assert.deepEqual(await box(),{w:2460,h:1250,pages:[1460,1000],multi:true,fits:true,wm:'horizontal-tb',img:'400x400'});
     assert.ok(parseFloat(await page.evaluate(() => getComputedStyle(document.querySelector('#cs-sheet .cs-head')).borderTopWidth)) > 2,'Nhiều tờ: có vệt trên');
+    // Bảng 2 tờ: Copy ảnh cả bảng / tờ trái / tờ phải; sọc chìm vẫn thấy khi ảnh bị thu nhỏ còn ~1200 px (như dán Zalo/Word)
+    const copyShot = mode => page.evaluate(async mode => {
+      let got = null;
+      navigator.clipboard.write = async items => { got = await items[0].getType('image/png'); };
+      document.querySelector(`#cmp-image-actions [data-out="${mode}"]`).click();
+      for (let k = 0; k < 300 && !got; k++) { document.querySelector('dialog.gd-ask[open] [data-ask="ok"]')?.click(); await new Promise(r => setTimeout(r, 100)); }
+      const bmp = await createImageBitmap(got), w = 1200, h = Math.round(bmp.height * w / bmp.width);
+      const c = Object.assign(document.createElement('canvas'), {width: w, height: h}), x = c.getContext('2d');
+      x.imageSmoothingQuality = 'high'; x.drawImage(bmp, 0, 0, w, h);
+      const row = x.getImageData(20, h - 30, 300, 1).data, v = [];
+      for (let k = 0; k < row.length; k += 4) v.push(row[k]);
+      return {w: bmp.width, h: bmp.height, stripe: Math.max(...v) - Math.min(...v)};
+    }, mode);
+    assert.ok(await page.locator('#cmp-image-actions [data-out="copy-0"]').evaluate(el => !el.hidden),'Có mục Copy tờ trái khi 2 tờ');
+    const whole = await copyShot('copy'), leftPage = await copyShot('copy-0'), rightPage = await copyShot('copy-1');
+    assert.deepEqual([whole.w, leftPage.w, rightPage.w],[4920, 2920, 2000],'Cả bảng / tờ trái (ngang) / tờ phải (dọc)');
+    assert.ok([whole, leftPage, rightPage].every(x => x.stripe >= 4),'Sọc chìm còn thấy sau khi thu nhỏ: ' + JSON.stringify([whole, leftPage, rightPage]));
     const consTops = await page.evaluate(() => [...document.querySelectorAll('#cs-sheet .cs-sec.cons')].map(e => Math.round(e.getBoundingClientRect().top)));
     assert.equal(new Set(consTops).size,1,'NHƯỢC ĐIỂM thẳng hàng qua 2 tờ: '+consTops);
     await page.locator('#cmp-layout').selectOption('2');

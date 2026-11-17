@@ -305,6 +305,7 @@
     if (!b) return;
     byId('cmp-cat-select').innerHTML = doc.categories.map(c => `<option value="${esc(c.id)}" ${c.id === b.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
     byId('cmp-layout').value = layoutOf(b).join('+');
+    document.querySelectorAll('#cmp-image-actions [data-out^="copy-"]').forEach(el => { el.hidden = layoutOf(b).length < 2; });
     byId('cmp-approve').textContent = b.status === 'new' ? '✓ Duyệt OK' : '↺ Đánh dấu cần xem lại';
     fit();
     tighten();
@@ -388,7 +389,11 @@
       }).concat(document.fonts.ready));
       await Promise.all([...root.querySelectorAll('img')].map(img => img.decode().catch(() => null)));
       tighten(root);
-      const shoot = async el => applyAntiEditWatermark(await html2canvas(el, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true}), watermarkOn(), {alpha: 0.07, lineWidth: 2.4});
+      // Nét sọc dày theo cỡ ảnh (khoảng cách sọc cũng giãn theo cỡ): ảnh 2 tờ rộng ~4900 px dán vào Zalo/Word bị thu nhỏ vẫn còn thấy sọc
+      const shoot = async el => {
+        const canvas = await html2canvas(el, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true});
+        return applyAntiEditWatermark(canvas, watermarkOn(), {alpha: 0.08, lineWidth: 1.6 * Math.max(1, Math.round(canvas.width / 1400))});
+      };
       if (!perPage) return await shoot(root);
       const pages = [];
       for (const page of root.querySelectorAll('.cs-sheet')) pages.push(await shoot(page));
@@ -431,7 +436,10 @@
       if (mode === 'pdf') return await exportPdf([b], b.heading);
       const unnamed = b.columns.filter(c => !c.name || DEFAULT_NAME.test(c.name)).length;
       if (unnamed && !await GDHomeShell.confirm({message: 'Còn ' + unnamed + ' phương án chưa có tên (viền đỏ trên bảng). Vẫn xuất ảnh?', okText: 'Vẫn xuất'})) return;
-      const canvas = await renderCanvas(b);
+      // Bảng 2 tờ: copy riêng tờ trái / tờ phải
+      const page = /^copy-(\d)$/.exec(mode);
+      const canvas = page ? (await renderCanvas(b, true))[Number(page[1])] : await renderCanvas(b);
+      if (!canvas) return toast('Bảng này chỉ có 1 tờ.');
       if (mode === 'png') return download(canvas.toDataURL('image/png'), fileName(b.heading, 'png'));
       const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
       await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
