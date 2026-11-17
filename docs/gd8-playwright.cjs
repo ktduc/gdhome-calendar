@@ -541,7 +541,11 @@ cases['so-sanh'] = async page => {
     assert.ok(Math.abs(gem.center[0] - 0x5a) < 6,'Tâm ngôi sao đã lấp bằng màu nền: ' + gem.center);
     await page.locator('#cmp-prompt-answer').fill('```json\n' + JSON.stringify({heading:'X',columns:[col('Khác 1'),col('Khác 2')]}) + '\n```');
     await page.locator('#cmp-prompt-dlg [data-pr="apply"]').click();
-    await page.locator('#cmp-prompt-dlg').waitFor({state:'hidden'});
+    // Điền bảng xong: hộp vẫn mở, prompt ảnh ghép dựng lại theo tên vừa điền và đã copy sẵn
+    await page.waitForFunction(() => document.getElementById('cmp-prompt-dlg').open && document.querySelector('#cs-sheet .cs-band [data-col="1"] [data-f="name"]')?.textContent === 'Tay nắm dài');
+    assert.ok(await page.locator('#cmp-prompt-dlg').evaluate(d => d.open),'Điền bảng không tắt hộp');
+    assert.match(await page.locator('#cmp-img-collage').inputValue(),/Panel 2: "Tay nắm dài"/);
+    await page.locator('#cmp-prompt-dlg [data-pr="close"]').click();
     assert.equal(await page.locator('#cs-sheet .cs-band [data-col="1"] [data-f="name"]').textContent(),'Tay nắm dài','Dán kết quả vẫn giữ chữ của anh');
     // Tiêu đề dài: luôn 1 dòng, chữ tự co cho vừa
     const head = page.locator('#cs-sheet [data-f="heading"]').first();

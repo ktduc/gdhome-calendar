@@ -635,10 +635,16 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       try {
         const {board: made, issues} = await post('/api/compare/import', {board: target, raw: answer.value});
         fillBoard(target, made);
-        dlg.close();
         renderAll();
         save();
-        toast(issues.length ? 'Đã điền bảng. Cần xem lại: ' + issues[0] : 'Đã điền bảng từ câu trả lời của AI.');
+        // Giữ hộp mở để làm tiếp phần ảnh: prompt ảnh ghép dựng lại theo tên/mô tả vừa điền rồi copy sẵn
+        byId('cmp-img-collage').value = collagePrompt(target);
+        byId('cmp-img-all').value = allImagesPrompt(target);
+        let copied = true;
+        try { await navigator.clipboard.writeText(byId('cmp-img-collage').value); }
+        catch { copied = false; byId('cmp-img-collage').select(); }
+        const done = issues.length ? 'Đã điền bảng (cần xem lại: ' + issues[0] + ').' : 'Đã điền bảng.';
+        toast(done + (copied ? ' Đã copy sẵn prompt ảnh ghép – dán vào Gemini.' : ' Bấm Copy prompt ảnh ghép để lấy prompt ảnh.'));
       } catch (error) { GDHomeShell.alert(error.message); }
     };
     byId('cmp-add-cat').onclick = async () => {
