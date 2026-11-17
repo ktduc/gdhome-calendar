@@ -339,6 +339,70 @@ cases['library-undo'] = async page => {
   assert.ok(box.x + box.width <= close.x + 1 && Math.abs(box.y - close.y) < 20,'Nút Hoàn tác/Làm lại nằm cạnh nút đóng');
 };
 
+cases['so-sanh'] = async page => {
+  const col = (name,kicker = '') => ({kicker,name,desc:'Mô tả '+name,stats:'',pros:['Ưu 1','Ưu 2','Ưu 3'],cons:['Nhược 1','Nhược 2','Nhược 3']});
+  const ideas = [];
+  await page.route('**/api/ai/compare',async route => {
+    const {idea,categories} = route.request().postDataJSON();
+    ideas.push({idea,categories});
+    await new Promise(r => setTimeout(r,150));
+    const board = idea.includes('cửa')
+      ? {category:'CỬA',title:'SO SÁNH',heading:'CỬA CÓ KHUÔN VÀ GIẤU KHUÔN',columns:[col('CỬA CÓ KHUÔN','PHƯƠNG ÁN A:'),col('CỬA GIẤU KHUÔN','PHƯƠNG ÁN B:')],status:'new',idea}
+      : {category:'VẬT LIỆU MỚI',title:'SO SÁNH',heading:'CÁC LOẠI CỐT GỖ',columns:[col('MFC'),col('MDF'),col('HDF')],status:'new',idea};
+    return route.fulfill({json:{success:true,board:{id:'cmp_'+Math.random().toString(36).slice(2,10),...board},issues:[]}});
+  });
+  await page.goto('/so-sanh');
+  await page.locator('#cmp-tree .cmp-cat').first().waitFor();
+  await page.locator('#cmp-ideas').fill('So sánh cửa có khuôn và giấu khuôn\n\nCốt gỗ MFC, MDF, HDF');
+  await page.locator('#cmp-run').click();
+  // Làm lần lượt: 2 dòng -> 2 bảng, hàng đợi trống
+  await page.locator('#cmp-tree li.is-new').nth(1).waitFor();
+  await page.waitForFunction(() => !document.querySelector('#cmp-queue li'));
+  assert.equal(ideas.length,2);
+  assert.deepEqual(ideas[0].categories,['VẬT LIỆU','CỬA'],'Gửi danh mục có sẵn cho AI');
+  assert.deepEqual(await page.locator('#cmp-tree .cmp-cat-head span').allTextContents(),['VẬT LIỆU','CỬA','VẬT LIỆU MỚI'],'Hạng mục mới tự tạo');
+  // Bảng mới được tô nền; mở bảng cửa
+  await page.locator('#cmp-tree [data-board]',{hasText:'CỬA CÓ KHUÔN'}).click();
+  const sheet = page.locator('#cs-sheet');
+  await sheet.waitFor();
+  assert.equal(await sheet.locator('.cs-tab').textContent(),'CỬA');
+  assert.equal(await sheet.locator('.cs-band .cs-name').count(),2);
+  // Bố cục 3 cột rồi về 2 cột
+  await page.locator('.cmp-seg [data-cols="3"]').click();
+  assert.equal(await sheet.locator('.cs-band .cs-name').count(),3);
+  await page.locator('.cmp-seg [data-cols="2"]').click();
+  assert.equal(await page.locator('#cs-sheet .cs-band .cs-name').count(),2);
+  // Sửa trực tiếp: tiêu đề + 1 ý ưu điểm -> lưu server
+  const heading = page.locator('#cs-sheet [data-f="heading"]');
+  await heading.click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' (2026)');
+  await page.locator('#cs-sheet .cs-band [data-col="0"] [data-f="desc"]').click();
+  await page.keyboard.press('End');
+  await page.keyboard.type(' sửa');
+  // Duyệt OK -> hết tô nền, xuống nhóm đã OK
+  await page.locator('#cmp-approve').click();
+  await page.waitForFunction(() => fetch('/api/compare').then(r => r.json()).then(d => {
+    const b = d.boards.find(x => x.heading.startsWith('CỬA CÓ KHUÔN'));
+    return b && b.status === 'ok' && b.heading.endsWith('(2026)') && b.columns[0].desc.endsWith(' sửa');
+  }));
+  assert.equal(await page.locator('#cmp-tree li.is-new').count(),1);
+  // Bảng vừa khổ ở mọi độ rộng, không tràn ngang trang
+  for (const width of [1280,1440,1920,2560]) {
+    await page.setViewportSize({width,height:900});
+    await page.waitForTimeout(100);
+    const fits = await page.evaluate(() => {
+      const stage = document.getElementById('cmp-stage'), sheet = document.getElementById('cs-sheet');
+      return document.documentElement.scrollWidth <= innerWidth && sheet.getBoundingClientRect().right <= stage.getBoundingClientRect().right + 1;
+    });
+    assert.ok(fits,'Vừa khổ ở '+width);
+  }
+  // Xoá bảng dùng hộp xác nhận của web
+  await page.locator('#cmp-delete').click();
+  await page.locator('dialog.gd-ask [data-ask="ok"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('#cmp-tree [data-board]').length === 1);
+};
+
 cases['24.1'] = async page => {
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();

@@ -934,6 +934,27 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     sendJson(res, 200, { success: true, ...(await notionPush(nc, Array.isArray(body.items) ? body.items : [])) });
     return true;
   }
+  // Bảng so sánh: 1 ý tưởng -> 1 bảng; server tự rà, chưa đạt thì gửi lỗi cho AI sửa 1 lần
+  if (urlPath === '/api/ai/compare' && req.method === 'POST') {
+    const ai = resolveAi(await loadUserCfg(store,dataKey));
+    if (!ai) throw httpError(400,'Chưa kết nối AI. Mở ⚙ Kết nối AI để chọn nhà cung cấp và API key.');
+    const body = await readJsonBody(req);
+    const idea = String(body.idea || '').replace(/\s+/g,' ').trim().slice(0,400);
+    if (!idea) throw httpError(400,'Nhập ý tưởng so sánh.');
+    const {normalizeBoard,reviewBoard,COMPARE_SYSTEM} = require('./compare');
+    const categories = (Array.isArray(body.categories) ? body.categories : []).filter(name => typeof name === 'string').slice(0,60).map(name => name.slice(0,40));
+    const text = 'DANH MỤC CÓ SẴN: ' + (categories.join(', ') || '(chưa có)') + '\nÝ TƯỞNG SO SÁNH: ' + idea;
+    let {plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text,COMPARE_SYSTEM);
+    let board = normalizeBoard({...plan,idea}), issues = reviewBoard(board);
+    if (issues.length) {
+      ({plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text + '\nBẢN TRƯỚC:\n' + JSON.stringify(plan).slice(0,8000) +
+        '\nLỖI CẦN SỬA (trả lại toàn bộ JSON đã sửa): ' + issues.join(' '),COMPARE_SYSTEM));
+      board = normalizeBoard({...plan,idea}); issues = reviewBoard(board);
+    }
+    if (!board) throw httpError(502,'AI chưa trả về bảng so sánh hợp lệ. Thử lại hoặc viết ý tưởng rõ hơn.');
+    sendJson(res,200,{success:true,board,issues,model});
+    return true;
+  }
   if (urlPath === '/api/ai/library-filters' && req.method === 'POST') {
     const ai = resolveAi(await loadUserCfg(store,dataKey));
     if (!ai) throw httpError(400,'Chưa kết nối AI. Mở ⚙ Kết nối AI để chọn nhà cung cấp và API key.');
