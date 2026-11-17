@@ -542,6 +542,35 @@ cases['so-sanh'] = async page => {
     await page.locator('#cmp-prompt-dlg [data-pr="apply"]').click();
     await page.locator('#cmp-prompt-dlg').waitFor({state:'hidden'});
     assert.equal(await page.locator('#cs-sheet .cs-band [data-col="1"] [data-f="name"]').textContent(),'Tay nắm dài','Dán kết quả vẫn giữ chữ của anh');
+    // Tiêu đề dài: luôn 1 dòng, chữ tự co cho vừa
+    const head = page.locator('#cs-sheet [data-f="heading"]').first();
+    await head.click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('KHÓA CỬA TAY NẮM TRÒN, TAY GẠT DÀI VÀ KHÓA ĐIỆN TỬ VÂN TAY CHO CĂN HỘ CHUNG CƯ CAO CẤP');
+    const hd = await head.evaluate(el => ({fits: el.scrollWidth <= el.clientWidth + 1, size: parseFloat(getComputedStyle(el).fontSize), lines: Math.round(el.offsetHeight / parseFloat(getComputedStyle(el).lineHeight))}));
+    assert.ok(hd.fits && hd.size < 25 && hd.lines === 1,'Tiêu đề 1 dòng tự co: ' + JSON.stringify(hd));
+    // Ảnh ghép Gemini (2 ô có khe trắng): Ctrl+V khi hộp prompt mở -> tự cắt vào 2 cột
+    await page.locator('#cmp-prompt').click();
+    await page.locator('#cmp-prompt-dlg[open]').waitFor();
+    assert.match(await page.locator('#cmp-img-collage').inputValue(),/ONE single image \(aspect ratio 16:9\)[\s\S]*Panel 1: "Tay nắm tròn"[\s\S]*Panel 2: "Tay nắm dài"/);
+    await page.evaluate(async () => {
+      const c = Object.assign(document.createElement('canvas'),{width:1600,height:900}), x = c.getContext('2d');
+      x.fillStyle = '#fff'; x.fillRect(0,0,1600,900);
+      x.fillStyle = '#c0392b'; x.fillRect(20,60,770,770);
+      x.fillStyle = '#2980b9'; x.fillRect(810,60,770,770);
+      const blob = await new Promise(r => c.toBlob(r,'image/png')), data = new DataTransfer();
+      data.items.add(new File([blob],'ghep.png',{type:'image/png'}));
+      document.getElementById('cmp-prompt-answer').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+    });
+    await page.locator('#cs-sheet .cs-img[data-col="1"] img[data-asset]').waitFor({timeout:15000});
+    await page.waitForFunction(() => document.querySelector('#cs-sheet .cs-img[data-col="0"] img')?.complete && document.querySelector('#cs-sheet .cs-img[data-col="1"] img')?.complete && document.querySelector('#cs-sheet .cs-img[data-col="1"] img').naturalWidth > 0);
+    const tileColors = await page.evaluate(() => [0, 1].map(i => { const img = document.querySelector(`#cs-sheet .cs-img[data-col="${i}"] img`), c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight; const x = c.getContext('2d'); x.drawImage(img,0,0);
+      return {w: img.naturalWidth, h: img.naturalHeight, corner: [...x.getImageData(2,2,1,1).data].slice(0,3), mid: [...x.getImageData(img.naturalWidth >> 1,img.naturalHeight >> 1,1,1).data].slice(0,3)}; }));
+    assert.ok(tileColors.every(t => t.w === t.h),'Ô cắt ra vuông: ' + JSON.stringify(tileColors));
+    assert.ok(tileColors[0].mid[0] > 150 && tileColors[0].mid[2] < 90 && tileColors[1].mid[2] > 150,'Đúng thứ tự ô -> cột');
+    assert.ok(tileColors.every(t => t.corner.some(v => v < 230)),'Đã gọt khe trắng ở mép ô');
+    await page.locator('#cmp-prompt-dlg [data-pr="close"]').click();
   } finally { integrations.compareBoard = original; }
 };
 

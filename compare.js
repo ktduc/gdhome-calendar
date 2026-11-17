@@ -68,10 +68,10 @@ Quy tắc nội dung:
 - "category": hạng mục lớn VIẾT HOA 1–2 từ; ưu tiên chọn đúng một tên trong DANH MỤC CÓ SẴN, chỉ tạo tên mới khi không hợp.
 - Mỗi cột: "kicker" luôn để "", "name" (vd "MDF (Ván mịn)" hoặc "CỬA CÓ KHUÔN (TRUYỀN THỐNG)"), "desc" 1 câu ≤ 110 ký tự giải thích bản chất,
   "stats" (tuỳ chọn) dạng "Giá thành: 2   Độ cứng: 3   Độ bền: 4" thang 1–5, CÙNG tiêu chí và cùng thứ tự ở mọi cột; để trống nếu không có tiêu chí định lượng hợp lý.
-- "pros" và "cons": mỗi cột đúng 3 ý, mỗi ý ≤ 55 ký tự, bắt đầu bằng chữ hoa, không dấu chấm cuối thừa, không lặp ý giữa ưu và nhược.
+- "pros" và "cons": mỗi cột 3–4 ý (4 ý khi phương án có thêm điểm đáng nói; các cột nên cùng số ý), mỗi ý ≤ 55 ký tự, bắt đầu bằng chữ hoa, không dấu chấm cuối thừa, không lặp ý giữa ưu và nhược.
 - Các cột phải đối xứng: cùng góc nhìn (giá, độ bền, thi công, thẩm mỹ, bảo trì…), ý của cột này đối chiếu được với cột kia.
 - Đúng kỹ thuật thi công nội thất Việt Nam, không quảng cáo, không bịa số liệu cụ thể (giá tiền, thương hiệu) nếu ý tưởng không nêu.
-Trước khi trả lời, TỰ RÀ SOÁT: đủ cột, đủ 3 ưu + 3 nhược mỗi cột, stats cùng tiêu chí, không mâu thuẫn giữa các cột, tiếng Việt có dấu đúng chính tả, độ dài trong giới hạn. Sửa lại nếu sai.
+Trước khi trả lời, TỰ RÀ SOÁT: đủ cột, đủ 3–4 ưu + 3–4 nhược mỗi cột, stats cùng tiêu chí, không mâu thuẫn giữa các cột, tiếng Việt có dấu đúng chính tả, độ dài trong giới hạn. Sửa lại nếu sai.
 Chỉ trả JSON: {"category":"VẬT LIỆU","title":"SO SÁNH","heading":"…","columns":[{"kicker":"","name":"…","desc":"…","stats":"","pros":["…","…","…"],"cons":["…","…","…"]}]}`;
 
 // Kiểm tra kết quả AI; trả danh sách lỗi (rỗng = đạt) để gửi lại cho AI sửa 1 lần
@@ -80,7 +80,7 @@ function reviewBoard(board) {
   const issues = [];
   if (!board.heading) issues.push('Thiếu "heading".');
   board.columns.forEach((col, i) => {
-    if (col.pros.length < 2 || col.cons.length < 2) issues.push(`Cột ${i + 1} cần 3 ưu điểm và 3 nhược điểm.`);
+    if (col.pros.length < 2 || col.cons.length < 2) issues.push(`Cột ${i + 1} cần 3–4 ưu điểm và 3–4 nhược điểm.`);
     if (!col.desc) issues.push(`Cột ${i + 1} thiếu "desc".`);
   });
   const statKeys = board.columns.map(col => col.stats.split(/\d+\*?/).map(s => s.replace(/[:\s]+$/,'').trim()).filter(Boolean).join('|'));
@@ -126,7 +126,7 @@ function mergeFill(seed, made) {
   const columns = seed.columns.map((col, i) => {
     const ai = made.columns[i] || {pros: [], cons: []};
     const pick = f => col[f] || ai[f] || '';
-    const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, 3);
+    const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, Math.max(3, Math.min(4, ai[f].length)));   // 3–4 ý theo AI
     // mô tả người dùng đã gõ (có thể gồm cả dòng giá thành) thì không thêm stats của AI
     return {kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: col.desc ? col.stats : pick('stats'), pros: list('pros'), cons: list('cons'), image: null};
   });

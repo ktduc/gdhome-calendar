@@ -85,7 +85,7 @@
       const ai = made.columns[i];
       if (!ai) return col;
       const pick = f => (col[f] && !(f === 'name' && DEFAULT_NAME.test(col[f]))) ? col[f] : ai[f] || col[f];
-      const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, 3);
+      const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, Math.max(3, Math.min(4, ai[f].length)));   // 3–4 ý theo AI
       return {...col, kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: col.desc ? col.stats : pick('stats'), pros: list('pros'), cons: list('cons')};
     });
     if (!target.heading) target.heading = made.heading;
@@ -281,6 +281,12 @@
       while (body.scrollHeight > body.clientHeight + 1 && k > 0.6) sheet.style.setProperty('--k', k = Math.round((k - 0.04) * 100) / 100);
       sheet.classList.toggle('is-overflow', body.scrollHeight > body.clientHeight + 1);
     }
+    // Tiêu đề dưới chữ SO SÁNH luôn 1 dòng: dài thì chữ nhỏ dần cho vừa (tối thiểu 12 px)
+    for (const h of root ? root.querySelectorAll('.cs-title [data-f="heading"]') : []) {
+      h.style.fontSize = '';
+      let size = parseFloat(getComputedStyle(h).fontSize);
+      while (h.scrollWidth > h.clientWidth + 1 && size > 12) h.style.fontSize = (size -= 0.5) + 'px';
+    }
     // Nhiều tờ ghép: phần ƯU ĐIỂM cao bằng nhau để tiêu đề NHƯỢC ĐIỂM thẳng hàng qua các tờ
     const pros = root ? [...root.querySelectorAll('.cs-body > .cs-grid:first-child')] : [];
     if (pros.length > 1) {
@@ -382,7 +388,7 @@
       }).concat(document.fonts.ready));
       await Promise.all([...root.querySelectorAll('img')].map(img => img.decode().catch(() => null)));
       tighten(root);
-      const shoot = async el => applyAntiEditWatermark(await html2canvas(el, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true}), watermarkOn());
+      const shoot = async el => applyAntiEditWatermark(await html2canvas(el, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true}), watermarkOn(), {alpha: 0.07, lineWidth: 2.4});
       if (!perPage) return await shoot(root);
       const pages = [];
       for (const page of root.querySelectorAll('.cs-sheet')) pages.push(await shoot(page));
@@ -449,6 +455,55 @@ Show this option clearly as the main subject, realistic materials and constructi
 Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no logo, no collage.`);
   }
 
+  // Ảnh ghép: Gemini thường chỉ vẽ 1 ảnh mỗi lượt -> xin 1 ảnh chia ô (đồng bộ phong cách), web tự cắt vào từng cột
+  const gridFor = n => n <= 3 ? [n, 1] : n === 4 ? [2, 2] : [3, 2];          // [số cột, số hàng] của ảnh ghép
+  function collagePrompt(b) {
+    const n = b.columns.length, [C, R] = gridFor(n), ratio = {'2x1': '16:9', '3x1': '21:9', '2x2': '1:1', '3x2': '3:2'}[C + 'x' + R];
+    return `Create ONE single image (aspect ratio ${ratio}) laid out as a clean grid of ${C} columns × ${R} row(s) of equal square panels separated by thin pure white gutters, read left-to-right, top-to-bottom:
+${b.columns.map((c, i) => `Panel ${i + 1}: ${subjectOf(b, c)}`).join('\n')}${n < C * R ? `\nLeave the last ${C * R - n} panel plain white.` : ''}
+Comparison topic: ${b.heading || b.idea || ''}.
+All panels photorealistic with the same style, camera angle, lighting and neutral modern Vietnamese apartment background so they compare fairly; each subject centered and fully inside its square panel with realistic materials and construction details.
+No text, no labels, no numbers, no frames other than the white gutters, no watermark, no logo.`;
+  }
+  // Cắt ảnh ghép thành n ô: chia đều theo lưới, gọt viền trắng ở mép ô, rồi lấy hình vuông chính giữa
+  async function splitCollage(blob, n) {
+    const bmp = await createImageBitmap(blob), [C, R] = gridFor(n), W = bmp.width, H = bmp.height;
+    const ctx = Object.assign(document.createElement('canvas'), {width: W, height: H}).getContext('2d', {willReadFrequently: true});
+    ctx.drawImage(bmp, 0, 0);
+    const d = ctx.getImageData(0, 0, W, H).data;
+    const L = (x, y) => { const k = (y * W + x) * 4; return 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2]; };
+    const whiteLine = (x0, y0, x1, y1) => {           // đường ngang/dọc gần như trắng tinh = khe giữa các ô
+      let sum = 0, min = 255, n2 = 0;
+      for (let t = 0; t <= 1; t += 1 / 40) { const l = L(Math.round(x0 + (x1 - x0) * t), Math.round(y0 + (y1 - y0) * t)); sum += l; min = Math.min(min, l); n2++; }
+      return sum / n2 > 238 && min > 205;
+    };
+    const tiles = [];
+    for (let i = 0; i < n; i++) {
+      const cw = W / C, ch = H / R, col = i % C, row = (i / C) | 0;
+      let x0 = Math.round(col * cw), x1 = Math.round((col + 1) * cw) - 1, y0 = Math.round(row * ch), y1 = Math.round((row + 1) * ch) - 1;
+      const limit = 0.15 * Math.min(cw, ch);
+      for (let k = 0; k < limit && whiteLine(x0, y0, x0, y1); k++) x0++;
+      for (let k = 0; k < limit && whiteLine(x1, y0, x1, y1); k++) x1--;
+      for (let k = 0; k < limit && whiteLine(x0, y0, x1, y0); k++) y0++;
+      for (let k = 0; k < limit && whiteLine(x0, y1, x1, y1); k++) y1--;
+      const s = Math.min(x1 - x0 + 1, y1 - y0 + 1), sx = x0 + ((x1 - x0 + 1 - s) >> 1), sy = y0 + ((y1 - y0 + 1 - s) >> 1);
+      const tile = Object.assign(document.createElement('canvas'), {width: s, height: s});
+      tile.getContext('2d').drawImage(bmp, sx, sy, s, s, 0, 0, s, s);
+      tiles.push(await new Promise(resolve => tile.toBlob(resolve, 'image/png')));
+    }
+    return tiles;
+  }
+  async function useCollage(blob) {
+    const b = board();
+    if (!b) return;
+    try {
+      toast('Đang tách ảnh ghép thành ' + b.columns.length + ' ô…');
+      const tiles = await splitCollage(blob, b.columns.length);
+      for (const [i, tile] of tiles.entries()) await uploadBlob(i, tile);
+      toast('Đã đưa ' + tiles.length + ' ảnh vào các cột.');
+    } catch (error) { GDHomeShell.alert('Không tách được ảnh ghép: ' + error.message); }
+  }
+
   // ---------------------------------------------------------------- SỰ KIỆN
   function wire() {
     byId('cmp-run').onclick = async () => {
@@ -507,21 +562,36 @@ Aspect ratio ${ratio}. Exactly ONE image. No text, no labels, no watermark, no l
         byId('cmp-prompt-text').value = prompt;
         byId('cmp-prompt-answer').value = '';
         byId('cmp-img-all').value = allImagesPrompt(b);
+        byId('cmp-img-collage').value = collagePrompt(b);
         byId('cmp-img-prompts').innerHTML = imagePrompts(b).map((text, i) => `<div class="cmp-img-prompt"><div><b>Cột ${i + 1}: ${esc(b.columns[i].name || '')}</b>
           <button type="button" class="gd-ask-btn" data-pr="copy-img" data-i="${i}">📋 Copy prompt ảnh</button></div><textarea readonly rows="3">${esc(text)}</textarea></div>`).join('');
         dlg.dataset.board = b.id;
         dlg.showModal();
       } catch (error) { GDHomeShell.alert(error.message); }
     };
+    // Ctrl+V ảnh khi hộp prompt đang mở = ảnh ghép, tự tách vào các cột
+    dlg.addEventListener('paste', e => {
+      const file = clipboardImage(e.clipboardData);
+      if (file) { e.preventDefault(); useCollage(file); }
+    });
     dlg.onclick = async e => {
       const act = e.target.closest('[data-pr]')?.dataset.pr;
       if (act === 'close') return dlg.close();
-      if (act === 'copy' || act === 'copy-img' || act === 'copy-all-img') {
-        const area = act === 'copy' ? byId('cmp-prompt-text') : act === 'copy-all-img' ? byId('cmp-img-all') : e.target.closest('.cmp-img-prompt').querySelector('textarea');
+      if (act === 'paste-collage') {
+        try {
+          for (const item of await navigator.clipboard.read()) {
+            const type = item.types.find(t => t.startsWith('image/'));
+            if (type) return useCollage(await item.getType(type));
+          }
+          return toast('Clipboard chưa có ảnh. Copy ảnh ghép Gemini vẽ rồi bấm lại (hoặc Ctrl+V).');
+        } catch { return toast('Trình duyệt chặn đọc clipboard: nhấn Ctrl+V khi hộp này đang mở.'); }
+      }
+      if (act === 'copy' || act === 'copy-img' || act === 'copy-all-img' || act === 'copy-collage') {
+        const area = act === 'copy' ? byId('cmp-prompt-text') : act === 'copy-all-img' ? byId('cmp-img-all') : act === 'copy-collage' ? byId('cmp-img-collage') : e.target.closest('.cmp-img-prompt').querySelector('textarea');
         try { await navigator.clipboard.writeText(area.value); }
         catch { area.select(); document.execCommand('copy'); }
         return toast({copy: 'Đã copy prompt chữ – dán vào ChatGPT / Claude / Gemini.', 'copy-img': 'Đã copy prompt ảnh – gửi riêng để AI vẽ 1 ảnh rời.',
-          'copy-all-img': 'Đã copy prompt tất cả ảnh – dán vào Gemini để nhận đủ ảnh 1 lần.'}[act]);
+          'copy-all-img': 'Đã copy prompt nhiều ảnh rời.', 'copy-collage': 'Đã copy prompt ảnh ghép – dán vào Gemini, vẽ xong copy ảnh rồi bấm Dán ảnh ghép.'}[act]);
       }
       if (act !== 'apply') return;
       const target = doc.boards.find(x => x.id === dlg.dataset.board);

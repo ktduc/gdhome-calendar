@@ -1,4 +1,5 @@
-function applyAntiEditWatermark(canvas, enabled = true) {
+// opts.alpha / opts.lineWidth: trang cần sọc rõ hơn (nền xám, ảnh chụp ×2) truyền vào; mặc định giữ như Chốt mã
+function applyAntiEditWatermark(canvas, enabled = true, opts = {}) {
   if (!canvas || canvas.__gdWatermarked) return canvas;
   if (!enabled) return canvas;
   const w = canvas.width;
@@ -28,9 +29,9 @@ function applyAntiEditWatermark(canvas, enabled = true) {
   ctx.globalCompositeOperation = 'source-over';
   // Sọc chéo 1 chiều duy nhất: từ PHẢI sang TRÁI, trên xuống dưới ( / ).
   // Nét mảnh nhất có thể (1px), xếp rất dày (cách ~3px) và rất mờ -> như lớp vân chìm phủ toàn ảnh.
-  ctx.globalAlpha = 0.035;
+  ctx.globalAlpha = opts.alpha ?? 0.035;
   ctx.strokeStyle = '#334155';
-  ctx.lineWidth = 1.2; // dày hơn ~20%
+  ctx.lineWidth = (opts.lineWidth ?? 1.2); // dày hơn ~20%
   ctx.lineCap = 'butt';
   const gap = 3.45 * unit; // thưa hơn 15%
   ctx.beginPath();

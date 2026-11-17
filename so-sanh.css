@@ -150,3 +150,5 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cs-board:not(.is-exporting) .cs-sheet.is-overflow .cs-body { box-shadow: inset 0 -4px 0 #d93025; }   /* nhỏ hết mức vẫn tràn: báo viền đỏ dưới */
 .cmp-img-all { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 12.5px; color: #64748b; }
 .export-watermark-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
+.cs-title { flex: 1; min-width: 0; }
+.cs-title [data-f=heading] { white-space: nowrap; overflow: hidden; }   /* 1 dòng, chữ tự co trong tighten() */
