@@ -91,7 +91,7 @@ cases['24.2'] = async page => {
 cases['todo'] = async page => {
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();
-  assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false,'Bảng Lịch không hiện Todo');
+  await page.locator('#gd-todo-toggle').waitFor();   // Todo hiện ở mọi trang, cả Bảng Lịch
   await page.locator('#btn-view-msproject').click();
   for (const width of [1280,1440,1920,2560]) {
     await page.setViewportSize({width,height:900});
@@ -249,10 +249,10 @@ cases['todo'] = async page => {
   const panelBox = await panel.boundingBox();
   assert.ok(panelBox.height >= 900 - 90,'Cửa sổ Todo cao hết màn hình: '+panelBox.height);
   assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false);
-  // Về Bảng Lịch: Todo ẩn
+  // Về Bảng Lịch: cửa sổ Todo vẫn hiện (dùng ở mọi trang)
   await page.locator('#btn-view-calendar').click();
-  assert.equal(await page.locator('#gd-todo-toggle').isVisible(),false);
-  assert.equal(await panel.isVisible(),false);
+  await page.waitForTimeout(200);
+  assert.equal(await panel.isVisible(),true);
 };
 
 cases['multi-delete'] = async page => {
@@ -342,65 +342,105 @@ cases['library-undo'] = async page => {
 cases['so-sanh'] = async page => {
   const col = (name,kicker = '') => ({kicker,name,desc:'Mô tả '+name,stats:'',pros:['Ưu 1','Ưu 2','Ưu 3'],cons:['Nhược 1','Nhược 2','Nhược 3']});
   const ideas = [];
-  await page.route('**/api/ai/compare',async route => {
-    const {idea,categories} = route.request().postDataJSON();
+  // AI chạy nền trên server: giả lập hàm soạn bảng của server
+  const integrations = require('../integrations'), original = integrations.compareBoard;
+  const {normalizeBoard} = require('../compare');
+  integrations.compareBoard = async (store,dataKey,idea,categories,onStep) => {
     ideas.push({idea,categories});
-    await new Promise(r => setTimeout(r,150));
+    await onStep('AI đang soạn bảng');
+    await new Promise(r => setTimeout(r,2500));
     const board = idea.includes('cửa')
-      ? {category:'CỬA',title:'SO SÁNH',heading:'CỬA CÓ KHUÔN VÀ GIẤU KHUÔN',columns:[col('CỬA CÓ KHUÔN','PHƯƠNG ÁN A:'),col('CỬA GIẤU KHUÔN','PHƯƠNG ÁN B:')],status:'new',idea}
-      : {category:'VẬT LIỆU MỚI',title:'SO SÁNH',heading:'CÁC LOẠI CỐT GỖ',columns:[col('MFC'),col('MDF'),col('HDF')],status:'new',idea};
-    return route.fulfill({json:{success:true,board:{id:'cmp_'+Math.random().toString(36).slice(2,10),...board},issues:[]}});
-  });
-  await page.goto('/so-sanh');
-  await page.locator('#cmp-tree .cmp-cat').first().waitFor();
-  await page.locator('#cmp-ideas').fill('So sánh cửa có khuôn và giấu khuôn\n\nCốt gỗ MFC, MDF, HDF');
-  await page.locator('#cmp-run').click();
-  // Làm lần lượt: 2 dòng -> 2 bảng, hàng đợi trống
-  await page.locator('#cmp-tree li.is-new').nth(1).waitFor();
-  await page.waitForFunction(() => !document.querySelector('#cmp-queue li'));
-  assert.equal(ideas.length,2);
-  assert.deepEqual(ideas[0].categories,['VẬT LIỆU','CỬA'],'Gửi danh mục có sẵn cho AI');
-  assert.deepEqual(await page.locator('#cmp-tree .cmp-cat-head span').allTextContents(),['VẬT LIỆU','CỬA','VẬT LIỆU MỚI'],'Hạng mục mới tự tạo');
-  // Bảng mới được tô nền; mở bảng cửa
-  await page.locator('#cmp-tree [data-board]',{hasText:'CỬA CÓ KHUÔN'}).click();
-  const sheet = page.locator('#cs-sheet');
-  await sheet.waitFor();
-  assert.equal(await sheet.locator('.cs-tab').textContent(),'CỬA');
-  assert.equal(await sheet.locator('.cs-band .cs-name').count(),2);
-  // Bố cục 3 cột rồi về 2 cột
-  await page.locator('.cmp-seg [data-cols="3"]').click();
-  assert.equal(await sheet.locator('.cs-band .cs-name').count(),3);
-  await page.locator('.cmp-seg [data-cols="2"]').click();
-  assert.equal(await page.locator('#cs-sheet .cs-band .cs-name').count(),2);
-  // Sửa trực tiếp: tiêu đề + 1 ý ưu điểm -> lưu server
-  const heading = page.locator('#cs-sheet [data-f="heading"]');
-  await heading.click();
-  await page.keyboard.press('End');
-  await page.keyboard.type(' (2026)');
-  await page.locator('#cs-sheet .cs-band [data-col="0"] [data-f="desc"]').click();
-  await page.keyboard.press('End');
-  await page.keyboard.type(' sửa');
-  // Duyệt OK -> hết tô nền, xuống nhóm đã OK
-  await page.locator('#cmp-approve').click();
-  await page.waitForFunction(() => fetch('/api/compare').then(r => r.json()).then(d => {
-    const b = d.boards.find(x => x.heading.startsWith('CỬA CÓ KHUÔN'));
-    return b && b.status === 'ok' && b.heading.endsWith('(2026)') && b.columns[0].desc.endsWith(' sửa');
-  }));
-  assert.equal(await page.locator('#cmp-tree li.is-new').count(),1);
-  // Bảng vừa khổ ở mọi độ rộng, không tràn ngang trang
-  for (const width of [1280,1440,1920,2560]) {
-    await page.setViewportSize({width,height:900});
-    await page.waitForTimeout(100);
-    const fits = await page.evaluate(() => {
-      const stage = document.getElementById('cmp-stage'), sheet = document.getElementById('cs-sheet');
-      return document.documentElement.scrollWidth <= innerWidth && sheet.getBoundingClientRect().right <= stage.getBoundingClientRect().right + 1;
+      ? {category:'CỬA',title:'SO SÁNH',heading:'CỬA CÓ KHUÔN VÀ GIẤU KHUÔN',columns:[col('CỬA CÓ KHUÔN','PHƯƠNG ÁN A:'),col('CỬA GIẤU KHUÔN','PHƯƠNG ÁN B:')],idea}
+      : {category:'VẬT LIỆU MỚI',title:'SO SÁNH',heading:'CÁC LOẠI CỐT GỖ',columns:[col('MFC'),col('MDF'),col('HDF')],idea};
+    return {board:normalizeBoard(board),issues:[]};
+  };
+  const catOf = name => page.locator('#cmp-tree .cmp-cat',{has:page.locator('.cmp-cat-name',{hasText:new RegExp('^'+name+'$')})});
+  try {
+    await page.goto('/so-sanh');
+    await page.locator('#cmp-tree .cmp-cat').first().waitFor();
+    await page.locator('#cmp-ideas').fill('So sánh cửa có khuôn và giấu khuôn\n\nCốt gỗ MFC, MDF, HDF');
+    await page.locator('#cmp-run').click();
+    // Có tiến trình: số bảng, bước đang làm
+    const progress = page.locator('#cmp-progress');
+    await progress.getByText('AI đang làm 2 bảng').waitFor();
+    await progress.getByText('AI đang soạn bảng').waitFor({timeout:6000});
+    // F5 giữa chừng: server vẫn làm tiếp, mở lại nhận đủ 2 bảng
+    await page.reload();
+    await page.locator('#cmp-tree li.is-new').nth(1).waitFor({timeout:15000});
+    await page.waitForFunction(() => document.getElementById('cmp-progress').hidden && !document.querySelector('#cmp-queue li'),null,{timeout:15000});
+    assert.equal(ideas.length,2);
+    assert.deepEqual(ideas[0].categories,['VẬT LIỆU','CỬA'],'Gửi danh mục có sẵn cho AI');
+    assert.deepEqual(await page.locator('#cmp-tree .cmp-cat-name').allTextContents(),['VẬT LIỆU','CỬA','VẬT LIỆU MỚI'],'Hạng mục mới tự tạo');
+    // Kéo thả: hạng mục "VẬT LIỆU MỚI" lên đầu
+    await catOf('VẬT LIỆU MỚI').locator('.cmp-cat-head').dragTo(page.locator('#cmp-tree .cmp-cat').first(),{targetPosition:{x:20,y:4}});
+    assert.deepEqual(await page.locator('#cmp-tree .cmp-cat-name').allTextContents(),['VẬT LIỆU MỚI','VẬT LIỆU','CỬA']);
+    // Kéo bảng "CÁC LOẠI CỐT GỖ" sang hạng mục VẬT LIỆU
+    await page.locator('#cmp-tree li[data-board-id]',{hasText:'CÁC LOẠI CỐT GỖ'}).dragTo(catOf('VẬT LIỆU').locator('.cmp-cat-head'));
+    await catOf('VẬT LIỆU').getByText('CÁC LOẠI CỐT GỖ').waitFor();
+    // Hoàn tác / Làm lại
+    await page.locator('#cmp-undo').click();
+    await catOf('VẬT LIỆU MỚI').getByText('CÁC LOẠI CỐT GỖ').waitFor();
+    await page.locator('#cmp-redo').click();
+    await catOf('VẬT LIỆU').getByText('CÁC LOẠI CỐT GỖ').waitFor();
+    // Mở bảng cửa
+    await page.locator('#cmp-tree [data-board]',{hasText:'CỬA CÓ KHUÔN'}).click();
+    const sheet = page.locator('#cs-sheet');
+    await sheet.waitFor();
+    assert.equal(await sheet.locator('.cs-tab').textContent(),'CỬA');
+    // Bố cục 3 cột rồi về 2 cột
+    await page.locator('.cmp-seg [data-cols="3"]').click();
+    assert.equal(await sheet.locator('.cs-band .cs-name').count(),3);
+    await page.locator('.cmp-seg [data-cols="2"]').click();
+    assert.equal(await page.locator('#cs-sheet .cs-band .cs-name').count(),2);
+    // Ctrl+V ảnh (chụp màn hình / file đã copy) vào ô ảnh đang chọn
+    await page.locator('#cs-sheet .cs-img[data-col="1"]').click({position:{x:20,y:20}});
+    await page.evaluate(async () => {
+      const canvas = Object.assign(document.createElement('canvas'),{width:60,height:60});
+      canvas.getContext('2d').fillRect(0,0,60,60);
+      const blob = await new Promise(r => canvas.toBlob(r,'image/png'));
+      const data = new DataTransfer();
+      data.items.add(new File([blob],'man-hinh.png',{type:'image/png'}));
+      document.body.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
     });
-    assert.ok(fits,'Vừa khổ ở '+width);
-  }
-  // Xoá bảng dùng hộp xác nhận của web
-  await page.locator('#cmp-delete').click();
-  await page.locator('dialog.gd-ask [data-ask="ok"]').click();
-  await page.waitForFunction(() => document.querySelectorAll('#cmp-tree [data-board]').length === 1);
+    await page.locator('#cs-sheet .cs-img[data-col="1"] img[data-asset]').waitFor({timeout:8000});
+    // Sửa trực tiếp: tiêu đề + mô tả -> lưu server
+    await page.locator('#cs-sheet [data-f="heading"]').click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' (2026)');
+    await page.locator('#cs-sheet .cs-band [data-col="0"] [data-f="desc"]').click();
+    await page.keyboard.press('End');
+    await page.keyboard.type(' sửa');
+    // Duyệt OK -> hết tô nền
+    await page.locator('#cmp-approve').click();
+    await page.waitForFunction(() => fetch('/api/compare').then(r => r.json()).then(d => {
+      const b = d.boards.find(x => x.heading.startsWith('CỬA CÓ KHUÔN'));
+      return b && b.status === 'ok' && b.heading.endsWith('(2026)') && b.columns[0].desc.endsWith(' sửa') && b.columns[1].image?.full;
+    }));
+    assert.equal(await page.locator('#cmp-tree li.is-new').count(),1);
+    // 100% / Vừa khung
+    await page.locator('[data-zoom="full"]').click();
+    assert.equal(await sheet.evaluate(el => el.style.zoom),'1');
+    await page.locator('[data-zoom="fit"]').click();
+    // Header: tài khoản sát phải, có nút sáng/tối và Todo
+    const right = await page.locator('.shell-account').evaluate(el => el.getBoundingClientRect().right);
+    assert.ok(right > page.viewportSize().width - 40,'Ô tài khoản sát phải: '+right);
+    await page.locator('.shell-theme-toggle').waitFor();
+    await page.locator('#gd-todo-toggle').waitFor();
+    // Vừa khổ ở mọi độ rộng
+    for (const width of [1280,1440,1920,2560]) {
+      await page.setViewportSize({width,height:900});
+      await page.waitForTimeout(100);
+      const fits = await page.evaluate(() => {
+        const stage = document.getElementById('cmp-stage'), s = document.getElementById('cs-sheet');
+        return document.documentElement.scrollWidth <= innerWidth && s.getBoundingClientRect().right <= stage.getBoundingClientRect().right + 1;
+      });
+      assert.ok(fits,'Vừa khổ ở '+width);
+    }
+    // Xoá bảng dùng hộp xác nhận của web
+    await page.locator('#cmp-delete').click();
+    await page.locator('dialog.gd-ask [data-ask="ok"]').click();
+    await page.waitForFunction(() => document.querySelectorAll('#cmp-tree [data-board]').length === 1);
+  } finally { integrations.compareBoard = original; }
 };
 
 cases['24.1'] = async page => {

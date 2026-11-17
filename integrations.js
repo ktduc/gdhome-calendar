@@ -903,6 +903,30 @@ async function updateSettings(store, dataKey, body) {
 // -------------------------------------------------------------------------
 // ROUTER: trả về true nếu đã xử lý
 // -------------------------------------------------------------------------
+// Bảng so sánh: 1 ý tưởng -> 1 bảng; server tự rà, chưa đạt thì gửi lỗi cho AI sửa 1 lần.
+// Dùng cho route /api/ai/compare và hàng đợi chạy nền của trang /so-sanh (compare.js).
+async function compareBoard(store,dataKey,rawIdea,rawCategories,onStep = () => {}) {
+  const ai = resolveAi(await loadUserCfg(store,dataKey));
+  if (!ai) throw httpError(400,'Chưa kết nối AI. Mở ⚙ Kết nối AI để chọn nhà cung cấp và API key.');
+  const idea = String(rawIdea || '').replace(/\s+/g,' ').trim().slice(0,400);
+  if (!idea) throw httpError(400,'Nhập ý tưởng so sánh.');
+  const {normalizeBoard,reviewBoard,COMPARE_SYSTEM} = require('./compare');
+  const categories = (Array.isArray(rawCategories) ? rawCategories : []).filter(name => typeof name === 'string').slice(0,60).map(name => name.slice(0,40));
+  const text = 'DANH MỤC CÓ SẴN: ' + (categories.join(', ') || '(chưa có)') + '\nÝ TƯỞNG SO SÁNH: ' + idea;
+  onStep('AI đang soạn bảng');
+  let {plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text,COMPARE_SYSTEM);
+  onStep('Đang rà soát kết quả');
+  let board = normalizeBoard({...plan,idea}), issues = reviewBoard(board);
+  if (issues.length) {
+    onStep('AI đang sửa theo rà soát');
+    ({plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text + '\nBẢN TRƯỚC:\n' + JSON.stringify(plan).slice(0,8000) +
+      '\nLỖI CẦN SỬA (trả lại toàn bộ JSON đã sửa): ' + issues.join(' '),COMPARE_SYSTEM));
+    board = normalizeBoard({...plan,idea}); issues = reviewBoard(board);
+  }
+  if (!board) throw httpError(502,'AI chưa trả về bảng so sánh hợp lệ. Thử lại hoặc viết ý tưởng rõ hơn.');
+  return {board,issues,model};
+}
+
 async function handleIntegrations(req, res, urlPath, ctx) {
   const { sendJson, readJsonBody, dataKey, store } = ctx;
   if (urlPath === '/api/integrations/settings' && req.method === 'GET') {
@@ -934,25 +958,9 @@ async function handleIntegrations(req, res, urlPath, ctx) {
     sendJson(res, 200, { success: true, ...(await notionPush(nc, Array.isArray(body.items) ? body.items : [])) });
     return true;
   }
-  // Bảng so sánh: 1 ý tưởng -> 1 bảng; server tự rà, chưa đạt thì gửi lỗi cho AI sửa 1 lần
   if (urlPath === '/api/ai/compare' && req.method === 'POST') {
-    const ai = resolveAi(await loadUserCfg(store,dataKey));
-    if (!ai) throw httpError(400,'Chưa kết nối AI. Mở ⚙ Kết nối AI để chọn nhà cung cấp và API key.');
     const body = await readJsonBody(req);
-    const idea = String(body.idea || '').replace(/\s+/g,' ').trim().slice(0,400);
-    if (!idea) throw httpError(400,'Nhập ý tưởng so sánh.');
-    const {normalizeBoard,reviewBoard,COMPARE_SYSTEM} = require('./compare');
-    const categories = (Array.isArray(body.categories) ? body.categories : []).filter(name => typeof name === 'string').slice(0,60).map(name => name.slice(0,40));
-    const text = 'DANH MỤC CÓ SẴN: ' + (categories.join(', ') || '(chưa có)') + '\nÝ TƯỞNG SO SÁNH: ' + idea;
-    let {plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text,COMPARE_SYSTEM);
-    let board = normalizeBoard({...plan,idea}), issues = reviewBoard(board);
-    if (issues.length) {
-      ({plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text + '\nBẢN TRƯỚC:\n' + JSON.stringify(plan).slice(0,8000) +
-        '\nLỖI CẦN SỬA (trả lại toàn bộ JSON đã sửa): ' + issues.join(' '),COMPARE_SYSTEM));
-      board = normalizeBoard({...plan,idea}); issues = reviewBoard(board);
-    }
-    if (!board) throw httpError(502,'AI chưa trả về bảng so sánh hợp lệ. Thử lại hoặc viết ý tưởng rõ hơn.');
-    sendJson(res,200,{success:true,board,issues,model});
+    sendJson(res,200,{success:true,...await compareBoard(store,dataKey,body.idea,body.categories)});
     return true;
   }
   if (urlPath === '/api/ai/library-filters' && req.method === 'POST') {
@@ -1169,7 +1177,7 @@ async function handleIntegrations(req, res, urlPath, ctx) {
   return false;
 }
 
-module.exports = {
+module.exports = { compareBoard,
   features,
   handleIntegrations,
   parseNotionId,

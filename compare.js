@@ -89,7 +89,111 @@ function withWrite(key, fn) {
   return next;
 }
 
-async function handleCompare(req, res, urlPath, {store, dataKey, readJsonBody, sendJson}) {
+// ---------------------------------------------------------------- HÀNG ĐỢI AI CHẠY NỀN
+// Server tự làm lần lượt, kể cả khi đóng trang / F5. Kết quả nằm ở hàng đợi tới khi trang mở lại và nhận (ack).
+// shortcut: server khởi động lại (deploy/ngủ) thì việc đang làm quay về "chờ" và chạy lại khi mở trang – đủ cho vài chục bảng.
+const queueKeyFor = dataKey => 'compare-queue-v1-' + crypto.createHash('sha256').update(String(dataKey)).digest('hex').slice(0, 24);
+const workers = new Set();
+
+async function readQueue(store, qkey) {
+  const data = await store.get(qkey);
+  return Array.isArray(data?.jobs) ? data.jobs : [];
+}
+function changeQueue(store, qkey, fn) {
+  return withWrite(qkey, async () => {
+    const jobs = await readQueue(store, qkey);
+    const result = fn(jobs);
+    await store.put(qkey, {jobs});
+    return result;
+  });
+}
+
+async function runWorker(store, dataKey, makeBoard) {
+  const qkey = queueKeyFor(dataKey);
+  if (workers.has(qkey)) return;
+  workers.add(qkey);
+  try {
+    for (;;) {
+      const job = await changeQueue(store, qkey, jobs => {
+        const next = jobs.find(j => j.state === 'waiting');
+        if (next) Object.assign(next, {state: 'running', step: 'Đang gửi AI', startedAt: Date.now(), error: ''});
+        return next && {...next};
+      });
+      if (!job) break;
+      const setStep = step => changeQueue(store, qkey, jobs => { const j = jobs.find(x => x.id === job.id); if (j && j.state === 'running') j.step = step; }).catch(() => {});
+      try {
+        const {board, issues} = await makeBoard(job.idea, job.categories, setStep);
+        await changeQueue(store, qkey, jobs => {
+          const j = jobs.find(x => x.id === job.id);
+          if (j) Object.assign(j, {state: 'done', board, issues: issues || [], finishedAt: Date.now(), step: ''});
+        });
+      } catch (error) {
+        await changeQueue(store, qkey, jobs => {
+          const j = jobs.find(x => x.id === job.id);
+          if (j) Object.assign(j, {state: 'error', error: String(error.message || 'Lỗi AI').slice(0, 300), finishedAt: Date.now(), step: ''});
+        });
+        if (error.status === 400) {                     // chưa kết nối AI: dừng, các việc còn lại giữ "chờ"
+          break;
+        }
+      }
+    }
+  } finally { workers.delete(qkey); }
+}
+
+function queueView(jobs) {
+  const times = jobs.filter(j => j.state === 'done' && j.finishedAt && j.startedAt).map(j => j.finishedAt - j.startedAt);
+  return {jobs, avgMs: times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 45000, now: Date.now()};
+}
+
+async function handleQueue(req, urlPath, {store, dataKey, readJsonBody, sendJson, res, makeBoard}) {
+  const qkey = queueKeyFor(dataKey);
+  const kick = () => { runWorker(store, dataKey, makeBoard).catch(error => console.error('[SO SÁNH] Hàng đợi lỗi:', error.message)); };
+  if (req.method === 'GET') {
+    // Mở trang sau khi server khởi động lại: việc "đang làm" dở quay về "chờ" rồi chạy tiếp
+    const jobs = await changeQueue(store, qkey, list => {
+      if (!workers.has(qkey)) list.forEach(j => { if (j.state === 'running') Object.assign(j, {state: 'waiting', step: ''}); });
+      return list;
+    });
+    if (jobs.some(j => j.state === 'waiting')) kick();
+    return sendJson(res, 200, queueView(jobs));
+  }
+  const body = await readJsonBody(req);
+  if (urlPath === '/api/compare/queue') {
+    const ideas = (Array.isArray(body.ideas) ? body.ideas : []).map(idea => str(idea, 400)).filter(Boolean).slice(0, 100);
+    if (!ideas.length) throw fail(400, 'Nhập ít nhất 1 dòng ý tưởng so sánh.');
+    const categories = (Array.isArray(body.categories) ? body.categories : []).map(name => str(name, 40)).filter(Boolean).slice(0, 60);
+    const jobs = await changeQueue(store, qkey, list => {
+      if (list.length + ideas.length > 300) throw fail(400, 'Hàng đợi đã quá dài (tối đa 300 việc).');
+      list.push(...ideas.map(idea => ({id: 'job_' + crypto.randomUUID(), idea, categories, state: 'waiting', createdAt: Date.now()})));
+      return list;
+    });
+    kick();
+    return sendJson(res, 200, queueView(jobs));
+  }
+  const ids = new Set(Array.isArray(body.ids) ? body.ids.map(String) : [String(body.id || '')]);
+  if (urlPath === '/api/compare/queue/ack' || urlPath === '/api/compare/queue/delete') {
+    // ack: trang đã nhận bảng; delete: bỏ việc đang chờ / lỗi (việc đang chạy không bỏ được)
+    const jobs = await changeQueue(store, qkey, list => {
+      const keep = list.filter(j => !ids.has(j.id) || (j.state === 'running'));
+      list.splice(0, list.length, ...keep);
+      return list;
+    });
+    return sendJson(res, 200, queueView(jobs));
+  }
+  if (urlPath === '/api/compare/queue/retry') {
+    const jobs = await changeQueue(store, qkey, list => {
+      list.forEach(j => { if (ids.has(j.id) && j.state === 'error') Object.assign(j, {state: 'waiting', error: ''}); });
+      return list;
+    });
+    kick();
+    return sendJson(res, 200, queueView(jobs));
+  }
+  throw fail(404, 'API hàng đợi không tồn tại.');
+}
+
+async function handleCompare(req, res, urlPath, ctx) {
+  const {store, dataKey, readJsonBody, sendJson} = ctx;
+  if (urlPath.startsWith('/api/compare/queue')) return handleQueue(req, urlPath, {...ctx, res});
   const key = keyFor(dataKey);
   if (urlPath === '/api/compare' && req.method === 'GET') {
     const doc = await store.get(key);
@@ -111,4 +215,4 @@ async function handleCompare(req, res, urlPath, {store, dataKey, readJsonBody, s
   throw fail(404, 'API so sánh không tồn tại.');
 }
 
-module.exports = {handleCompare, normalizeBoard, normalizeDoc, reviewBoard, COMPARE_SYSTEM, defaultDoc, keyFor};
+module.exports = {handleCompare, normalizeBoard, normalizeDoc, reviewBoard, COMPARE_SYSTEM, defaultDoc, keyFor, queueKeyFor, runWorker};

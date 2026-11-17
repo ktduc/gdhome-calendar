@@ -1,6 +1,6 @@
 // =========================================================================
 // GD HOME - VIỆC CẦN LÀM (TODO) TRÊN TIMELINE
-// - Chỉ hiện khi đang ở chế độ Timeline (nằm trong #msproject-view-wrapper)
+// - Hiện ở mọi trang của bộ công cụ (nút nổi góc phải dưới); kéo vào Timeline / xếp dự án chỉ có ở trang Lịch
 // - Kéo thả trong danh sách để đổi thứ tự; ★ bên phải = ưu tiên (đồng bộ "Quan trọng" của Microsoft To Do)
 // - Kéo việc thả lên Timeline -> thành hạng mục trong dự án riêng "TODO" (giống dự án NOTION, luôn ở cuối)
 //   Giữ Shift khi thả lên dòng dự án khác, hoặc bấm 📁 trên việc -> xếp/chuyển sang dự án đó
@@ -19,9 +19,11 @@
   let root, listEl, inputEl, toggleBtn, statusEl, msEl;
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
-  const toast = (m) => { if (typeof showToast === 'function') showToast(m); };
+  // Trang Lịch (app.js) có AppState + Timeline; các trang khác chỉ dùng danh sách việc
+  const onSchedule = () => typeof AppState !== 'undefined' && typeof syncAllFromMSProject === 'function';
+  const toast = (m) => { if (typeof showToast === 'function') showToast(m); else window.GDHomeShell?.toast(m); };
   const fmtDate = (d) => d ? d.slice(8, 10) + '/' + d.slice(5, 7) : '';
-  const todayStr = () => formatDateStr(new Date());
+  const todayStr = () => new Intl.DateTimeFormat('sv-SE', {timeZone: 'Asia/Ho_Chi_Minh'}).format(new Date());
   const isTimelineVisible = () => {
     const w = document.getElementById('msproject-view-wrapper');
     return !!(w && w.offsetParent !== null && w.style.display !== 'none');
@@ -38,7 +40,10 @@
   const scheduleReady = () => typeof _scheduleReady === 'undefined' || _scheduleReady || (typeof _guestMode !== 'undefined' && _guestMode);
 
   async function api(path, options = {}) {
-    const res = await apiFetch(path, Object.assign({}, options, options.body ? {body: JSON.stringify(options.body)} : {}), false);
+    const init = Object.assign({}, options, options.body ? {body: JSON.stringify(options.body)} : {});
+    const res = typeof apiFetch === 'function' ? await apiFetch(path, init, false)
+      : await fetch(path, {...init, headers: window.GDHomeShell?.authHeaders?.() || {'Content-Type': 'application/json'}});
+    if (res.status === 401) st.noAuth = true;
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.message || ('Lỗi ' + res.status));
     return json;
@@ -108,11 +113,11 @@
   }
 
   function linkedTask(item) {
-    return item.taskId && Array.isArray(AppState.tasks) ? AppState.tasks.find(t => t.id === item.taskId) : null;
+    return item.taskId && onSchedule() && Array.isArray(AppState.tasks) ? AppState.tasks.find(t => t.id === item.taskId) : null;
   }
 
   function calName(calId) {
-    const cal = AppState.calendars.find(c => c.id === calId);
+    const cal = onSchedule() && AppState.calendars.find(c => c.id === calId);
     if (!cal) return 'dự án';
     const owner = (AppState.projectOwners || []).find(o => o.id === cal.ownerId);
     return owner && owner.name ? `${owner.name} · ${cal.name}` : cal.name;
@@ -137,7 +142,7 @@
   // ------------------------------------------------------------------ GIỮ TODO KHỚP VỚI TIMELINE
   // Hạng mục bị xoá -> bỏ liên kết và bỏ ngày (việc quay lại danh sách); đổi ngày/tên/100% -> cập nhật việc
   function checkLinks() {
-    if (!st.loaded || !scheduleReady() || !Array.isArray(AppState.tasks)) return;
+    if (!st.loaded || !onSchedule() || !scheduleReady() || !Array.isArray(AppState.tasks)) return;
     for (const item of st.items) {
       if (!item.taskId || st.linkPending.has(item.id) || String(item.id).startsWith('tmp_')) continue;
       const task = linkedTask(item);
@@ -403,7 +408,7 @@
 
   // ------------------------------------------------------------------ GIAO DIỆN
   function build() {
-    const wrapper = document.getElementById('msproject-view-wrapper');
+    const wrapper = document.body;                                // gắn vào body: hiện ở mọi trang
     if (!wrapper || document.getElementById('gd-todo-panel')) return false;
     toggleBtn = document.createElement('button');
     toggleBtn.type = 'button';
@@ -437,6 +442,7 @@
       </footer>`;
     wrapper.appendChild(root);
     listEl = root.querySelector('#gd-todo-list');
+    if (!onSchedule()) root.querySelector('.gd-todo-hint').hidden = true;   // gợi ý kéo vào Timeline chỉ cho trang Lịch
     inputEl = root.querySelector('.gd-todo-add textarea');
     inputEl.addEventListener('input', () => autosize(inputEl));
     inputEl.addEventListener('keydown', (e) => {
@@ -648,7 +654,7 @@
       <input type="checkbox" class="gd-todo-chk" ${item.done ? 'checked' : ''} ${pending ? 'disabled' : ''} aria-label="Hoàn thành">
       <span class="gd-todo-title" title="Nháy đúp để sửa">${esc(item.title)}</span>
       ${dueLabel ? `<button type="button" class="gd-todo-due ${task ? 'linked' : ''} ${overdue ? 'overdue' : ''}" data-act="goto" title="${task ? 'Đã xếp vào ' + esc(calName(task.calendarId)) + ' – bấm để tới hạng mục' : 'Hẹn ngày (Microsoft To Do)'}">${dueLabel}</button>` : ''}
-      ${pending || item.done ? '' : `<button type="button" class="gd-todo-mini gd-todo-assign" data-act="assign" title="${task ? 'Chuyển sang dự án khác' : 'Xếp vào dự án trên Timeline'}">📁</button>`}
+      ${pending || item.done || !onSchedule() ? '' : `<button type="button" class="gd-todo-mini gd-todo-assign" data-act="assign" title="${task ? 'Chuyển sang dự án khác' : 'Xếp vào dự án trên Timeline'}">📁</button>`}
       ${pending ? '' : '<button type="button" class="gd-todo-mini gd-todo-del" data-act="del" title="Xoá">×</button>'}
       <button type="button" class="gd-todo-star ${item.star ? 'on' : ''}" data-act="star" ${pending ? 'disabled' : ''} aria-pressed="${item.star ? 'true' : 'false'}" title="${item.star ? 'Bỏ ưu tiên' : 'Đánh dấu ưu tiên (Quan trọng)'}">${item.star ? '★' : '☆'}</button>
       ${st.assignId === item.id ? `<div class="gd-todo-assign-row">${assignSelect()}</div>` : ''}
@@ -665,7 +671,8 @@
     applyFontWeight();
     if (!st.open || st.editingId) return;
     let html = open.map(itemHtml).join('');
-    if (!st.loaded) html = '<li class="gd-todo-empty">Đang tải…</li>';
+    if (st.noAuth) html = '<li class="gd-todo-empty">Đăng nhập Gmail để dùng Việc cần làm.</li>';
+    else if (!st.loaded) html = '<li class="gd-todo-empty">Đang tải…</li>';
     else if (!open.length) html = '<li class="gd-todo-empty">Không còn việc nào 🎉</li>';
     if (st.showDone && done.length) html += `<li class="gd-todo-sep">Đã xong</li>` + done.slice(0, 50).map(itemHtml).join('');
     listEl.innerHTML = html;
@@ -715,7 +722,8 @@
     if (!root && !build()) return;
     // Chưa đăng nhập thì chưa gọi API (tránh bật lại hộp đăng nhập)
     if (typeof _appConfig !== 'undefined' && _appConfig.authMode === 'google' && !getSession()) return;
-    const visible = isTimelineVisible();
+    if (st.noAuth) return;                                       // chưa đăng nhập ở trang này: không gọi lại liên tục
+    const visible = !document.hidden;
     if (visible && !st.loaded && !st.loading) { st.loading = true; load().finally(() => { st.loading = false; }); }
     if (visible && st.ms.linked && !document.hidden && Date.now() - st.lastSync > SYNC_EVERY_MS) sync();
     if (st.loaded) checkLinks();

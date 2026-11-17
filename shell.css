@@ -972,3 +972,13 @@ body.is-sidebar-collapsed .work-app-layout>.shell-sidebar{display:none!important
 .gd-ask.is-danger .gd-ask-btn.is-primary{background:var(--gd-danger,#d93025);border-color:var(--gd-danger,#d93025)}
 .gd-ask.is-danger .gd-ask-btn.is-primary:hover{background:var(--gd-danger-hover,#b31412)}
 .gd-ask-btn:focus-visible{outline:2px solid #f59e0b;outline-offset:2px}
+
+/* ---------- Giao diện tối dùng chung (nút 🌙/☀ cạnh tài khoản) ----------
+   shortcut: đảo màu toàn trang rồi đảo lại ảnh/video/canvas – màu thanh tiến độ hơi khác bản sáng; cần đẹp hơn thì viết biến màu riêng cho từng trang */
+html[data-theme="dark"] { filter: invert(1) hue-rotate(180deg); background: #fff; }
+/* Hộp thoại nằm ở lớp trên cùng, không ăn filter của html: đảo riêng */
+html[data-theme="dark"] dialog { filter: invert(1) hue-rotate(180deg); }
+html[data-theme="dark"] :is(img, video, canvas, picture, iframe, input[type="color"], .cs-sheet, .shell-user-avatar) { filter: invert(1) hue-rotate(180deg); }
+html[data-theme="dark"] :is(.cs-sheet img, .shell-user-avatar img) { filter: none; }  /* bảng so sánh giữ đúng màu bản in */
+.shell-theme-toggle { width: 32px; height: 32px; margin-right: 6px; border: 1px solid #dadce0; border-radius: 8px; background: #fff; font-size: 15px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.shell-theme-toggle:hover { background: #f1f5f9; }

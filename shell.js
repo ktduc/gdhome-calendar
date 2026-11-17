@@ -35,6 +35,18 @@ window.GDHomeShell = (() => {
   }[c]));
   const icon = (name,fallback = '') => '<i data-lucide="' + escape(name) + '" aria-hidden="true">' + escape(fallback) + '</i>';
   const icons = () => window.lucide?.createIcons();
+  const MENU_SVG = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>';
+  // Giao diện sáng/tối dùng chung mọi trang (nhớ trên trình duyệt, đồng bộ giữa các tab)
+  const THEME_KEY = 'gdhome_theme';
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+    document.querySelectorAll('.shell-theme-toggle').forEach(btn => {
+      btn.textContent = theme === 'dark' ? '☀' : '🌙';
+      btn.title = theme === 'dark' ? 'Chuyển giao diện sáng' : 'Chuyển giao diện tối';
+    });
+  }
+  try { applyTheme(localStorage.getItem(THEME_KEY)); } catch { applyTheme('light'); }
+  window.addEventListener('storage', event => { if (event.key === THEME_KEY) applyTheme(event.newValue); });
 
   function menu(element) {
     if (!element) return;
@@ -444,7 +456,7 @@ window.GDHomeShell = (() => {
       toggleBtn.id = 'btn-toggle-sidebar';
       toggleBtn.title = 'Ẩn/Hiện thanh bên trái';
       toggleBtn.setAttribute('aria-label', 'Ẩn/Hiện thanh bên trái');
-      toggleBtn.innerHTML = '<i data-lucide="menu">☰</i>';
+      toggleBtn.innerHTML = MENU_SVG;
       headerLeft.prepend(toggleBtn);
       icons();
     }
@@ -495,6 +507,7 @@ window.GDHomeShell = (() => {
     let dropdown = container.querySelector('.shell-account-dropdown');
     if (!dropdown) {
       container.innerHTML =
+        '<button type="button" class="icon-btn shell-theme-toggle" data-shell-account-action="theme" aria-label="Chuyển giao diện sáng / tối"></button>' +
         '<button type="button" class="btn btn-outline btn-sm shell-guest-login-btn" data-shell-account-action="login" style="display:' + (isGuest ? 'inline-flex' : 'none') + ';">Đăng nhập</button>' +
         '<details class="hdr-dropdown shell-account-dropdown" data-shell-account>' +
           '<summary class="shell-user-chip" title="' + escape(email || 'Tài khoản') + '">' +
@@ -513,6 +526,7 @@ window.GDHomeShell = (() => {
           '</div>' +
         '</details>' +
         '<strong id="identity" style="display:none;">' + escape(email) + '</strong>';
+      applyTheme(document.documentElement.dataset.theme);
     } else {
       const loginBtn = container.querySelector('.shell-guest-login-btn');
       if (loginBtn) loginBtn.style.display = isGuest ? 'inline-flex' : 'none';
@@ -533,6 +547,12 @@ window.GDHomeShell = (() => {
         const parentDetails = actionBtn.closest('details');
         if (parentDetails) parentDetails.removeAttribute('open');
 
+        if (action === 'theme') {
+          const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+          try { localStorage.setItem(THEME_KEY,next); } catch {}
+          applyTheme(next);
+          return;
+        }
         if (action === 'connections') {
           if (window.GDHomeConnections) window.GDHomeConnections.open();
           else location.href = '/tools#connections';
@@ -578,8 +598,9 @@ window.GDHomeShell = (() => {
           toggleBtn.id = 'btn-toggle-sidebar';
           toggleBtn.title = 'Ẩn/Hiện thanh bên trái';
           toggleBtn.setAttribute('aria-label', 'Ẩn/Hiện thanh bên trái');
-          toggleBtn.innerHTML = '<i data-lucide="menu">☰</i>';
+          toggleBtn.innerHTML = MENU_SVG;
         }
+        if (!toggleBtn.querySelector('svg[data-shell-menu-icon]')) { toggleBtn.innerHTML = MENU_SVG.replace('<svg ','<svg data-shell-menu-icon '); }
         const hasSidebar = document.querySelector('.app-sidebar, .material-sidebar, .shell-sidebar');
         const show = hasSidebar ? 'visible' : 'hidden';
         if (toggleBtn.style.visibility !== show) {
