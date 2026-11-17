@@ -80,3 +80,47 @@ test('so sánh: hàng đợi AI chạy nền, tiến trình, lỗi, thử lại,
   v = await until(x => x.jobs.find(j => j.id === 'job_x')?.state === 'done');
   assert.ok(steps.includes('Ý dở'));
 });
+
+test('so sánh: bảng tự làm – AI điền chỗ trống kèm ảnh, giữ chữ người dùng; hết lượt ngày thì dừng hàng đợi', async () => {
+  const {mergeFill} = require('../compare');
+  const data = new Map();
+  const store = {get: async k => structuredClone(data.get(k) ?? null), put: async (k, v) => { data.set(k, structuredClone(v)); }};
+  const calls = [];
+  let quota = false;
+  const makeBoard = async (idea, categories, onStep, fill) => {
+    calls.push({idea, fill});
+    if (quota) throw Object.assign(new Error('Đã hết hạn mức AI hôm nay.'), {status: 429, aiCode: 'daily_quota'});
+    const made = normalizeBoard({heading: 'TAY NẮM', columns: [col('Tay nắm tròn AI'), col('Tay nắm dài AI', {pros: ['Ý anh', 'X', 'Y']})]});
+    return {board: mergeFill(fill.seed, made), issues: []};
+  };
+  async function call(method, path, body) {
+    let out;
+    await handleCompare({method}, {}, path, {store, dataKey: 'f@x.com', readJsonBody: async () => body, sendJson: (r, s, o) => { out = o; }, makeBoard});
+    return out;
+  }
+  const until = async fn => { for (let i = 0; i < 200; i++) { const v = await call('GET', '/api/compare/queue'); if (fn(v)) return v; await new Promise(r => setTimeout(r, 10)); } throw new Error('Hết giờ'); };
+  const board = {id: 'cmp_tu_lam', heading: '', notes: 'Tay nắm inox 304', columns: [
+    {name: 'Phương án A', desc: '', pros: [], cons: []}, {name: 'Tay nắm dài', desc: 'Ý anh tự gõ', pros: ['Ý anh'], cons: []}]};
+  await call('POST', '/api/compare/queue/fill', {board, images: [{mediaType: 'image/jpeg', data: 'abc', col: 1}, {mediaType: 'text/html', data: 'x'}]});
+  const v = await until(x => x.jobs[0]?.state === 'done');
+  const {seed, images} = calls[0].fill;
+  assert.equal(calls[0].idea, 'Tay nắm dài', 'Tên mặc định "Phương án A" không gửi làm ý tưởng');
+  assert.equal(seed.columns[0].name, '', 'Tên mặc định để AI đặt');
+  assert.equal(seed.notes, 'Tay nắm inox 304');
+  assert.deepEqual(images, [{mediaType: 'image/jpeg', data: 'abc', col: 1}], 'Chỉ nhận ảnh hợp lệ');
+  const out = v.jobs[0].board;
+  assert.equal(v.jobs[0].boardId, 'cmp_tu_lam');
+  assert.equal(out.columns[0].name, 'Tay nắm tròn AI', 'AI đặt tên cột trống');
+  assert.equal(out.columns[1].name, 'Tay nắm dài', 'Giữ tên người dùng');
+  assert.equal(out.columns[1].desc, 'Ý anh tự gõ');
+  assert.deepEqual(out.columns[1].pros, ['Ý anh', 'X', 'Y'], 'Ý có sẵn đứng đầu, không lặp');
+  assert.equal(out.columns[0].pros.length, 3);
+  await call('POST', '/api/compare/queue/ack', {ids: v.jobs.map(j => j.id)});
+  // Hết lượt AI hôm nay: dừng, các việc sau báo lỗi để bấm thử lại, không gọi AI thêm
+  quota = true;
+  calls.length = 0;
+  await call('POST', '/api/compare/queue', {ideas: ['Ý 1', 'Ý 2', 'Ý 3'], categories: []});
+  const q = await until(x => x.jobs.every(j => j.state === 'error'));
+  assert.equal(calls.length, 1);
+  assert.ok(q.jobs[2].error.startsWith('Chưa làm: '));
+});

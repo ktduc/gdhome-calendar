@@ -344,8 +344,14 @@ cases['so-sanh'] = async page => {
   const ideas = [];
   // AI chạy nền trên server: giả lập hàm soạn bảng của server
   const integrations = require('../integrations'), original = integrations.compareBoard;
-  const {normalizeBoard} = require('../compare');
-  integrations.compareBoard = async (store,dataKey,idea,categories,onStep) => {
+  const {normalizeBoard,mergeFill} = require('../compare');
+  const fills = [];
+  integrations.compareBoard = async (store,dataKey,idea,categories,onStep,fill) => {
+    if (fill) {                                   // bảng tự làm: AI điền chỗ trống
+      fills.push(fill);
+      await onStep('AI đang soạn bảng');
+      return {board:mergeFill(fill.seed,normalizeBoard({heading:'TAY NẮM',columns:[col('Tay nắm tròn'),col('Tay nắm AI')]})),issues:[]};
+    }
     ideas.push({idea,categories});
     await onStep('AI đang soạn bảng');
     await new Promise(r => setTimeout(r,2500));
@@ -440,6 +446,35 @@ cases['so-sanh'] = async page => {
     await page.locator('#cmp-delete').click();
     await page.locator('dialog.gd-ask [data-ask="ok"]').click();
     await page.waitForFunction(() => document.querySelectorAll('#cmp-tree [data-board]').length === 1);
+    // Bảng tự làm: + Bảng mới -> gõ tiêu đề, dán ảnh, dán chữ, sửa tên 1 cột -> ✨ AI điền chỗ trống
+    await page.locator('#cmp-add-board').click();
+    await page.waitForFunction(() => document.querySelectorAll('#cmp-tree [data-board]').length === 2);
+    await page.keyboard.type('Tay nắm cửa');
+    await page.locator('#cs-sheet .cs-img[data-col="0"]').click({position:{x:20,y:20}});
+    await page.evaluate(async () => {
+      const canvas = Object.assign(document.createElement('canvas'),{width:60,height:60});
+      canvas.getContext('2d').fillRect(0,0,60,60);
+      const blob = await new Promise(r => canvas.toBlob(r,'image/png'));
+      const data = new DataTransfer();
+      data.items.add(new File([blob],'tay-nam.png',{type:'image/png'}));
+      document.body.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+    });
+    await page.locator('#cs-sheet .cs-img[data-col="0"] img[data-asset]').waitFor({timeout:8000});
+    await page.locator('#cmp-notes').fill('Tay nắm inox 304, dài 30cm');
+    await page.locator('#cs-sheet .cs-band [data-col="1"] [data-f="name"]').click();
+    await page.keyboard.press('Control+A');
+    await page.keyboard.type('Tay nắm dài');
+    await page.locator('#cmp-fill').click();
+    await page.waitForFunction(() => document.querySelector('#cs-sheet .cs-band [data-col="0"] [data-f="name"]')?.textContent === 'Tay nắm tròn',null,{timeout:8000});
+    assert.equal(fills.length,1);
+    assert.equal(fills[0].seed.heading,'TAY NẮM CỬA');
+    assert.equal(fills[0].seed.notes,'Tay nắm inox 304, dài 30cm');
+    assert.equal(fills[0].images.length,1,'Gửi ảnh cột 1 cho AI');
+    assert.equal(fills[0].images[0].col,0);
+    assert.equal(await page.locator('#cs-sheet .cs-band [data-col="1"] [data-f="name"]').textContent(),'Tay nắm dài','Giữ tên anh đã gõ');
+    assert.equal(await page.locator('#cs-sheet [data-f="heading"]').textContent(),'Tay nắm cửa');
+    await page.locator('#cs-sheet .cs-img[data-col="0"] img[data-asset]').waitFor();
+    assert.equal(await page.locator('#cs-sheet [data-col="0"] [data-f="pros"] li').count(),3,'AI điền ưu điểm');
   } finally { integrations.compareBoard = original; }
 };
 

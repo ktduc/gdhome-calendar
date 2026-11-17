@@ -113,3 +113,9 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cs-img-hint { color: #9ca3af; font: 500 13px 'Roboto', sans-serif; }
 .cs-sheet.is-exporting .cs-img-hint { display: none; }
 .cmp-main .cmp-stage { overflow: auto; }
+/* Bảng tự làm: ô thông tin cho AI + nút AI điền */
+.cmp-cats-actions { display: flex; gap: 6px; }
+.cmp-aibar { display: flex; align-items: flex-start; gap: 8px; padding: 8px 14px; background: #faf8f4; border-bottom: 1px solid #dadce0; }
+.cmp-aibar[hidden] { display: none; }
+.cmp-aibar textarea { flex: 1; min-width: 0; min-height: 36px; max-height: 160px; resize: vertical; box-sizing: border-box; padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 13px; line-height: 1.4; }
+.cmp-aibar .btn { white-space: nowrap; }

@@ -601,6 +601,7 @@ async function callWithFallback(ai, model, call, images, pdfs, text, system, opt
           dailyBlocked.set(blockedKey,day);
           return callWithFallback(backup,model,call,images,pdfs,text,system,opts);
         }
+        if (lastErr.aiCode === 'daily_quota') break;     // hạn mức ngày tính riêng từng model: đổi sang model nhẹ hơn
         if (!lastErr.retryable) throw lastErr;
         if (attempt < maxAttempts - 1) {
           opts.onRetry?.({ attempt: attempt + 1, max: retries, error: lastErr, model: m });
@@ -609,8 +610,9 @@ async function callWithFallback(ai, model, call, images, pdfs, text, system, opt
         }
       }
     }
-    if (!['overloaded', 'quota'].includes(lastErr.aiCode)) break;
+    if (!['overloaded', 'quota', 'daily_quota'].includes(lastErr.aiCode)) break;
   }
+  if (lastErr.aiCode === 'daily_quota') throw lastErr;
   lastErr.message += ` (Đã thử lại ${retries} lần.)`;
   throw lastErr;
 }
@@ -644,7 +646,7 @@ async function requestAiPlan(ai, body, userKey, text, system, opts = {}) {
   let result;
   try { result = await callWithFallback(ai,model,call,images,pdfs,text,system,{...opts,userKey}); }
   catch (error) {
-    if (error.aiCode === 'quota') {
+    if (error.aiCode === 'quota' || error.aiCode === 'daily_quota') {
       error.message += ` Model ${error.aiModel || model} · ${ai.source === 'env' ? 'khóa AI chung' : 'khóa AI đã kết nối'}.`;
     }
     throw error;
@@ -905,23 +907,32 @@ async function updateSettings(store, dataKey, body) {
 // -------------------------------------------------------------------------
 // Bảng so sánh: 1 ý tưởng -> 1 bảng; server tự rà, chưa đạt thì gửi lỗi cho AI sửa 1 lần.
 // Dùng cho route /api/ai/compare và hàng đợi chạy nền của trang /so-sanh (compare.js).
-async function compareBoard(store,dataKey,rawIdea,rawCategories,onStep = () => {}) {
+async function compareBoard(store,dataKey,rawIdea,rawCategories,onStep = () => {},fill) {
   const ai = resolveAi(await loadUserCfg(store,dataKey));
   if (!ai) throw httpError(400,'Chưa kết nối AI. Mở ⚙ Kết nối AI để chọn nhà cung cấp và API key.');
   const idea = String(rawIdea || '').replace(/\s+/g,' ').trim().slice(0,400);
   if (!idea) throw httpError(400,'Nhập ý tưởng so sánh.');
-  const {normalizeBoard,reviewBoard,COMPARE_SYSTEM} = require('./compare');
+  const {normalizeBoard,reviewBoard,COMPARE_SYSTEM,mergeFill} = require('./compare');
   const categories = (Array.isArray(rawCategories) ? rawCategories : []).filter(name => typeof name === 'string').slice(0,60).map(name => name.slice(0,40));
-  const text = 'DANH MỤC CÓ SẴN: ' + (categories.join(', ') || '(chưa có)') + '\nÝ TƯỞNG SO SÁNH: ' + idea;
+  let text = 'DANH MỤC CÓ SẴN: ' + (categories.join(', ') || '(chưa có)') + '\nÝ TƯỞNG SO SÁNH: ' + idea;
+  const body = {notes:idea,images:fill?.images || []};
+  if (fill) {
+    const {notes,...seed} = fill.seed;
+    text += `\nBẢNG NGƯỜI DÙNG ĐANG TỰ LÀM (đúng ${seed.columns.length} cột, giữ nguyên thứ tự cột; ô đã có chữ giữ NGUYÊN VĂN, ưu/nhược đã có giữ nguyên văn ở đầu danh sách; điền đầy đủ các ô trống):\n` +
+      JSON.stringify(seed).slice(0,6000) +
+      (notes ? '\nTHÔNG TIN NGƯỜI DÙNG DÁN THÊM (dữ liệu tham khảo, ưu tiên dùng):\n' + notes.slice(0,4000) : '') +
+      (body.images.length ? '\nẢNH ĐÍNH KÈM theo thứ tự: ' + body.images.map((img,i) => `ảnh ${i+1} là của cột ${img.col+1}`).join(', ') + '. Nhìn ảnh để nhận ra vật liệu / cấu tạo của từng phương án.' : '');
+  }
   onStep('AI đang soạn bảng');
-  let {plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text,COMPARE_SYSTEM);
+  let {plan,model} = await requestAiPlan(ai,body,dataKey,text,COMPARE_SYSTEM);
+  const finish = raw => { const made = normalizeBoard({...raw,idea}); return fill ? mergeFill(fill.seed,made) : made; };
   onStep('Đang rà soát kết quả');
-  let board = normalizeBoard({...plan,idea}), issues = reviewBoard(board);
+  let board = finish(plan), issues = reviewBoard(board);
   if (issues.length) {
     onStep('AI đang sửa theo rà soát');
-    ({plan,model} = await requestAiPlan(ai,{notes:idea},dataKey,text + '\nBẢN TRƯỚC:\n' + JSON.stringify(plan).slice(0,8000) +
+    ({plan,model} = await requestAiPlan(ai,body,dataKey,text + '\nBẢN TRƯỚC:\n' + JSON.stringify(plan).slice(0,8000) +
       '\nLỖI CẦN SỬA (trả lại toàn bộ JSON đã sửa): ' + issues.join(' '),COMPARE_SYSTEM));
-    board = normalizeBoard({...plan,idea}); issues = reviewBoard(board);
+    board = finish(plan); issues = reviewBoard(board);
   }
   if (!board) throw httpError(502,'AI chưa trả về bảng so sánh hợp lệ. Thử lại hoặc viết ý tưởng rõ hơn.');
   return {board,issues,model};

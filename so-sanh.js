@@ -76,6 +76,33 @@
     return cat;
   }
 
+  // ---------------------------------------------------------------- BẢNG TỰ LÀM + AI ĐIỀN
+  const DEFAULT_NAME = /^phương án [a-c]$/i;
+  const blankCol = name => ({kicker: '', name, desc: '', stats: '', pros: [], cons: [], image: null});
+  // Kết quả AI về: chữ anh đang có (kể cả sửa trong lúc AI chạy) luôn giữ, AI chỉ lấp ô trống; ảnh giữ nguyên
+  function fillBoard(target, made) {
+    target.columns = target.columns.map((col, i) => {
+      const ai = made.columns[i];
+      if (!ai) return col;
+      const pick = f => (col[f] && !(f === 'name' && DEFAULT_NAME.test(col[f]))) ? col[f] : ai[f] || col[f];
+      const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, 3);
+      return {...col, kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: pick('stats'), pros: list('pros'), cons: list('cons')};
+    });
+    if (!target.heading) target.heading = made.heading;
+    target.status = 'new';
+  }
+  // Ảnh ô so sánh -> JPEG nhỏ (≤ 768px) gửi AI nhìn
+  async function smallImage(img) {
+    try {
+      if (!img?.src) return null;
+      await img.decode();
+      const k = Math.min(1, 768 / Math.max(img.naturalWidth, img.naturalHeight));
+      const canvas = Object.assign(document.createElement('canvas'), {width: Math.round(img.naturalWidth * k), height: Math.round(img.naturalHeight * k)});
+      canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+      return {mediaType: 'image/jpeg', data: canvas.toDataURL('image/jpeg', 0.82).split(',')[1]};
+    } catch { return null; }
+  }
+
   // ---------------------------------------------------------------- HÀNG ĐỢI AI (server làm nền)
   function applyQueue(view) {
     queue = view;
@@ -84,6 +111,8 @@
     const done = view.jobs.filter(j => j.state === 'done' && j.board);
     if (done.length) {
       for (const job of done) {
+        const target = job.boardId && doc.boards.find(b => b.id === job.boardId);
+        if (target) { fillBoard(target, job.board); continue; }
         if (doc.boards.some(b => b.id === job.board.id)) continue;
         const made = {...job.board, categoryId: categoryFor(job.board.category).id, status: 'new'};
         doc.boards.unshift(made);
@@ -122,7 +151,7 @@
     } else head.hidden = true;
     byId('cmp-queue').innerHTML = jobs.map((j, i) => `<li class="is-${j.state}" data-id="${esc(j.id)}">
       <b>${j.state === 'running' ? '⏳' : j.state === 'error' ? '⚠' : (i + 1) + '.'}</b>
-      <span>${esc(j.idea)}${j.state === 'error' ? `<em>${esc(j.error)}</em>` : j.state === 'running' ? `<em>${esc(j.step || '')}</em>` : ''}</span>
+      <span>${j.boardId ? '✨ Điền: ' : ''}${esc(j.idea)}${j.state === 'error' ? `<em>${esc(j.error)}</em>` : j.state === 'running' ? `<em>${esc(j.step || '')}</em>` : ''}</span>
       ${j.state === 'error' ? '<button type="button" data-q="retry" title="Thử lại">↻</button>' : ''}
       ${j.state === 'running' ? '' : '<button type="button" data-q="del" title="Bỏ khỏi hàng đợi">×</button>'}</li>`).join('');
   }
@@ -237,8 +266,9 @@
 
   function renderSheet() {
     const b = board();
-    byId('cmp-toolbar').hidden = !b;
+    byId('cmp-toolbar').hidden = byId('cmp-aibar').hidden = !b;
     byId('cmp-empty').hidden = !!b;
+    if (b && document.activeElement !== byId('cmp-notes')) byId('cmp-notes').value = b.notes || '';
     byId('cmp-sheet-wrap').innerHTML = b ? sheetHtml(b) : '';
     if (!b) return;
     byId('cmp-cat-select').innerHTML = doc.categories.map(c => `<option value="${esc(c.id)}" ${c.id === b.categoryId ? 'selected' : ''}>${esc(c.name)}</option>`).join('');
@@ -345,6 +375,37 @@
       if (!li) return;
       try { applyQueue(await post('/api/compare/queue/' + (btn.dataset.q === 'del' ? 'delete' : 'retry'), {id: li.dataset.id})); }
       catch (error) { toast(error.message); }
+    };
+    byId('cmp-add-board').onclick = () => {
+      const cat = doc.categories.find(c => c.id === board()?.categoryId) || doc.categories[0] || categoryFor('KHÁC');
+      const b = {id: 'cmp_' + crypto.randomUUID(), categoryId: cat.id, category: '', title: 'SO SÁNH', heading: '',
+        columns: [blankCol('Phương án A'), blankCol('Phương án B')], idea: '', status: 'new', notes: '', createdAt: new Date().toISOString()};
+      doc.boards.unshift(b);
+      current = b.id;
+      activeSlot = null;
+      renderAll();
+      save();
+      document.querySelector('#cs-sheet [data-f="heading"]')?.focus();
+      toast('Bảng trống: gõ tiêu đề, tên phương án, dán ảnh (Ctrl+V) rồi tự điền hoặc bấm ✨ AI điền bảng.');
+    };
+    byId('cmp-notes').oninput = e => { const b = board(); if (b) { b.notes = e.target.value; save({typing: true}); } };
+    byId('cmp-fill').onclick = async () => {
+      const b = board(), btn = byId('cmp-fill');
+      if (!b) return;
+      if (!b.heading && !(b.notes || '').trim() && !b.columns.some(c => (c.name && !DEFAULT_NAME.test(c.name)) || c.image)) {
+        return toast('Gõ tiêu đề / tên phương án, dán thông tin hoặc ảnh trước để AI biết so sánh gì.');
+      }
+      btn.disabled = true;
+      try {
+        const images = [];
+        for (const [col, c] of b.columns.entries()) {
+          const data = c.image && await smallImage(document.querySelector(`#cs-sheet .cs-img[data-col="${col}"] img`));
+          if (data) images.push({...data, col});
+        }
+        applyQueue(await post('/api/compare/queue/fill', {board: b, images, categories: doc.categories.map(c => c.name)}));
+        toast('AI đang điền bảng trên máy chủ – xem tiến trình bên trái. Chữ anh đã gõ được giữ nguyên.');
+      } catch (error) { GDHomeShell.alert(error.message); }
+      finally { btn.disabled = false; }
     };
     byId('cmp-add-cat').onclick = async () => {
       const name = (await GDHomeShell.prompt('Tên hạng mục lớn (vd: VẬT LIỆU, CỬA, ĐIỆN NƯỚC):', '', {okText: 'Thêm'}))?.trim();

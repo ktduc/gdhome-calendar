@@ -617,7 +617,7 @@ async function handleApi(req, res, urlPath) {
   }
   if (urlPath === '/api/compare' || urlPath.startsWith('/api/compare/')) {
     return handleCompare(req, res, urlPath, { store, dataKey, readJsonBody, sendJson,
-      makeBoard: (idea, categories, onStep) => integrations.compareBoard(store, dataKey, idea, categories, onStep) });
+      makeBoard: (idea, categories, onStep, fill) => integrations.compareBoard(store, dataKey, idea, categories, onStep, fill) });
   }
   if (urlPath === '/api/todos' || urlPath.startsWith('/api/todos/')) {
     return todos.handle(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });

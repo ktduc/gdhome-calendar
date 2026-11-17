@@ -38,6 +38,7 @@ function normalizeBoard(board, categories = []) {
     categoryId, category: str(board.category, 40).toUpperCase(),
     title: str(board.title, 60) || 'SO SÁNH', heading: str(board.heading, 120).toUpperCase(),
     columns, idea: str(board.idea, 400), status: board.status === 'ok' ? 'ok' : 'new', // bố cục 2/3 cột = số cột
+    notes: String(board.notes ?? '').replace(/\r/g, '').slice(0, 4000),               // chữ người dùng dán cho AI, không in lên bảng
     createdAt: str(board.createdAt, 40) || new Date().toISOString()};
 }
 
@@ -82,6 +83,18 @@ function reviewBoard(board) {
   return issues;
 }
 
+// "AI điền bảng": chữ người dùng đã điền luôn thắng, AI chỉ lấp chỗ trống, giữ đúng số cột của người dùng
+function mergeFill(seed, made) {
+  if (!made) return null;
+  const columns = seed.columns.map((col, i) => {
+    const ai = made.columns[i] || {pros: [], cons: []};
+    const pick = f => col[f] || ai[f] || '';
+    const list = f => col[f].length >= 3 ? col[f] : [...col[f], ...ai[f].filter(t => !col[f].includes(t))].slice(0, 3);
+    return {kicker: pick('kicker'), name: pick('name'), desc: pick('desc'), stats: pick('stats'), pros: list('pros'), cons: list('cons'), image: null};
+  });
+  return {...made, heading: seed.heading || made.heading, category: seed.category || made.category, columns};
+}
+
 function withWrite(key, fn) {
   const next = (writes.get(key) || Promise.resolve()).catch(() => {}).then(fn);
   writes.set(key, next);
@@ -94,6 +107,8 @@ function withWrite(key, fn) {
 // shortcut: server khởi động lại (deploy/ngủ) thì việc đang làm quay về "chờ" và chạy lại khi mở trang – đủ cho vài chục bảng.
 const queueKeyFor = dataKey => 'compare-queue-v1-' + crypto.createHash('sha256').update(String(dataKey)).digest('hex').slice(0, 24);
 const workers = new Set();
+// shortcut: ảnh gửi kèm việc "AI điền bảng" chỉ giữ trong bộ nhớ; server khởi động lại thì AI chỉ dựa vào chữ.
+const jobImages = new Map();
 
 async function readQueue(store, qkey) {
   const data = await store.get(qkey);
@@ -122,7 +137,8 @@ async function runWorker(store, dataKey, makeBoard) {
       if (!job) break;
       const setStep = step => changeQueue(store, qkey, jobs => { const j = jobs.find(x => x.id === job.id); if (j && j.state === 'running') j.step = step; }).catch(() => {});
       try {
-        const {board, issues} = await makeBoard(job.idea, job.categories, setStep);
+        const {board, issues} = await makeBoard(job.idea, job.categories, setStep, job.seed ? {seed: job.seed, images: jobImages.get(job.id) || []} : undefined);
+        jobImages.delete(job.id);
         await changeQueue(store, qkey, jobs => {
           const j = jobs.find(x => x.id === job.id);
           if (j) Object.assign(j, {state: 'done', board, issues: issues || [], finishedAt: Date.now(), step: ''});
@@ -132,7 +148,11 @@ async function runWorker(store, dataKey, makeBoard) {
           const j = jobs.find(x => x.id === job.id);
           if (j) Object.assign(j, {state: 'error', error: String(error.message || 'Lỗi AI').slice(0, 300), finishedAt: Date.now(), step: ''});
         });
-        if (error.status === 400) {                     // chưa kết nối AI: dừng, các việc còn lại giữ "chờ"
+        if (error.status === 400 || error.aiCode === 'daily_quota') {
+          // chưa kết nối AI / hết lượt hôm nay: dừng, các việc còn lại báo lỗi để bấm ↻ khi có lượt (không gọi AI vô ích)
+          await changeQueue(store, qkey, jobs => jobs.forEach(j => {
+            if (j.state === 'waiting') Object.assign(j, {state: 'error', error: 'Chưa làm: ' + String(error.message || '').slice(0, 280), finishedAt: Date.now()});
+          }));
           break;
         }
       }
@@ -158,6 +178,25 @@ async function handleQueue(req, urlPath, {store, dataKey, readJsonBody, sendJson
     return sendJson(res, 200, queueView(jobs));
   }
   const body = await readJsonBody(req);
+  if (urlPath === '/api/compare/queue/fill') {
+    // Bảng tự làm: AI điền chỗ trống theo chữ + ảnh người dùng dán, giữ nguyên chỗ đã điền
+    const seed = normalizeBoard({...body.board, status: 'new'});
+    if (!seed) throw fail(400, 'Bảng cần ít nhất 2 cột có tên phương án.');
+    seed.columns.forEach(col => { if (/^phương án [a-c]$/i.test(col.name)) col.name = ''; });   // tên mặc định của bảng trống: để AI đặt tên
+    const images = (Array.isArray(body.images) ? body.images : []).slice(0, 3)
+      .filter(img => /^image\/(png|jpeg|webp)$/.test(String(img?.mediaType)) && typeof img.data === 'string' && img.data.length < 1_500_000)
+      .map(img => ({mediaType: img.mediaType, data: img.data, col: Number(img.col) || 0}));
+    const categories = (Array.isArray(body.categories) ? body.categories : []).map(name => str(name, 40)).filter(Boolean).slice(0, 60);
+    const id = 'job_' + crypto.randomUUID();
+    jobImages.set(id, images);
+    const jobs = await changeQueue(store, qkey, list => {
+      list.push({id, idea: seed.heading || seed.columns.map(c => c.name).filter(Boolean).join(' và ') || seed.notes.split('\n')[0].slice(0, 200) || 'Bảng so sánh theo ảnh đính kèm', categories, state: 'waiting', createdAt: Date.now(),
+        boardId: seed.id, seed: {heading: seed.heading, category: seed.category, columns: seed.columns.map(({image, ...col}) => col), notes: seed.notes}});
+      return list;
+    });
+    kick();
+    return sendJson(res, 200, queueView(jobs));
+  }
   if (urlPath === '/api/compare/queue') {
     const ideas = (Array.isArray(body.ideas) ? body.ideas : []).map(idea => str(idea, 400)).filter(Boolean).slice(0, 100);
     if (!ideas.length) throw fail(400, 'Nhập ít nhất 1 dòng ý tưởng so sánh.');
@@ -173,6 +212,7 @@ async function handleQueue(req, urlPath, {store, dataKey, readJsonBody, sendJson
   const ids = new Set(Array.isArray(body.ids) ? body.ids.map(String) : [String(body.id || '')]);
   if (urlPath === '/api/compare/queue/ack' || urlPath === '/api/compare/queue/delete') {
     // ack: trang đã nhận bảng; delete: bỏ việc đang chờ / lỗi (việc đang chạy không bỏ được)
+    ids.forEach(id => jobImages.delete(id));
     const jobs = await changeQueue(store, qkey, list => {
       const keep = list.filter(j => !ids.has(j.id) || (j.state === 'running'));
       list.splice(0, list.length, ...keep);
@@ -215,4 +255,4 @@ async function handleCompare(req, res, urlPath, ctx) {
   throw fail(404, 'API so sánh không tồn tại.');
 }
 
-module.exports = {handleCompare, normalizeBoard, normalizeDoc, reviewBoard, COMPARE_SYSTEM, defaultDoc, keyFor, queueKeyFor, runWorker};
+module.exports = {handleCompare, normalizeBoard, normalizeDoc, reviewBoard, mergeFill, COMPARE_SYSTEM, defaultDoc, keyFor, queueKeyFor, runWorker};

@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="/shell.css?v=gd25">
   <link rel="stylesheet" href="/tools.css?v=gd18d">
   <link rel="stylesheet" href="/asset-library.css?v=undo1">
-  <link rel="stylesheet" href="/so-sanh.css?v=cmp2">
+  <link rel="stylesheet" href="/so-sanh.css?v=cmp3">
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js" defer></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
   <script src="/shell.js?v=gd25" defer></script>
@@ -21,7 +21,7 @@
   <script src="/catalogue-import-history.js?v=gd20.12" defer></script>
   <script src="/asset-library.js?v=undo1" defer></script>
   <script src="/integrations-client.js?v=dlg1" defer></script>
-  <script src="/so-sanh.js?v=cmp2" defer></script>
+  <script src="/so-sanh.js?v=cmp3" defer></script>
 <link rel="stylesheet" href="/timeline-todo.css?v=todo9">
 <script src="/timeline-todo.js?v=todo9" defer></script>
 </head>
@@ -59,7 +59,10 @@
       </section>
       <div class="cmp-cats-head">
         <strong>Danh mục</strong>
-        <button type="button" class="btn btn-outline btn-sm" id="cmp-add-cat" title="Thêm hạng mục lớn">+ Hạng mục</button>
+        <span class="cmp-cats-actions">
+          <button type="button" class="btn btn-outline btn-sm" id="cmp-add-board" title="Tạo bảng trống để tự làm (vẫn có thể bấm AI điền sau)">+ Bảng mới</button>
+          <button type="button" class="btn btn-outline btn-sm" id="cmp-add-cat" title="Thêm hạng mục lớn">+ Hạng mục</button>
+        </span>
       </div>
       <nav class="cmp-tree" id="cmp-tree" aria-label="Danh mục bảng so sánh"></nav>
     </aside>
@@ -80,6 +83,10 @@
         <button type="button" class="btn btn-outline btn-sm" id="cmp-delete">Xoá bảng</button>
         <button type="button" class="btn btn-success btn-sm" id="cmp-copy" title="Copy ảnh bảng để dán vào Zalo, Word…">Copy ảnh</button>
         <button type="button" class="btn btn-success btn-sm" id="cmp-export">Tải PNG</button>
+      </div>
+      <div class="cmp-aibar" id="cmp-aibar" hidden>
+        <textarea id="cmp-notes" rows="2" placeholder="Thông tin cho AI (không in lên bảng): dán chữ mô tả, thông số, link… Ảnh dán vào các ô ảnh bên dưới."></textarea>
+        <button type="button" class="btn btn-primary btn-sm" id="cmp-fill" title="AI điền các ô còn trống theo tên phương án, chữ ở đây và ảnh đã dán; chữ anh đã gõ được giữ nguyên">✨ AI điền bảng</button>
       </div>
       <div class="cmp-stage" id="cmp-stage">
         <p class="cmp-empty" id="cmp-empty">Chọn một bảng ở danh mục bên trái, hoặc nhập ý tưởng để AI làm bảng mới.</p>
