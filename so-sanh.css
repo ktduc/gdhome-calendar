@@ -43,7 +43,7 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 
 /* ---------------- Bảng so sánh (khổ thiết kế 1000px, thu nhỏ vừa màn hình bằng zoom) ---------------- */
 /* Gotham là font bản quyền, không có trên web font: dùng Montserrat (dáng gần Gotham nhất, đủ dấu tiếng Việt) */
-.cs-title { text-align: center; font-family: 'Montserrat', 'Gotham', sans-serif; font-weight: 600; line-height: 1.2; letter-spacing: .2px; }
+.cs-title { text-align: center; font-family: 'Montserrat', 'Gotham', sans-serif; font-weight: 700; line-height: 1.2; letter-spacing: .2px; }
 .cs-title [data-f=title] { font-size: 26px; }
 .cs-title [data-f=heading] { font-size: 25px; }
 /* Chữ dọc bằng xoay (html2canvas không hỗ trợ writing-mode nên ảnh xuất bị vỡ chữ) */
@@ -158,3 +158,7 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cmp-prompt-dlg .gd-ask-btn { height: auto; min-height: var(--gd-btn-height, 32px); white-space: nowrap; line-height: 1.2; }   /* nút không bị dính 2 dòng chữ */
 .cmp-panel .cmp-aibar #cmp-fill { background: #eef0f2; color: #475569; border-color: #d0d5db; }    /* AI của web: nút phụ màu xám */
 #cmp-image-actions [hidden] { display: none !important; }
+/* Hộp prompt không khoá trang: nổi bên trái, vẫn sửa bảng / thông tin cho AI ở giữa và bên phải, prompt tự cập nhật */
+.cmp-prompt-dlg:not(:modal) { position: fixed; inset: 64px auto auto 16px; margin: 0; width: min(560px, 42vw); height: calc(100vh - 80px); box-sizing: border-box; max-height: none; overflow: auto; z-index: 60; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
+.cmp-prompt-dlg > .gd-ask-actions { position: sticky; bottom: -14px; padding: 8px 0; background: inherit; }
+.cmp-pick { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }

@@ -90,7 +90,9 @@
     }
     removeGeminiMark.last = hit;   // để kiểm thử xem điểm dò
     // Ngôi sao là lớp trắng mờ phẳng: sáng hơn xung quanh rõ, đều màu bên trong và đúng hình sao 4 cánh lõm
-    if (!hit || hit.score < 12 || hit.sd > 16 || hit.corr < 0.6) return null;   // đo: logo thật ~0,74, mảng sáng khác ≤ 0,31
+    // Nền sáng (tường, sàn trắng): ngôi sao trắng mờ chỉ chênh ~5 mức sáng -> ngưỡng chênh thấp, độ khớp hình sao mới là chốt chặn
+    // (đo: logo thật 0,79–0,98; mảng sáng khác ≤ 0,33)
+    if (!hit || hit.score < 3 || hit.sd > 16 || hit.corr < 0.6) return null;
     // Chọn sát ngôi sao rồi nới đều 2 px theo mép (ăn hết viền mờ khử răng cưa)
     const mask = [], lim = Math.ceil(hit.R * 1.3), grow = 2, inStar = (dx, dy) => star(dx, dy, hit.R) <= 1;
     for (let dy = -lim; dy <= lim; dy++) for (let dx = -lim; dx <= lim; dx++) {

@@ -413,7 +413,7 @@ cases['so-sanh'] = async page => {
       navigator.clipboard.write = async items => { got = await items[0].getType('image/png'); };
       document.querySelector(`#cmp-image-actions [data-out="${mode}"]`).click();
       for (let k = 0; k < 300 && !got; k++) { document.querySelector('dialog.gd-ask[open] [data-ask="ok"]')?.click(); await new Promise(r => setTimeout(r, 100)); }
-      const bmp = await createImageBitmap(got), w = 1200, h = Math.round(bmp.height * w / bmp.width);
+      const bmp = await createImageBitmap(got), w = bmp.width, h = bmp.height;
       const c = Object.assign(document.createElement('canvas'), {width: w, height: h}), x = c.getContext('2d');
       x.imageSmoothingQuality = 'high'; x.drawImage(bmp, 0, 0, w, h);
       const row = x.getImageData(20, h - 30, 300, 1).data, v = [];
@@ -423,10 +423,19 @@ cases['so-sanh'] = async page => {
     assert.ok(await page.locator('#cmp-image-actions [data-out="copy-0"]').evaluate(el => !el.hidden),'Có mục Copy tờ trái khi 2 tờ');
     const whole = await copyShot('copy'), leftPage = await copyShot('copy-0'), rightPage = await copyShot('copy-1');
     assert.deepEqual([whole.w, leftPage.w, rightPage.w],[4920, 2920, 2000],'Cả bảng / tờ trái (ngang) / tờ phải (dọc)');
-    assert.ok([whole, leftPage, rightPage].every(x => x.stripe >= 4),'Sọc chìm còn thấy sau khi thu nhỏ: ' + JSON.stringify([whole, leftPage, rightPage]));
+    assert.ok([whole, leftPage, rightPage].every(x => x.stripe >= 3),'Có sọc chìm (cùng độ đậm các tool khác): ' + JSON.stringify([whole, leftPage, rightPage]));
     const consTops = await page.evaluate(() => [...document.querySelectorAll('#cs-sheet .cs-sec.cons')].map(e => Math.round(e.getBoundingClientRect().top)));
     assert.equal(new Set(consTops).size,1,'NHƯỢC ĐIỂM thẳng hàng qua 2 tờ: '+consTops);
     await page.locator('#cmp-layout').selectOption('2');
+    // Giảm 5 -> 2: hộp cho chọn đúng 3 phương án muốn bỏ (mặc định 3 phương án cuối)
+    const pick = page.locator('.cmp-pick-dlg');
+    await pick.waitFor();
+    assert.equal(await pick.locator('input:checked').count(),3);
+    await pick.locator('input').nth(4).uncheck();
+    assert.ok(await pick.locator('[data-a="ok"]').isDisabled(),'Chưa đủ số phương án thì chưa cho bỏ');
+    await pick.locator('input').nth(4).check();
+    await pick.locator('[data-a="ok"]').click();
+    await pick.waitFor({state:'detached'});
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('#cs-sheet .cs-head')).borderTopWidth),'0px','1 tờ: không có vệt trên');
     assert.equal(await page.locator('#cs-sheet .cs-band .cs-name').count(),2);
     // Ctrl+V ảnh (chụp màn hình / file đã copy) vào ô ảnh đang chọn
@@ -539,6 +548,9 @@ cases['so-sanh'] = async page => {
     // Prompt cho AI khác -> dán câu trả lời về
     await page.locator('#cmp-prompt').click();
     await page.locator('#cmp-prompt-dlg[open]').waitFor();
+    // Hộp prompt không khoá trang: sửa thông tin cho AI ở panel phải -> prompt tự cập nhật
+    await page.locator('#cmp-notes').fill('Tay nắm inox 304, dài 30cm – bản sửa');
+    await page.waitForFunction(() => document.getElementById('cmp-prompt-text').value.includes('bản sửa'),null,{timeout:8000});
     assert.ok((await page.locator('#cmp-prompt-text').inputValue()).includes('Tay nắm inox 304'));
     assert.match(await page.locator('#cmp-img-all').inputValue(),/Create 2 SEPARATE[\s\S]*1\. "Tay nắm tròn"[\s\S]*2\. "Tay nắm dài"[\s\S]*square 1:1/);
     // Logo Gemini (ngôi sao ở góc dưới phải ảnh vuông) tự xoá trên máy; ảnh không có logo giữ nguyên

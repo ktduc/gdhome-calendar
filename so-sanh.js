@@ -35,6 +35,7 @@
     }
     snapshot = now;
     renderHistory();
+    refreshPromptsSoon();
     setStatus('pending');
     clearTimeout(saveTimer);
     saveTimer = setTimeout(async () => {
@@ -389,11 +390,8 @@
       }).concat(document.fonts.ready));
       await Promise.all([...root.querySelectorAll('img')].map(img => img.decode().catch(() => null)));
       tighten(root);
-      // Nét sọc dày theo cỡ ảnh (khoảng cách sọc cũng giãn theo cỡ): ảnh 2 tờ rộng ~4900 px dán vào Zalo/Word bị thu nhỏ vẫn còn thấy sọc
-      const shoot = async el => {
-        const canvas = await html2canvas(el, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true});
-        return applyAntiEditWatermark(canvas, watermarkOn(), {alpha: 0.08, lineWidth: 1.6 * Math.max(1, Math.round(canvas.width / 1400))});
-      };
+      // Sọc chìm giống hệt các tool khác (Lịch, Chốt mã): cùng hàm, cùng độ đậm
+      const shoot = async el => applyAntiEditWatermark(await html2canvas(el, {scale: 2, backgroundColor: '#e6e6e6', useCORS: true}), watermarkOn());
       if (!perPage) return await shoot(root);
       const pages = [];
       for (const page of root.querySelectorAll('.cs-sheet')) pages.push(await shoot(page));
@@ -541,6 +539,43 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
     } catch (error) { GDHomeShell.alert('Không tách được ảnh ghép: ' + error.message); }
   }
 
+  // Giảm số phương án: cho chọn đúng k phương án muốn bỏ (mặc định tích các phương án cuối)
+  // Dựng lại toàn bộ prompt của hộp "Gửi bảng này qua AI khác" theo bảng đang mở (gọi khi mở hộp và mỗi lần sửa bảng)
+  async function refreshPrompts() {
+    const dlg = byId('cmp-prompt-dlg'), b = board();
+    if (!b) return;
+    dlg.dataset.board = b.id;
+    byId('cmp-img-all').value = allImagesPrompt(b);
+    byId('cmp-img-collage').value = collagePrompt(b);
+    byId('cmp-img-prompts').innerHTML = imagePrompts(b).map((text, i) => `<div class="cmp-img-prompt"><div><b>Cột ${i + 1}: ${esc(b.columns[i].name || '')}</b>
+      <button type="button" class="gd-ask-btn" data-pr="copy-img" data-i="${i}">📋 Copy prompt ảnh</button></div><textarea readonly rows="3">${esc(text)}</textarea></div>`).join('');
+    const {prompt} = await post('/api/compare/prompt', {board: b, categories: doc.categories.map(c => c.name)});
+    if (board() === b) byId('cmp-prompt-text').value = prompt;
+  }
+  let promptTimer = null;
+  const refreshPromptsSoon = () => {
+    if (!byId('cmp-prompt-dlg')?.open) return;
+    clearTimeout(promptTimer);
+    promptTimer = setTimeout(() => refreshPrompts().catch(() => {}), 500);
+  };
+  function pickColumnsToRemove(b, k) {
+    return new Promise(resolve => {
+      const d = Object.assign(document.createElement('dialog'), {className: 'shell-dialog gd-ask is-danger cmp-pick-dlg'});
+      d.innerHTML = `<h2>Bỏ ${k} phương án</h2><p class="gd-ask-message">Tích đúng ${k} phương án muốn bỏ. Ctrl+Z để hoàn tác.</p>
+        <div class="gd-ask-list">${b.columns.map((c, i) => `<label class="cmp-pick"><input type="checkbox" value="${i}" ${i >= b.columns.length - k ? 'checked' : ''}>
+          <span>${i + 1}. ${esc(c.name && !DEFAULT_NAME.test(c.name) ? c.name : '(chưa đặt tên)')}${c.image ? ' · có ảnh' : ''}${c.pros.length || c.cons.length ? ' · có ưu/nhược' : ''}</span></label>`).join('')}</div>
+        <div class="gd-ask-actions"><button type="button" class="gd-ask-btn" data-a="cancel">Huỷ</button><button type="button" class="gd-ask-btn is-primary" data-a="ok"></button></div>`;
+      document.body.append(d);
+      const ok = d.querySelector('[data-a="ok"]');
+      const sync = () => { const n = d.querySelectorAll('input:checked').length; ok.disabled = n !== k; ok.textContent = n === k ? 'Bỏ ' + k + ' phương án đã chọn' : 'Đã chọn ' + n + '/' + k; };
+      d.addEventListener('change', sync);
+      sync();
+      d.onclick = e => { const a = e.target.closest('[data-a]')?.dataset.a; if (a) d.close(a === 'ok' ? 'ok' : ''); };
+      d.onclose = () => { const res = d.returnValue === 'ok' ? [...d.querySelectorAll('input:checked')].map(i => Number(i.value)) : null; d.remove(); resolve(res); };
+      d.showModal();
+    });
+  }
+
   // ---------------------------------------------------------------- SỰ KIỆN
   function wire() {
     byId('cmp-run').onclick = async () => {
@@ -595,15 +630,9 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       const b = board();
       if (!b) return;
       try {
-        const {prompt} = await post('/api/compare/prompt', {board: b, categories: doc.categories.map(c => c.name)});
-        byId('cmp-prompt-text').value = prompt;
         byId('cmp-prompt-answer').value = '';
-        byId('cmp-img-all').value = allImagesPrompt(b);
-        byId('cmp-img-collage').value = collagePrompt(b);
-        byId('cmp-img-prompts').innerHTML = imagePrompts(b).map((text, i) => `<div class="cmp-img-prompt"><div><b>Cột ${i + 1}: ${esc(b.columns[i].name || '')}</b>
-          <button type="button" class="gd-ask-btn" data-pr="copy-img" data-i="${i}">📋 Copy prompt ảnh</button></div><textarea readonly rows="3">${esc(text)}</textarea></div>`).join('');
-        dlg.dataset.board = b.id;
-        dlg.showModal();
+        await refreshPrompts();
+        if (!dlg.open) dlg.show();
       } catch (error) { GDHomeShell.alert(error.message); }
     };
     // Ctrl+V ảnh khi hộp prompt đang mở = ảnh ghép, tự tách vào các cột
@@ -678,6 +707,7 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       activeSlot = null;
       renderTree();
       renderSheet();
+      refreshPromptsSoon();   // hộp prompt đang mở thì chuyển theo bảng vừa chọn
     };
     tree.addEventListener('change', e => {
       if (e.target.type !== 'color') return;
@@ -702,10 +732,11 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
     byId('cmp-layout').onchange = async e => {
       const b = board(), layout = LAYOUTS[e.target.value], n = layout.reduce((x, y) => x + y, 0);
       if (!b) return;
-      const removed = b.columns.slice(n);
-      const filled = removed.filter(c => c.pros.length || c.cons.length || c.image || c.desc);
-      if (filled.length && !await GDHomeShell.confirm({message: 'Bỏ ' + removed.length + ' phương án cuối: ' + removed.map(c => c.name).join(', ') + '?', okText: 'Bỏ', danger: true})) return renderSheet();
-      b.columns = b.columns.slice(0, n);
+      if (b.columns.length > n) {
+        const drop = await pickColumnsToRemove(b, b.columns.length - n);
+        if (!drop) return renderSheet();
+        b.columns = b.columns.filter((c, i) => !drop.includes(i));
+      }
       while (b.columns.length < n) b.columns.push(blankCol(''));
       b.layout = layout;
       renderSheet();
