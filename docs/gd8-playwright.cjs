@@ -567,6 +567,19 @@ cases['so-sanh'] = async page => {
     });
     assert.equal(gem.removed,true,'Thấy và xoá logo Gemini');
     assert.equal(gem.none,null,'Ảnh không có logo thì không đụng');
+    // Ảnh ghép 3:2 (6 phương án): logo cỡ / lề khác vị trí quen thuộc vẫn tìm thấy nhờ quét cả góc
+    const gem32 = await page.evaluate(async () => {
+      const c = Object.assign(document.createElement('canvas'),{width:1248,height:832}), x = c.getContext('2d');
+      x.fillStyle = '#e8e2d8'; x.fillRect(0,0,1248,832);
+      x.fillStyle = 'rgba(255,255,255,.5)'; x.beginPath();
+      for (let t = 0; t <= Math.PI * 2; t += 0.01) { const px = 1148 + 21.6 * Math.sign(Math.cos(t)) * Math.abs(Math.cos(t)) ** 3, py = 732 + 21.6 * Math.sign(Math.sin(t)) * Math.abs(Math.sin(t)) ** 3; t ? x.lineTo(px,py) : x.moveTo(px,py); }
+      x.fill();
+      const out = await removeGeminiMark(await new Promise(r => c.toBlob(r,'image/png')));
+      if (!out) return null;
+      const b = await createImageBitmap(out), cc = Object.assign(document.createElement('canvas'),{width:1248,height:832}).getContext('2d'); cc.drawImage(b,0,0);
+      return [...cc.getImageData(1148,732,1,1).data].slice(0,3);
+    });
+    assert.ok(gem32 && Math.abs(gem32[0] - 0xe8) < 6,'Ảnh ghép 3:2: đã xoá logo Gemini: ' + gem32);
     assert.ok(Math.abs(gem.center[0] - 0x5a) < 6,'Tâm ngôi sao đã lấp bằng màu nền: ' + gem.center);
     await page.locator('#cmp-prompt-answer').fill('```json\n' + JSON.stringify({heading:'X',columns:[col('Khác 1'),col('Khác 2')]}) + '\n```');
     await page.locator('#cmp-prompt-dlg [data-pr="apply"]').click();

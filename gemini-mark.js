@@ -1,5 +1,5 @@
 // =========================================================================
-// GD HOME - Tự xoá logo Gemini (ngôi sao 4 cánh) ở góc dưới phải ảnh vuông do Gemini tạo.
+// GD HOME - Tự xoá logo Gemini (ngôi sao 4 cánh) ở góc dưới phải ảnh do Gemini tạo (ảnh vuông, ảnh ghép 3:2…).
 // Xử lý ngay trên máy (canvas), không gọi AI: dò đúng chỗ ngôi sao quanh vị trí quen thuộc,
 // chỉ chọn sát hình ngôi sao rồi lấp bằng điểm ảnh xung quanh (giống Fill của Photoshop).
 // removeGeminiMark(blob) -> Promise<Blob|null>  (null = không thấy logo, giữ ảnh gốc)
@@ -31,6 +31,34 @@
       if (best) found.push(best);
     }
     return found;    // mỗi vị trí dò 1 ứng viên; chọn theo độ khớp hình ở dưới
+  }
+
+  // Dò rộng (khi các vị trí quen thuộc không thấy, vd ảnh ghép 3:2 có cỡ / lề logo khác): quét cả vùng góc dưới phải,
+  // so độ sáng trong hình sao với vành ngoài bằng điểm mẫu thưa, giữ ~10 chỗ nổi nhất để chấm độ khớp hình ở bước sau
+  function sweep(d, W, H) {
+    const L = (X, Y) => { const k = (Y * W + X) * 4; return 0.299 * d[k] + 0.587 * d[k + 1] + 0.114 * d[k + 2]; };
+    const M = Math.min(W, H), side = Math.round(M * 0.32), top = [];
+    for (let R = Math.max(8, Math.round(M * 0.012)); R <= Math.round(M * 0.06); R += Math.max(1, Math.round(R * 0.12))) {
+      const ins = [], ring = [], st = Math.max(1, Math.round(R / 5)), lim = Math.ceil(R * 1.6);
+      for (let dy = -lim; dy <= lim; dy += st) for (let dx = -lim; dx <= lim; dx += st) {
+        const v = star(dx, dy, R);
+        if (v <= 0.55) ins.push([dx, dy]); else if (v >= 1.5) ring.push([dx, dy]);
+      }
+      const pad = lim + 2, step = Math.max(2, Math.round(R / 6));
+      for (let cy = Math.max(pad, H - side); cy <= H - pad; cy += step) for (let cx = Math.max(pad, W - side); cx <= W - pad; cx += step) {
+        let a = 0, a2 = 0, b = 0, b2 = 0;
+        for (const [dx, dy] of ins) { const l = L(cx + dx, cy + dy); a += l; a2 += l * l; }
+        for (const [dx, dy] of ring) { const l = L(cx + dx, cy + dy); b += l; b2 += l * l; }
+        const mi = a / ins.length, mo = b / ring.length;
+        if (mi - mo < 2) continue;
+        const vi = Math.max(0, a2 / ins.length - mi * mi), vo = Math.max(0, b2 / ring.length - mo * mo);
+        const t = (mi - mo) / Math.sqrt(vi / ins.length + vo / ring.length + 0.25);
+        const near = top.findIndex(c => Math.abs(c.cx - cx) < R && Math.abs(c.cy - cy) < R);
+        if (near >= 0) { if (top[near].t < t) top[near] = {cx, cy, R, t, score: mi - mo, sd: Math.sqrt(vi)}; continue; }
+        if (top.length < 10 || t > top[top.length - 1].t) { top.push({cx, cy, R, t, score: mi - mo, sd: Math.sqrt(vi)}); top.sort((p, q) => q.t - p.t); top.length = Math.min(top.length, 10); }
+      }
+    }
+    return top;
   }
 
   // Độ khớp hình: tương quan giữa độ sáng và mặt nạ ngôi sao trong ô vuông quanh tâm (mảng trắng tròn/vuông cho điểm thấp)
@@ -78,21 +106,30 @@
     const ctx = canvas.getContext('2d', {willReadFrequently: true});
     ctx.drawImage(bmp, 0, 0);
     const img = ctx.getImageData(0, 0, W, H), d = img.data;
-    let hit = null;
-    for (const cand of find(d, W, H)) {
-      // Tinh chỉnh tâm ±3 px và bán kính theo độ khớp hình (đầu cánh nhọn dài hơn phần sáng giữa)
-      let top = null;
-      for (let R = Math.round(cand.R * 0.9); R <= Math.round(cand.R * 1.35); R++) for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
-        const corr = shapeMatch(d, W, {cx: cand.cx + dx, cy: cand.cy + dy, R}, Math.ceil(cand.R * 1.4), 2);
-        if (!top || corr > top.corr) top = {cx: cand.cx + dx, cy: cand.cy + dy, R, corr};
+    // Tinh chỉnh tâm và bán kính theo độ khớp hình (đầu cánh nhọn dài hơn phần sáng giữa), chọn ứng viên khớp nhất
+    const refine = (cands, reach) => {
+      let best = null;
+      for (const cand of cands) {
+        let top = null;
+        for (let R = Math.round(cand.R * 0.85); R <= Math.round(cand.R * 1.35); R++) for (let dy = -reach; dy <= reach; dy++) for (let dx = -reach; dx <= reach; dx++) {
+          const corr = shapeMatch(d, W, {cx: cand.cx + dx, cy: cand.cy + dy, R}, Math.ceil(cand.R * 1.4), 2);
+          if (!top || corr > top.corr) top = {cx: cand.cx + dx, cy: cand.cy + dy, R, corr};
+        }
+        if (!best || top.corr > best.corr) best = {...cand, ...top};
       }
-      if (!hit || top.corr > hit.corr) hit = {...cand, ...top};
-    }
-    removeGeminiMark.last = hit;   // để kiểm thử xem điểm dò
-    // Ngôi sao là lớp trắng mờ phẳng: sáng hơn xung quanh rõ, đều màu bên trong và đúng hình sao 4 cánh lõm
-    // Nền sáng (tường, sàn trắng): ngôi sao trắng mờ chỉ chênh ~5 mức sáng -> ngưỡng chênh thấp, độ khớp hình sao mới là chốt chặn
+      return best;
+    };
+    // Ngôi sao là lớp trắng mờ phẳng: sáng hơn xung quanh, đều màu bên trong và đúng hình sao 4 cánh lõm.
+    // Nền sáng (tường, sàn trắng) chỉ chênh ~5 mức sáng -> ngưỡng chênh thấp, độ khớp hình sao mới là chốt chặn
     // (đo: logo thật 0,79–0,98; mảng sáng khác ≤ 0,33)
-    if (!hit || hit.score < 3 || hit.sd > 16 || hit.corr < 0.6) return null;
+    const ok = (h, min = 0.6) => h && h.score >= 3 && h.sd <= 16 && h.corr >= min;
+    let hit = refine(find(d, W, H), 3);
+    let minCorr = 0.6;
+    // Vị trí quen thuộc không thấy: quét cả góc (ảnh ghép 3:2…). Quét rộng dễ gặp chỗ na ná hơn nên đòi khớp hình cao hơn
+    // (đo: logo thật dò rộng ≥ 0,88; ảnh không logo cao nhất 0,55)
+    if (!ok(hit)) { hit = refine(sweep(d, W, H), 4); minCorr = 0.72; }
+    removeGeminiMark.last = hit;   // để kiểm thử xem điểm dò
+    if (!ok(hit, minCorr)) return null;
     // Chọn sát ngôi sao rồi nới đều 2 px theo mép (ăn hết viền mờ khử răng cưa)
     const mask = [], lim = Math.ceil(hit.R * 1.3), grow = 2, inStar = (dx, dy) => star(dx, dy, hit.R) <= 1;
     for (let dy = -lim; dy <= lim; dy++) for (let dx = -lim; dx <= lim; dx++) {
