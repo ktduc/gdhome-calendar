@@ -25,3 +25,22 @@ test('GistStore: thay đổi đến lúc đang gửi vẫn được gửi tiếp
   assert.deepEqual(sent[1],['user-b_at_example.com.json']);
   assert.equal(gist.dirty.size,0);
 });
+
+test('GistStore: GitHub hết hạn mức -> Chốt mã vẫn lưu được (giữ chờ), không gọi GitHub tới giờ mở lại', async () => {
+  const { GistStore } = require('../server');
+  const local = { init:async () => {}, put:async () => {}, get:async () => null };
+  const gist = new GistStore('token','gist-id',local);
+  let calls = 0;
+  gist.api = async () => {
+    calls++;
+    throw Object.assign(new Error('GitHub Gist HTTP 403: API rate limit exceeded'),{upstreamStatus:403,rateLimited:true,resetAt:Date.now() + 3600000});
+  };
+  await gist.putMaterials([['materials',{v:1}]]);          // không ném lỗi
+  await gist.putMaterials([['materials',{v:2}]]);          // đang khoá: không gọi GitHub nữa
+  await gist.flush();
+  clearTimeout(gist.timer);
+  assert.equal(calls,1);
+  assert.deepEqual(await gist.get('materials'),{v:2});
+  assert.ok(gist.dirty.size >= 1,'còn chờ đẩy lên Gist');
+  assert.ok(gist.info().githubBlockedUntil);
+});

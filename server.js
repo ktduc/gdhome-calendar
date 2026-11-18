@@ -163,10 +163,15 @@ async function gistRequest(url,options,deadline = Infinity) {
       const response = await fetch(url,{...options,signal:AbortSignal.timeout(Math.min(remaining,GIST_TIMEOUT_MS))});
       const body = await response.text();
       if (response.ok) return body;
-      throw Object.assign(new Error('GitHub Gist HTTP ' + response.status + ': ' + body.slice(0,200)),{upstreamStatus:response.status});
+      // Hết hạn mức API GitHub (5000 lượt/giờ): thử lại ngay cũng vô ích, báo kèm giờ mở lại
+      const rateLimited = (response.status === 403 || response.status === 429) &&
+        (response.headers.get('x-ratelimit-remaining') === '0' || /rate limit/i.test(body));
+      const reset = Number(response.headers.get('x-ratelimit-reset')) * 1000;
+      throw Object.assign(new Error('GitHub Gist HTTP ' + response.status + ': ' + body.slice(0,200)),
+        {upstreamStatus:response.status,rateLimited,resetAt:rateLimited ? (reset > Date.now() ? reset : Date.now() + 60000) : 0});
     } catch (error) {
       const status = error.upstreamStatus;
-      if (attempt+1 === attempts || (status && status !== 429 && status < 500)) throw error;
+      if (error.rateLimited || attempt+1 === attempts || (status && status !== 429 && status < 500)) throw error;
       console.error('[GIST] Thử lại ' + options.method + ' (' + (attempt+1) + '/2):',error.message);
     }
   }
@@ -184,6 +189,7 @@ class GistStore {
     this.local = fallbackFileStore;
     this.lastError = null;
     this.lastSyncAt = null;
+    this.blockedUntil = 0;
   }
   async api(method,url,body,deadline) {
     const text = await gistRequest(`https://api.github.com${url}`,{
@@ -250,16 +256,28 @@ class GistStore {
     this.schedule(1500);
   }
   // Hồ sơ ký và bản phát hành chỉ báo thành công sau khi Gist nhận cả lần ghi.
+  // GitHub đang khoá vì hết hạn mức: nhận lưu vào bộ nhớ + file dự phòng, tự đẩy lên Gist khi mở lại
+  async queueUntilReset(writes) {
+    for (const [key,data] of writes) await this.put(key,data);
+    this.schedule(Math.max(1500,this.blockedUntil - Date.now() + 2000));
+  }
   async putMaterials(writes) {
     if (this.flushing) await this.flushing;
+    if (this.blockedUntil > Date.now()) return this.queueUntilReset(writes);
     const pending = writes.map(([key]) => fileNameForKey(key)).filter(name => this.dirty.delete(name));
     const files = Object.fromEntries(writes.map(([key,data]) => [
       fileNameForKey(key), { content: JSON.stringify(data, null, 2) }
     ]));
     try {
       await this.api('PATCH', `/gists/${this.gistId}`, { files });
-    } catch {
+      this.blockedUntil = 0;
+    } catch (error) {
       for (const name of pending) this.dirty.add(name);
+      if (error.rateLimited) {
+        this.blockedUntil = error.resetAt;
+        this.lastError = error.message;
+        return this.queueUntilReset(writes);
+      }
       if (pending.length) this.schedule(1500);
       throw Object.assign(new Error('Chưa lưu được Chốt mã lên GitHub Gist. Thử lại.'), { status: 503 });
     }
@@ -275,19 +293,21 @@ class GistStore {
   async flush() {
     if (this.flushing) return this.flushing;
     if (this.dirty.size === 0) return;
+    if (this.blockedUntil > Date.now()) return this.schedule(this.blockedUntil - Date.now() + 2000);
     const names = Array.from(this.dirty);
     this.dirty.clear();
     const files = {};
     names.forEach(n => { files[n] = { content: JSON.stringify(this.cache.get(n), null, 2) }; });
     let failed = false;
     this.flushing = this.api('PATCH', `/gists/${this.gistId}`, { files })
-      .then(() => { this.lastError = null; this.lastSyncAt = new Date().toISOString(); })
+      .then(() => { this.lastError = null; this.blockedUntil = 0; this.lastSyncAt = new Date().toISOString(); })
       .catch(err => {
         failed = true;
         this.lastError = err.message;
         console.error('[GIST] Lỗi đẩy dữ liệu, sẽ thử lại:', err.message);
         names.forEach(n => this.dirty.add(n));
-        this.schedule(10000);
+        if (err.rateLimited) this.blockedUntil = err.resetAt;
+        this.schedule(err.rateLimited ? err.resetAt - Date.now() + 2000 : 10000);
       })
       .finally(() => {
         this.flushing = null;
@@ -297,7 +317,8 @@ class GistStore {
     return this.flushing;
   }
   info() {
-    return { storage: 'gist', gistId: this.gistId, pending: this.dirty.size, lastSyncAt: this.lastSyncAt, lastError: this.lastError };
+    return { storage: 'gist', gistId: this.gistId, pending: this.dirty.size, lastSyncAt: this.lastSyncAt, lastError: this.lastError,
+      ...(this.blockedUntil > Date.now() ? { githubBlockedUntil: new Date(this.blockedUntil).toISOString() } : {}) };
   }
 }
 
