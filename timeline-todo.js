@@ -306,16 +306,16 @@
 
   function setupDragDrop() {
     document.addEventListener('dragover', (e) => {
-      if (!st.dragId || !isTimelineVisible()) return;
+      if (!st.dragId) return;
       const lt = listTarget(e);
-      if (lt) {
+      if (lt) {                                                    // sắp xếp trong danh sách: mọi trang
         e.preventDefault();
         e.dataTransfer.dropEffect = 'move';
         clearDropHint();
         lt.li.classList.add(lt.after ? 'gd-todo-insert-after' : 'gd-todo-insert-before');
         return;
       }
-      const t = timelineTarget(e);
+      const t = isTimelineVisible() ? timelineTarget(e) : null;
       if (!t) { clearDropHint(); if (typeof hideFloatingTooltip === 'function') hideFloatingTooltip(); return; }
       e.preventDefault();
       e.dataTransfer.dropEffect = 'copy';
@@ -331,7 +331,7 @@
       if (!st.dragId) return;
       const item = st.items.find(i => i.id === st.dragId);
       const lt = listTarget(e);
-      const t = lt ? null : timelineTarget(e);
+      const t = lt || !isTimelineVisible() ? null : timelineTarget(e);
       const dragId = st.dragId;
       endDrag();
       if (!item || (!lt && !t)) return;
@@ -516,7 +516,7 @@
     try { localStorage.setItem('gd_todo_open', open ? '1' : '0'); } catch (e) { /* bỏ qua */ }
     render();
     if (open) {
-      if (!st.loaded) load();
+      if (!st.loaded) tick();
       else if (Date.now() - st.lastSync > 15000) sync();
       setTimeout(() => inputEl && inputEl.focus(), 30);
     }
@@ -720,6 +720,8 @@
 
   function tick() {
     if (!root && !build()) return;
+    // Trang Lịch: chờ app.js đọc cấu hình + đăng nhập xong (trước đó authMode còn 'none' -> gọi API thiếu token -> 401)
+    if (onSchedule() && !scheduleReady()) return;
     // Chưa đăng nhập thì chưa gọi API (tránh bật lại hộp đăng nhập)
     if (typeof _appConfig !== 'undefined' && _appConfig.authMode === 'google' && !getSession()) return;
     if (st.noAuth) return;                                       // chưa đăng nhập ở trang này: không gọi lại liên tục
@@ -744,5 +746,5 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
-  window.GDTimelineTodo = {state: st, reload: load, sync: () => sync(false), checkLinks};
+  window.GDTimelineTodo = {state: st, reload: load, sync: () => sync(false), checkLinks, tick};
 })();

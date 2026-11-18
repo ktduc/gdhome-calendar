@@ -287,6 +287,15 @@ test('Object Storage: Thao tác PUT / GET / HEAD / DELETE với mock fetch', asy
     // 5. DELETE
     const delRes = await deleteObject('project-files/test.pdf', opts);
     assert.equal(delRes.ok, true);
+
+    // 6. B2 bận (500) -> tự gửi lại; 500 mãi thì báo lỗi sau 3 lần; 403 không gửi lại
+    for (const [codes, ok, calls] of [[[500, 200], true, 2], [[500, 503, 500], false, 3], [[403], false, 1]]) {
+      let n = 0;
+      global.fetch = async () => { const status = codes[Math.min(n++, codes.length - 1)]; return {ok: status < 300, status, headers: new Headers()}; };
+      const run = putObject('project-files/retry.webp', Buffer.from('x'), 'image/webp', {...opts, retryDelay: 1});
+      if (ok) await run; else await assert.rejects(run, err => err.status === 502);
+      assert.equal(n, calls);
+    }
   } finally {
     global.fetch = origFetch;
   }

@@ -307,7 +307,7 @@
 
     // Hỗ trợ Ctrl+V dán ảnh trực tiếp
     window.addEventListener('paste', e => {
-      if (!currentProjectId) return;
+      if (!currentProjectId || e.defaultPrevented) return;   // hộp khác (vd Phối cảnh 3D) đã nhận ảnh dán
       const items = e.clipboardData?.items;
       if (!items) return;
       const files = [...items].filter(item => item.kind === 'file' && item.type.startsWith('image/'))

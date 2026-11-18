@@ -175,17 +175,22 @@ function signedUrl(method, key, options = {}) {
  * Tải đối tượng lên Object Storage qua PUT
  */
 async function putObject(key, buffer, mime = 'application/octet-stream', options = {}) {
-  const url = signedUrl('PUT', key, options);
   const timeoutMs = options.timeout || 30000;
-  const res = await fetch(url, {
-    method: 'PUT',
-    headers: { 'Content-Type': mime },
-    body: buffer,
-    signal: AbortSignal.timeout(timeoutMs)
-  });
+  // B2 đôi khi trả 500/503 (máy chủ bận) và khuyên gửi lại: thử tối đa 3 lần, mỗi lần ký URL mới
+  let res;
+  for (let attempt = 1; ; attempt++) {
+    res = await fetch(signedUrl('PUT', key, options), {
+      method: 'PUT',
+      headers: { 'Content-Type': mime },
+      body: buffer,
+      signal: AbortSignal.timeout(timeoutMs)
+    });
+    if (res.ok || attempt >= 3 || !(res.status >= 500 || res.status === 429)) break;
+    await new Promise(resolve => setTimeout(resolve, (options.retryDelay ?? 800) * attempt));
+  }
 
   if (!res.ok) {
-    throw Object.assign(new Error(`Không ghi được tệp lên Object Storage (${res.status}).`), { status: 502 });
+    throw Object.assign(new Error(`Không ghi được tệp lên Object Storage (${res.status})${res.status >= 500 || res.status === 429 ? ' – kho lưu trữ đang bận, đã thử 3 lần; tải lại sau ít phút' : ''}.`), { status: 502 });
   }
   return { key, size: buffer.length, mime };
 }

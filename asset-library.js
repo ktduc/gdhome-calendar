@@ -1244,6 +1244,21 @@ window.GDHomeAssets = (() => {
     });
   }
 
+  // Ctrl+V ảnh / PDF khi hộp đang mở (ảnh chụp màn hình, copy từ Zalo/trình duyệt). Dán chữ vào ô nhập vẫn như thường.
+  function enablePaste(dialog,onFiles) {
+    const handler = event => {
+      if (!dialog.open || event.defaultPrevented) return;
+      const stamp = Date.now();
+      const files = [...(event.clipboardData?.files || [])].filter(file => file.type.startsWith('image/') || isPdf(file))
+        .map((file,i) => new File([file],file.name && file.name !== 'image.png' ? file.name : 'dan-anh-' + stamp + '-' + (i + 1) + '.' + (file.type.split('/')[1] || 'png'),{type:file.type}));
+      if (!files.length) return;
+      event.preventDefault();
+      onFiles(files);
+    };
+    document.addEventListener('paste',handler);
+    dialog.addEventListener('close',() => document.removeEventListener('paste',handler),{once:true});
+  }
+
   let openPopover = null;
   function closePicker() { openPopover?.close(); }
   const pickerWidthKey = 'gdhome-asset-picker-width';
@@ -3057,7 +3072,7 @@ window.GDHomeAssets = (() => {
       '<button type="button" role="tab" data-catalogue-tab="history" aria-selected="false">Đã nhập</button></div>' +
       '<section data-catalogue-history hidden></section><form class="wood-catalogue-controls">' +
       '<section class="catalogue-import-sources"><h3>1 · Nguồn nhập</h3>' +
-      '<div data-catalogue-mixed><div class="asset-drop" data-catalogue-drop>Kéo thả PDF, ảnh hoặc thư mục vào đây</div>' +
+      '<div data-catalogue-mixed><div class="asset-drop" data-catalogue-drop>Kéo thả PDF, ảnh hoặc thư mục vào đây · Ctrl+V để dán ảnh</div>' +
       '<label data-catalogue-pdf>Catalogue PDF <input name="pdf" type="file" accept="application/pdf,.pdf" multiple></label>' +
       '<label>Ảnh <input type="file" name="images" accept="image/*" multiple></label>' +
       '<label>Thư mục <input type="file" name="folder" webkitdirectory multiple></label></div>' +
@@ -3184,6 +3199,7 @@ window.GDHomeAssets = (() => {
         if (!busy) queue.add(incoming,mode);
       } catch (error) { status.textContent = error.message; }
     };
+    enablePaste(dialog,files => { if (!busy) queue.add(files.map(file => ({file})),mode); });
     if (preset.file) queue.add([{file:preset.file}],mode);
     const historyPanel = body.querySelector('[data-catalogue-history]'), review = body.querySelector('.catalogue-review');
     const listValues = value => value.split(',').map(part => part.trim()).filter(Boolean);
@@ -4568,17 +4584,18 @@ window.GDHomeAssets = (() => {
   function openRenders({projectId,projectName,onPick} = {}) {
     const {dialog,body} = modal('asset-render-dialog','🎨 Phối cảnh 3D' + (projectName ? ' · ' + projectName : ''));
     let status = '';
+    const upload = async files => {
+      try { await uploadRenders(projectId,files,message => { status = message; const s = body.querySelector('.asset-status'); if (s) s.textContent = message; }); }
+      catch (error) { status = error.message; }
+      paint(true);
+    };
+    enablePaste(dialog,upload);
     async function paint(force = false) {
-      body.innerHTML = '<div class="asset-drop" tabindex="0">⬆ Kéo thả ảnh hoặc PDF phối cảnh cả nhà · PDF tự tách từng trang thành ảnh và nén</div>' +
+      body.innerHTML = '<div class="asset-drop" tabindex="0">⬆ Kéo thả, bấm chọn hoặc Ctrl+V ảnh / PDF phối cảnh cả nhà · PDF tự tách từng trang thành ảnh và nén</div>' +
         '<p class="asset-status" role="status">' + esc(status) + '</p><div class="asset-render-list"><p class="asset-empty">Đang tải…</p></div>' +
         '<p class="asset-hint">Kho ảnh này dùng chung với Quản lý dự án.' + (onPick ? ' Bấm ảnh để dùng cho ô đang chọn.' : '') +
         ' <a href="/du-an?project=' + encodeURIComponent(projectId || '') + '" target="_blank">Mở Hồ sơ dự án</a></p>';
       const drop = body.querySelector('.asset-drop');
-      const upload = async files => {
-        try { await uploadRenders(projectId,files,message => { status = message; const s = body.querySelector('.asset-status'); if (s) s.textContent = message; }); }
-        catch (error) { status = error.message; }
-        paint(true);
-      };
       drop.onclick = async () => { const files = await filePicker('image/*,application/pdf'); if (files.length) upload(files); };
       drop.onkeydown = event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); drop.click(); } };
       enableDrop(drop,upload);

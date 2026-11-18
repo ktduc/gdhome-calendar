@@ -3,6 +3,8 @@ const fs = require('node:fs/promises');
 const fsSync = require('node:fs');
 const path = require('node:path');
 const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
+// Tên file từ header có thể đã mã hoá %xx hoặc là chữ thường có dấu % ("100%.pdf"): giải mã được thì giải, không thì giữ nguyên
+const safeDecode = value => { try { return decodeURIComponent(value); } catch { return value; } };
 const fontkit = require('@pdf-lib/fontkit');
 const { projectList, writeProjectProfile } = require('./project-profiles');
 const {
@@ -1566,7 +1568,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
       type = 'render';
       room = url.searchParams.get('room');
       pageNumber = parseInt(url.searchParams.get('pageNumber') || '1', 10);
-      sourcePdf = url.searchParams.get('sourcePdf') ? decodeURIComponent(url.searchParams.get('sourcePdf')) : null;
+      sourcePdf = url.searchParams.get('sourcePdf') || null;   // searchParams đã giải mã sẵn (giải mã lần 2 làm hỏng tên có dấu %)
       const bytes = await readRawBody(req,maxImageBytes + 1024*1024);
       try {
         const form = await new Response(bytes,{headers:{'Content-Type':contentType}}).formData();
@@ -1594,10 +1596,10 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
       const urlObj = new URL(req.url, 'http://localhost');
       projectId = urlObj.searchParams.get('projectId') || req.headers['x-project-id'];
       const rawName = urlObj.searchParams.get('name') || req.headers['x-file-name'] || 'file';
-      name = decodeURIComponent(rawName);
+      name = safeDecode(rawName);
       type = urlObj.searchParams.get('type') || req.headers['x-doc-type'] || 'drawing';
       const rawRoom = urlObj.searchParams.get('room') || req.headers['x-room'] || 'Cả nhà';
-      room = decodeURIComponent(rawRoom);
+      room = safeDecode(rawRoom);
       cleanMime = contentType || MIME_MAP[path.extname(name).toLowerCase()] || 'application/octet-stream';
       if (!readRawBody) {
         return sendJson(res, 500, { success: false, message: 'Server chưa hỗ trợ đọc binary stream.' });

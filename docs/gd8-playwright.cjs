@@ -253,6 +253,22 @@ cases['todo'] = async page => {
   await page.locator('#btn-view-calendar').click();
   await page.waitForTimeout(200);
   assert.equal(await panel.isVisible(),true);
+  // Timeline ẩn vẫn kéo sắp xếp được trong danh sách
+  const firstOpen = () => page.evaluate(() => document.querySelector('#gd-todo-list li[draggable="true"]:not(.starred) .gd-todo-title').textContent);
+  const lastLi = panel.locator('li[draggable="true"]:not(.starred)').last(), lastTitle = await lastLi.locator('.gd-todo-title').textContent();
+  await lastLi.dragTo(panel.locator('li[draggable="true"]:not(.starred)').first(),{targetPosition:{x:40,y:3}});
+  await page.waitForFunction(t => document.querySelector('#gd-todo-list li[draggable="true"]:not(.starred) .gd-todo-title').textContent === t,lastTitle);
+  assert.equal(await firstOpen(),lastTitle);
+  // Trang Lịch: Todo không gọi API trước khi app.js đọc cấu hình/đăng nhập xong (trước đây gọi sớm thiếu token -> 401 -> kẹt "Đăng nhập Gmail")
+  const early = await page.evaluate(async () => {
+    const calls = [], f = window.fetch;
+    window.fetch = (u, o) => { if (String(u).includes('/api/todos')) calls.push(u); return f(u, o); };
+    GDTimelineTodo.state.loaded = false; _scheduleReady = false;
+    await GDTimelineTodo.tick(); await new Promise(r => setTimeout(r, 100));
+    _scheduleReady = true; window.fetch = f;
+    return calls.length;
+  });
+  assert.equal(early,0,'Chưa sẵn sàng thì chưa gọi /api/todos');
 };
 
 cases['multi-delete'] = async page => {
@@ -4358,6 +4374,16 @@ cases['20.12'] = async page => {
   await modal.locator('[data-catalogue-drop]').dispatchEvent('drop',{dataTransfer:dropped});
   const rows = modal.locator('[data-catalogue-source]');
   assert.equal(await rows.count(),6);
+  // Ctrl+V ảnh (ảnh chụp màn hình) cũng vào hàng đợi; dán chữ vào ô link vẫn như thường
+  await page.evaluate(encoded => {
+    const data = new DataTransfer();
+    data.items.add(new File([Uint8Array.from(atob(encoded),letter => letter.charCodeAt(0))],'image.png',{type:'image/png'}));
+    document.querySelector('.wood-catalogue-dialog h2').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+  },imageFixture);
+  assert.equal(await rows.count(),7,'Ctrl+V ảnh vào hàng đợi');
+  const pasted = rows.filter({hasText:'dan-anh-'});
+  await pasted.locator('[data-remove-source]').click();
+  assert.equal(await rows.count(),6);
   const webB = rows.filter({hasText:'https://example.com/b'});
   await webB.locator('summary').click();
   await webB.locator('[data-source-setting=categoryId]').selectOption('cat-5');
@@ -5511,6 +5537,23 @@ cases['21.7'] = async page => {
     await close('.asset-library-dialog');
     await page.evaluate(() => GDHomeAssets.openRenders({projectId:'p1'}));
     await inspect(width,'Phối cảnh 3D','.asset-render-dialog');
+    if (width === 1440 && !before) {
+      // Ctrl+V ảnh trong hộp Phối cảnh 3D -> tải lên kho dự án
+      const uploads = [];
+      await page.route('**/api/project-hub/documents/upload**',route => { uploads.push(new URL(route.request().url()).searchParams.get('name')); route.fulfill({json:{success:true}}); });
+      await page.evaluate(() => new Promise(done => {
+        const c = Object.assign(document.createElement('canvas'),{width:40,height:40});
+        c.toBlob(blob => {
+          const data = new DataTransfer();
+          data.items.add(new File([blob],'image.png',{type:'image/png'}));
+          document.querySelector('.asset-render-dialog').dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+          done();
+        },'image/png');
+      }));
+      await page.waitForFunction(() => /Đã thêm 1 ảnh 3D/.test(document.querySelector('.asset-render-dialog .asset-status')?.textContent || ''));
+      assert.match(uploads[0] || '',/^dan-anh-/);
+      await page.unroute('**/api/project-hub/documents/upload**');
+    }
     await close('.asset-render-dialog');
     for (const picker of ['pickLibrary','pickWood','pickPaint','pickRender']) {
       await page.evaluate(picker => GDHomeAssets[picker](document.querySelector('.image-cell'),{groupName:'SÀN GỖ',projectId:'p1'}),picker);
