@@ -9,19 +9,22 @@ const ICONS = require('./icons.js');
 const SRC = __dirname;
 const OUT = path.join(SRC, '..', 'assets');
 
-const WEEK = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
+// Thứ Hai → Chủ Nhật. [tên file, chữ hiển thị]
+const WEEK = [['thu_hai', 'THỨ HAI'], ['thu_ba', 'THỨ BA'], ['thu_tu', 'THỨ TƯ'], ['thu_nam', 'THỨ NĂM'],
+  ['thu_sau', 'THỨ SÁU'], ['thu_bay', 'THỨ BẢY'], ['chu_nhat', 'CHỦ NHẬT']];
 const WEATHER = ['sunny', 'partly_cloudy', 'cloudy', 'rain', 'heavy_rain', 'thunder', 'snow', 'fog', 'wind', 'night', 'unknown'];
 
+const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
+const VIET = 'U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB';
+const FONT_FACES = [['Barlow', 'barlow', [500, 600, 700]], ['BarlowSC', 'barlow-semi-condensed', [500, 600, 700]]];
+
 function fontCss() {
-  const f = (fam, w, file) => `@font-face{font-family:'${fam}';font-weight:${w};src:url(data:font/woff2;base64,${fs.readFileSync(path.join(SRC, 'fonts', file)).toString('base64')}) format('woff2');}`;
-  return [
-    f('Barlow', 500, 'barlow-latin-500-normal.woff2'),
-    f('Barlow', 600, 'barlow-latin-600-normal.woff2'),
-    f('Barlow', 700, 'barlow-latin-700-normal.woff2'),
-    f('BarlowSC', 500, 'barlow-semi-condensed-latin-500-normal.woff2'),
-    f('BarlowSC', 600, 'barlow-semi-condensed-latin-600-normal.woff2'),
-  ].join('\n');
+  const css = [];
+  for (const [fam, file, weights] of FONT_FACES) for (const w of weights) for (const [sub, range] of [['latin', LATIN], ['vietnamese', VIET]]) {
+    const data = fs.readFileSync(path.join(SRC, 'fonts', `${file}-${sub}-${w}-normal.woff2`)).toString('base64');
+    css.push(`@font-face{font-family:'${fam}';font-weight:${w};unicode-range:${range};src:url(data:font/woff2;base64,${data}) format('woff2');}`);
+  }
+  return css.join('\n');
 }
 
 // Mã chạy trong trang: các hàm vẽ canvas.
@@ -80,26 +83,39 @@ const BG_FN = `async function background(withBlack) {
   text(ctx, 'SUNRISE', 280, 88, { ...L, size: 15 });
   hline(ctx, 26, 382, 114);
 
-  // Khối giờ vàng
-  rr(ctx, 24, 122, 172, 204, 18, 'yellow');
-  rr(ctx, 80, 113, 60, 22, 9, 'yellow');
-  rr(ctx, 83, 116, 54, 16, 7, 'black');
-  text(ctx, '24H', 110, 119, { font: 'Barlow', weight: 700, size: 14, color: 'yellow', align: 'center', ls: 0.5 });
+  // Khối giờ vàng – bên phải
+  rr(ctx, 212, 122, 172, 204, 18, 'yellow');
+  rr(ctx, 268, 113, 60, 22, 9, 'yellow');
+  rr(ctx, 271, 116, 54, 16, 7, 'black');
+  text(ctx, '24H', 298, 119, { font: 'Barlow', weight: 700, size: 14, color: 'yellow', align: 'center', ls: 0.5 });
 
   // Khối giây
-  rr(ctx, 24, 332, 172, 72, 18, 'yellow');
-  await drawIcon(ctx, 'bell', 'black', 42, 352, 32, 32);
-  ctx.fillStyle = '#000'; ctx.fillRect(95, 342, 2.5, 52);
-  text(ctx, 'SECOND', 146, 338, { font: 'BarlowSC', weight: 600, size: 14, color: 'black', align: 'center', ls: 0.5 });
+  rr(ctx, 212, 332, 172, 72, 18, 'yellow');
+  await drawIcon(ctx, 'bell', 'black', 230, 352, 32, 32);
+  ctx.fillStyle = '#000'; ctx.fillRect(283, 342, 2.5, 52);
+  text(ctx, 'SECOND', 334, 338, { font: 'BarlowSC', weight: 600, size: 14, color: 'black', align: 'center', ls: 0.5 });
 
-  // Cột phải
-  text(ctx, 'CALENDAR', 206, 128, L);
-  hline(ctx, 206, 384, 266);
-  text(ctx, 'ACTIVITY', 206, 280, L);
-  await drawIcon(ctx, 'shoe', '#3DDC84', 208, 318, 30, 30);
-  text(ctx, 'STEPS', 334, 326, { ...L, size: 16 });
-  await drawIcon(ctx, 'heart', '#FF3B30', 209, 363, 28, 28);
-  text(ctx, 'BPM', 334, 370, { ...L, size: 16 });
+  // Cột trái: lịch
+  text(ctx, 'CALENDAR', 26, 128, L);
+  const dayO = LAYOUT.digitSets.day;
+  ctx.font = font(dayO);
+  const dCap = capOf(ctx);
+  text(ctx, '/', 89, 200 + Math.round((42 - dCap) / 2), { ...dayO, align: 'center' });
+  // Âm lịch
+  await drawIcon(ctx, 'night', 'yellow', 25, 250, 20, 20);
+  const lu = LAYOUT.digitSets.lunar;
+  ctx.font = font(lu);
+  const lCap = capOf(ctx);
+  text(ctx, '/', 78, 248 + Math.round((24 - lCap) / 2), { ...lu, align: 'center' });
+  text(ctx, 'ÂL', 113, 248 + Math.round((24 - lCap) / 2), { font: 'BarlowSC', weight: 600, size: 21, color: 'gray' });
+  hline(ctx, 26, 198, 280);
+
+  // Cột trái: hoạt động
+  text(ctx, 'ACTIVITY', 26, 292, L);
+  await drawIcon(ctx, 'shoe', '#3DDC84', 24, 320, 30, 30);
+  text(ctx, 'STEPS', 152, 328, { ...L, size: 15, ls: 0.6 });
+  await drawIcon(ctx, 'heart', '#FF3B30', 25, 365, 28, 28);
+  text(ctx, 'BPM', 152, 372, { ...L, size: 15, ls: 0.6 });
 
   // Hàng dưới
   hline(ctx, 26, 382, 412);
@@ -113,18 +129,19 @@ async function main() {
   fs.rmSync(OUT, { recursive: true, force: true });
   const browser = await chromium.launch();
   const page = await browser.newPage();
-  await page.setContent(`<html><head><style>${fontCss()}</style></head><body>
-    <span style="font-family:Barlow;font-weight:500">0</span><span style="font-family:Barlow;font-weight:600">0</span>
-    <span style="font-family:Barlow;font-weight:700">0</span><span style="font-family:BarlowSC;font-weight:500">0</span>
-    <span style="font-family:BarlowSC;font-weight:600">0</span></body></html>`);
-  await page.evaluate(async () => { await document.fonts.ready;
-    for (const f of ['500 20px Barlow', '600 20px Barlow', '700 20px Barlow', '500 20px BarlowSC', '600 20px BarlowSC']) {
-      await document.fonts.load(f); if (!document.fonts.check(f)) throw new Error('Font không tải được: ' + f); } });
+  await page.setContent(`<html><head><style>${fontCss()}</style></head><body></body></html>`);
+  await page.evaluate(async (faces) => {
+    for (const [fam, , weights] of faces) for (const w of weights) {
+      const f = `${w} 20px ${fam}`;
+      await document.fonts.load(f, 'A0ỨẬ');
+      if (!document.fonts.check(f, 'A0ỨẬ')) throw new Error('Font không tải được: ' + f);
+    }
+  }, FONT_FACES);
   await page.addScriptTag({ content: `window.LAYOUT=${JSON.stringify(LAYOUT)};
     window.ICONS={${Object.entries(ICONS).map(([k, f]) => `${JSON.stringify(k)}:${f.toString()}`).join(',')}};
     ${ICONS_HELPERS}${PAGE_LIB}${BG_FN}` });
 
-  const files = await page.evaluate(async ({ WEEK, MONTHS, WEATHER }) => {
+  const files = await page.evaluate(async ({ WEEK, WEATHER }) => {
     const out = {};
     const sets = LAYOUT.digitSets;
     for (const [, s] of Object.entries(sets)) {
@@ -139,16 +156,20 @@ async function main() {
     out['data/small_colon.png'] = cell(':', 6, sm.cell[1], sm);
     out['data/num_empty.png'] = cell('--', 30, n.cell[1], n);
 
-    const wk = { font: 'Barlow', weight: 600, size: 84, color: 'yellow', ls: 1 };
-    WEEK.forEach((s, i) => { out[`date/week_${i + 1}_${s}.png`] = cell(s, 180, 66, wk, 'left'); });
-    const mo = { font: 'Barlow', weight: 700, size: 46, color: 'white', ls: 0.5 };
-    MONTHS.forEach((s, i) => { out[`date/month_${String(i + 1).padStart(2, '0')}_${s}.png`] = cell(s, 116, 42, mo, 'left'); });
-
+    // Ảnh thứ: chừa chỗ phía trên cho dấu tiếng Việt (và dấu nặng phía dưới).
+    const wk = { font: 'BarlowSC', weight: 700, size: 40, color: 'yellow', ls: 0 };
+    WEEK.forEach(([slug, label], i) => {
+      const c = canvas(178, 56), ctx = c.getContext('2d');
+      ctx.font = font(wk); ctx.fillStyle = col(wk.color); ctx.letterSpacing = wk.ls + 'px';
+      if (ctx.measureText(label).width > 178) throw new Error('Chữ thứ quá dài: ' + label);
+      ctx.fillText(label, 0, 44);
+      out[`date/week_${i + 1}_${slug}.png`] = c.toDataURL('image/png');
+    });
     for (const w of WEATHER) out[`weather/${w}.png`] = await icon(w, 'yellow', 64, 46);
     out['background.png'] = await background(true);
     out['background_transparent.png'] = await background(false);
     return out;
-  }, { WEEK, MONTHS, WEATHER });
+  }, { WEEK, WEATHER });
 
   for (const [rel, data] of Object.entries(files)) {
     const p = path.join(OUT, rel);

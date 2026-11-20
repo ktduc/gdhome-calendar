@@ -19,8 +19,13 @@ const A = '../assets/';
 const face = document.getElementById('face');
 const W = LAYOUT.widgets, D = LAYOUT.digitSets;
 const STATIC = new URLSearchParams(location.search).has('static');
-const MONTHS = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
-const WEEK = ['MON','TUE','WED','THU','FRI','SAT','SUN'];
+const WEEK = ['thu_hai','thu_ba','thu_tu','thu_nam','thu_sau','thu_bay','chu_nhat'];
+// Ngày âm lịch (lịch Trung Hoa của trình duyệt, đủ dùng để xem thử).
+const LUNAR_FMT = new Intl.DateTimeFormat('en-u-ca-chinese', { day: 'numeric', month: 'numeric' });
+function lunar(d) {
+  const p = Object.fromEntries(LUNAR_FMT.formatToParts(d).map((x) => [x.type, x.value]));
+  return { day: parseInt(p.day, 10), month: parseInt(p.month, 10) };
+}
 const WEATHER = { code: 'partly_cloudy', temp: 26, hi: 30, lo: 24, sunrise: '06:00' };
 
 function img(src, x, y) {
@@ -55,9 +60,12 @@ function render() {
   digit('secTens', ss[0]); digit('secOnes', ss[1]);
   const wd = (now.getDay() + 6) % 7;
   img(`date/week_${wd + 1}_${WEEK[wd]}.png`, W.week.x, W.week.y);
+  const mo = p2(now.getMonth() + 1);
   digit('dayTens', dd[0]); digit('dayOnes', dd[1]);
-  const m = now.getMonth();
-  img(`date/month_${p2(m + 1)}_${MONTHS[m]}.png`, W.month.x, W.month.y);
+  digit('monthTens', mo[0]); digit('monthOnes', mo[1]);
+  const lu = lunar(now), ld = p2(lu.day), lm = p2(lu.month);
+  digit('lunarDayTens', ld[0]); digit('lunarDayOnes', ld[1]);
+  digit('lunarMonthTens', lm[0]); digit('lunarMonthOnes', lm[1]);
   number('temp', WEATHER.temp);
   number('tempHiLo', WEATHER.hi + '/' + WEATHER.lo);
   img(`weather/${WEATHER.code}.png`, W.weather.x, W.weather.y);
