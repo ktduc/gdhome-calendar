@@ -242,4 +242,5 @@ const rays = (cx, cy, r1, r2, angles) => angles.map((a) => { const t = a * Math.
   return 'M' + (cx + r1 * Math.cos(t)).toFixed(2) + ' ' + (cy + r1 * Math.sin(t)).toFixed(2) + 'L' + (cx + r2 * Math.cos(t)).toFixed(2) + ' ' + (cy + r2 * Math.sin(t)).toFixed(2); }).join('');
 `;
 
-main().catch((e) => { console.error(e); process.exit(1); });
+module.exports = { fontCss, FONT_FACES, PAGE_LIB, ICONS_HELPERS, WEEK, WEATHER };
+if (require.main === module) main().catch((e) => { console.error(e); process.exit(1); });

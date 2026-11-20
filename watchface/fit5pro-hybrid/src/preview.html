@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Xem thử Hybrid Orange</title>
+<style>
+  html, body { margin: 0; background: #1c1c1e; }
+  body { display: flex; justify-content: center; padding: 20px 0; }
+  #face { position: relative; width: 408px; height: 480px; background: #000; border-radius: 64px; overflow: hidden; }
+  #face img { position: absolute; display: block; }
+</style>
+</head>
+<body>
+<div id="face"></div>
+<script src="layout.js"></script>
+<script>
+const A = '../assets/';
+const face = document.getElementById('face');
+const W = LAYOUT.widgets, D = LAYOUT.digitSets;
+const Q = new URLSearchParams(location.search);
+const STATIC = Q.has('static');
+let AOD = Q.has('aod');
+const WEEK = ['thu_hai', 'thu_ba', 'thu_tu', 'thu_nam', 'thu_sau', 'thu_bay', 'chu_nhat'];
+const LUNAR_FMT = new Intl.DateTimeFormat('en-u-ca-chinese', { day: 'numeric', month: 'numeric' });
+function lunar(d) {
+  const p = Object.fromEntries(LUNAR_FMT.formatToParts(d).map((x) => [x.type, x.value]));
+  return { day: parseInt(p.day, 10), month: parseInt(p.month, 10) };
+}
+const DATA = { weather: 'partly_cloudy', temp: 16, battery: 93, steps: 5700, heart: 82, km: '3.75' };
+const p2 = (n) => String(n).padStart(2, '0');
+
+function img(src, x, y) {
+  const i = new Image(); i.src = A + src; i.style.left = x + 'px'; i.style.top = y + 'px';
+  face.appendChild(i); return i;
+}
+function digit(widgets, sets, key, d) { const w = widgets[key]; img(sets[w.set].prefix + d + '.png', w.x, w.y); }
+function number(key, str) {
+  const w = W[key], s = D[w.set], parts = [];
+  for (const ch of String(str)) {
+    if (/\d/.test(ch)) parts.push([s.prefix + ch + '.png', s.cell[0]]);
+    else if (ch === '-') parts.push([w.minus, 11]);
+    else if (ch === '.') parts.push([w.dot, 6]);
+  }
+  if (w.unit) parts.push([w.unit, w.unitW]);
+  const total = parts.reduce((a, p) => a + p[1], 0);
+  let x = w.align === 'right' ? w.x - total : w.align === 'center' ? Math.round(w.x - total / 2) : w.x;
+  for (const [src, cw] of parts) { img(src, x, w.y); x += cw; }
+}
+function handImg(spec, deg) {
+  const [cx, cy] = W.hands.center;
+  const i = img(spec.img, cx - spec.pivot[0], cy - spec.pivot[1]);
+  i.style.transformOrigin = `${spec.pivot[0]}px ${spec.pivot[1]}px`;
+  i.style.transform = `rotate(${deg}deg)`;
+}
+function time(widgets, sets, now) {
+  const hh = p2(now.getHours()), mm = p2(now.getMinutes()), dd = p2(now.getDate()), mo = p2(now.getMonth() + 1);
+  const g = (k, d) => digit(widgets, sets, k, d);
+  g('hourTens', hh[0]); g('hourOnes', hh[1]); g('minTens', mm[0]); g('minOnes', mm[1]);
+  g('dayTens', dd[0]); g('dayOnes', dd[1]); g('monthTens', mo[0]); g('monthOnes', mo[1]);
+  const wd = (now.getDay() + 6) % 7;
+  img(`${widgets.week.img}${wd + 1}_${WEEK[wd]}.png`, widgets.week.x, widgets.week.y);
+}
+
+function render() {
+  face.innerHTML = '';
+  const now = STATIC ? new Date(2026, 10, 20, 22, 31, 3) : new Date();
+  if (AOD) {
+    img('aod/background_aod.png', 0, 0);
+    time(LAYOUT.aod.widgets, LAYOUT.aod.digitSets, now);
+  } else {
+    img('background.png', 0, 0);
+    time(W, D, now);
+    const ss = p2(now.getSeconds());
+    digit(W, D, 'secTens', ss[0]); digit(W, D, 'secOnes', ss[1]);
+    const lu = lunar(now), ld = p2(lu.day), lm = p2(lu.month);
+    digit(W, D, 'lunarDayTens', ld[0]); digit(W, D, 'lunarDayOnes', ld[1]);
+    digit(W, D, 'lunarMonthTens', lm[0]); digit(W, D, 'lunarMonthOnes', lm[1]);
+    img(`weather/${DATA.weather}.png`, W.weather.x, W.weather.y);
+    number('temp', DATA.temp);
+    number('battery', DATA.battery);
+    number('steps', DATA.steps);
+    number('heart', DATA.heart);
+    number('distance', DATA.km);
+    const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+    handImg(W.hands.hour, (h + m / 60) * 30);
+    handImg(W.hands.minute, (m + s / 60) * 6);
+    handImg(W.hands.second, s * 6);
+    const [cx, cy] = W.hands.center;
+    img(W.hands.cap.img, cx - W.hands.cap.w / 2, cy - W.hands.cap.h / 2);
+  }
+  return Promise.all([...face.querySelectorAll('img')].map((i) => i.decode().catch(() => {})));
+}
+render().then(() => { window.__ready = true; });
+if (!STATIC) {
+  setInterval(render, 1000);
+  face.title = 'Bấm để chuyển màn hình thường / AOD';
+  face.style.cursor = 'pointer';
+  face.addEventListener('click', () => { AOD = !AOD; render(); });
+}
+</script>
+</body>
+</html>
