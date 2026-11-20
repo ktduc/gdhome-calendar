@@ -1,10 +1,12 @@
 # Mặt đồng hồ "Yellow Block" – Huawei Watch Fit 5 Pro
 
-![preview](preview.png)
+![preview](preview_all.png)
+
+👉 **Hướng dẫn dựng & cài chi tiết từng bước: [HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md)**
 
 Bộ ảnh và bố cục dựng theo mẫu: khối giờ vàng 24H và ô giây kèm chuông báo thức nằm **bên phải**; cột **bên trái** hiển thị thứ bằng tiếng Việt, ngày/tháng dạng số (03/11), ngày âm lịch (25/09 ÂL) và hoạt động (bước chân, nhịp tim); hàng trên thời tiết + bình minh, hàng dưới pin + 2 phím tắt (tin nhắn, cuộc gọi).
 
-- Khung thiết kế: **408 × 480 px** (cùng tỷ lệ màn hình dòng Watch Fit). Nếu Theme Studio báo độ phân giải khác cho Fit 5 Pro, sửa `screen` trong `src/layout.js` rồi chạy lại lệnh xuất ảnh.
+- Khung thiết kế: **408 × 480 px**, đúng độ phân giải màn hình Watch Fit 5 Pro (1,92" AMOLED).
 - Phông chữ: Barlow / Barlow Semi Condensed (giấy phép SIL OFL, dùng thương mại được).
 
 ## Cấu trúc
@@ -21,6 +23,8 @@ Bộ ảnh và bố cục dựng theo mẫu: khối giờ vàng 24H và ô giây
 | `assets/data/gray_0..9.png` + `gray_slash`, `gray_minus` | Nhiệt độ cao/thấp (xám, 10×20) |
 | `assets/data/small_0..9.png` + `small_colon` | Giờ bình minh (trắng, 12×24) |
 | `assets/weather/*.png` | 11 icon thời tiết vàng (64×46) |
+| `assets/aod/` | Màn hình AOD: nền `background_aod`, số giờ nét viền `time_0..9` (72×96), số ngày `date_0..9`, thứ `week_*` (300×56) |
+| `YellowBlock_Fit5Pro.zip` | Toàn bộ `assets/` + hướng dẫn, để tải về máy Windows |
 | `src/` | Mã nguồn: `layout.js` (tọa độ), `icons.js`, `generate.cjs` (xuất ảnh), `preview.html` (xem thử chạy giờ thật) |
 
 ## Tọa độ đặt trong Theme Studio (x, y = góc trên-trái)
@@ -43,22 +47,10 @@ Bộ ảnh và bố cục dựng theo mẫu: khối giờ vàng 24H và ô giây
 | Số bước | data/num_ | 58 | 318 | Trái |
 | Nhịp tim | data/num_ | 58 | 362 | Trái |
 | Pin (+ %) | data/num_ | 204 (tâm) | 436 | Giữa |
-| Vùng chạm tin nhắn | – | 78 | 424 | 36×36 |
-| Vùng chạm cuộc gọi | – | 294 | 424 | 34×34 |
-| Vùng chạm báo thức | – | 230 | 352 | 32×32 |
 
-## Các bước làm trong Huawei Theme Studio
+## Màn hình AOD
 
-1. Đăng ký tài khoản nhà phát triển Huawei, tải **Huawei Theme Studio** (Windows) → *New Project* → *Watch Face* → chọn thiết bị **HUAWEI WATCH FIT 5 Pro** (nếu chưa có thì chọn dòng Fit mới nhất cùng độ phân giải).
-2. Kéo `background.png` vào lớp nền.
-3. Thêm thành phần **Time** → kiểu *Digital, ảnh rời*: gán bộ `big_0..9` cho giờ, phút; `sec_0..9` cho giây; đặt tọa độ theo bảng. Chọn định dạng 24 giờ.
-4. Thêm **Date**: Week → 7 ảnh `week_1_thu_hai` … `week_7_chu_nhat` (kiểm tra thứ tự Theme Studio yêu cầu – nếu bắt đầu từ Chủ nhật thì đưa `chu_nhat` lên đầu); Day và Month đều chọn kiểu **số** dùng `day_0..9` (dấu "/" đã có sẵn trên nền).
-   **Âm lịch:** thêm thành phần Lunar date (nếu Theme Studio có cho thiết bị này) và gán `lunar_0..9` cho ngày/tháng âm. Nếu Theme Studio chỉ cho kiểu chữ Hán hoặc không có thành phần âm lịch, hãy xoá biểu tượng trăng, dấu "/" và chữ "ÂL" ở dòng âm lịch trong hàm `background` rồi xuất lại ảnh. Tháng nhuận không được đánh dấu riêng.
-5. Thêm **Data**: Steps, Heart rate, Battery dùng `num_0..9`; Weather → icon + nhiệt độ (`num_`, đơn vị `unit_c`, dấu âm `num_minus`) và cao/thấp (`gray_`, phân cách `gray_slash`); Sunrise (nếu thiết bị hỗ trợ) dùng `small_`.
-6. Gán icon thời tiết theo từng mã của Theme Studio: nắng → `sunny`, ít mây → `partly_cloudy`, nhiều mây/âm u → `cloudy`, mưa nhỏ/vừa → `rain`, mưa to → `heavy_rain`, dông → `thunder`, tuyết/mưa tuyết → `snow`, sương mù/bụi → `fog`, gió → `wind`, đêm quang → `night`, còn lại → `unknown`.
-7. Thêm vùng chạm (Shortcut/Jump) cho tin nhắn, cuộc gọi, báo thức theo bảng.
-8. (Tuỳ chọn) Màn hình chờ AOD: dùng `background_transparent.png` làm gợi ý, chỉ giữ giờ/phút để tiết kiệm pin.
-9. *Preview* → *Export* file `.hwt` → cài lên đồng hồ qua Theme Studio hoặc gửi duyệt lên Huawei Themes.
+Chỉ hiện thứ, ngày/tháng và giờ:phút (không giây), số dạng nét viền, ~6% điểm ảnh sáng. Tọa độ và cách dựng: xem [HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md#bước-5--dựng-màn-hình-aod-luôn-hiển-thị).
 
 ## Sửa giao diện & xuất lại ảnh
 
@@ -66,5 +58,7 @@ Bộ ảnh và bố cục dựng theo mẫu: khối giờ vàng 24H và ô giây
 node watchface/fit5pro/src/generate.cjs
 ```
 
-Lệnh xuất lại toàn bộ `assets/` và `preview.png`. Mở `src/preview.html` trong trình duyệt để xem chạy theo giờ thật (thêm `?static=1` để giữ 22:42:07 ngày 03/11/2026). Ngày âm trong bản xem thử lấy từ lịch âm Trung Hoa của trình duyệt, có thể lệch 1 ngày so với lịch Việt Nam ở một số tháng.
+Sau khi xuất lại ảnh, tạo lại file zip: `cd watchface/fit5pro && zip -qr YellowBlock_Fit5Pro.zip assets HUONG-DAN-CAI-DAT.md preview*.png`.
+
+Lệnh xuất lại toàn bộ `assets/`, `preview.png`, `preview_aod.png`. Bấm vào mặt đồng hồ trong `preview.html` để chuyển giữa màn hình chính và AOD. Mở `src/preview.html` trong trình duyệt để xem chạy theo giờ thật (thêm `?static=1` để giữ 22:42:07 ngày 03/11/2026). Ngày âm trong bản xem thử lấy từ lịch âm Trung Hoa của trình duyệt, có thể lệch 1 ngày so với lịch Việt Nam ở một số tháng.
 Đổi màu ở `colors`, đổi vị trí ở `widgets`, đổi cỡ chữ ở `digitSets` trong `src/layout.js`; nhãn và nền tĩnh nằm trong hàm `background` của `generate.cjs`.

@@ -18,7 +18,9 @@
 const A = '../assets/';
 const face = document.getElementById('face');
 const W = LAYOUT.widgets, D = LAYOUT.digitSets;
-const STATIC = new URLSearchParams(location.search).has('static');
+const Q = new URLSearchParams(location.search);
+const STATIC = Q.has('static');
+let AOD = Q.has('aod');
 const WEEK = ['thu_hai','thu_ba','thu_tu','thu_nam','thu_sau','thu_bay','chu_nhat'];
 // Ngày âm lịch (lịch Trung Hoa của trình duyệt, đủ dùng để xem thử).
 const LUNAR_FMT = new Intl.DateTimeFormat('en-u-ca-chinese', { day: 'numeric', month: 'numeric' });
@@ -33,6 +35,16 @@ function img(src, x, y) {
   face.appendChild(i); return i;
 }
 function digit(key, d) { const w = W[key]; img(D[w.set].prefix + d + '.png', w.x, w.y); }
+function aodDigit(key, d) { const w = LAYOUT.aod.widgets[key]; img(LAYOUT.aod.digitSets[w.set].prefix + d + '.png', w.x, w.y); }
+function renderAod(now, p2) {
+  const AW = LAYOUT.aod.widgets;
+  img('aod/background_aod.png', 0, 0);
+  const wd = (now.getDay() + 6) % 7;
+  img(`aod/week_${wd + 1}_${WEEK[wd]}.png`, AW.week.x, AW.week.y);
+  const dd = p2(now.getDate()), mo = p2(now.getMonth() + 1), hh = p2(now.getHours()), mm = p2(now.getMinutes());
+  aodDigit('dayTens', dd[0]); aodDigit('dayOnes', dd[1]); aodDigit('monthTens', mo[0]); aodDigit('monthOnes', mo[1]);
+  aodDigit('hourTens', hh[0]); aodDigit('hourOnes', hh[1]); aodDigit('minTens', mm[0]); aodDigit('minOnes', mm[1]);
+}
 // Chuỗi số + ký tự đặc biệt, căn trái/giữa theo widget.
 function number(key, str, extra = {}) {
   const w = W[key], s = D[w.set];
@@ -52,8 +64,9 @@ function number(key, str, extra = {}) {
 function render() {
   face.innerHTML = '';
   const now = STATIC ? new Date(2026, 10, 3, 22, 42, 7) : new Date();
-  img('background.png', 0, 0);
   const p2 = (n) => String(n).padStart(2, '0');
+  if (AOD) { renderAod(now, p2); return Promise.all([...face.querySelectorAll('img')].map((i) => i.decode().catch(() => {}))); }
+  img('background.png', 0, 0);
   const hh = p2(now.getHours()), mm = p2(now.getMinutes()), ss = p2(now.getSeconds()), dd = p2(now.getDate());
   digit('hourTens', hh[0]); digit('hourOnes', hh[1]);
   digit('minTens', mm[0]); digit('minOnes', mm[1]);
@@ -76,7 +89,12 @@ function render() {
   return Promise.all([...face.querySelectorAll('img')].map((i) => i.decode().catch(() => {})));
 }
 render().then(() => { window.__ready = true; });
-if (!STATIC) setInterval(render, 1000);
+if (!STATIC) {
+  setInterval(render, 1000);
+  face.title = 'Bấm để chuyển màn hình thường / AOD';
+  face.style.cursor = 'pointer';
+  face.addEventListener('click', () => { AOD = !AOD; render(); });
+}
 </script>
 </body>
 </html>

@@ -47,8 +47,11 @@ function cell(s, w, h, o, align) {
   ctx.font = font(o); ctx.fillStyle = col(o.color); ctx.letterSpacing = (o.ls || 0) + 'px';
   const cap = capOf(ctx);
   const base = Math.round((h + cap) / 2);
-  if (align === 'left') { ctx.textAlign = 'left'; ctx.fillText(s, 0, base); }
-  else { ctx.textAlign = 'center'; ctx.fillText(s, w / 2, base); }
+  const draw = o.stroke
+    ? (t, x, y) => { ctx.strokeStyle = col(o.color); ctx.lineWidth = o.stroke; ctx.lineJoin = 'round'; ctx.strokeText(t, x, y); }
+    : (t, x, y) => ctx.fillText(t, x, y);
+  if (align === 'left') { ctx.textAlign = 'left'; draw(s, o.stroke || 0, base); }
+  else { ctx.textAlign = 'center'; draw(s, w / 2, base); }
   return c.toDataURL('image/png');
 }
 function loadSvg(str) {
@@ -165,6 +168,30 @@ async function main() {
       ctx.fillText(label, 0, 44);
       out[`date/week_${i + 1}_${slug}.png`] = c.toDataURL('image/png');
     });
+    // ---- AOD ----
+    const aod = LAYOUT.aod;
+    for (const [, st] of Object.entries(aod.digitSets)) {
+      for (let d = 0; d <= 9; d++) out[st.prefix + d + '.png'] = cell(String(d), st.cell[0], st.cell[1], st);
+    }
+    const aw = { font: 'BarlowSC', weight: 600, size: 40, color: aod.colors.text, ls: 1 };
+    WEEK.forEach(([slug, label], i) => {
+      const c = canvas(300, 56), ctx = c.getContext('2d');
+      ctx.font = font(aw); ctx.fillStyle = col(aw.color); ctx.letterSpacing = aw.ls + 'px'; ctx.textAlign = 'center';
+      ctx.fillText(label, 150, 44);
+      out[`aod/week_${i + 1}_${slug}.png`] = c.toDataURL('image/png');
+    });
+    {
+      const c = canvas(408, 480), ctx = c.getContext('2d');
+      ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 408, 480);
+      const t = aod.digitSets.time;
+      ctx.fillStyle = col(t.color);
+      for (const y of [262 + 30, 262 + 60]) { ctx.beginPath(); ctx.arc(204, y, 6, 0, Math.PI * 2); ctx.fill(); }
+      const d = aod.digitSets.date;
+      ctx.font = font(d);
+      text(ctx, '/', 204, 184 + Math.round((42 - capOf(ctx)) / 2), { ...d, align: 'center' });
+      out['aod/background_aod.png'] = c.toDataURL('image/png');
+    }
+
     for (const w of WEATHER) out[`weather/${w}.png`] = await icon(w, 'yellow', 64, 46);
     out['background.png'] = await background(true);
     out['background_transparent.png'] = await background(false);
@@ -183,6 +210,20 @@ async function main() {
   await page.waitForFunction(() => window.__ready === true);
   const el = await page.$('#face');
   await el.screenshot({ path: path.join(SRC, '..', 'preview.png') });
+
+  await page.goto('file://' + path.join(SRC, 'preview.html') + '?static=1&aod=1');
+  await page.waitForFunction(() => window.__ready === true);
+  const aodPng = await (await page.$('#face')).screenshot({ path: path.join(SRC, '..', 'preview_aod.png') });
+  // Tỷ lệ điểm ảnh sáng của AOD (càng thấp càng tiết kiệm pin).
+  const lit = await page.evaluate(async (b64) => {
+    const i = new Image(); i.src = 'data:image/png;base64,' + b64; await i.decode();
+    const c = document.createElement('canvas'); c.width = i.width; c.height = i.height; const ctx = c.getContext('2d');
+    ctx.drawImage(i, 0, 0);
+    const px = ctx.getImageData(0, 0, c.width, c.height).data; let on = 0;
+    for (let k = 0; k < px.length; k += 4) if (px[k] + px[k + 1] + px[k + 2] > 60) on++;
+    return on / (c.width * c.height);
+  }, aodPng.toString('base64'));
+  console.log('AOD: tỷ lệ điểm ảnh sáng', (lit * 100).toFixed(1) + '%');
   await browser.close();
 }
 
