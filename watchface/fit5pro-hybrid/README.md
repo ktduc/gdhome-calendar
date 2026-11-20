@@ -2,8 +2,8 @@
 
 ![preview](preview_all.png)
 
-Mặt lai số + kim: số giờ/phút dày, kim giờ/phút trong suốt, thứ tiếng Việt, ngày/tháng dạng số, âm lịch, AOD nét viền giữ nguyên bố cục.
+Giữ nguyên thiết kế mặt gốc (Roboto mảnh, bóng đổ, kim bạc). Cải tiến: kim giờ/phút làm mờ, tháng viết tắt "Th 11", thứ tiếng Việt, số giờ/phút đậm hơn trên nền bo góc, âm lịch; AOD có kim + số + thứ/ngày/tháng ở đúng vị trí cũ.
 
 - Hướng dẫn dựng & cài: **[HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md)**
 - Gói ảnh để tải về: `HybridOrange_Fit5Pro.zip`
-- Mã nguồn: `src/` (`layout.js`, `generate.cjs`, `preview.html`)
+- Mã nguồn: `src/` (`layout.js`, `generate.cjs`, `preview.html`, `fonts/`)

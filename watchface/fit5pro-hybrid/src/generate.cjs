@@ -1,22 +1,61 @@
-// Xuất ảnh cho mặt "Hybrid Orange". Dùng chung font, icon và hàm vẽ với mặt Yellow Block.
+// Xuất ảnh cho mặt "Hybrid Orange" (bám theo mặt gốc: font Roboto mảnh, bóng đổ, kim bạc).
 // Chạy:  node watchface/fit5pro-hybrid/src/generate.cjs
 const fs = require('fs');
 const path = require('path');
 const { chromium } = require('playwright');
 const LAYOUT = require('./layout.js');
 const ICONS = require('../../fit5pro/src/icons.js');
-const { fontCss, FONT_FACES, PAGE_LIB, ICONS_HELPERS, WEEK, WEATHER } = require('../../fit5pro/src/generate.cjs');
+const { PAGE_LIB, ICONS_HELPERS, WEEK, WEATHER } = require('../../fit5pro/src/generate.cjs');
 
 const SRC = __dirname;
 const ROOT = path.join(SRC, '..');
 const OUT = path.join(ROOT, 'assets');
 
-// Mã vẽ riêng của mặt này (chạy trong trang).
-const FACE_FN = `
-const L = { font: 'BarlowSC', weight: 500, size: 15, color: 'gray', ls: 1 };
-function strokeRR(ctx, x, y, w, h, r, color, lw) {
-  ctx.beginPath(); ctx.roundRect(x, y, w, h, r); ctx.strokeStyle = col(color); ctx.lineWidth = lw; ctx.stroke();
+const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
+const VIET = 'U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB';
+const WEIGHTS = [300, 400, 500];
+function fontCss() {
+  const css = [];
+  for (const w of WEIGHTS) for (const [sub, range] of [['latin', LATIN], ['vietnamese', VIET]]) {
+    const data = fs.readFileSync(path.join(SRC, 'fonts', `roboto-${sub}-${w}-normal.woff2`)).toString('base64');
+    css.push(`@font-face{font-family:'Roboto';font-weight:${w};unicode-range:${range};src:url(data:font/woff2;base64,${data}) format('woff2');}`);
+  }
+  return css.join('\n');
 }
+
+const FACE_FN = `
+// Icon thời tiết dạng đặc (trắng) như mặt gốc
+const CF = 'M6.5 20H17.5A4 4 0 0 0 18 12A5.5 5.5 0 0 0 7.5 11.2A4.4 4.4 0 0 0 6.5 20Z';
+const CFU = 'M6.5 16H17.5A4 4 0 0 0 18 8A5.5 5.5 0 0 0 7.5 7.2A4.4 4.4 0 0 0 6.5 16Z';
+const SEP = 'stroke="#2A2A2A" stroke-width="1.4"';
+Object.assign(ICONS, {
+  w_sunny: (c) => svg('<circle cx="12" cy="12" r="5" fill="' + c + '"/><path d="' + rays(12, 12, 7.5, 10, [0, 45, 90, 135, 180, 225, 270, 315]) + '" ' + S(c, 1.8) + '/>'),
+  w_partly_cloudy: (c) => svg('<circle cx="9" cy="8.5" r="4" fill="' + c + '"/><path d="' + rays(9, 8.5, 5.8, 7.8, [90, 135, 180, 225, 270, 315]) + '" ' + S(c, 1.6) + '/><path d="' + CF + '" fill="' + c + '" ' + SEP + '/>'),
+  w_cloudy: (c) => svg('<path d="M9 8.5A4.5 4.5 0 0 1 17.6 7 3.4 3.4 0 0 1 20 13H18" fill="' + c + '" opacity=".55"/><path d="' + CF + '" fill="' + c + '" ' + SEP + '/>'),
+  w_rain: (c) => svg('<path d="' + CFU + '" fill="' + c + '"/><path d="M8.5 18.5l-1 2.5M12.5 18.5l-1 2.5M16.5 18.5l-1 2.5" ' + S(c, 1.8) + '/>'),
+  w_heavy_rain: (c) => svg('<path d="' + CFU + '" fill="' + c + '"/><path d="M7.5 18l-1.5 4M11 18l-1.5 4M14.5 18l-1.5 4M18 18l-1.5 4" ' + S(c, 1.8) + '/>'),
+  w_thunder: (c) => svg('<path d="' + CFU + '" fill="' + c + '"/><path d="M12.8 16.5 10 20h3l-2 3.5" ' + S('#FF7F1F', 1.8) + '/>'),
+  w_snow: (c) => svg('<path d="' + CFU + '" fill="' + c + '"/><path d="M8 19h.01M12 18.5h.01M16 19h.01M10 21.8h.01M14 21.8h.01" ' + S(c, 2.6) + '/>'),
+  w_fog: (c) => svg('<path d="' + CFU + '" fill="' + c + '"/><path d="M4 19h16M6 22h12" ' + S(c, 1.8) + '/>'),
+  w_wind: (c) => svg('<path d="M3 9h11a2.5 2.5 0 1 0-2.5-2.5M3 13h15a2.5 2.5 0 1 1-2.5 2.5M3 17h8" ' + S(c, 2) + '/>'),
+  w_night: (c) => svg('<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10Z" fill="' + c + '"/>'),
+  w_unknown: (c) => svg('<path d="' + CF + '" fill="' + c + '"/><path d="M10.6 14.2a1.5 1.5 0 1 1 2.1 1.4c-.5.2-.7.5-.7 1M12 18.4h.01" ' + S('#2A2A2A', 1.5) + '/>'),
+  moon_f: (c) => svg('<path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10Z" fill="' + c + '"/>'),
+});
+
+const SH = LAYOUT.shadow;
+function shadowOn(ctx) { ctx.shadowColor = SH.color; ctx.shadowBlur = SH.blur; ctx.shadowOffsetX = SH.dx; ctx.shadowOffsetY = SH.dy; }
+function shadowOff(ctx) { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+// Ô số có bóng đổ (aod: không bóng)
+function cellS(s, w, h, o, noShadow) {
+  const c = canvas(w, h), ctx = c.getContext('2d');
+  ctx.font = font(o); ctx.fillStyle = col(o.color);
+  const base = Math.round((h + capOf(ctx)) / 2);
+  if (!noShadow) shadowOn(ctx);
+  ctx.textAlign = 'center'; ctx.fillText(s, w / 2, base);
+  return c.toDataURL('image/png');
+}
+const LB = { font: 'Roboto', weight: 300, size: 17, color: 'label', ls: 0.6 };
 function midY(ctx, top, h, o) { ctx.font = font(o); return top + Math.round((h - capOf(ctx)) / 2); }
 
 async function background(aod) {
@@ -24,84 +63,116 @@ async function background(aod) {
   const c = canvas(w, h), ctx = c.getContext('2d');
   if (aod) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h); }
   else {
-    const g = ctx.createRadialGradient(204, 210, 0, 204, 210, 340);
-    g.addColorStop(0, '#2C2C2F'); g.addColorStop(0.6, '#161618'); g.addColorStop(1, '#050505');
+    const g = ctx.createRadialGradient(214, 230, 0, 214, 230, 360);
+    g.addColorStop(0, '#3A3A3B'); g.addColorStop(0.55, '#202021'); g.addColorStop(1, '#080808');
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   }
-  const D = LAYOUT.digitSets;
+  // Nền bo góc làm nổi khối giờ + phút
+  ctx.beginPath(); ctx.roundRect(204, 112, 154, 246, 24);
+  ctx.fillStyle = aod ? '#101010' : 'rgba(255,255,255,0.07)'; ctx.fill();
+  ctx.strokeStyle = aod ? '#2A2A2A' : 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1.2; ctx.stroke();
+  // Ô ngày
+  ctx.strokeStyle = aod ? '#3A3A3A' : col('box'); ctx.lineWidth = 1.5; ctx.strokeRect(91.5, 100.5, 79, 103);
 
-  // Ô ngày + chữ "TH" trước số tháng
-  strokeRR(ctx, 96, 96, 80, 100, 3, aod ? '#3A3A3C' : 'box', 1.5);
-  text(ctx, 'TH', 102, midY(ctx, 158, 30, { ...L, size: 16 }), { ...L, size: 16, ls: 0.5 });
-  text(ctx, '24H', 352, 186, { ...L, size: 16 });
+  if (!aod) shadowOn(ctx);
+  const M = LAYOUT.digitSets.month;
+  const thO = { ...M, size: 25, color: aod ? '#BDBDBD' : 'white' };
+  text(ctx, 'Th', 99, midY(ctx, 166, 32, M), thO);
+  text(ctx, '24H', 364, 183, { ...LB, size: 18, color: aod ? '#5A5A5A' : 'label' });
   if (aod) return c.toDataURL('image/png');
 
   // Hàng trên
-  await drawIcon(ctx, 'stopwatch', 'gray', 92, 38, 18, 18);
-  text(ctx, 'TIMER', 113, 42, L);
-  text(ctx, 'POWER', 206, 42, L);
-  hline(ctx, 206, 282, 92);
-  text(ctx, 'CALENDAR', 96, 74, L);
+  await drawIcon(ctx, 'stopwatch', 'label', 104, 40, 17, 17);
+  text(ctx, 'TIMER', 124, 42, LB);
+  text(ctx, 'POWER', 204, 42, LB);
+  shadowOff(ctx); ctx.fillStyle = col('line'); ctx.fillRect(204, 95, 70, 1.2); shadowOn(ctx);
+  text(ctx, 'CALENDAR', 90, 72, LB);
 
-  // Âm lịch: biểu tượng trăng + dấu "/"
-  await drawIcon(ctx, 'night', 'orange', 16, 187, 17, 17);
-  text(ctx, '/', 63.5, midY(ctx, 184, 22, D.lunar), { ...D.lunar, align: 'center' });
+  // Âm lịch
+  await drawIcon(ctx, 'moon_f', 'orange', 22, 198, 14, 14);
+  const LU = LAYOUT.digitSets.lunar;
+  text(ctx, '/', 65, midY(ctx, 194, 22, LU), { ...LU, align: 'center' });
 
   // Hoạt động
-  hline(ctx, 12, 196, 262);
-  text(ctx, 'ACTIVITY', 112, 274, { ...L, align: 'center' });
-  await drawIcon(ctx, 'shoe', 'orange', 157, 298, 26, 26);
-  await drawIcon(ctx, 'heart', 'white', 159, 349, 22, 22);
-  text(ctx, 'km', 60, midY(ctx, 402, 24, { ...L, size: 16 }), { ...L, size: 16 });
-  await drawIcon(ctx, 'pin', 'orange', 158, 401, 24, 24);
+  shadowOff(ctx); ctx.fillStyle = col('line'); ctx.fillRect(0, 263, 204, 1.2); shadowOn(ctx);
+  text(ctx, 'ACTIVITY', 170, 277, { ...LB, align: 'right' });
+  await drawIcon(ctx, 'shoe', 'orange', 146, 305, 25, 24);
+  await drawIcon(ctx, 'heart', 'white', 150, 364, 21, 21);
+  text(ctx, 'km', 70, midY(ctx, 412, 26, { ...LB, size: 16 }), { ...LB, size: 16 });
+  await drawIcon(ctx, 'pin', 'orange', 148, 411, 22, 25);
 
-  // Phím tắt dưới
-  await drawIcon(ctx, 'message_dot', 'white', 222, 386, 36, 36);
-  text(ctx, 'MESSAGE', 240, 428, { ...L, size: 13, align: 'center' });
-  await drawIcon(ctx, 'alarm', 'white', 313, 386, 34, 34);
-  text(ctx, 'ALARM', 330, 428, { ...L, size: 13, align: 'center' });
+  // Phím tắt
+  await drawIcon(ctx, 'message_dot', 'white', 220, 388, 38, 36);
+  text(ctx, 'MESSAGE', 239, 436, { ...LB, size: 15, align: 'center' });
+  await drawIcon(ctx, 'alarm', '#D4D4D4', 305, 389, 36, 34);
+  text(ctx, 'ALARM', 323, 436, { ...LB, size: 15, align: 'center' });
   return c.toDataURL('image/png');
 }
 
-// Kim: ảnh dựng đứng chỉ 12 giờ, hơi trong suốt để vẫn đọc được thông tin bên dưới.
-function hand(spec, pts, fill, alpha, groove) {
+// ---- Kim: giữ dáng kim bạc của mặt gốc, chỉ làm mờ ----
+// Thân mảnh gần tâm, lưỡi hình thoi có rãnh tối, mặt trái sáng / phải tối, bóng đổ quanh kim.
+function bladeHand(spec, o) {
+  const [px, py] = spec.pivot;
+  const tip = py - o.len, b0 = py - o.stemTo, wide = py - o.wideAt, tail = py + o.tail;
   const c = canvas(spec.w, spec.h), ctx = c.getContext('2d');
-  ctx.globalAlpha = alpha;
-  ctx.beginPath(); pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y))); ctx.closePath();
-  ctx.fillStyle = fill; ctx.fill();
-  if (groove) {
-    ctx.globalCompositeOperation = 'destination-out'; ctx.globalAlpha = 0.45;
-    ctx.fillRect(spec.w / 2 - 1, groove[0], 2, groove[1] - groove[0]);
+  // vẽ đặc trên lớp phụ rồi dán với độ mờ để bóng + thân mờ đều
+  const lay = canvas(spec.w, spec.h), lc = lay.getContext('2d');
+  const g = lc.createLinearGradient(px - o.blade / 2, 0, px + o.blade / 2, 0);
+  g.addColorStop(0, o.light); g.addColorStop(0.5, o.light); g.addColorStop(0.5, o.dark); g.addColorStop(1, o.dark);
+  {
+    const ctx = lc;
+    if (o.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 7; ctx.shadowOffsetY = 0; }
+    ctx.beginPath();
+    ctx.moveTo(px, tip); ctx.lineTo(px + o.blade / 2, wide); ctx.lineTo(px + o.stem / 2, b0);
+    ctx.lineTo(px + o.stem / 2, tail - 2); ctx.quadraticCurveTo(px, tail + 2, px - o.stem / 2, tail - 2);
+    ctx.lineTo(px - o.stem / 2, b0); ctx.lineTo(px - o.blade / 2, wide); ctx.closePath();
+    ctx.fillStyle = g; ctx.fill();
+    ctx.shadowColor = 'transparent';
+    // rãnh tối giữa lưỡi
+    ctx.strokeStyle = o.groove; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(px, tip + o.len * 0.12); ctx.lineTo(px, b0 - 4); ctx.stroke();
   }
+  ctx.globalAlpha = o.alpha; ctx.drawImage(lay, 0, 0);
   return c.toDataURL('image/png');
 }
+function secondHand(spec) {
+  const [px, py] = spec.pivot, c = canvas(spec.w, spec.h), ctx = c.getContext('2d');
+  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 5;
+  ctx.fillStyle = col('orange');
+  ctx.beginPath(); ctx.moveTo(px - 1.2, py); ctx.lineTo(px - 0.8, 18); ctx.lineTo(px + 0.8, 18); ctx.lineTo(px + 1.2, py); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.roundRect(px - 2.2, py, 4.4, 50, 2.2); ctx.fill();
+  return c.toDataURL('image/png');
+}
+function capImg(ring, dot, shadow) {
+  const c = canvas(24, 24), ctx = c.getContext('2d');
+  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 4; }
+  ctx.fillStyle = ring; ctx.beginPath(); ctx.arc(12, 12, 7.5, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowColor = 'transparent';
+  ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(12, 12, 4, 0, Math.PI * 2); ctx.fill();
+  return c.toDataURL('image/png');
+}
+const HAND_HOUR = { len: 130, stemTo: 52, wideAt: 92, blade: 17, stem: 5, tail: 18 };
+const HAND_MIN  = { len: 205, stemTo: 80, wideAt: 150, blade: 14, stem: 4.5, tail: 26 };
 function hands() {
-  const H = LAYOUT.widgets.hands, out = {};
-  const silver = '#E2E2E6';
-  out['hands/hour.png'] = hand(H.hour, [[11, 2], [20.5, 42], [15, 128], [14, 150], [8, 150], [7, 128], [1.5, 42]], silver, 0.55, [22, 112]);
-  out['hands/minute.png'] = hand(H.minute, [[9, 2], [16.5, 38], [12, 196], [11.5, 222], [6.5, 222], [6, 196], [1.5, 38]], silver, 0.55, [20, 180]);
-  {
-    const s = H.second, c = canvas(s.w, s.h), ctx = c.getContext('2d');
-    ctx.globalAlpha = 0.9; ctx.fillStyle = col('orange');
-    ctx.fillRect(s.pivot[0] - 1.25, 4, 2.5, s.h - 8);
-    ctx.beginPath(); ctx.arc(s.pivot[0], s.h - 14, 5, 0, Math.PI * 2); ctx.fill();
-    out['hands/second.png'] = c.toDataURL('image/png');
-  }
-  {
-    const s = H.cap, c = canvas(s.w, s.h), ctx = c.getContext('2d');
-    ctx.fillStyle = '#D0D0D4'; ctx.beginPath(); ctx.arc(10, 10, 8, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = col('orange'); ctx.beginPath(); ctx.arc(10, 10, 3.5, 0, Math.PI * 2); ctx.fill();
-    out['hands/cap.png'] = c.toDataURL('image/png');
-  }
+  const H = LAYOUT.widgets.hands, A = LAYOUT.aod.widgets.hands, out = {};
+  const live = { light: '#F2F2F2', dark: '#B9B9BC', groove: '#5C5C60', alpha: 0.6, shadow: true };
+  const dim = { light: '#8A8A8A', dark: '#626264', groove: '#2E2E2E', alpha: 0.85, shadow: false };
+  out['hands/hour.png'] = bladeHand(H.hour, { ...HAND_HOUR, ...live });
+  out['hands/minute.png'] = bladeHand(H.minute, { ...HAND_MIN, ...live });
+  out['hands/second.png'] = secondHand(H.second);
+  out['hands/cap.png'] = capImg('#D6D6D8', col('orange'), true);
+  out['aod/hand_hour.png'] = bladeHand(A.hour, { ...HAND_HOUR, ...dim });
+  out['aod/hand_minute.png'] = bladeHand(A.minute, { ...HAND_MIN, ...dim });
+  out['aod/hand_cap.png'] = capImg('#7A7A7A', '#B5561A', false);
   return out;
 }
 
-function weekImage(label, o, stroke) {
-  const c = canvas(168, 48), ctx = c.getContext('2d');
-  ctx.font = font(o); ctx.letterSpacing = (o.ls || 0) + 'px'; ctx.textAlign = 'center';
-  if (ctx.measureText(label).width > 168) throw new Error('Chữ thứ quá dài: ' + label);
-  if (stroke) { ctx.strokeStyle = col(o.color); ctx.lineWidth = stroke; ctx.lineJoin = 'round'; ctx.strokeText(label, 84, 38); }
-  else { ctx.fillStyle = col(o.color); ctx.fillText(label, 84, 38); }
+function weekImage(label, color, noShadow) {
+  const c = canvas(170, 44), ctx = c.getContext('2d');
+  ctx.font = font({ font: 'Roboto', weight: 300, size: 31 }); ctx.fillStyle = col(color); ctx.textAlign = 'right';
+  if (ctx.measureText(label).width > 164) throw new Error('Chữ thứ quá dài: ' + label);
+  if (!noShadow) shadowOn(ctx);
+  ctx.fillText(label, 166, 34);
   return c.toDataURL('image/png');
 }
 `;
@@ -111,39 +182,40 @@ async function main() {
   const browser = await chromium.launch();
   const page = await browser.newPage();
   await page.setContent(`<html><head><style>${fontCss()}</style></head><body></body></html>`);
-  await page.evaluate(async (faces) => {
-    for (const [fam, , weights] of faces) for (const w of weights) {
-      const f = `${w} 20px ${fam}`;
+  await page.evaluate(async (weights) => {
+    for (const w of weights) {
+      const f = `${w} 20px Roboto`;
       await document.fonts.load(f, 'A0ỨẬ');
       if (!document.fonts.check(f, 'A0ỨẬ')) throw new Error('Font không tải được: ' + f);
     }
-  }, FONT_FACES);
+  }, WEIGHTS);
   await page.addScriptTag({ content: `window.LAYOUT=${JSON.stringify(LAYOUT)};
     window.ICONS={${Object.entries(ICONS).map(([k, f]) => `${JSON.stringify(k)}:${f.toString()}`).join(',')}};
     ${ICONS_HELPERS}${PAGE_LIB}${FACE_FN}` });
 
   const files = await page.evaluate(async ({ WEEK, WEATHER }) => {
     const out = {};
-    const digitSets = (sets) => {
-      for (const s of Object.values(sets)) for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cell(String(d), s.cell[0], s.cell[1], s);
-    };
-    digitSets(LAYOUT.digitSets);
-    digitSets(LAYOUT.aod.digitSets);
+    for (const s of Object.values(LAYOUT.digitSets)) for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cellS(String(d), s.cell[0], s.cell[1], s);
+    for (const s of Object.values(LAYOUT.aod.digitSets)) for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cellS(String(d), s.cell[0], s.cell[1], s, true);
 
     const D = LAYOUT.digitSets;
-    out['data/num_pct.png'] = cell('%', 20, D.num.cell[1], D.num);
-    out['data/num_c.png'] = cell('°C', 30, D.num.cell[1], D.num);
-    out['data/num_minus.png'] = cell('-', 11, D.num.cell[1], D.num);
-    out['data/num_empty.png'] = cell('--', 28, D.num.cell[1], D.num);
-    out['data/numo_empty.png'] = cell('--', 28, D.numo.cell[1], D.numo);
-    out['data/small_dot.png'] = cell('.', 6, D.small.cell[1], D.small);
+    out['data/bat_pct.png'] = cellS('%', 24, D.bat.cell[1], D.bat);
+    out['data/temp_c.png'] = cellS('°C', 30, D.temp.cell[1], D.temp);
+    out['data/temp_minus.png'] = cellS('-', 11, D.temp.cell[1], D.temp);
+    out['data/num_empty.png'] = cellS('--', 28, D.num.cell[1], D.num);
+    out['data/numo_empty.png'] = cellS('--', 28, D.numo.cell[1], D.numo);
+    out['data/small_dot.png'] = cellS('.', 6, D.small.cell[1], D.small);
 
-    const wk = { font: 'BarlowSC', weight: 600, size: 34, color: '#E5E5EA', ls: 1 };
     WEEK.forEach(([slug, label], i) => {
-      out[`date/week_${i + 1}_${slug}.png`] = weekImage(label, wk);
-      out[`aod/week_${i + 1}_${slug}.png`] = weekImage(label, wk, 1.3);
+      out[`date/week_${i + 1}_${slug}.png`] = weekImage(label, 'week');
+      out[`aod/week_${i + 1}_${slug}.png`] = weekImage(label, '#8A8A8A', true);
     });
-    for (const w of WEATHER) out[`weather/${w}.png`] = await icon(w, 'white', 52, 40);
+    for (const w of WEATHER) {
+      const c = canvas(40, 38), ctx = c.getContext('2d');
+      shadowOn(ctx);
+      await drawIcon(ctx, 'w_' + w, 'white', 2, 2, 36, 34);
+      out[`weather/${w}.png`] = c.toDataURL('image/png');
+    }
     Object.assign(out, hands());
     out['background.png'] = await background(false);
     out['aod/background_aod.png'] = await background(true);

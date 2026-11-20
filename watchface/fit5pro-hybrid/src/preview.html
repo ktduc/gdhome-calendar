@@ -47,6 +47,14 @@ function number(key, str) {
   let x = w.align === 'right' ? w.x - total : w.align === 'center' ? Math.round(w.x - total / 2) : w.x;
   for (const [src, cw] of parts) { img(src, x, w.y); x += cw; }
 }
+function hands(H, now, withSecond) {
+  const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+  handImg(H.hour, (h + m / 60) * 30);
+  handImg(H.minute, (m + s / 60) * 6);
+  if (withSecond) handImg(W.hands.second, s * 6);
+  const [cx, cy] = W.hands.center;
+  img(H.cap.img, cx - H.cap.w / 2, cy - H.cap.h / 2);
+}
 function handImg(spec, deg) {
   const [cx, cy] = W.hands.center;
   const i = img(spec.img, cx - spec.pivot[0], cy - spec.pivot[1]);
@@ -68,6 +76,7 @@ function render() {
   if (AOD) {
     img('aod/background_aod.png', 0, 0);
     time(LAYOUT.aod.widgets, LAYOUT.aod.digitSets, now);
+    hands(LAYOUT.aod.widgets.hands, now, false);
   } else {
     img('background.png', 0, 0);
     time(W, D, now);
@@ -82,12 +91,7 @@ function render() {
     number('steps', DATA.steps);
     number('heart', DATA.heart);
     number('distance', DATA.km);
-    const h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
-    handImg(W.hands.hour, (h + m / 60) * 30);
-    handImg(W.hands.minute, (m + s / 60) * 6);
-    handImg(W.hands.second, s * 6);
-    const [cx, cy] = W.hands.center;
-    img(W.hands.cap.img, cx - W.hands.cap.w / 2, cy - W.hands.cap.h / 2);
+    hands(W.hands, now, true);
   }
   return Promise.all([...face.querySelectorAll('img')].map((i) => i.decode().catch(() => {})));
 }
