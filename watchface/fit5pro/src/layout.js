@@ -48,23 +48,23 @@
       battery:    { set: 'num', x: 204, y: 436, align: 'center', digits: 3, unit: 'data/unit_pct.png', unitW: 22 },
     },
 
-    // Màn hình chờ AOD: chỉ thứ, ngày/tháng, giờ:phút (không giây).
+    // Màn hình chờ AOD: giữ đúng vị trí màn hình chính, dạng nét viền;
+    // chỉ thứ, ngày/tháng, giờ:phút (không giây).
     aod: {
-      colors: { time: '#FFC21A', text: '#B0B0B0' },
       digitSets: {
-        time: { prefix: 'aod/time_', cell: [72, 96], color: '#FFC21A', font: 'Barlow', weight: 700, size: 122, stroke: 3 },
-        date: { prefix: 'aod/date_', cell: [27, 42], color: '#B0B0B0', font: 'Barlow', weight: 600, size: 44 },
+        time: { prefix: 'aod/time_', cell: [72, 92], color: 'yellow', font: 'Barlow', weight: 700, size: 118, stroke: 3 },
+        date: { prefix: 'aod/date_', cell: [27, 42], color: 'white',  font: 'Barlow', weight: 700, size: 46, stroke: 1.6 },
       },
       widgets: {
-        week:      { img: 'aod/week_', x: 54, y: 120, w: 300, h: 56 },
-        dayTens:   { set: 'date', x: 141, y: 184 },
-        dayOnes:   { set: 'date', x: 168, y: 184 },
-        monthTens: { set: 'date', x: 213, y: 184 },
-        monthOnes: { set: 'date', x: 240, y: 184 },
-        hourTens:  { set: 'time', x: 46,  y: 262 },
-        hourOnes:  { set: 'time', x: 118, y: 262 },
-        minTens:   { set: 'time', x: 218, y: 262 },
-        minOnes:   { set: 'time', x: 290, y: 262 },
+        week:      { img: 'aod/week_', x: 24, y: 146, w: 178, h: 56 },
+        dayTens:   { set: 'date', x: 26,  y: 200 },
+        dayOnes:   { set: 'date', x: 53,  y: 200 },
+        monthTens: { set: 'date', x: 98,  y: 200 },
+        monthOnes: { set: 'date', x: 125, y: 200 },
+        hourTens:  { set: 'time', x: 226, y: 140 },
+        hourOnes:  { set: 'time', x: 298, y: 140 },
+        minTens:   { set: 'time', x: 226, y: 228 },
+        minOnes:   { set: 'time', x: 298, y: 228 },
       },
     },
   };

@@ -173,22 +173,28 @@ async function main() {
     for (const [, st] of Object.entries(aod.digitSets)) {
       for (let d = 0; d <= 9; d++) out[st.prefix + d + '.png'] = cell(String(d), st.cell[0], st.cell[1], st);
     }
-    const aw = { font: 'BarlowSC', weight: 600, size: 40, color: aod.colors.text, ls: 1 };
+    // Thứ AOD: cùng chữ/vị trí với màn hình chính nhưng chỉ vẽ nét viền.
+    const aw = { font: 'BarlowSC', weight: 700, size: 40, color: 'yellow', ls: 0 };
     WEEK.forEach(([slug, label], i) => {
-      const c = canvas(300, 56), ctx = c.getContext('2d');
-      ctx.font = font(aw); ctx.fillStyle = col(aw.color); ctx.letterSpacing = aw.ls + 'px'; ctx.textAlign = 'center';
-      ctx.fillText(label, 150, 44);
+      const c = canvas(178, 56), ctx = c.getContext('2d');
+      ctx.font = font(aw); ctx.strokeStyle = col(aw.color); ctx.lineWidth = 1.6; ctx.lineJoin = 'round';
+      ctx.strokeText(label, 1, 44);
       out[`aod/week_${i + 1}_${slug}.png`] = c.toDataURL('image/png');
     });
     {
+      // Nền AOD: viền khối giờ + nhãn 24H + dấu "/" của ngày, cùng vị trí màn hình chính.
       const c = canvas(408, 480), ctx = c.getContext('2d');
       ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 408, 480);
-      const t = aod.digitSets.time;
-      ctx.fillStyle = col(t.color);
-      for (const y of [262 + 30, 262 + 60]) { ctx.beginPath(); ctx.arc(204, y, 6, 0, Math.PI * 2); ctx.fill(); }
-      const d = aod.digitSets.date;
+      const stroke = (x, y, w, h, r, color, lw) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r);
+        ctx.strokeStyle = col(color); ctx.lineWidth = lw; ctx.stroke(); };
+      stroke(213, 123, 170, 202, 17, 'yellow', 2);
+      ctx.fillStyle = '#000'; ctx.fillRect(266, 118, 64, 10);
+      stroke(271, 116, 54, 16, 7, 'yellow', 1.5);
+      text(ctx, '24H', 298, 119, { font: 'Barlow', weight: 700, size: 14, color: 'yellow', align: 'center', ls: 0.5 });
+      const d = LAYOUT.digitSets.day;
       ctx.font = font(d);
-      text(ctx, '/', 204, 184 + Math.round((42 - capOf(ctx)) / 2), { ...d, align: 'center' });
+      ctx.font = font(d); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.textAlign = 'center';
+      ctx.strokeText('/', 89, 200 + Math.round((42 + capOf(ctx)) / 2));
       out['aod/background_aod.png'] = c.toDataURL('image/png');
     }
 

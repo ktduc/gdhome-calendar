@@ -23,7 +23,7 @@ Bộ ảnh và bố cục dựng theo mẫu: khối giờ vàng 24H và ô giây
 | `assets/data/gray_0..9.png` + `gray_slash`, `gray_minus` | Nhiệt độ cao/thấp (xám, 10×20) |
 | `assets/data/small_0..9.png` + `small_colon` | Giờ bình minh (trắng, 12×24) |
 | `assets/weather/*.png` | 11 icon thời tiết vàng (64×46) |
-| `assets/aod/` | Màn hình AOD: nền `background_aod`, số giờ nét viền `time_0..9` (72×96), số ngày `date_0..9`, thứ `week_*` (300×56) |
+| `assets/aod/` | Màn hình AOD: nền `background_aod`, số giờ nét viền `time_0..9` (72×92), số ngày nét viền `date_0..9` (27×42), thứ nét viền `week_*` (178×56) |
 | `YellowBlock_Fit5Pro.zip` | Toàn bộ `assets/` + hướng dẫn, để tải về máy Windows |
 | `src/` | Mã nguồn: `layout.js` (tọa độ), `icons.js`, `generate.cjs` (xuất ảnh), `preview.html` (xem thử chạy giờ thật) |
 
@@ -50,7 +50,7 @@ Bộ ảnh và bố cục dựng theo mẫu: khối giờ vàng 24H và ô giây
 
 ## Màn hình AOD
 
-Chỉ hiện thứ, ngày/tháng và giờ:phút (không giây), số dạng nét viền, ~6% điểm ảnh sáng. Tọa độ và cách dựng: xem [HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md#bước-5--dựng-màn-hình-aod-luôn-hiển-thị).
+Giữ đúng vị trí màn hình chính cho liền mạch; chỉ hiện thứ, ngày/tháng và giờ:phút (không giây), toàn bộ dạng nét viền, ~7% điểm ảnh sáng. Tọa độ và cách dựng: xem [HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md#bước-5--dựng-màn-hình-aod-luôn-hiển-thị).
 
 ## Sửa giao diện & xuất lại ảnh
 

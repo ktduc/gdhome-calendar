@@ -118,16 +118,16 @@ Thêm **Hot zone / Jump** (vùng trong suốt, không cần ảnh):
 
 ## Bước 5 – Dựng màn hình AOD (luôn hiển thị)
 
-Chuyển sang thẻ **AOD / Always On Display** của dự án. AOD chỉ có **thứ, ngày/tháng và giờ:phút – không có giây**, chữ số dạng nét viền nên chỉ ~6% điểm ảnh sáng (đỡ hao pin, tránh lưu ảnh màn AMOLED).
+Chuyển sang thẻ **AOD / Always On Display** của dự án. AOD **giữ đúng vị trí như màn hình chính** (thứ, ngày/tháng bên trái; khối giờ bên phải) để khi chuyển qua lại trông liền mạch. Chỉ có **thứ, ngày/tháng và giờ:phút – không có giây**, toàn bộ dạng **nét viền** nên chỉ ~7% điểm ảnh sáng (đỡ hao pin, tránh lưu ảnh màn AMOLED).
 
 | Thành phần | Ảnh | X | Y |
 |---|---|---|---|
-| Nền AOD (đã có dấu ":" và "/") | `aod/background_aod.png` | 0 | 0 |
-| Thứ | `aod/week_1_thu_hai` … `week_7_chu_nhat` | 54 | 120 |
-| Ngày – chục / đơn vị | `aod/date_0..9` | 141 / 168 | 184 |
-| Tháng – chục / đơn vị | `aod/date_0..9` | 213 / 240 | 184 |
-| Giờ – chục / đơn vị | `aod/time_0..9` | 46 / 118 | 262 |
-| Phút – chục / đơn vị | `aod/time_0..9` | 218 / 290 | 262 |
+| Nền AOD (viền khối giờ, nhãn 24H, dấu "/") | `aod/background_aod.png` | 0 | 0 |
+| Thứ | `aod/week_1_thu_hai` … `week_7_chu_nhat` | 24 | 146 |
+| Ngày – chục / đơn vị | `aod/date_0..9` | 26 / 53 | 200 |
+| Tháng – chục / đơn vị | `aod/date_0..9` | 98 / 125 | 200 |
+| Giờ – chục / đơn vị | `aod/time_0..9` | 226 / 298 | 140 |
+| Phút – chục / đơn vị | `aod/time_0..9` | 226 / 298 | 228 |
 
 Không thêm thành phần giây, thời tiết hay vùng chạm vào AOD.
 
@@ -151,7 +151,7 @@ Không thêm thành phần giây, thời tiết hay vùng chạm vào AOD.
 4. Giữ điện thoại gần đồng hồ, Bluetooth bật, đến khi báo cài xong → chọn **Đặt làm mặt mặc định**.
 
 ### Bật AOD trên đồng hồ
-Trên đồng hồ: **Cài đặt → Màn hình & độ sáng → Luôn bật màn hình (Always On Display)** → bật. Khi hạ tay, đồng hồ sẽ hiện màn AOD (thứ, ngày, giờ:phút).
+Trên đồng hồ: **Cài đặt → Màn hình & độ sáng → Luôn bật màn hình (Always On Display)** → bật. Khi hạ tay, đồng hồ chuyển sang AOD: cùng bố cục, chỉ còn nét viền của thứ, ngày/tháng và giờ:phút.
 
 ## Xử lý sự cố
 
