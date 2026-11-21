@@ -42,12 +42,14 @@ function img(src, x, y) {
   face.appendChild(i); return i;
 }
 function digit(widgets, sets, key, d) { const w = widgets[key]; img(sets[w.set].prefix + d + '.png', w.x, w.y); }
-const SPECIAL = { '-': ['minus', 12], '/': ['sep', 8], ':': ['sep', 7] };
+// Độ rộng ảnh ký tự đặc biệt theo bộ số
+const SPECIAL = { '-': 'minus', '/': 'sep', ':': 'sep' };
+const SPECIAL_W = { temp: { '-': 11 }, hilo: { '-': 7, '/': 7 }, sun: { ':': 5 } };
 function number(key, str) {
   const w = W[key], s = D[w.set], parts = [];
   for (const ch of String(str)) {
     if (/\d/.test(ch)) parts.push([s.prefix + ch + '.png', s.cell[0]]);
-    else if (SPECIAL[ch]) parts.push([w[SPECIAL[ch][0]], w.set === 'gray' && ch === '-' ? 8 : SPECIAL[ch][1]]);
+    else if (SPECIAL[ch]) parts.push([w[SPECIAL[ch]], SPECIAL_W[w.set][ch]]);
   }
   if (w.unit) parts.push([w.unit, w.unitW]);
   const total = parts.reduce((a, p) => a + p[1], 0);

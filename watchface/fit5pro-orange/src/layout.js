@@ -1,94 +1,98 @@
-// Bố cục mặt "Orange Block" cho Huawei Watch Fit 5 Pro (408 x 480), dàn gần tràn viền.
+// Bố cục mặt "Orange Block" cho Huawei Watch Fit 5 Pro (408 x 480).
+// Vị trí, cỡ chữ đo trực tiếp từ giao diện mẫu; chỉ thêm kim giờ/phút có bóng đổ.
 // Tọa độ x, y = góc trên-trái của ảnh. Dùng chung cho generate.cjs và preview.html.
 (function (root) {
+  // Ô số được căn sao cho mép trên chữ số (capTop) đúng như mẫu.
+  const CAP = { Barlow: 0.70, Roboto: 0.711 };
+  const set = (o) => ({ ...o, capH: Math.round(CAP[o.font] * o.size) });
+  const at = (s, x, capTop) => ({ x, y: capTop - Math.round((s.cell[1] - s.capH) / 2) });
+
+  const S = {
+    big:   set({ prefix: 'time/big_',   cell: [64, 96], color: 'black',  font: 'Barlow', weight: 700, size: 114 }),
+    sec:   set({ prefix: 'time/sec_',   cell: [30, 46], color: 'black',  font: 'Barlow', weight: 700, size: 50 }),
+    date:  set({ prefix: 'date/date_',  cell: [17, 36], color: 'white',  font: 'Roboto', weight: 700, size: 32 }),
+    lunar: set({ prefix: 'date/lunar_', cell: [15, 34], color: 'lunar',  font: 'Roboto', weight: 300, size: 29 }),
+    temp:  set({ prefix: 'data/temp_',  cell: [17, 32], color: 'white',  font: 'Barlow', weight: 500, size: 31 }),
+    hilo:  set({ prefix: 'data/hilo_',  cell: [10, 22], color: 'gray',   font: 'Barlow', weight: 500, size: 19 }),
+    sun:   set({ prefix: 'data/sun_',   cell: [10, 22], color: 'white',  font: 'Barlow', weight: 500, size: 20 }),
+    act:   set({ prefix: 'data/act_',   cell: [15, 32], color: 'act',    font: 'Roboto', weight: 300, size: 28 }),
+    bat:   set({ prefix: 'data/bat_',   cell: [19, 36], color: 'white',  font: 'Roboto', weight: 300, size: 34 }),
+  };
+  const AS = {
+    big:  set({ ...S.big,  prefix: 'aod/big_',  color: 'orange', stroke: 2.2 }),
+    date: set({ ...S.date, prefix: 'aod/date_', color: '#A8A8A8' }),
+  };
+
+  // Ngày/tháng/năm: 21/11/2026 (mép trên số y 213)
+  const dateRow = (s) => ({
+    dayTens: { set: 'date', ...at(s, 30, 213) },  dayOnes: { set: 'date', ...at(s, 47, 213) },
+    monthTens: { set: 'date', ...at(s, 76, 213) }, monthOnes: { set: 'date', ...at(s, 93, 213) },
+    year1: { set: 'date', ...at(s, 122, 213) }, year2: { set: 'date', ...at(s, 139, 213) },
+    year3: { set: 'date', ...at(s, 156, 213) }, year4: { set: 'date', ...at(s, 173, 213) },
+  });
+  const timeBlock = (s) => ({
+    hourTens: { set: 'big', ...at(s, 266, 145) }, hourOnes: { set: 'big', ...at(s, 330, 145) },
+    minTens:  { set: 'big', ...at(s, 266, 236) }, minOnes:  { set: 'big', ...at(s, 330, 236) },
+  });
+  const HANDS = {
+    hour:   { img: 'hands/hour.png',   w: 44, h: 201, pivot: [22, 158] },
+    minute: { img: 'hands/minute.png', w: 42, h: 265, pivot: [21, 213] },
+    cap:    { img: 'hands/cap.png',    w: 18, h: 18 },
+  };
+
   const LAYOUT = {
     screen: { w: 408, h: 480 },
-    colors: { orange: '#FF7A1A', white: '#FFFFFF', gray: '#8E8E93', lunar: '#B4B4B8', line: '#3A3A3C', black: '#000000' },
-    // Độ đậm của kim giờ/phút (1 = đặc). Kim có bóng đổ như mặt mẫu Hybrid.
-    handAlpha: 0.72,
-
-    // Khối cam: giờ/phút và giây
-    panel:  { x: 214, y: 112, w: 186, h: 246, r: 22 },
-    panel2: { x: 214, y: 364, w: 186, h: 66,  r: 20 },
-
-    digitSets: {
-      big:   { prefix: 'time/big_',   cell: [80, 112], color: 'black',  font: 'Barlow', weight: 700, size: 144 },
-      sec:   { prefix: 'time/sec_',   cell: [32, 50],  color: 'black',  font: 'Barlow', weight: 700, size: 60 },
-      date:  { prefix: 'date/date_',  cell: [19, 40],  color: 'white',  font: 'Barlow', weight: 700, size: 36 },
-      lunar: { prefix: 'date/lunar_', cell: [13, 30],  color: 'lunar',  font: 'Barlow', weight: 500, size: 25 },
-      num:   { prefix: 'data/num_',   cell: [18, 36],  color: 'white',  font: 'Barlow', weight: 500, size: 34 },
-      small: { prefix: 'data/small_', cell: [13, 28],  color: 'white',  font: 'Barlow', weight: 500, size: 25 },
-      gray:  { prefix: 'data/gray_',  cell: [11, 22],  color: 'gray',   font: 'Barlow', weight: 500, size: 20 },
+    colors: {
+      orange: '#FF7300', white: '#FFFFFF', gray: '#6E6E6E', lunar: '#8A8A8A', act: '#9A9A9A',
+      dim: '#4E4E4E', line: '#3A3A3A', pill: '#1E1E1E', pillText: '#FFB27A', black: '#000000',
     },
+    // Độ đậm kim giờ/phút (1 = đặc). Kim có bóng đổ đậm để nổi trên mọi nền.
+    handAlpha: 0.9,
 
+    panel:  { x: 259, y: 114, w: 142, h: 217, r: 12 },
+    panel2: { x: 259, y: 337, w: 142, h: 61,  r: 10 },
+    // Dấu "/" in sẵn trên nền (tâm x)
+    dateSlashes: [70, 116],
+    lunarSlashes: [65, 105],
+
+    digitSets: S,
     widgets: {
-      // Giờ / phút / giây (bên phải)
-      hourTens:   { set: 'big', x: 227, y: 124 },
-      hourOnes:   { set: 'big', x: 307, y: 124 },
-      minTens:    { set: 'big', x: 227, y: 240 },
-      minOnes:    { set: 'big', x: 307, y: 240 },
-      secTens:    { set: 'sec', x: 306, y: 376 },
-      secOnes:    { set: 'sec', x: 338, y: 376 },
+      ...timeBlock(S.big),
+      secTens: { set: 'sec', ...at(S.sec, 329, 360) },
+      secOnes: { set: 'sec', ...at(S.sec, 359, 360) },
 
-      // Lịch (bên trái): THỨ 7 / 21/11/2026 / 13/10/ Bính Ngọ
-      week:       { img: 'date/week_', x: 12, y: 118, w: 196, h: 66 },
-      dayTens:    { set: 'date', x: 14,  y: 190 },
-      dayOnes:    { set: 'date', x: 33,  y: 190 },
-      monthTens:  { set: 'date', x: 62,  y: 190 },
-      monthOnes:  { set: 'date', x: 81,  y: 190 },
-      year1:      { set: 'date', x: 110, y: 190 },
-      year2:      { set: 'date', x: 129, y: 190 },
-      year3:      { set: 'date', x: 148, y: 190 },
-      year4:      { set: 'date', x: 167, y: 190 },
-      lunarDayTens:   { set: 'lunar', x: 14, y: 232 },
-      lunarDayOnes:   { set: 'lunar', x: 27, y: 232 },
-      lunarMonthTens: { set: 'lunar', x: 49, y: 232 },
-      lunarMonthOnes: { set: 'lunar', x: 62, y: 232 },
-      canchi:     { img: 'date/canchi_', x: 90, y: 230, w: 118, h: 34 },
+      // Thứ: chữ cam, mép trên chữ hoa y 155 (ảnh chừa 16px phía trên cho dấu)
+      week: { img: 'date/week_', x: 23, y: 139, w: 232, h: 66, base: 54 },
+      ...dateRow(S.date),
+      // Âm lịch: 13/10/ B Ngọ (mép trên số y 251)
+      lunarDayTens:   { set: 'lunar', ...at(S.lunar, 30, 251) },
+      lunarDayOnes:   { set: 'lunar', ...at(S.lunar, 45, 251) },
+      lunarMonthTens: { set: 'lunar', ...at(S.lunar, 70, 251) },
+      lunarMonthOnes: { set: 'lunar', ...at(S.lunar, 85, 251) },
+      canchi: { img: 'date/canchi_', x: 124, y: 241, w: 110, h: 46, base: 31 },
 
-      // Thời tiết & bình minh (hàng trên)
-      temp:       { set: 'num',   x: 24,  y: 40, align: 'left', unit: 'data/num_c.png', unitW: 36, minus: 'data/num_minus.png' },
-      tempHiLo:   { set: 'gray',  x: 38,  y: 78, align: 'left', sep: 'data/gray_slash.png', minus: 'data/gray_minus.png' },
-      weather:    { img: 'weather/', x: 136, y: 40, w: 66, h: 56 },
-      sunrise:    { set: 'small', x: 274, y: 42, align: 'left', sep: 'data/small_colon.png' },
+      temp:     { set: 'temp', ...at(S.temp, 61, 57), align: 'left', unit: 'data/temp_c.png', unitW: 33, minus: 'data/temp_minus.png' },
+      tempHiLo: { set: 'hilo', ...at(S.hilo, 86, 87), align: 'left', sep: 'data/hilo_slash.png', minus: 'data/hilo_minus.png' },
+      weather:  { img: 'weather/', x: 143, y: 55, w: 56, h: 48 },
+      sunrise:  { set: 'sun', ...at(S.sun, 286, 68), align: 'left', sep: 'data/sun_colon.png' },
 
-      // Hoạt động & pin
-      steps:      { set: 'num',   x: 52,  y: 312, align: 'left' },
-      heart:      { set: 'num',   x: 52,  y: 372, align: 'left' },
-      battery:    { set: 'small', x: 204, y: 450, align: 'center', unit: 'data/small_pct.png', unitW: 18 },
+      steps:   { set: 'act', ...at(S.act, 66, 323), align: 'left' },
+      heart:   { set: 'act', ...at(S.act, 66, 361), align: 'left' },
+      battery: { set: 'bat', ...at(S.bat, 210, 446), align: 'center', unit: 'data/bat_pct.png', unitW: 24 },
 
-      // Kim (dáng kim mặt Hybrid, có bóng đổ). pivot = tâm xoay trong ảnh; center = tâm xoay trên màn hình.
-      hands: {
-        center: [210, 246],
-        hour:   { img: 'hands/hour.png',   w: 44, h: 201, pivot: [22, 158] },
-        minute: { img: 'hands/minute.png', w: 42, h: 265, pivot: [21, 213] },
-        cap:    { img: 'hands/cap.png',    w: 18, h: 18 },
-      },
+      hands: { center: [204, 240], ...HANDS },
     },
 
     // AOD: ô giờ/phút + ngày/tháng/năm + kim giờ/phút, cùng vị trí.
     aod: {
-      digitSets: {
-        big:  { prefix: 'aod/big_',  cell: [80, 112], color: 'orange', font: 'Barlow', weight: 700, size: 144, stroke: 2.5 },
-        date: { prefix: 'aod/date_', cell: [19, 40],  color: '#BDBDBD', font: 'Barlow', weight: 700, size: 36 },
-      },
+      digitSets: AS,
       widgets: {
-        hourTens:  { set: 'big',  x: 227, y: 124 },
-        hourOnes:  { set: 'big',  x: 307, y: 124 },
-        minTens:   { set: 'big',  x: 227, y: 240 },
-        minOnes:   { set: 'big',  x: 307, y: 240 },
-        dayTens:   { set: 'date', x: 14,  y: 190 },
-        dayOnes:   { set: 'date', x: 33,  y: 190 },
-        monthTens: { set: 'date', x: 62,  y: 190 },
-        monthOnes: { set: 'date', x: 81,  y: 190 },
-        year1:     { set: 'date', x: 110, y: 190 },
-        year2:     { set: 'date', x: 129, y: 190 },
-        year3:     { set: 'date', x: 148, y: 190 },
-        year4:     { set: 'date', x: 167, y: 190 },
+        ...timeBlock(AS.big),
+        ...dateRow(AS.date),
         hands: {
-          hour:   { img: 'aod/hand_hour.png',   w: 44, h: 201, pivot: [22, 158] },
-          minute: { img: 'aod/hand_minute.png', w: 42, h: 265, pivot: [21, 213] },
-          cap:    { img: 'aod/hand_cap.png',    w: 18, h: 18 },
+          hour:   { ...HANDS.hour,   img: 'aod/hand_hour.png' },
+          minute: { ...HANDS.minute, img: 'aod/hand_minute.png' },
+          cap:    { ...HANDS.cap,    img: 'aod/hand_cap.png' },
         },
       },
     },

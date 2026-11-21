@@ -7,6 +7,19 @@ const LAYOUT = require('./layout.js');
 const ICONS = require('../../fit5pro/src/icons.js');
 const { fontCss, FONT_FACES, PAGE_LIB, ICONS_HELPERS, WEATHER } = require('../../fit5pro/src/generate.cjs');
 
+const ROBOTO_DIR = path.join(__dirname, '..', '..', 'fit5pro-hybrid', 'src', 'fonts');
+const ROBOTO_W = [300, 400, 500, 700];
+function robotoCss() {
+  const LATIN = 'U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+0304,U+0308,U+0329,U+2000-206F,U+20AC,U+2122,U+2191,U+2193,U+2212,U+2215,U+FEFF,U+FFFD';
+  const VIET = 'U+0102-0103,U+0110-0111,U+0128-0129,U+0168-0169,U+01A0-01A1,U+01AF-01B0,U+0300-0301,U+0303-0304,U+0308-0309,U+0323,U+0329,U+1EA0-1EF9,U+20AB';
+  const css = [];
+  for (const w of ROBOTO_W) for (const [sub, range] of [['latin', LATIN], ['vietnamese', VIET]]) {
+    const data = fs.readFileSync(path.join(ROBOTO_DIR, `roboto-${sub}-${w}-normal.woff2`)).toString('base64');
+    css.push(`@font-face{font-family:'Roboto';font-weight:${w};unicode-range:${range};src:url(data:font/woff2;base64,${data}) format('woff2');}`);
+  }
+  return css.join('\n');
+}
+
 const SRC = __dirname;
 const ROOT = path.join(SRC, '..');
 const OUT = path.join(ROOT, 'assets');
@@ -15,17 +28,20 @@ const OUT = path.join(ROOT, 'assets');
 const WEEK = [['thu_2', 'THỨ 2'], ['thu_3', 'THỨ 3'], ['thu_4', 'THỨ 4'], ['thu_5', 'THỨ 5'],
   ['thu_6', 'THỨ 6'], ['thu_7', 'THỨ 7'], ['chu_nhat', 'CHỦ NHẬT']];
 // 60 năm can chi, chỉ số 0 = Giáp Tý (vd. 1984, 2044). Chỉ số = (năm âm - 4) mod 60.
+// Hiển thị viết tắt can như mẫu ("B Ngọ"); riêng Ất giữ nguyên chữ.
 const CAN = ['Giáp', 'Ất', 'Bính', 'Đinh', 'Mậu', 'Kỷ', 'Canh', 'Tân', 'Nhâm', 'Quý'];
+const CAN_SHORT = ['G', 'Ất', 'B', 'Đ', 'M', 'K', 'C', 'T', 'N', 'Q'];
 const CHI = ['Tý', 'Sửu', 'Dần', 'Mão', 'Thìn', 'Tỵ', 'Ngọ', 'Mùi', 'Thân', 'Dậu', 'Tuất', 'Hợi'];
 const slug = (s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
 const CANCHI = Array.from({ length: 60 }, (_, i) => {
   const name = `${CAN[i % 10]} ${CHI[i % 12]}`;
-  return [`${String(i).padStart(2, '0')}_${slug(name).replace(' ', '_')}`, name];
+  return [`${String(i).padStart(2, '0')}_${slug(name).replace(' ', '_')}`, `${CAN_SHORT[i % 10]} ${CHI[i % 12]}`];
 });
 
 const FACE_FN = `
-const LB = { font: 'BarlowSC', weight: 500, size: 15, color: 'gray', ls: 1.2 };
 function midY(ctx, top, h, o) { ctx.font = font(o); return top + Math.round((h - capOf(ctx)) / 2); }
+// Đường kẻ mảnh, mờ (giống nhau cho cả trên và dưới)
+function thin(ctx, x, y, w, h) { ctx.fillStyle = col('line'); ctx.fillRect(x, y, w, h); }
 
 async function background(aod) {
   const { w, h } = LAYOUT.screen;
@@ -38,47 +54,44 @@ async function background(aod) {
   if (aod) { ctx.strokeStyle = col('orange'); ctx.lineWidth = 2; ctx.stroke(); }
   else { ctx.fillStyle = col('orange'); ctx.fill(); }
   const tx = P.x + P.w / 2;
-  rr(ctx, tx - 32, P.y - 9, 64, 22, 9, aod ? 'black' : 'orange');
-  if (aod) { ctx.beginPath(); ctx.roundRect(tx - 32, P.y - 9, 64, 22, 9); ctx.strokeStyle = col('orange'); ctx.lineWidth = 1.5; ctx.stroke(); }
-  else rr(ctx, tx - 29, P.y - 6, 58, 16, 7, 'black');
-  text(ctx, '24H', tx, P.y - 3, { font: 'Barlow', weight: 700, size: 14, color: 'orange', align: 'center', ls: 0.5 });
+  ctx.beginPath(); ctx.roundRect(tx - 25, P.y + 4, 50, 20, 10);
+  if (aod) { ctx.strokeStyle = col('orange'); ctx.lineWidth = 1.2; ctx.stroke(); } else { ctx.fillStyle = col('pill'); ctx.fill(); }
+  text(ctx, '24H', tx, P.y + 7, { font: 'Barlow', weight: 500, size: 20, color: aod ? 'orange' : 'pillText', align: 'center' });
 
   // Dấu "/" của ngày/tháng/năm
-  const dO = { ...D.date, color: aod ? '#BDBDBD' : 'white' };
-  for (const x of [57, 105]) text(ctx, '/', x, midY(ctx, 190, 40, dO), { ...dO, align: 'center' });
+  const dO = { ...D.date, color: aod ? '#A8A8A8' : 'white' };
+  for (const x of LAYOUT.dateSlashes) text(ctx, '/', x, 213, { ...dO, align: 'center' });
   if (aod) return c.toDataURL('image/png');
 
   // Khối giây
   rr(ctx, P2.x, P2.y, P2.w, P2.h, P2.r, 'orange');
-  await drawIcon(ctx, 'bell', 'black', P2.x + 18, P2.y + 18, 30, 30);
-  ctx.fillStyle = '#000'; ctx.fillRect(P2.x + 70, P2.y + 9, 2.5, P2.h - 18);
-  text(ctx, 'SECOND', 338, P2.y + 4, { font: 'BarlowSC', weight: 600, size: 13, color: 'black', align: 'center', ls: 0.5 });
+  await drawIcon(ctx, 'bell', 'black', 277, 352, 27, 27);
+  ctx.fillStyle = '#000'; ctx.fillRect(320, 342, 3, 51);
+  text(ctx, 'SECOND', 331, 342, { font: 'Roboto', weight: 400, size: 17, color: 'black' });
 
-  // Hàng trên: dự báo + bình minh
-  text(ctx, 'FORECAST', 204, 12, { ...LB, align: 'center' });
-  hline(ctx, 14, 394, 32);
-  ctx.fillStyle = C.line; ctx.fillRect(212, 40, 1.5, 56);
-  await drawIcon(ctx, 'sunrise', '#FFC21A', 226, 44, 40, 40);
-  text(ctx, 'SUNRISE', 274, 74, LB);
-  hline(ctx, 14, 394, 104);
+  // Hàng trên: dự báo + bình minh (đường kẻ mảnh, mờ như bên dưới)
+  text(ctx, 'FORECAST', 205, 27, { font: 'BarlowSC', weight: 500, size: 21, color: 'gray', ls: 1.4, align: 'center' });
+  thin(ctx, 129, 45, 156, 1);
+  thin(ctx, 223, 63, 1, 38);
+  await drawIcon(ctx, 'sunrise', '#FFC21A', 231, 61, 36, 36);
+  text(ctx, 'SUNRISE', 280, 88, { font: 'BarlowSC', weight: 500, size: 17, color: 'gray', ls: 1 });
 
-  // Âm lịch: dấu "/"
-  const lO = D.lunar;
-  for (const x of [44.5, 79.5]) text(ctx, '/', x, midY(ctx, 232, 30, lO), { ...lO, align: 'center' });
+  // Âm lịch: dấu "/" sau ngày và sau tháng
+  for (const x of LAYOUT.lunarSlashes) text(ctx, '/', x, 251, { ...D.lunar, align: 'center' });
 
-  // Hoạt động
-  hline(ctx, 14, 206, 272);
-  text(ctx, 'ACTIVITY', 14, 282, LB);
-  await drawIcon(ctx, 'shoe', '#7DC243', 14, 316, 32, 32);
-  text(ctx, 'STEPS', 150, 324, { ...LB, size: 16 });
-  await drawIcon(ctx, 'heart', '#E53935', 16, 377, 28, 28);
-  text(ctx, 'BPM', 150, 384, { ...LB, size: 16 });
+  // Hoạt động (màu dịu như mẫu)
+  thin(ctx, 16, 283, 180, 1);
+  text(ctx, 'ACTIVITY', 40, 294, { font: 'Roboto', weight: 400, size: 17, color: 'dim' });
+  await drawIcon(ctx, 'shoe', '#5C7F35', 37, 317, 27, 27);
+  text(ctx, 'STEPS', 146, 334, { font: 'Roboto', weight: 400, size: 14, color: 'dim' });
+  await drawIcon(ctx, 'heart', '#8E2B2B', 40, 361, 21, 21);
+  text(ctx, 'BPM', 123, 371, { font: 'Roboto', weight: 400, size: 14, color: 'dim' });
 
   // Hàng dưới
-  hline(ctx, 34, 374, 434);
-  text(ctx, 'POWER', 204, 439, { ...LB, size: 14, align: 'center' });
-  await drawIcon(ctx, 'message', 'white', 72, 442, 34, 34);
-  await drawIcon(ctx, 'phone', 'white', 302, 443, 32, 32);
+  thin(ctx, 48, 410, 314, 1);
+  await drawIcon(ctx, 'message', '#E6E6E6', 81, 427, 34, 34);
+  text(ctx, 'POWER', 205, 420, { font: 'Roboto', weight: 400, size: 21, color: 'gray', align: 'center' });
+  await drawIcon(ctx, 'phone', 'white', 279, 425, 34, 34);
   return c.toDataURL('image/png');
 }
 
@@ -96,7 +109,7 @@ function leftText(label, w, h, o, base) {
 function barHand(spec, o) {
   const [px, py] = spec.pivot, hw = o.width / 2;
   const lay = canvas(spec.w, spec.h), lc = lay.getContext('2d');
-  if (o.shadow) { lc.shadowColor = 'rgba(0,0,0,0.85)'; lc.shadowBlur = 10; lc.shadowOffsetY = 2; }
+  if (o.shadow) { lc.shadowColor = 'rgba(0,0,0,0.9)'; lc.shadowBlur = 9; lc.shadowOffsetY = 0; }
   lc.beginPath();
   lc.moveTo(px, py - o.len);
   lc.lineTo(px + hw, py - o.len + o.taper);
@@ -139,13 +152,14 @@ async function main() {
   fs.rmSync(OUT, { recursive: true, force: true });
   const browser = await chromium.launch();
   const page = await browser.newPage();
-  await page.setContent(`<html><head><style>${fontCss()}</style></head><body></body></html>`);
+  await page.setContent(`<html><head><style>${fontCss()}\n${robotoCss()}</style></head><body></body></html>`);
   await page.evaluate(async (faces) => {
     for (const [fam, , weights] of faces) for (const w of weights) {
       const f = `${w} 20px ${fam}`;
       await document.fonts.load(f, 'A0ỨẬ');
       if (!document.fonts.check(f, 'A0ỨẬ')) throw new Error('Font không tải được: ' + f);
     }
+    for (const w of [300, 400, 500, 700]) { await document.fonts.load(w + ' 20px Roboto', 'A0ỨẬ'); }
   }, FONT_FACES);
   await page.addScriptTag({ content: `window.LAYOUT=${JSON.stringify(LAYOUT)};
     window.ICONS={${Object.entries(ICONS).map(([k, f]) => `${JSON.stringify(k)}:${f.toString()}`).join(',')}};
@@ -157,20 +171,21 @@ async function main() {
       for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cell(String(d), s.cell[0], s.cell[1], s);
     }
     const D = LAYOUT.digitSets;
-    out['data/num_c.png'] = cell('°C', 36, D.num.cell[1], D.num);
-    out['data/num_minus.png'] = cell('-', 12, D.num.cell[1], D.num);
-    out['data/num_empty.png'] = cell('--', 32, D.num.cell[1], D.num);
-    out['data/gray_slash.png'] = cell('/', 8, D.gray.cell[1], D.gray);
-    out['data/gray_minus.png'] = cell('-', 8, D.gray.cell[1], D.gray);
-    out['data/small_colon.png'] = cell(':', 7, D.small.cell[1], D.small);
-    out['data/small_pct.png'] = cell('%', 18, D.small.cell[1], D.small);
+    out['data/temp_c.png'] = cell('°C', 33, D.temp.cell[1], D.temp);
+    out['data/temp_minus.png'] = cell('-', 11, D.temp.cell[1], D.temp);
+    out['data/hilo_slash.png'] = cell('/', 7, D.hilo.cell[1], D.hilo);
+    out['data/hilo_minus.png'] = cell('-', 7, D.hilo.cell[1], D.hilo);
+    out['data/sun_colon.png'] = cell(':', 5, D.sun.cell[1], D.sun);
+    out['data/act_empty.png'] = cell('--', 28, D.act.cell[1], D.act);
+    out['data/bat_pct.png'] = cell('%', 24, D.bat.cell[1], D.bat);
 
-    const wk = { font: 'Barlow', weight: 700, size: 58, color: 'orange', ls: 0.5 };
-    WEEK.forEach(([slug, label], i) => { out[`date/week_${i + 1}_${slug}.png`] = leftText(label, 196, 66, wk, 58); });
-    const cc = { font: 'Barlow', weight: 500, size: 25, color: 'lunar' };
-    CANCHI.forEach(([slug, label]) => { out[`date/canchi_${slug}.png`] = leftText(label, 118, 34, cc, 25); });
+    const W = LAYOUT.widgets;
+    const wk = { font: 'Roboto', weight: 500, size: 53, color: 'orange' };
+    WEEK.forEach(([slug, label], i) => { out[`date/week_${i + 1}_${slug}.png`] = leftText(label, W.week.w, W.week.h, wk, W.week.base); });
+    const cc = { font: 'Roboto', weight: 300, size: 29, color: 'lunar' };
+    CANCHI.forEach(([slug, label]) => { out[`date/canchi_${slug}.png`] = leftText(label, W.canchi.w, W.canchi.h, cc, W.canchi.base); });
 
-    for (const w of WEATHER) out[`weather/${w}.png`] = await icon(w, '#FFC21A', 66, 56);
+    for (const w of WEATHER) out[`weather/${w}.png`] = await icon(w, '#FFC21A', 56, 48);
     Object.assign(out, hands());
     out['background.png'] = await background(false);
     out['aod/background_aod.png'] = await background(true);

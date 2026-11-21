@@ -2,7 +2,7 @@
 
 ![preview](preview_all.png)
 
-Khối giờ cam bên phải; thứ tiếng Việt, ngày/tháng/năm, âm lịch kèm năm can chi bên trái; kim giờ/phút có bóng đổ; bố cục gần tràn viền; AOD gồm ô giờ/phút, ngày/tháng/năm và kim.
+Đúng bố cục giao diện mẫu (khối giờ cam bên phải; thứ, ngày/tháng/năm, âm lịch "13/10/ B Ngọ" bên trái), thêm kim giờ/phút có bóng đổ, nét phân cách phía trên mảnh và mờ như bên dưới; AOD gồm ô giờ/phút, ngày/tháng/năm và kim.
 
 - Hướng dẫn dựng & cài: **[HUONG-DAN-CAI-DAT.md](HUONG-DAN-CAI-DAT.md)**
 - Gói ảnh để tải về: `OrangeBlock_Fit5Pro.zip`
