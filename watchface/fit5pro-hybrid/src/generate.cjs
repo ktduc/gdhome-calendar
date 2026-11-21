@@ -67,45 +67,49 @@ async function background(aod) {
     g.addColorStop(0, '#3A3A3B'); g.addColorStop(0.55, '#202021'); g.addColorStop(1, '#080808');
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   }
-  // Nền bo góc làm nổi khối giờ + phút
-  ctx.beginPath(); ctx.roundRect(204, 112, 149, 246, 22);
-  ctx.fillStyle = aod ? '#101010' : 'rgba(255,255,255,0.07)'; ctx.fill();
-  ctx.strokeStyle = aod ? '#2A2A2A' : 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1.2; ctx.stroke();
-  // Ô ngày
-  ctx.strokeStyle = aod ? '#3A3A3A' : col('box'); ctx.lineWidth = 1.5; ctx.strokeRect(91.5, 100.5, 79, 103);
+  const P = LAYOUT.panel, B = LAYOUT.box;
+  // Ô giờ/phút: cam nhạt (AOD: chỉ viền cam tối)
+  ctx.beginPath(); ctx.roundRect(P.x, P.y, P.w, P.h, P.r);
+  if (aod) { ctx.strokeStyle = '#6A3A16'; ctx.lineWidth = 2; ctx.stroke(); }
+  else {
+    const pg = ctx.createLinearGradient(0, P.y, 0, P.y + P.h);
+    pg.addColorStop(0, '#FFBE85'); pg.addColorStop(1, '#FFA45E');
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3;
+    ctx.fillStyle = pg; ctx.fill(); ctx.restore();
+  }
+  // Ô lịch
+  ctx.strokeStyle = aod ? '#3A3A3A' : col('box'); ctx.lineWidth = 1.5;
+  ctx.strokeRect(B.x + 0.5, B.y + 0.5, B.w - 1, B.h - 1);
 
   if (!aod) shadowOn(ctx);
   const M = LAYOUT.digitSets.month;
-  const thO = { ...M, size: 25, color: aod ? '#BDBDBD' : 'white' };
-  text(ctx, 'Th', 99, midY(ctx, 166, 32, M), thO);
-  text(ctx, '24H', 359, 183, { ...LB, size: 18, color: aod ? '#5A5A5A' : 'label' });
+  text(ctx, 'Th', 115, midY(ctx, 130, 30, M), { ...M, size: 25, color: aod ? '#BDBDBD' : 'white' });
   if (aod) return c.toDataURL('image/png');
 
-  // Hàng trên
-  await drawIcon(ctx, 'stopwatch', 'label', 104, 40, 17, 17);
-  text(ctx, 'TIMER', 124, 42, LB);
-  text(ctx, 'POWER', 204, 42, LB);
-  shadowOff(ctx); ctx.fillStyle = col('line'); ctx.fillRect(204, 95, 70, 1.2); shadowOn(ctx);
-  text(ctx, 'CALENDAR', 90, 72, LB);
+  // Hàng trên (chừa giữa cho biểu tượng hệ thống)
+  await drawIcon(ctx, 'stopwatch', 'label', 62, 21, 18, 18);
+  text(ctx, 'TIMER', 84, 23, LB);
+  text(ctx, 'POWER', 236, 23, LB);
+  shadowOff(ctx); ctx.fillStyle = col('line'); ctx.fillRect(16, 52, 376, 1.2); shadowOn(ctx);
 
-  // Âm lịch
-  await drawIcon(ctx, 'moon_f', 'orange', 22, 198, 14, 14);
+  // Âm lịch trong ô lịch
+  await drawIcon(ctx, 'moon_f', 'orange', 113, 170, 14, 14);
   const LU = LAYOUT.digitSets.lunar;
-  text(ctx, '/', 65, midY(ctx, 194, 22, LU), { ...LU, align: 'center' });
+  text(ctx, '/', 157.5, midY(ctx, 166, 22, LU), { ...LU, align: 'center' });
 
   // Hoạt động
-  shadowOff(ctx); ctx.fillStyle = col('line'); ctx.fillRect(0, 263, 204, 1.2); shadowOn(ctx);
-  text(ctx, 'ACTIVITY', 170, 277, { ...LB, align: 'right' });
-  await drawIcon(ctx, 'shoe', 'orange', 146, 305, 25, 24);
-  await drawIcon(ctx, 'heart', 'white', 150, 364, 21, 21);
-  text(ctx, 'km', 70, midY(ctx, 412, 26, { ...LB, size: 16 }), { ...LB, size: 16 });
-  await drawIcon(ctx, 'pin', 'orange', 148, 411, 22, 25);
+  shadowOff(ctx); ctx.fillStyle = col('line'); ctx.fillRect(14, 254, 186, 1.2); shadowOn(ctx);
+  text(ctx, 'ACTIVITY', 200, 263, { ...LB, size: 15, align: 'right' });
+  await drawIcon(ctx, 'shoe', 'orange', 167, 286, 27, 26);
+  await drawIcon(ctx, 'heart', 'white', 170, 339, 23, 23);
+  text(ctx, 'km', 76, midY(ctx, 388, 24, { ...LB, size: 17 }), { ...LB, size: 17 });
+  await drawIcon(ctx, 'pin', 'orange', 169, 386, 23, 27);
 
   // Phím tắt
-  await drawIcon(ctx, 'message_dot', 'white', 220, 388, 38, 36);
-  text(ctx, 'MESSAGE', 239, 436, { ...LB, size: 15, align: 'center' });
-  await drawIcon(ctx, 'alarm', '#D4D4D4', 305, 389, 36, 34);
-  text(ctx, 'ALARM', 323, 436, { ...LB, size: 15, align: 'center' });
+  await drawIcon(ctx, 'message_dot', 'white', 222, 384, 40, 38);
+  text(ctx, 'MESSAGE', 242, 430, { ...LB, size: 15, align: 'center' });
+  await drawIcon(ctx, 'alarm', '#D4D4D4', 318, 385, 38, 36);
+  text(ctx, 'ALARM', 337, 430, { ...LB, size: 15, align: 'center' });
   return c.toDataURL('image/png');
 }
 
@@ -161,11 +165,11 @@ function hands() {
 }
 
 function weekImage(label, color, noShadow) {
-  const c = canvas(170, 44), ctx = c.getContext('2d');
-  ctx.font = font({ font: 'Roboto', weight: 300, size: 31 }); ctx.fillStyle = col(color); ctx.textAlign = 'right';
-  if (ctx.measureText(label).width > 164) throw new Error('Chữ thứ quá dài: ' + label);
+  const c = canvas(186, 44), ctx = c.getContext('2d');
+  ctx.font = font({ font: 'Roboto', weight: 300, size: 33 }); ctx.fillStyle = col(color); ctx.textAlign = 'right';
+  if (ctx.measureText(label).width > 182) throw new Error('Chữ thứ quá dài: ' + label);
   if (!noShadow) shadowOn(ctx);
-  ctx.fillText(label, 166, 34);
+  ctx.fillText(label, 184, 35);
   return c.toDataURL('image/png');
 }
 `;
@@ -188,16 +192,18 @@ async function main() {
 
   const files = await page.evaluate(async ({ WEEK, WEATHER }) => {
     const out = {};
-    for (const s of Object.values(LAYOUT.digitSets)) for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cellS(String(d), s.cell[0], s.cell[1], s);
+    for (const s of Object.values(LAYOUT.digitSets)) for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cellS(String(d), s.cell[0], s.cell[1], s, s.noShadow);
     for (const s of Object.values(LAYOUT.aod.digitSets)) for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cellS(String(d), s.cell[0], s.cell[1], s, true);
 
     const D = LAYOUT.digitSets;
-    out['data/bat_pct.png'] = cellS('%', 24, D.bat.cell[1], D.bat);
-    out['data/temp_c.png'] = cellS('°C', 28, D.temp.cell[1], D.temp);
+    out['data/bat_pct.png'] = cellS('%', 22, D.bat.cell[1], D.bat);
+    out['data/temp_c.png'] = cellS('°C', 30, D.temp.cell[1], D.temp);
     out['data/temp_minus.png'] = cellS('-', 11, D.temp.cell[1], D.temp);
     out['data/num_empty.png'] = cellS('--', 26, D.num.cell[1], D.num);
     out['data/numo_empty.png'] = cellS('--', 26, D.numo.cell[1], D.numo);
-    out['data/small_dot.png'] = cellS('.', 5, D.small.cell[1], D.small);
+    out['data/hilo_slash.png'] = cellS('/', 7, D.hilo.cell[1], D.hilo);
+    out['data/hilo_minus.png'] = cellS('-', 7, D.hilo.cell[1], D.hilo);
+    out['data/small_dot.png'] = cellS('.', 6, D.small.cell[1], D.small);
 
     WEEK.forEach(([slug, label], i) => {
       out[`date/week_${i + 1}_${slug}.png`] = weekImage(label, 'week');

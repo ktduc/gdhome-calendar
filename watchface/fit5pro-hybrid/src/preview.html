@@ -27,7 +27,7 @@ function lunar(d) {
   const p = Object.fromEntries(LUNAR_FMT.formatToParts(d).map((x) => [x.type, x.value]));
   return { day: parseInt(p.day, 10), month: parseInt(p.month, 10) };
 }
-const DATA = { weather: 'partly_cloudy', temp: 16, battery: 93, steps: 5700, heart: 82, km: '3.75' };
+const DATA = { weather: 'partly_cloudy', temp: 16, hi: 19, lo: 12, battery: 93, steps: 5700, heart: 82, km: '3.75' };
 const p2 = (n) => String(n).padStart(2, '0');
 
 function img(src, x, y) {
@@ -39,8 +39,9 @@ function number(key, str) {
   const w = W[key], s = D[w.set], parts = [];
   for (const ch of String(str)) {
     if (/\d/.test(ch)) parts.push([s.prefix + ch + '.png', s.cell[0]]);
-    else if (ch === '-') parts.push([w.minus, 11]);
-    else if (ch === '.') parts.push([w.dot, 5]);
+    else if (ch === '-') parts.push([w.minus, w.set === 'hilo' ? 7 : 11]);
+    else if (ch === '/') parts.push([w.sep, 7]);
+    else if (ch === '.') parts.push([w.dot, 6]);
   }
   if (w.unit) parts.push([w.unit, w.unitW]);
   const total = parts.reduce((a, p) => a + p[1], 0);
@@ -87,6 +88,7 @@ function render() {
     digit(W, D, 'lunarMonthTens', lm[0]); digit(W, D, 'lunarMonthOnes', lm[1]);
     img(`weather/${DATA.weather}.png`, W.weather.x, W.weather.y);
     number('temp', DATA.temp);
+    number('tempHiLo', DATA.hi + '/' + DATA.lo);
     number('battery', DATA.battery);
     number('steps', DATA.steps);
     number('heart', DATA.heart);
