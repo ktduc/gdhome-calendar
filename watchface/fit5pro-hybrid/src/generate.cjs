@@ -68,7 +68,7 @@ async function background(aod) {
     ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   }
   // Nền bo góc làm nổi khối giờ + phút
-  ctx.beginPath(); ctx.roundRect(204, 112, 154, 246, 24);
+  ctx.beginPath(); ctx.roundRect(204, 112, 149, 246, 22);
   ctx.fillStyle = aod ? '#101010' : 'rgba(255,255,255,0.07)'; ctx.fill();
   ctx.strokeStyle = aod ? '#2A2A2A' : 'rgba(255,255,255,0.14)'; ctx.lineWidth = 1.2; ctx.stroke();
   // Ô ngày
@@ -78,7 +78,7 @@ async function background(aod) {
   const M = LAYOUT.digitSets.month;
   const thO = { ...M, size: 25, color: aod ? '#BDBDBD' : 'white' };
   text(ctx, 'Th', 99, midY(ctx, 166, 32, M), thO);
-  text(ctx, '24H', 364, 183, { ...LB, size: 18, color: aod ? '#5A5A5A' : 'label' });
+  text(ctx, '24H', 359, 183, { ...LB, size: 18, color: aod ? '#5A5A5A' : 'label' });
   if (aod) return c.toDataURL('image/png');
 
   // Hàng trên
@@ -109,61 +109,54 @@ async function background(aod) {
   return c.toDataURL('image/png');
 }
 
-// ---- Kim: giữ dáng kim bạc của mặt gốc, chỉ làm mờ ----
-// Thân mảnh gần tâm, lưỡi hình thoi có rãnh tối, mặt trái sáng / phải tối, bóng đổ quanh kim.
-function bladeHand(spec, o) {
-  const [px, py] = spec.pivot;
-  const tip = py - o.len, b0 = py - o.stemTo, wide = py - o.wideAt, tail = py + o.tail;
-  const c = canvas(spec.w, spec.h), ctx = c.getContext('2d');
-  // vẽ đặc trên lớp phụ rồi dán với độ mờ để bóng + thân mờ đều
+// ---- Kim: chép đúng dáng kim của mặt gốc (thanh bạc bản đều, mũi nhọn ngắn,
+// đuôi vát qua tâm, bóng đổ mềm), chỉ làm nhạt bằng độ trong suốt.
+function barHand(spec, o) {
+  const [px, py] = spec.pivot, hw = o.width / 2;
   const lay = canvas(spec.w, spec.h), lc = lay.getContext('2d');
-  const g = lc.createLinearGradient(px - o.blade / 2, 0, px + o.blade / 2, 0);
-  g.addColorStop(0, o.light); g.addColorStop(0.5, o.light); g.addColorStop(0.5, o.dark); g.addColorStop(1, o.dark);
-  {
-    const ctx = lc;
-    if (o.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 7; ctx.shadowOffsetY = 0; }
-    ctx.beginPath();
-    ctx.moveTo(px, tip); ctx.lineTo(px + o.blade / 2, wide); ctx.lineTo(px + o.stem / 2, b0);
-    ctx.lineTo(px + o.stem / 2, tail - 2); ctx.quadraticCurveTo(px, tail + 2, px - o.stem / 2, tail - 2);
-    ctx.lineTo(px - o.stem / 2, b0); ctx.lineTo(px - o.blade / 2, wide); ctx.closePath();
-    ctx.fillStyle = g; ctx.fill();
-    ctx.shadowColor = 'transparent';
-    // rãnh tối giữa lưỡi
-    ctx.strokeStyle = o.groove; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(px, tip + o.len * 0.12); ctx.lineTo(px, b0 - 4); ctx.stroke();
-  }
+  if (o.shadow) { lc.shadowColor = 'rgba(0,0,0,0.6)'; lc.shadowBlur = 8; }
+  lc.beginPath();
+  lc.moveTo(px, py - o.len);                       // mũi
+  lc.lineTo(px + hw, py - o.len + o.taper);
+  lc.lineTo(px + hw, py + o.tail - o.cut);         // đuôi vát
+  lc.lineTo(px - hw, py + o.tail);
+  lc.lineTo(px - hw, py - o.len + o.taper);
+  lc.closePath();
+  const g = lc.createLinearGradient(px - hw, 0, px + hw, 0);
+  g.addColorStop(0, o.light); g.addColorStop(0.55, o.mid); g.addColorStop(1, o.dark);
+  lc.fillStyle = g; lc.fill();
+  const c = canvas(spec.w, spec.h), ctx = c.getContext('2d');
   ctx.globalAlpha = o.alpha; ctx.drawImage(lay, 0, 0);
   return c.toDataURL('image/png');
 }
-function secondHand(spec) {
+function secondHand(spec, o) {
   const [px, py] = spec.pivot, c = canvas(spec.w, spec.h), ctx = c.getContext('2d');
-  ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 5;
+  ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 4;
   ctx.fillStyle = col('orange');
-  ctx.beginPath(); ctx.moveTo(px - 1.2, py); ctx.lineTo(px - 0.8, 18); ctx.lineTo(px + 0.8, 18); ctx.lineTo(px + 1.2, py); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.roundRect(px - 2.2, py, 4.4, 50, 2.2); ctx.fill();
+  ctx.fillRect(px - o.width / 2, py - o.len, o.width, o.len + o.tail);
   return c.toDataURL('image/png');
 }
-function capImg(ring, dot, shadow) {
-  const c = canvas(24, 24), ctx = c.getContext('2d');
-  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,0.7)'; ctx.shadowBlur = 4; }
-  ctx.fillStyle = ring; ctx.beginPath(); ctx.arc(12, 12, 7.5, 0, Math.PI * 2); ctx.fill();
-  ctx.shadowColor = 'transparent';
-  ctx.fillStyle = dot; ctx.beginPath(); ctx.arc(12, 12, 4, 0, Math.PI * 2); ctx.fill();
+function capImg(color, shadow) {
+  const c = canvas(16, 16), ctx = c.getContext('2d');
+  if (shadow) { ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 3; }
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(8, 8, 5.5, 0, Math.PI * 2); ctx.fill();
   return c.toDataURL('image/png');
 }
-const HAND_HOUR = { len: 130, stemTo: 52, wideAt: 92, blade: 17, stem: 5, tail: 18 };
-const HAND_MIN  = { len: 205, stemTo: 80, wideAt: 150, blade: 14, stem: 4.5, tail: 26 };
+// Kích thước đo từ ảnh mẫu (đơn vị px màn hình 408x480)
+const HAND_HOUR = { len: 142, width: 12, taper: 12, tail: 27, cut: 9 };
+const HAND_MIN  = { len: 197, width: 10, taper: 11, tail: 36, cut: 8 };
+const HAND_SEC  = { len: 197, width: 3, tail: 56 };
 function hands() {
   const H = LAYOUT.widgets.hands, A = LAYOUT.aod.widgets.hands, out = {};
-  const live = { light: '#F2F2F2', dark: '#B9B9BC', groove: '#5C5C60', alpha: 0.6, shadow: true };
-  const dim = { light: '#8A8A8A', dark: '#626264', groove: '#2E2E2E', alpha: 0.85, shadow: false };
-  out['hands/hour.png'] = bladeHand(H.hour, { ...HAND_HOUR, ...live });
-  out['hands/minute.png'] = bladeHand(H.minute, { ...HAND_MIN, ...live });
-  out['hands/second.png'] = secondHand(H.second);
-  out['hands/cap.png'] = capImg('#D6D6D8', col('orange'), true);
-  out['aod/hand_hour.png'] = bladeHand(A.hour, { ...HAND_HOUR, ...dim });
-  out['aod/hand_minute.png'] = bladeHand(A.minute, { ...HAND_MIN, ...dim });
-  out['aod/hand_cap.png'] = capImg('#7A7A7A', '#B5561A', false);
+  const live = { light: '#E2E2E2', mid: '#CFCFCF', dark: '#B4B4B4', alpha: LAYOUT.handAlpha, shadow: true };
+  const dim = { light: '#8C8C8C', mid: '#7E7E7E', dark: '#6A6A6A', alpha: 0.85, shadow: false };
+  out['hands/hour.png'] = barHand(H.hour, { ...HAND_HOUR, ...live });
+  out['hands/minute.png'] = barHand(H.minute, { ...HAND_MIN, ...live });
+  out['hands/second.png'] = secondHand(H.second, HAND_SEC);
+  out['hands/cap.png'] = capImg(col('orange'), true);
+  out['aod/hand_hour.png'] = barHand(A.hour, { ...HAND_HOUR, ...dim });
+  out['aod/hand_minute.png'] = barHand(A.minute, { ...HAND_MIN, ...dim });
+  out['aod/hand_cap.png'] = capImg('#B5561A', false);
   return out;
 }
 
@@ -200,11 +193,11 @@ async function main() {
 
     const D = LAYOUT.digitSets;
     out['data/bat_pct.png'] = cellS('%', 24, D.bat.cell[1], D.bat);
-    out['data/temp_c.png'] = cellS('°C', 30, D.temp.cell[1], D.temp);
+    out['data/temp_c.png'] = cellS('°C', 28, D.temp.cell[1], D.temp);
     out['data/temp_minus.png'] = cellS('-', 11, D.temp.cell[1], D.temp);
-    out['data/num_empty.png'] = cellS('--', 28, D.num.cell[1], D.num);
-    out['data/numo_empty.png'] = cellS('--', 28, D.numo.cell[1], D.numo);
-    out['data/small_dot.png'] = cellS('.', 6, D.small.cell[1], D.small);
+    out['data/num_empty.png'] = cellS('--', 26, D.num.cell[1], D.num);
+    out['data/numo_empty.png'] = cellS('--', 26, D.numo.cell[1], D.numo);
+    out['data/small_dot.png'] = cellS('.', 5, D.small.cell[1], D.small);
 
     WEEK.forEach(([slug, label], i) => {
       out[`date/week_${i + 1}_${slug}.png`] = weekImage(label, 'week');

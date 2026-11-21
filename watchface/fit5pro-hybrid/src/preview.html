@@ -40,7 +40,7 @@ function number(key, str) {
   for (const ch of String(str)) {
     if (/\d/.test(ch)) parts.push([s.prefix + ch + '.png', s.cell[0]]);
     else if (ch === '-') parts.push([w.minus, 11]);
-    else if (ch === '.') parts.push([w.dot, 6]);
+    else if (ch === '.') parts.push([w.dot, 5]);
   }
   if (w.unit) parts.push([w.unit, w.unitW]);
   const total = parts.reduce((a, p) => a + p[1], 0);

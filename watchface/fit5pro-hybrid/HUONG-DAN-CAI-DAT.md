@@ -3,7 +3,8 @@
 ![Màn hình chính và AOD](preview_all.png)
 
 Giữ nguyên thiết kế mặt gốc (font Roboto mảnh, bóng đổ, nền xám chuyển tối, màu cam/trắng/xám, kim bạc). Chỉ cải tiến:
-- **Kim giờ & phút giữ dáng cũ, làm mờ ~60%**: vẫn đọc được thông tin bên dưới.
+- **Kim giờ & phút giữ y dáng mặt gốc** (thanh bạc bản đều, mũi nhọn ngắn, đuôi vát qua tâm, bóng mềm, chấm tâm cam), chỉ **nhạt hơn** (độ đậm 55%) để thấy thông tin bên dưới.
+- Vị trí, cỡ chữ, độ đậm nhạt các phần khác **giữ như mặt gốc**; chỉ số giờ/phút đậm hơn.
 - **Tháng viết tắt**: "Th 11" (tháng 9 → "Th 9" hiển thị "Th 09"; xem ghi chú 4.4).
 - **Thứ tiếng Việt**: THỨ HAI … CHỦ NHẬT.
 - **Số giờ/phút đậm hơn** (vẫn Roboto, từ nét mảnh lên Medium) và có **nền bo góc** làm nổi khối số.
@@ -23,17 +24,17 @@ Khung **408 × 480 px**. Các bước chung (đăng ký nhà phát triển, cài
 |---|---|---|---|
 | Giờ – chục / đơn vị | `time/hour_` | 214 / 280 | 124 |
 | Phút – chục / đơn vị | `time/minute_` | 212 / 283 | 250 |
-| Giây – chục / đơn vị | `time/sec_` | 364 / 384 | 290 |
+| Giây – chục / đơn vị | `time/sec_` | 359 / 379 | 289 |
 
 ### 4.3 Kim (Pointer)
-**Tâm xoay trên màn hình: X 196, Y 232.** Ảnh kim dựng đứng chỉ 12 giờ, đã có sẵn độ mờ và bóng – không chỉnh thêm opacity.
+**Tâm xoay trên màn hình: X 198, Y 236.** Ảnh kim dựng đứng chỉ 12 giờ, đã có sẵn độ mờ và bóng – không chỉnh thêm opacity.
 
 | Kim | Ảnh | Kích thước | Tâm xoay trong ảnh (X, Y) |
 |---|---|---|---|
-| Giờ | `hands/hour.png` | 40 × 176 | 20, 150 |
-| Phút | `hands/minute.png` | 36 × 262 | 18, 228 |
-| Giây | `hands/second.png` | 20 × 270 | 10, 214 |
-| Nắp tâm (trên cùng) | `hands/cap.png` | 24 × 24 | đặt tại X 184, Y 220 |
+| Giờ | `hands/hour.png` | 40 × 197 | 20, 156 |
+| Phút | `hands/minute.png` | 38 × 261 | 19, 211 |
+| Giây | `hands/second.png` | 20 × 273 | 10, 207 |
+| Chấm tâm cam (trên cùng) | `hands/cap.png` | 16 × 16 | đặt tại X 190, Y 228 |
 
 ### 4.4 Lịch
 
@@ -54,10 +55,10 @@ Khung **408 × 480 px**. Các bước chung (đăng ký nhà phát triển, cài
 |---|---|---|---|---|
 | Pin (+ `bat_pct`) | `data/bat_0..9` | 212 | 60 | Trái |
 | Icon thời tiết | `weather/*.png` (40×38, trắng đặc) | 30 | 116 | – |
-| Nhiệt độ (+ `temp_c`, âm `temp_minus`) | `data/temp_0..9` | 20 | 158 | Trái |
-| Số bước (trống `num_empty`) | `data/num_0..9` | **142 = mép phải** | 302 | **Phải** |
+| Nhiệt độ (+ `temp_c`, âm `temp_minus`) | `data/temp_0..9` | 22 | 158 | Trái |
+| Số bước (trống `num_empty`) | `data/num_0..9` | **142 = mép phải** | 304 | **Phải** |
 | Nhịp tim (trống `numo_empty`) | `data/numo_0..9` (cam) | **142 = mép phải** | 360 | **Phải** |
-| Quãng đường km (dấu `small_dot`) | `data/small_0..9` | 104 | 412 | Trái |
+| Quãng đường km (dấu `small_dot`) | `data/small_0..9` | 105 | 414 | Trái |
 
 Icon thời tiết: tên file giống bảng của Yellow Block (`sunny`, `partly_cloudy`, `cloudy`, `rain`, `heavy_rain`, `thunder`, `snow`, `fog`, `wind`, `night`, `unknown`).
 
@@ -82,9 +83,9 @@ Icon thời tiết: tên file giống bảng của Yellow Block (`sunny`, `partl
 | Ngày – chục / đơn vị | `aod/day_0..9` | 98 / 131 | 108 |
 | Tháng – chục / đơn vị | `aod/month_0..9` | 138 / 153 | 166 |
 | Thứ | `aod/week_1_thu_hai` … `week_7_chu_nhat` | 2 | 220 |
-| Kim giờ (tâm ảnh 20, 150) | `aod/hand_hour.png` | tâm xoay 196, 232 | |
-| Kim phút (tâm ảnh 18, 228) | `aod/hand_minute.png` | tâm xoay 196, 232 | |
-| Nắp tâm | `aod/hand_cap.png` | 184 | 220 |
+| Kim giờ (tâm ảnh 20, 156) | `aod/hand_hour.png` | tâm xoay 198, 236 | |
+| Kim phút (tâm ảnh 19, 211) | `aod/hand_minute.png` | tâm xoay 198, 236 | |
+| Chấm tâm | `aod/hand_cap.png` | 190 | 228 |
 
 Không thêm giây, kim giây, dữ liệu hay vùng chạm vào AOD.
 
@@ -99,6 +100,6 @@ node watchface/fit5pro-hybrid/src/generate.cjs
 cd watchface/fit5pro-hybrid && zip -qr HybridOrange_Fit5Pro.zip assets HUONG-DAN-CAI-DAT.md preview*.png
 ```
 
-- Độ mờ kim: số `alpha: 0.6` trong hàm `hands()` của `src/generate.cjs` (0 = trong suốt, 1 = đặc).
+- Độ đậm kim: `handAlpha: 0.55` trong `src/layout.js` (1 = đặc như mặt gốc, nhỏ hơn = nhạt hơn).
 - Bố cục: `src/layout.js`. Font Roboto (Apache 2.0) trong `src/fonts/`.
 - Mở `src/preview.html` để xem chạy giờ thật; bấm vào mặt để chuyển AOD.

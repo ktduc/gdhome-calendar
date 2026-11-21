@@ -10,6 +10,8 @@
     },
     // Bóng đổ nhẹ dưới chữ/số như mặt gốc
     shadow: { color: 'rgba(0,0,0,0.65)', blur: 5, dx: 0, dy: 2 },
+    // Độ đậm của kim giờ/phút (1 = đặc như mặt gốc). Nhỏ hơn = nhạt hơn, thấy rõ chữ bên dưới.
+    handAlpha: 0.55,
 
     digitSets: {
       hour:   { prefix: 'time/hour_',   cell: [66, 92],  color: 'white',  font: F, weight: 500, size: 116 },
@@ -18,11 +20,11 @@
       day:    { prefix: 'date/day_',    cell: [33, 56],  color: 'orange', font: F, weight: 300, size: 66 },
       month:  { prefix: 'date/month_',  cell: [15, 32],  color: 'white',  font: F, weight: 300, size: 30 },
       lunar:  { prefix: 'date/lunar_',  cell: [11, 22],  color: 'label',  font: F, weight: 400, size: 19 },
-      temp:   { prefix: 'data/temp_',   cell: [17, 34],  color: 'white',  font: F, weight: 300, size: 34 },
+      temp:   { prefix: 'data/temp_',   cell: [16, 34],  color: 'white',  font: F, weight: 300, size: 32 },
       bat:    { prefix: 'data/bat_',    cell: [16, 30],  color: 'white',  font: F, weight: 300, size: 29 },
-      num:    { prefix: 'data/num_',    cell: [17, 32],  color: 'white',  font: F, weight: 400, size: 31 },
-      numo:   { prefix: 'data/numo_',   cell: [17, 32],  color: 'orange', font: F, weight: 400, size: 31 },
-      small:  { prefix: 'data/small_',  cell: [12, 26],  color: 'white',  font: F, weight: 400, size: 22 },
+      num:    { prefix: 'data/num_',    cell: [15, 32],  color: 'white',  font: F, weight: 300, size: 28 },
+      numo:   { prefix: 'data/numo_',   cell: [15, 32],  color: 'orange', font: F, weight: 300, size: 28 },
+      small:  { prefix: 'data/small_',  cell: [10, 22],  color: 'white',  font: F, weight: 400, size: 19 },
     },
 
     widgets: {
@@ -31,8 +33,8 @@
       hourOnes:   { set: 'hour',   x: 280, y: 124 },
       minTens:    { set: 'minute', x: 212, y: 250 },
       minOnes:    { set: 'minute', x: 283, y: 250 },
-      secTens:    { set: 'sec',    x: 364, y: 290 },
-      secOnes:    { set: 'sec',    x: 384, y: 290 },
+      secTens:    { set: 'sec',    x: 359, y: 289 },
+      secOnes:    { set: 'sec',    x: 379, y: 289 },
 
       // Lịch: ô ngày (ngày cam + "Th" + tháng), thứ tiếng Việt, âm lịch
       dayTens:    { set: 'day',   x: 98,  y: 108 },
@@ -48,18 +50,18 @@
       // Dữ liệu
       battery:    { set: 'bat',   x: 212, y: 60,  align: 'left',  unit: 'data/bat_pct.png', unitW: 24 },
       weather:    { img: 'weather/', x: 30, y: 116, w: 40, h: 38 },
-      temp:       { set: 'temp',  x: 20,  y: 158, align: 'left',  unit: 'data/temp_c.png', unitW: 30, minus: 'data/temp_minus.png' },
-      steps:      { set: 'num',   x: 142, y: 302, align: 'right' },
+      temp:       { set: 'temp',  x: 22,  y: 158, align: 'left',  unit: 'data/temp_c.png', unitW: 28, minus: 'data/temp_minus.png' },
+      steps:      { set: 'num',   x: 142, y: 304, align: 'right' },
       heart:      { set: 'numo',  x: 142, y: 360, align: 'right' },
-      distance:   { set: 'small', x: 104, y: 412, align: 'left', dot: 'data/small_dot.png' },
+      distance:   { set: 'small', x: 105, y: 414, align: 'left', dot: 'data/small_dot.png' },
 
       // Kim: ảnh dựng đứng chỉ 12 giờ. pivot = tâm xoay trong ảnh; center = tâm xoay trên màn hình.
       hands: {
-        center: [196, 232],
-        hour:   { img: 'hands/hour.png',   w: 40, h: 176, pivot: [20, 150] },
-        minute: { img: 'hands/minute.png', w: 36, h: 262, pivot: [18, 228] },
-        second: { img: 'hands/second.png', w: 20, h: 270, pivot: [10, 214] },
-        cap:    { img: 'hands/cap.png',    w: 24, h: 24 },
+        center: [198, 236],
+        hour:   { img: 'hands/hour.png',   w: 40, h: 197, pivot: [20, 156] },
+        minute: { img: 'hands/minute.png', w: 38, h: 261, pivot: [19, 211] },
+        second: { img: 'hands/second.png', w: 20, h: 273, pivot: [10, 207] },
+        cap:    { img: 'hands/cap.png',    w: 16, h: 16 },
       },
     },
 
@@ -82,9 +84,9 @@
         monthOnes: { set: 'month',  x: 153, y: 166 },
         week:      { img: 'aod/week_', x: 2, y: 220, w: 170, h: 44, align: 'right' },
         hands: {
-          hour:   { img: 'aod/hand_hour.png',   w: 40, h: 176, pivot: [20, 150] },
-          minute: { img: 'aod/hand_minute.png', w: 36, h: 262, pivot: [18, 228] },
-          cap:    { img: 'aod/hand_cap.png',    w: 24, h: 24 },
+          hour:   { img: 'aod/hand_hour.png',   w: 40, h: 197, pivot: [20, 156] },
+          minute: { img: 'aod/hand_minute.png', w: 38, h: 261, pivot: [19, 211] },
+          cap:    { img: 'aod/hand_cap.png',    w: 16, h: 16 },
         },
       },
     },
