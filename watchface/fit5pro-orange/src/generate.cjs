@@ -49,18 +49,16 @@ async function background(aod) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, w, h);
   const P = LAYOUT.panel, P2 = LAYOUT.panel2, D = LAYOUT.digitSets;
 
-  // Khối giờ/phút + nhãn 24H
+  // Khối giờ/phút + nhãn 24H (AOD giữ nguyên như màn hình chính)
   ctx.beginPath(); ctx.roundRect(P.x, P.y, P.w, P.h, P.r);
-  if (aod) { ctx.strokeStyle = col('orange'); ctx.lineWidth = 2; ctx.stroke(); }
-  else { ctx.fillStyle = col('orange'); ctx.fill(); }
+  ctx.fillStyle = col('orange'); ctx.fill();
   const tx = P.x + P.w / 2;
-  ctx.beginPath(); ctx.roundRect(tx - 25, P.y + 4, 50, 20, 10);
-  if (aod) { ctx.strokeStyle = col('orange'); ctx.lineWidth = 1.2; ctx.stroke(); } else { ctx.fillStyle = col('pill'); ctx.fill(); }
-  text(ctx, '24H', tx, P.y + 7, { font: 'Barlow', weight: 500, size: 20, color: aod ? 'orange' : 'pillText', align: 'center' });
+  ctx.beginPath(); ctx.roundRect(tx - 25, P.y + 4, 50, 20, 10); ctx.fillStyle = col('pill'); ctx.fill();
+  text(ctx, '24H', tx, P.y + 7, { font: 'Barlow', weight: 500, size: 20, color: 'pillText', align: 'center' });
 
-  // Dấu "/" của ngày/tháng/năm
-  const dO = { ...D.date, color: aod ? '#A8A8A8' : 'white' };
-  for (const x of LAYOUT.dateSlashes) text(ctx, '/', x, 213, { ...dO, align: 'center' });
+  // Dấu "/" của ngày/tháng/năm và âm lịch
+  for (const x of LAYOUT.dateSlashes) text(ctx, '/', x, 213, { ...D.date, align: 'center' });
+  for (const x of LAYOUT.lunarSlashes) text(ctx, '/', x, 253, { ...D.lunar, align: 'center' });
   if (aod) return c.toDataURL('image/png');
 
   // Khối giây
@@ -75,9 +73,6 @@ async function background(aod) {
   thin(ctx, 223, 63, 1, 38);
   await drawIcon(ctx, 'sunrise', '#FFC21A', 231, 61, 36, 36);
   text(ctx, 'SUNRISE', 280, 88, { font: 'BarlowSC', weight: 500, size: 17, color: 'gray', ls: 1 });
-
-  // Âm lịch: dấu "/" sau ngày và sau tháng
-  for (const x of LAYOUT.lunarSlashes) text(ctx, '/', x, 251, { ...D.lunar, align: 'center' });
 
   // Hoạt động (màu dịu như mẫu)
   thin(ctx, 16, 283, 180, 1);
@@ -95,6 +90,17 @@ async function background(aod) {
   return c.toDataURL('image/png');
 }
 
+// Ảnh thứ: dãn/ép ngang (giữ chiều cao chữ) để nét chữ chạy đúng từ mép trái tới mép phải khối ngày.
+function justText(label, spec, o, left, right) {
+  const c = canvas(spec.w, spec.h), ctx = c.getContext('2d');
+  ctx.font = font(o); ctx.fillStyle = col(o.color);
+  const m = ctx.measureText(label);
+  const inkL = -m.actualBoundingBoxLeft, inkW = m.actualBoundingBoxRight + m.actualBoundingBoxLeft;
+  const sx = (right - left) / inkW;
+  ctx.setTransform(sx, 0, 0, 1, (left - spec.x) - inkL * sx, 0);
+  ctx.fillText(label, 0, spec.base);
+  return c.toDataURL('image/png');
+}
 // Ảnh chữ căn trái, tự thu nhỏ nếu quá rộng; chừa chỗ cho dấu tiếng Việt.
 function leftText(label, w, h, o, base) {
   const c = canvas(w, h), ctx = c.getContext('2d');
@@ -135,15 +141,11 @@ function capImg(color, ring, shadow) {
 const HAND_HOUR = { len: 142, width: 12, taper: 12, tail: 27, cut: 9 };
 const HAND_MIN  = { len: 197, width: 10, taper: 11, tail: 36, cut: 8 };
 function hands() {
-  const H = LAYOUT.widgets.hands, A = LAYOUT.aod.widgets.hands, out = {};
+  const H = LAYOUT.widgets.hands, out = {};
   const live = { light: '#EAEAEA', mid: '#D2D2D2', dark: '#B0B0B0', alpha: LAYOUT.handAlpha, shadow: true };
-  const dim = { light: '#8C8C8C', mid: '#7E7E7E', dark: '#6A6A6A', alpha: 0.9, shadow: false };
   out['hands/hour.png'] = barHand(H.hour, { ...HAND_HOUR, ...live });
   out['hands/minute.png'] = barHand(H.minute, { ...HAND_MIN, ...live });
   out['hands/cap.png'] = capImg(col('orange'), '#D6D6D8', true);
-  out['aod/hand_hour.png'] = barHand(A.hour, { ...HAND_HOUR, ...dim });
-  out['aod/hand_minute.png'] = barHand(A.minute, { ...HAND_MIN, ...dim });
-  out['aod/hand_cap.png'] = capImg('#B5561A', '#7A7A7A', false);
   return out;
 }
 `;
@@ -167,7 +169,7 @@ async function main() {
 
   const files = await page.evaluate(async ({ WEEK, WEATHER, CANCHI }) => {
     const out = {};
-    for (const s of [...Object.values(LAYOUT.digitSets), ...Object.values(LAYOUT.aod.digitSets)]) {
+    for (const s of Object.values(LAYOUT.digitSets)) {
       for (let d = 0; d <= 9; d++) out[s.prefix + d + '.png'] = cell(String(d), s.cell[0], s.cell[1], s);
     }
     const D = LAYOUT.digitSets;
@@ -181,8 +183,8 @@ async function main() {
 
     const W = LAYOUT.widgets;
     const wk = { font: 'Roboto', weight: 500, size: 53, color: 'orange' };
-    WEEK.forEach(([slug, label], i) => { out[`date/week_${i + 1}_${slug}.png`] = leftText(label, W.week.w, W.week.h, wk, W.week.base); });
-    const cc = { font: 'Roboto', weight: 300, size: 29, color: 'lunar' };
+    WEEK.forEach(([slug, label], i) => { out[`date/week_${i + 1}_${slug}.png`] = justText(label, W.week, wk, LAYOUT.dateBlock.left, LAYOUT.dateBlock.right); });
+    const cc = { font: 'Roboto', weight: 300, size: 22, color: 'lunar' };
     CANCHI.forEach(([slug, label]) => { out[`date/canchi_${slug}.png`] = leftText(label, W.canchi.w, W.canchi.h, cc, W.canchi.base); });
 
     for (const w of WEATHER) out[`weather/${w}.png`] = await icon(w, '#FFC21A', 56, 48);

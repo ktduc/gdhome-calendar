@@ -5,7 +5,9 @@
 Dựng **đúng bố cục, cỡ chữ và màu của giao diện mẫu** (đo trực tiếp trên ảnh mẫu), chỉ thay đổi:
 - **Thêm kim giờ & phút** (dáng kim bạc của mặt mẫu Hybrid) với **bóng đổ đậm** để nổi rõ trên cả nền đen lẫn khối cam. Tâm kim ở giữa màn hình (204, 240).
 - **2 nét phân cách phía trên** (ngang dưới FORECAST và dọc giữa nhiệt độ / bình minh) đổi thành **mảnh 1px, mờ** giống hệt các nét bên dưới.
-- **AOD**: ô giờ/phút (viền cam, số nét viền) + ngày/tháng/năm + kim giờ/phút, cùng vị trí (~8% điểm ảnh sáng).
+- **Thứ và ngày tháng năm thẳng 2 mép** trái/phải (chữ thứ được dãn/ép ngang, giữ nguyên chiều cao, nên mọi ngày từ THỨ 2 đến CHỦ NHẬT đều khớp mép).
+- **Âm lịch nhỏ và mờ hơn** (13/10/ B Ngọ).
+- **AOD giữ nguyên hình ảnh** màn hình chính (không chuyển nét viền): ô giờ/phút cam, thứ, ngày/tháng/năm, âm lịch và kim giờ/phút, cùng vị trí (~17% điểm ảnh sáng).
 
 Font: Barlow (số giờ, giây, nhiệt độ, FORECAST, SUNRISE) và Roboto (thứ, ngày tháng năm, âm lịch, ACTIVITY, POWER…) – đúng như mẫu.
 
@@ -37,13 +39,13 @@ Khung **408 × 480 px**. Các bước chung (đăng ký nhà phát triển, cài
 
 | Thành phần | Ảnh | X | Y |
 |---|---|---|---|
-| Thứ (THỨ 2 … THỨ 7, CHỦ NHẬT) | `date/week_1_thu_2` … `week_7_chu_nhat` (232×66) | 23 | 139 |
+| Thứ (THỨ 2 … THỨ 7, CHỦ NHẬT) | `date/week_1_thu_2` … `week_7_chu_nhat` (180×66) | 20 | 139 |
 | Ngày – chục / đơn vị | `date/date_0..9` (17×36) | 30 / 47 | 206 |
 | Tháng – chục / đơn vị | `date/date_0..9` | 76 / 93 | 206 |
 | Năm – 4 chữ số | `date/date_0..9` | 122 / 139 / 156 / 173 | 206 |
-| Ngày âm – chục / đơn vị | `date/lunar_0..9` (15×34) | 30 / 45 | 244 |
-| Tháng âm – chục / đơn vị | `date/lunar_0..9` | 70 / 85 | 244 |
-| Năm can chi ("B Ngọ") | `date/canchi_00_giap_ty` … `canchi_59_quy_hoi` | 124 | 241 |
+| Ngày âm – chục / đơn vị | `date/lunar_0..9` (12×28) | 31 / 43 | 247 |
+| Tháng âm – chục / đơn vị | `date/lunar_0..9` | 63 / 75 | 247 |
+| Năm can chi ("B Ngọ") | `date/canchi_00_giap_ty` … `canchi_59_quy_hoi` | 99 | 245 |
 
 **Năm can chi:** 60 ảnh viết tắt can như mẫu (G, Ất, B, Đ, M, K, C, T, N, Q + chi), số thứ tự = (năm âm − 4) chia lấy dư 60 (Bính Ngọ 2026 = `canchi_42`). Nếu Theme Studio không có thành phần năm âm lịch nhận ảnh, có thể bỏ ảnh này hoặc báo lại để in cố định lên nền.
 
@@ -72,17 +74,18 @@ Icon thời tiết: `sunny`, `partly_cloudy`, `cloudy`, `rain`, `heavy_rain`, `t
 | Tin nhắn | 72 | 418 | 52 × 52 |
 | Cuộc gọi | 270 | 418 | 52 × 52 |
 
-## Bước 5 – AOD (cùng vị trí)
+## Bước 5 – AOD (giữ nguyên hình ảnh, cùng vị trí)
 
-| Thành phần | Ảnh | X | Y |
-|---|---|---|---|
-| Nền AOD (viền khối cam, 24H, dấu "/") | `aod/background_aod.png` | 0 | 0 |
-| Giờ – chục / đơn vị | `aod/big_0..9` | 266 / 330 | 137 |
-| Phút – chục / đơn vị | `aod/big_0..9` | 266 / 330 | 228 |
-| Ngày / tháng / năm | `aod/date_0..9` | như bảng Lịch | 206 |
-| Kim giờ (tâm ảnh 22, 158) | `aod/hand_hour.png` | tâm xoay 204, 240 | |
-| Kim phút (tâm ảnh 21, 213) | `aod/hand_minute.png` | tâm xoay 204, 240 | |
-| Nắp tâm | `aod/hand_cap.png` | 195 | 231 |
+AOD dùng **chính các ảnh của màn hình chính**, chỉ khác ảnh nền:
+
+| Thành phần | Ảnh | Vị trí |
+|---|---|---|
+| Nền AOD (khối cam giờ/phút + 24H, dấu "/" ngày và âm lịch; không có hàng thời tiết, hoạt động, khối giây) | `aod/background_aod.png` | X 0, Y 0 |
+| Giờ, phút | `time/big_0..9` | như mục Giờ |
+| Thứ, ngày/tháng/năm, âm lịch, can chi | `date/...` | như mục Lịch |
+| Kim giờ, kim phút, nắp tâm | `hands/hour.png`, `hands/minute.png`, `hands/cap.png` | như mục Kim |
+
+Không thêm giây, thời tiết, hoạt động hay vùng chạm vào AOD. Khối cam đặc sáng nhiều điểm ảnh hơn kiểu nét viền (~17% so với ~8%), nên AOD hao pin hơn một chút.
 
 ## Sửa & xuất lại ảnh
 

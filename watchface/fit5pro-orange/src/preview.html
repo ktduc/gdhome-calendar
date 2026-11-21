@@ -78,24 +78,30 @@ function timeDate(widgets, sets, now) {
   g('year1', yy[0]); g('year2', yy[1]); g('year3', yy[2]); g('year4', yy[3]);
 }
 
+// Thứ + âm lịch + can chi
+function calendar(widgets, sets, now) {
+  const wd = (now.getDay() + 6) % 7;
+  img(`date/week_${wd + 1}_${WEEK[wd]}.png`, widgets.week.x, widgets.week.y);
+  const lu = lunar(now), ld = p2(lu.day), lm = p2(lu.month);
+  const g = (k, d) => digit(widgets, sets, k, d);
+  g('lunarDayTens', ld[0]); g('lunarDayOnes', ld[1]); g('lunarMonthTens', lm[0]); g('lunarMonthOnes', lm[1]);
+  img(canchiFile(lu.year), widgets.canchi.x, widgets.canchi.y);
+}
+
 function render() {
   face.innerHTML = '';
   const now = STATIC ? new Date(2026, 10, 21, 22, 42, 7) : new Date();
   if (AOD) {
     img('aod/background_aod.png', 0, 0);
     timeDate(LAYOUT.aod.widgets, LAYOUT.aod.digitSets, now);
+    calendar(LAYOUT.aod.widgets, LAYOUT.aod.digitSets, now);
     hands(LAYOUT.aod.widgets.hands, now);
   } else {
     img('background.png', 0, 0);
     timeDate(W, D, now);
     const ss = p2(now.getSeconds());
     digit(W, D, 'secTens', ss[0]); digit(W, D, 'secOnes', ss[1]);
-    const wd = (now.getDay() + 6) % 7;
-    img(`date/week_${wd + 1}_${WEEK[wd]}.png`, W.week.x, W.week.y);
-    const lu = lunar(now), ld = p2(lu.day), lm = p2(lu.month);
-    digit(W, D, 'lunarDayTens', ld[0]); digit(W, D, 'lunarDayOnes', ld[1]);
-    digit(W, D, 'lunarMonthTens', lm[0]); digit(W, D, 'lunarMonthOnes', lm[1]);
-    img(canchiFile(lu.year), W.canchi.x, W.canchi.y);
+    calendar(W, D, now);
     img(`weather/${DATA.weather}.png`, W.weather.x, W.weather.y);
     number('temp', DATA.temp);
     number('tempHiLo', DATA.hi + '/' + DATA.lo);
