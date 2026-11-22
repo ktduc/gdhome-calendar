@@ -638,7 +638,7 @@ function renderRow(row,columns,number,editing) {
   const combineUnit = !columns.some(([key]) => key === 'unit');
   const cells = {
     select:'<label class="material-row-number"><input type="checkbox" data-select-row="' + html(row.id) + '" aria-label="Chọn ' + html(row.name || 'dòng') + '"><span>' + number + '</span></label>',
-    name:input('name',row.name,'Hạng mục'),
+    name:materialTextField('name',row.name,'Hạng mục'),   // nhiều dòng: Shift+Enter xuống dòng, ô cao theo chữ
     room:materialSuggestionCell('room',input('room',row.room,'Vị trí'),editing),
     render:editing ? '<div class="material-match-cell">' + imageCell(row.render,'render','','',false,editing) + '<button type="button" data-material-match="row" title="AI tìm mẫu từ ảnh 3D">AI</button></div>' : imageCell(row.render,'render','','',false,editing),
     spec:materialSuggestionCell('spec',materialTextField('spec',chosen?.finish || row.spec,'Quy cách'),editing),

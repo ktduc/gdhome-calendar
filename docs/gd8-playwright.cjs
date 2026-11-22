@@ -1648,6 +1648,27 @@ cases['9.5'] = async page => {
   assert.equal(await pick.getAttribute('aria-pressed'),'true');
 };
 
+// Ô Hạng mục nhiều dòng: Shift+Enter xuống dòng, ô cao theo chữ (không khuất), Enter sang dòng dưới; tải lại vẫn giữ xuống dòng
+cases['name-multiline'] = async page => {
+  await openMaterials(page);
+  const names = page.locator('tr[data-row] textarea[data-field="name"]');
+  const first = names.first();
+  const h1 = (await first.boundingBox()).height;
+  await first.click();
+  await page.keyboard.press('End');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('dòng hai dài thêm');
+  const value = await first.inputValue();
+  assert.match(value,/\ndòng hai dài thêm$/);
+  assert.ok((await first.boundingBox()).height > h1 + 8,'Ô cao thêm theo dòng mới');
+  await page.keyboard.press('Enter');
+  assert.equal(await first.inputValue(),value,'Enter không chèn xuống dòng');
+  assert.equal(await page.evaluate(() => document.activeElement.closest('tr')?.rowIndex > 0 && document.activeElement !== document.querySelector('tr[data-row] textarea[data-field="name"]')),true,'Enter sang dòng dưới');
+  await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
+  await openMaterials(page);
+  assert.equal(await names.first().inputValue(),value,'Tải lại vẫn giữ xuống dòng');
+};
+
 cases['9.6'] = async page => {
   await openMaterials(page);
   await page.evaluate(() => modify(() => {
@@ -1656,7 +1677,7 @@ cases['9.6'] = async page => {
     group.rows[1].note = 'Sơn mẫu tại phòng khách';
     mergeAiRows(sheet.groups,[{group:'Sơn tường',name:'Sơn trần',room:'',note:'So khớp mẫu dưới ánh sáng tự nhiên'}]);
   }));
-  const newRow = page.locator('tr[data-row]').filter({has:page.locator('input[data-field="name"][value="Sơn trần"]')});
+  const newRow = page.locator('tr[data-row]').filter({has:page.locator('textarea[data-field="name"]',{hasText:'Sơn trần'})});
   const note = newRow.locator('textarea[data-field="note"]');
   assert.equal(await note.inputValue(),'');
   await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');

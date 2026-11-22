@@ -198,7 +198,7 @@ function revealCreated(selector) {
     const target = document.querySelector(selector);
     if (!target) return;
     target.scrollIntoView({block:'center'});
-    const field = target.querySelector('input[data-field="groupName"],input[data-field="name"],input,textarea');
+    const field = target.querySelector('input[data-field="groupName"],[data-field="name"],input,textarea');
     field?.focus({preventScroll:true});
     field?.select?.();
     target.classList.add('material-just-added');
@@ -793,7 +793,8 @@ document.addEventListener('keydown', event => {
 
   const cell = target.closest('td');
   if (!cell) return;
-  if (event.key === 'Enter' && target.matches('textarea') && !event.ctrlKey) return;
+  // Ô Hạng mục: Shift+Enter xuống dòng, Enter sang dòng dưới như ô 1 dòng; các ô chữ dài khác Enter là xuống dòng
+  if (event.key === 'Enter' && target.matches('textarea') && !event.ctrlKey && (target.dataset.field !== 'name' || event.shiftKey)) return;
   if (event.key === 'Escape') { if (target.matches('input,textarea')) {
       target.value = target.defaultValue;
       if (target.dataset.field === 'code' && row.options[Number(slot)]) updateInlineCode(target,row.options[Number(slot)]);
