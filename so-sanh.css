@@ -159,6 +159,6 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cmp-panel .cmp-aibar #cmp-fill { background: #eef0f2; color: #475569; border-color: #d0d5db; }    /* AI của web: nút phụ màu xám */
 #cmp-image-actions [hidden] { display: none !important; }
 /* Hộp prompt không khoá trang: nổi bên trái, vẫn sửa bảng / thông tin cho AI ở giữa và bên phải, prompt tự cập nhật */
-.cmp-prompt-dlg:not(:modal) { position: fixed; inset: 64px auto auto 16px; margin: 0; width: min(560px, 42vw); height: calc(100vh - 80px); box-sizing: border-box; max-height: none; overflow: auto; z-index: 60; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
-.cmp-prompt-dlg > .gd-ask-actions { position: sticky; bottom: -14px; padding: 8px 0; background: inherit; }
+.cmp-prompt-dlg:not(:modal) { position: fixed; inset: 0; margin: auto; width: min(760px, 92vw); height: min(86vh, 900px); box-sizing: border-box; max-height: none; overflow: auto; z-index: 60; }   /* bảng nổi giữa màn hình, vẫn thao tác được bảng phía sau */
+.cmp-prompt-dlg > .gd-ask-actions { position: sticky; bottom: -14px; padding: 8px 0; background: rgba(236, 231, 223, .96); }
 .cmp-pick { display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer; }

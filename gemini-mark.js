@@ -69,10 +69,11 @@
     }
     return best;
   }
-  // Vị trí quen thuộc [cỡ logo, lề tới mép logo]: ảnh 1024 px logo 48 px lề 96 px (đo ảnh mẫu); 48/32, 96/64 theo cỡ ảnh
+  // Vị trí quen thuộc [cỡ logo, lề tới mép logo]: ảnh 1024 px logo 48 px lề 96 px (đo ảnh mẫu); 48/32, 96/64 theo cỡ ảnh;
+  // ảnh ghép 6 ô 3:2 (1024×687): logo 40 px, lề 77 px ≈ 3,9 % / 7,55 % chiều ngang
   function known(Lum, W, H) {
     const M = Math.min(W, H);
-    const cands = [[M * 0.046875, M * 0.09375], [48, 96], [96, 192], [64, 128], [48, 32], [96, 64]].map(([size, margin]) =>
+    const cands = [[W * 0.039, W * 0.0755], [M * 0.046875, M * 0.09375], [48, 96], [96, 192], [64, 128], [48, 32], [96, 64]].map(([size, margin]) =>
       ({cx: Math.round(W - margin - size / 2), cy: Math.round(H - margin - size / 2), r0: Math.round(size * 0.44), r1: Math.round(size * 0.6)}));
     return refine(Lum, W, H, cands, 6);
   }
