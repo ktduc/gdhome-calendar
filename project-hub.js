@@ -6,7 +6,7 @@ const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 // Tên file từ header có thể đã mã hoá %xx hoặc là chữ thường có dấu % ("100%.pdf"): giải mã được thì giải, không thì giữ nguyên
 const safeDecode = value => { try { return decodeURIComponent(value); } catch { return value; } };
 const fontkit = require('@pdf-lib/fontkit');
-const { projectList, writeProjectProfile, withScheduleWrite } = require('./project-profiles');
+const { projectList, writeProjectProfile, withScheduleWrite, writeTableSchema } = require('./project-profiles');
 const { projectRow, projectTasks, designFeeAfterDiscount } = require('./project-table');
 const {
   resolveAi,
@@ -1474,6 +1474,7 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     return sendJson(res, 200, {
       success: true,
       projects,
+      tableSchema: schedule.projectTable || { columns: [], custom: [] },
       storageInfo: {
         configured: assets.configured,
         r2: assets.configured,
@@ -1538,6 +1539,13 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     await hubStore.saveProject(result.project.id, record);
 
     return sendJson(res, 200, { success: true, project: result.project });
+  }
+
+  // 4c. Cấu hình cột Bảng thống kê dự án: POST /api/project-hub/table-schema
+  if (urlPath === '/api/project-hub/table-schema' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const tableSchema = await writeTableSchema(store, dataKey, body?.schema, defaultSchedule);
+    return sendJson(res, 200, { success: true, tableSchema });
   }
 
   // 4a. Áp dụng HĐTK: ghi hồ sơ + đợt thanh toán, tạo giai đoạn "THIẾT KẾ" với các mốc (ngày đã tính ở trình duyệt theo ngày làm việc)

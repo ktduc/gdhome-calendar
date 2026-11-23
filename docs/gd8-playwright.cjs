@@ -2294,6 +2294,29 @@ cases['thong-ke'] = async page => {
   await row.locator('[data-f=supervisor]').fill('GD - ĐỨC BÉ');
   await row.locator('[data-f=supervisor]').press('Enter');
   await page.waitForFunction(async () => (await GDHomeShell.api('/api/project-hub/overview')).projects[0].profile.supervisor === 'GD - ĐỨC BÉ');
+  assert.match(await row.locator('.tk-col-daysLeft').innerText(),/ngày|Hôm nay/,'Cột Số ngày còn');
+  // Cột: thêm thuộc tính riêng (Chọn 1), điền giá trị, chỉnh độ rộng, kéo đổi chỗ – lưu trên server
+  const overview = () => page.evaluate(() => GDHomeShell.api('/api/project-hub/overview'));
+  const until = async (test, message) => { for (let i = 0; i < 50; i++) { if (test(await overview())) return; await page.waitForTimeout(100); } throw new Error(message); };
+  await page.locator('.tk-cols summary').click();
+  await page.locator('.tk-col-add [name=label]').fill('Hướng nhà');
+  await page.locator('.tk-col-add [name=type]').selectOption('select');
+  await page.locator('.tk-col-add [name=options]').fill('Đông, Tây');
+  await page.locator('.tk-col-add button').click();
+  await page.locator('.tk-cols summary').click();
+  await row.locator('select[data-f^="c_"]').selectOption('Tây');
+  await until(o => Object.values(o.projects.find(p => p.id === 'p1').profile.custom || {}).includes('Tây') && o.tableSchema.custom.length, 'Lưu cột riêng + giá trị');
+  assert.deepEqual((await overview()).tableSchema.custom.map(c => [c.label, c.type, c.options]), [['Hướng nhà', 'select', ['Đông', 'Tây']]]);
+  await page.locator('#tk-wrap').evaluate(wrap => { wrap.scrollLeft = 0; });   // ô cột riêng ở cuối bảng đã cuộn sang phải
+  const handle = await page.locator('th[data-sort=address] .tk-resize').boundingBox();
+  await page.mouse.move(handle.x + 3, handle.y + 10); await page.mouse.down();
+  await page.mouse.move(handle.x + 103, handle.y + 10, {steps: 5}); await page.mouse.up();
+  await page.locator('th[data-sort=phone]').dragTo(page.locator('th[data-sort=address]'), {targetPosition: {x: 4, y: 10}});
+  await until(o => {
+    const cols = o.tableSchema.columns, keys = cols.filter(c => !c.hidden).map(c => c.key);
+    return keys.indexOf('phone') < keys.indexOf('address') && cols.find(c => c.key === 'address')?.width > 150;
+  }, 'Lưu thứ tự + độ rộng cột');
+  assert.deepEqual(await page.$$eval('thead th', ths => ths.slice(0, 3).map(th => th.dataset.sort)), ['project', 'phone', 'address']);
   // Nhập HĐTK bằng dán chữ
   await page.locator('[data-shell-slot=primary]').click();
   await page.locator('.tk-dialog textarea').fill(['HỢP ĐỒNG THIẾT KẾ NỘI THẤT','Số: HDKT/GD-TK/02032026','Hôm nay, ngày 02 tháng 03 năm 2026, tại văn phòng',
@@ -2314,8 +2337,8 @@ cases['thong-ke'] = async page => {
   const schedule = (await page.evaluate(() => GDHomeShell.api('/api/schedule'))).data;
   assert.deepEqual(schedule.tasks.filter(t => /TRẦN THỬ/.test(t.title)).map(t => t.title.split(' - ')[0]),['3D','HSKT']);
   // Nhập CSV Notion: 1 dự án trùng tên (điền ô trống), 1 dự án mới
-  const csv = '﻿DỰ ÁN,VỊ TRÍ,NGÀY KÍ HĐTK,TRẠNG THÁI 3D,ĐƠN GIÁ TK,DIỆN TÍCH,CHECK ĐỒ,MÃ VL\n' +
-    '"Căn hộ mẫu GĐ8","Vị trí khác","14/11/2026","ĐÃ CHỐT",300K,120,Yes,In progress\n"Chị Notion Mới","Ngõ 1, Hà Nội","November 5, 2026","XONG LẦN 1",250K,92,No,Not started\n';
+  const csv = '﻿DỰ ÁN,VỊ TRÍ,NGÀY KÍ HĐTK,TRẠNG THÁI 3D,ĐƠN GIÁ TK,DIỆN TÍCH,CHECK ĐỒ,MÃ VL,LOẠI NHÀ\n' +
+    '"Căn hộ mẫu GĐ8","Vị trí khác","14/11/2026","ĐÃ CHỐT",300K,120,Yes,In progress,Chung cư\n"Chị Notion Mới","Ngõ 1, Hà Nội","November 5, 2026","XONG LẦN 1",250K,92,No,Not started,Biệt thự\n';
   await page.locator('summary', {hasText:'Nhập'}).click();
   const [chooser] = await Promise.all([page.waitForEvent('filechooser'),page.locator('.hdr-menu-item[data-act=csv]').click()]);
   await chooser.setFiles({name:'notion.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
@@ -2326,6 +2349,9 @@ cases['thong-ke'] = async page => {
   assert.equal(await fresh.locator('[data-f=signedAt]').inputValue(),'2026-11-05');
   assert.equal(await fresh.locator('[data-f=status3d]').inputValue(),'Xong lần 1');
   assert.equal(await fresh.locator('[data-f=designPrice]').inputValue(),'250.000');
+  const loai = (await overview()).tableSchema.custom.find(c => c.label === 'LOẠI NHÀ');
+  assert.ok(loai, 'Cột Notion lạ thành cột riêng');
+  assert.equal(await fresh.locator(`[data-f="${loai.id}"]`).inputValue(),'Biệt thự');
   assert.equal(await row.locator('[data-f=address]').inputValue(),'Căn 1, Tòa Mẫu','Không ghi đè ô đã có');
   assert.equal(await row.locator('[data-f=status3d]').inputValue(),'Đã chốt');
   assert.equal(await row.locator('[data-f=checkDo]').isChecked(),true);

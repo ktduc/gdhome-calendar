@@ -11,18 +11,30 @@
 .tk-field { display: flex; align-items: center; gap: 6px; color: #5a4e41; }
 .tk-field select { height: 30px; border: 1px solid #d8d2c8; border-radius: 8px; background: #fff; font: inherit; }
 .tk-cols { position: relative; }
-.tk-cols-menu { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; display: grid; gap: 4px; min-width: 210px; max-height: 60vh; overflow: auto; padding: 10px;
+.tk-cols-menu { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; display: grid; gap: 4px; width: 320px; max-height: 60vh; overflow: auto; padding: 10px;
   background: #fff; border: 1px solid #d8d2c8; border-radius: 10px; box-shadow: 0 10px 28px rgba(50, 42, 34, .18); }
+.tk-cols-menu p { margin: 0 0 4px; font-size: 12px; }
+.tk-col-row { display: flex; align-items: center; gap: 6px; }
+.tk-col-label { flex: 1; min-width: 0; height: 26px; padding: 0 6px; border: 1px solid transparent; border-radius: 6px; background: transparent; font: inherit; }
+.tk-col-label:hover, .tk-col-label:focus { border-color: #d8d2c8; background: #fff; }
+.tk-col-add { display: grid; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px solid #ece7df; }
+.tk-col-add input, .tk-col-add select { height: 28px; padding: 0 8px; border: 1px solid #d8d2c8; border-radius: 7px; background: #fff; font: inherit; }
+.tk-csv-new { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .tk-empty { padding: 32px; text-align: center; color: #6f675d; }
 .tk-muted { color: #8a7f72; }
 
 /* Bảng: cuộn ngang trong khung, tiêu đề và cột Dự án đứng yên */
 .tk-wrap { overflow: auto; max-height: calc(100vh - 128px); border: 1px solid #d8d2c8; border-radius: 10px; background: #fff; }
 .tk-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
-.tk-table th, .tk-table td { padding: 0; border-bottom: 1px solid #ece7df; border-right: 1px solid #f1ede6; vertical-align: middle; white-space: nowrap; }
+.tk-table th, .tk-table td { padding: 0; border-bottom: 1px solid #ece7df; border-right: 1px solid #f1ede6; vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tk-table thead th { position: sticky; top: 0; z-index: 3; padding: 8px 8px; background: #ece7df; color: #5a4e41; font: 600 11.5px Roboto, sans-serif; text-transform: uppercase; letter-spacing: .2px; text-align: left; cursor: pointer; user-select: none; }
 .tk-table thead th:first-child, .tk-table tbody th[scope=row], .tk-table tfoot th { position: sticky; left: 0; z-index: 2; background: inherit; }
 .tk-table thead th:first-child { z-index: 4; background: #ece7df; }
+.tk-table thead th[draggable=true] { cursor: grab; }
+.tk-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 7px; cursor: col-resize; touch-action: none; }
+.tk-resize:hover { background: rgba(90, 78, 65, .25); }
+.tk-table thead th.tk-drop-before { box-shadow: inset 3px 0 0 #5a4e41; }
+.tk-table thead th.tk-drop-after { box-shadow: inset -3px 0 0 #5a4e41; }
 .tk-table tbody tr { background: #fff; }
 .tk-table tbody th[scope=row] { background: #fff; box-shadow: 1px 0 0 #e2dcd2; }
 .tk-table tbody tr:hover, .tk-table tbody tr:hover th[scope=row] { background: #faf7f2; }
@@ -43,11 +55,13 @@
 .tk-col-select { min-width: 132px; }
 .tk-col-deadline { min-width: 190px; padding: 0 8px !important; }
 .tk-col-deadlineLabel { min-width: 120px; padding: 0 8px !important; }
+.tk-col-daysLeft { min-width: 92px; padding: 0 8px !important; text-align: right; }
 .tk-col-money { min-width: 130px; }
 .tk-col-number { min-width: 96px; }
 .tk-col-check { width: 72px; }
 .tk-col-payments { min-width: 150px; padding: 0 6px !important; }
-.tk-name { display: flex; align-items: center; min-width: 230px; }
+.tk-name { display: flex; align-items: center; }
+.tk-name input { min-width: 0; }
 .tk-name input { font-weight: 600; }
 .tk-links { display: flex; gap: 2px; padding-right: 6px; opacity: .55; }
 .tk-links a { text-decoration: none; font-size: 13px; padding: 2px; border-radius: 4px; }

@@ -11,20 +11,25 @@
   const STATUS3D = ['Chưa làm', 'Đang triển khai', 'Chờ phản hồi', 'Xong lần 1', 'Xong lần 2', 'Xong lần 3', 'Đang chỉnh sửa', 'Đã chốt'];
   const STATUS_HSKT = ['Chưa làm', 'Đang triển khai', 'Đã gửi', 'Đang chỉnh sửa', 'Đã chốt'];
   const MATERIALS = ['Chưa làm', 'Đang làm', 'Xong'];
-  // Cột của bảng. auto(p) = giá trị tự tính khi ô tay để trống.
+  // Cột mặc định, gom theo giai đoạn: thông tin khách -> thiết kế -> thi công -> tiền. auto(p) = giá trị tự tính khi ô tay để trống.
+  // Anh tự đổi thứ tự (kéo tiêu đề), độ rộng (kéo mép phải), tên, ẩn/hiện và thêm cột riêng ở menu Cột; cấu hình lưu trên server.
   const COLS = [
     {key: 'project', label: 'Dự án', type: 'name'},
+    {key: 'customer', label: 'Khách / Bên A', type: 'text', hidden: true},
     {key: 'address', label: 'Vị trí', type: 'text'},
     {key: 'phone', label: 'SĐT', type: 'text'},
+    {key: 'email', label: 'Email', type: 'text', hidden: true},
+    {key: 'contractNo', label: 'Số HĐ', type: 'text', hidden: true},
     {key: 'signedAt', label: 'Ngày ký HĐTK', type: 'date'},
-    {key: 'designer3d', label: 'Triển khai 3D', type: 'people', auto: p => p.auto?.designer3d},
+    {key: 'stage', label: 'Giai đoạn', type: 'select', options: STAGES, auto: p => p.profile.constructionSignedAt ? 'Thi công' : 'Thiết kế'},
+    {key: 'designer3d', label: 'Người làm 3D', type: 'people', auto: p => p.auto?.designer3d},
     {key: 'status3d', label: 'Trạng thái 3D', type: 'select', options: STATUS3D, auto: p => p.auto?.status3d},
-    {key: 'designerHskt', label: 'Triển khai HSKT', type: 'people', auto: p => p.auto?.designerHskt},
+    {key: 'designerHskt', label: 'Người làm HSKT', type: 'people', auto: p => p.auto?.designerHskt},
     {key: 'statusHskt', label: 'Trạng thái HSKT', type: 'select', options: STATUS_HSKT, auto: p => p.auto?.statusHskt},
-    {key: 'deadline', label: 'Deadline sắp tới', type: 'deadline', readonly: true},
-    {key: 'deadlineLabel', label: 'ND deadline', type: 'deadlineLabel', readonly: true},
-    {key: 'stage', label: 'Trạng thái', type: 'select', options: STAGES, auto: p => p.profile.constructionSignedAt ? 'Thi công' : 'Thiết kế'},
-    {key: 'materialsStatus', label: 'Mã VL', type: 'select', options: MATERIALS, auto: p => materialsAuto(p)},
+    {key: 'deadline', label: 'Hạn sắp tới', type: 'deadline', readonly: true},
+    {key: 'deadlineLabel', label: 'Việc sắp tới', type: 'deadlineLabel', readonly: true},
+    {key: 'daysLeft', label: 'Số ngày còn', type: 'daysLeft', readonly: true},
+    {key: 'materialsStatus', label: 'Chốt mã VL', type: 'select', options: MATERIALS, auto: p => materialsAuto(p)},
     {key: 'constructionSignedAt', label: 'Ngày ký HĐTC', type: 'date'},
     {key: 'furnishAt', label: 'Ngày lên đồ', type: 'date'},
     {key: 'supervisor', label: 'Giám sát', type: 'people'},
@@ -35,18 +40,44 @@
     {key: 'designValue', label: 'Giá trị HĐTK', type: 'money', sum: true, auto: p => designValueAuto(p)},
     {key: 'constructionValue', label: 'Giá trị thi công ƯT', type: 'money', sum: true},
     {key: 'payments', label: 'Thanh toán', type: 'payments', readonly: true},
-    {key: 'customer', label: 'Khách / Bên A', type: 'text', hidden: true},
-    {key: 'contractNo', label: 'Số HĐ', type: 'text', hidden: true},
-    {key: 'email', label: 'Email', type: 'text', hidden: true},
     {key: 'note', label: 'Ghi chú', type: 'text', hidden: true},
   ];
+  // Kiểu cho cột anh tự thêm (giống thuộc tính Notion)
+  const CUSTOM_TYPES = [['text', 'Chữ'], ['number', 'Số'], ['money', 'Tiền'], ['date', 'Ngày'], ['select', 'Chọn 1'], ['people', 'Người'], ['check', 'Ô tick']];
   const VIEWS = [
     ['all', 'Tất cả'], ['design', 'Đang thiết kế'], ['build', 'Thi công'], ['soon', 'Deadline 7 ngày'],
     ['late', 'Trễ hạn'], ['pay', 'Chờ thu tiền'], ['done', 'Hoàn thành'],
   ];
   let projects = [], prefs = {view: 'all', group: '', mode: 'table', hidden: null, sort: null};
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF_KEY)) || {}); } catch { /* trình duyệt chặn bộ nhớ: dùng mặc định */ }
-  prefs.hidden ||= COLS.filter(col => col.hidden).map(col => col.key);
+  let schema = {columns: [], custom: []}, ALL = [];
+  // Danh sách cột đã áp cấu hình: cột mặc định + cột riêng, theo thứ tự / tên / độ rộng / ẩn đã lưu
+  function refreshCols() {
+    const base = [...COLS, ...schema.custom.map(c => ({key: c.id, label: c.label, type: c.type, options: c.options, sum: ['number', 'money'].includes(c.type), custom: true}))];
+    const conf = new Map(schema.columns.map((c, i) => [c.key, {...c, i}]));
+    const hiddenDefault = prefs.hidden || COLS.filter(col => col.hidden).map(col => col.key);   // máy đã chỉnh ẩn cột trước khi có cấu hình chung
+    ALL = base.map((col, d) => {
+      const c = conf.get(col.key);
+      return {...col, baseLabel: col.label, label: c?.label || col.label, width: c?.width || 0, hidden: c ? c.hidden : hiddenDefault.includes(col.key), order: c ? c.i : 1000 + d};
+    }).sort((a, b) => (a.key === 'project' ? -1 : b.key === 'project' ? 1 : a.order - b.order));
+  }
+  refreshCols();
+  let schemaTimer, schemaDirty = false;
+  // Lưu cấu hình cột: gộp các lần chỉnh liên tiếp (400 ms); now = lưu ngay và chờ xong (trước khi nhập dữ liệu vào cột mới)
+  function saveSchema(now = false) {
+    schemaDirty = true;
+    schema.columns = ALL.map(c => ({key: c.key, ...(c.label !== c.baseLabel ? {label: c.label} : {}), ...(c.width ? {width: c.width} : {}), hidden: c.hidden}));
+    refreshCols();
+    render();
+    clearTimeout(schemaTimer);
+    const post = async () => {
+      const status = byId('save-status');
+      GDHomeShell.saveStatus(status, 'saving');
+      try { await api('/api/project-hub/table-schema', {schema}); schemaDirty = false; GDHomeShell.saveStatus(status, 'saved'); } catch (error) { GDHomeShell.saveStatus(status, 'error', error.message); toast('Không lưu được cấu hình cột: ' + error.message); }
+    };
+    if (now) return post();
+    schemaTimer = setTimeout(post, 400);
+  }
   const remember = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* bỏ qua */ } };
 
   // ------------------------------------------------------------ giá trị
@@ -62,12 +93,13 @@
     const {area, designPrice, vat} = p.profile;
     return area && designPrice ? String(Math.round(num(area) * num(designPrice) * (1 + (Number(vat) || 0) / 100))) : '';
   }
-  const colOf = key => COLS.find(col => col.key === key);
+  const colOf = key => ALL.find(col => col.key === key);
   function val(p, key) {
     if (key === 'project') return p.name;
     if (key === 'deadline') return p.auto?.deadline?.end || '';
     if (key === 'deadlineLabel') return p.auto?.deadline?.label || '';
-    const manual = p.profile[key];
+    if (key === 'daysLeft') return p.auto?.deadline ? String(p.auto.deadline.daysLeft) : '';
+    const manual = /^c_/.test(key) ? p.profile.custom?.[key] : p.profile[key];
     if (manual) return manual;
     return colOf(key)?.auto?.(p) || '';
   }
@@ -96,19 +128,19 @@
         default: return true;
       }
     });
-    if (q) list = list.filter(p => [p.name, ...Object.values(p.profile).filter(v => typeof v === 'string'), p.auto?.designer3d, p.auto?.designerHskt]
+    if (q) list = list.filter(p => [p.name, ...Object.values(p.profile).filter(v => typeof v === 'string'), ...Object.values(p.profile.custom || {}), p.auto?.designer3d, p.auto?.designerHskt]
       .join(' ').toLowerCase().includes(q));
     const sort = prefs.sort || {key: 'deadline', dir: 1};
     const col = colOf(sort.key);
     const key = p => {
       const v = val(p, sort.key);
-      if (col && ['number', 'money'].includes(col.type)) return num(v);
+      if (col && ['number', 'money', 'daysLeft'].includes(col.type)) return v === '' ? '' : Number(String(v).replace(/[^\d.-]/g, '')) || 0;
       return String(v || '').toLowerCase();
     };
     return list.sort((a, b) => {
       const x = key(a), y = key(b);
-      if (x === '' || x === 0) return y === '' || y === 0 ? 0 : 1;   // ô trống luôn xuống cuối
-      if (y === '' || y === 0) return -1;
+      if (x === '') return y === '' ? 0 : 1;   // ô trống luôn xuống cuối
+      if (y === '') return -1;
       return (x > y ? 1 : x < y ? -1 : 0) * sort.dir;
     });
   }
@@ -120,7 +152,7 @@
 
   // ------------------------------------------------------------ vẽ bảng
   function cell(p, col) {
-    const v = p.profile[col.key] ?? '', auto = col.auto?.(p) || '', f = `data-id="${esc(p.id)}" data-f="${col.key}"`;
+    const v = (col.custom ? p.profile.custom?.[col.key] : p.profile[col.key]) ?? '', auto = col.auto?.(p) || '', f = `data-id="${esc(p.id)}" data-f="${col.key}"`;
     switch (col.type) {
       case 'name':
         return `<div class="tk-name"><input ${f} value="${esc(p.name)}" aria-label="Tên dự án">
@@ -130,7 +162,7 @@
       case 'number': return `<input class="tk-num" inputmode="decimal" ${f} value="${esc(v ? String(v).replace('.', ',') : '')}" placeholder="${esc(auto)}">`;
       case 'money': return `<input class="tk-num" inputmode="numeric" ${f} value="${esc(fmtMoney(v || ''))}" placeholder="${esc(fmtMoney(auto))}">`;
       case 'select': {
-        const options = [...new Set([...col.options, v].filter(Boolean))];
+        const options = [...new Set([...(col.options || []), v].filter(Boolean))];
         return `<select ${f} class="${v ? '' : 'is-auto'}" data-tone="${esc(v || auto)}"><option value="">${auto ? 'tự: ' + esc(auto) : '—'}</option>` +
           options.map(o => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
       }
@@ -141,6 +173,10 @@
         if (!d) return lateChip || '<span class="tk-muted">—</span>';
         const left = d.daysLeft === 0 ? 'hôm nay' : 'còn ' + d.daysLeft + ' ngày';
         return `<span class="tk-deadline">${fmtDate(d.start)}${d.start !== d.end ? ' → ' + fmtDate(d.end) : ''}</span> <small class="tk-left">${left}</small>${lateChip}`;
+      }
+      case 'daysLeft': {
+        const d = p.auto?.deadline;
+        return d ? `<span class="tk-num tk-left">${d.daysLeft === 0 ? 'Hôm nay' : d.daysLeft + ' ngày'}</span>` : '';
       }
       case 'deadlineLabel': return p.auto?.deadline ? `<span class="tk-chip">${esc(p.auto.deadline.label)}</span>` : '';
       case 'payments': {
@@ -158,7 +194,8 @@
     if (left !== null && left <= 2) return 'is-soon';
     return '';
   }
-  const cols = () => COLS.filter(col => !prefs.hidden.includes(col.key));
+  const cols = () => ALL.filter(col => !col.hidden);
+  const widthStyle = col => col.width ? ` style="width:${col.width}px;min-width:${col.width}px;max-width:${col.width}px"` : '';
   const sums = list => cols().map(col => col.sum ? list.reduce((s, p) => s + num(val(p, col.key)), 0) : null);
   function sumRow(list, label) {
     return `<tr class="tk-sum"><th>${esc(label)} <small>${list.length} dự án</small></th>` +
@@ -166,8 +203,8 @@
   }
   function renderTable(list) {
     const sort = prefs.sort || {key: 'deadline', dir: 1};
-    const head = '<thead><tr>' + cols().map(col => `<th data-sort="${col.key}" class="tk-col-${col.type}">${esc(col.label)}${sort.key === col.key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr></thead>';
-    const row = p => `<tr class="${rowClass(p)}" data-row="${esc(p.id)}">` + cols().map((col, i) => i ? `<td class="tk-col-${col.type}">${cell(p, col)}</td>` : `<th scope="row">${cell(p, col)}</th>`).join('') + '</tr>';
+    const head = '<thead><tr>' + cols().map((col, i) => `<th data-sort="${col.key}" class="tk-col-${col.type}"${i ? ' draggable="true" title="Bấm để sắp xếp · kéo để đổi chỗ · kéo mép phải để chỉnh độ rộng"' : ''}${widthStyle(col)}>${esc(col.label)}${sort.key === col.key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}<span class="tk-resize" data-resize="${col.key}" title="Kéo để chỉnh độ rộng · bấm đúp để về tự động"></span></th>`).join('') + '</tr></thead>';
+    const row = p => `<tr class="${rowClass(p)}" data-row="${esc(p.id)}">` + cols().map((col, i) => i ? `<td class="tk-col-${col.type}" data-c="${col.key}"${widthStyle(col)}>${cell(p, col)}</td>` : `<th scope="row" class="tk-col-name" data-c="${col.key}"${widthStyle(col)}>${cell(p, col)}</th>`).join('') + '</tr>';
     let body;
     if (prefs.group) {
       const groups = new Map();
@@ -194,15 +231,37 @@
       return `<section class="tk-lane" data-lane="${esc(lane)}"><h3>${esc(lane || '(trống)')} <small>${items.length}</small></h3>${items.map(card).join('')}</section>`;
     }).join('') + '</div>';
   }
+  // Menu Cột: bật/tắt, đổi tên, xoá cột riêng, thêm thuộc tính mới
+  function renderColsMenu() {
+    const typeName = type => CUSTOM_TYPES.find(t => t[0] === type)?.[1] || '';
+    byId('tk-cols').innerHTML = '<p class="tk-muted">Tick để hiện · sửa tên trực tiếp · kéo tiêu đề cột trên bảng để đổi chỗ</p>' +
+      ALL.slice(1).map(col => `<div class="tk-col-row"><input type="checkbox" data-show="${col.key}" ${col.hidden ? '' : 'checked'} aria-label="Hiện cột ${esc(col.label)}">` +
+        `<input class="tk-col-label" data-rename="${col.key}" value="${esc(col.label)}" placeholder="${esc(col.baseLabel)}" aria-label="Tên cột">` +
+        (col.custom ? `<small class="tk-muted">${typeName(col.type)}</small><button type="button" class="tk-x" data-del-col="${col.key}" aria-label="Xoá cột ${esc(col.label)}">×</button>` : '') + '</div>').join('') +
+      `<form class="tk-col-add"><b>+ Thêm thuộc tính</b><input name="label" placeholder="Tên cột, vd: Hướng nhà" required>
+        <select name="type">${CUSTOM_TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+        <input name="options" placeholder="Các lựa chọn, cách nhau bằng dấu phẩy" hidden><button class="btn btn-primary btn-sm">Thêm cột</button></form>` +
+      '<button type="button" class="btn btn-outline btn-sm" data-reset-cols>↺ Thứ tự, độ rộng, tên về mặc định</button>';
+  }
+  const newColId = () => 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  function addCustom(label, type, options = []) {
+    const id = newColId();
+    schema.custom.push({id, label, type, options});
+    refreshCols();
+    return id;
+  }
+
   function render() {
     byId('tk-views').innerHTML = VIEWS.map(([id, label]) => {
       const count = id === 'late' ? projects.filter(p => p.auto?.overdue?.length).length : id === 'pay' ? projects.filter(p => duePayments(p).length).length : 0;
       return `<button type="button" role="tab" aria-selected="${prefs.view === id}" data-view="${id}">${label}${count ? ` <b>${count}</b>` : ''}</button>`;
     }).join('');
+    byId('tk-group').innerHTML = '<option value="">Không nhóm</option>' + ALL.filter(col => ['select', 'people'].includes(col.type)).map(col => `<option value="${col.key}">${esc(col.label)}</option>`).join('');
+    if (!colOf(prefs.group)) prefs.group = '';
     byId('tk-group').value = prefs.group;
     document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('is-on', b.dataset.mode === prefs.mode));
-    byId('tk-cols').innerHTML = COLS.slice(1).map(col => `<label><input type="checkbox" value="${col.key}" ${prefs.hidden.includes(col.key) ? '' : 'checked'}> ${esc(col.label)}</label>`).join('');
-    const people = [...new Set(projects.flatMap(p => ['designer3d', 'designerHskt', 'supervisor', 'contractor'].flatMap(k => String(val(p, k)).split(',').map(s => s.trim()))).filter(Boolean))].sort();
+    if (!byId('tk-cols').contains(document.activeElement)) renderColsMenu();
+    const people = [...new Set(projects.flatMap(p => ALL.filter(col => col.type === 'people').map(col => col.key).flatMap(k => String(val(p, k)).split(',').map(s => s.trim()))).filter(Boolean))].sort();
     (byId('tk-people') || document.body.appendChild(Object.assign(document.createElement('datalist'), {id: 'tk-people'}))).innerHTML = people.map(n => `<option value="${esc(n)}">`).join('');
     const list = visible();
     if (prefs.mode === 'board') renderBoard(list); else renderTable(list);
@@ -225,7 +284,7 @@
   async function saveField(id, field, value) {
     const p = projects.find(x => x.id === id);
     if (!p) return;
-    const project = await saveProfile(id, {[field]: value});
+    const project = await saveProfile(id, colOf(field)?.custom ? {custom: {...p.profile.custom, [field]: value}} : {[field]: value});
     p.profile = project.profile;
     p.name = project.name;
     render();
@@ -405,16 +464,20 @@
       const file = input.files[0];
       if (!file) return;
       const rows = parseCsv(await file.text());
-      const head = rows.shift().map(h => CSV_MAP[norm(h)] || '');
+      const raw = rows.shift();
+      const head = raw.map(h => CSV_MAP[norm(h)] || ALL.find(col => col.custom && norm(col.label) === norm(h))?.key || '');
+      // Cột Notion chưa có trong bảng: đề nghị tạo cột riêng, đoán kiểu ngày / số theo dữ liệu
+      const unknown = raw.map((h, i) => ({i, label: h.trim(), values: rows.map(r => String(r[i] || '').trim()).filter(Boolean)})).filter(x => !head[x.i] && x.label && x.values.length);
       if (!head.includes('project')) return GDHomeShell.alert('Không thấy cột "Dự án" trong file CSV. Xuất bảng Notion bằng Export → Markdown & CSV.');
       const items = rows.map(r => {
         const profile = {};
-        head.forEach((f, i) => { const v = f && csvValue(f, r[i]); if (v) profile[f] = v; });
+        head.forEach((f, i) => { const v = f && csvValue(f, r[i]); if (v) { if (/^c_/.test(f)) (profile.custom ||= {})[f] = v; else profile[f] = v; } });
         const match = projects.find(p => norm(p.name) === norm(profile.project));
-        return {profile, match};
+        return {profile, match, row: r};
       }).filter(x => x.profile.project);
       const dialog = openDialog('Nhập bảng Notion (CSV)', `<p>${items.length} dự án · ${items.filter(x => x.match).length} trùng tên dự án đã có (cập nhật), ${items.filter(x => !x.match).length} tạo mới.
         Cột nhận ra: ${[...new Set(head.filter(Boolean))].map(f => colOf(f)?.label || f).join(', ')}.</p>
+        ${unknown.length ? `<p><b>Cột chưa có trong bảng</b> – tick để tạo cột riêng:</p><p class="tk-csv-new">${unknown.map((x, n) => `<label><input type="checkbox" data-new="${n}" checked> ${esc(x.label)}</label>`).join(' ')}</p>` : ''}
         <label><input type="checkbox" name="overwrite"> Ghi đè ô đã có dữ liệu (mặc định chỉ điền ô trống)</label>
         <div class="tk-csv-list"><table class="tk-mini"><tbody>${items.map((x, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td>${esc(x.profile.project)}</td><td>${x.match ? 'Cập nhật' : '<b>Tạo mới</b>'}</td><td class="tk-muted">${Object.keys(x.profile).length - 1} ô</td></tr>`).join('')}</tbody></table></div>
         <div class="tk-actions"><span class="tk-muted" role="status"></span><button type="button" class="btn btn-primary" data-go>Nhập</button></div>`);
@@ -422,11 +485,20 @@
         e.target.disabled = true;
         const overwrite = dialog.querySelector('[name=overwrite]').checked, status = dialog.querySelector('[role=status]');
         const chosen = [...dialog.querySelectorAll('[data-i]:checked')].map(c => items[c.dataset.i]);
+        const created = [...dialog.querySelectorAll('[data-new]:checked')].map(c => unknown[c.dataset.new]);
+        for (const x of created) {
+          const type = x.values.every(v => csvDate(v)) ? 'date' : x.values.every(v => /^-?[\d.,]+$/.test(v)) ? 'number' : 'text';
+          const id = addCustom(x.label.slice(0, 60), type);
+          for (const item of items) { const v = type === 'date' ? csvDate(item.row[x.i] || '') : type === 'number' ? String(num(String(item.row[x.i] || '').replace(/,(?=\d{3}\b)/g, ''))) : String(item.row[x.i] || '').trim(); if (v && v !== '0') (item.profile.custom ||= {})[id] = v; }
+        }
+        if (created.length) await saveSchema(true);
         let done = 0;
         for (const {profile, match} of chosen) {
           try {
             if (match) {
-              const patch = Object.fromEntries(Object.entries(profile).filter(([k]) => k !== 'project' && (overwrite || !match.profile[k])));
+              const patch = Object.fromEntries(Object.entries(profile).filter(([k]) => k !== 'project' && k !== 'custom' && (overwrite || !match.profile[k])));
+              const custom = Object.fromEntries(Object.entries(profile.custom || {}).filter(([k]) => overwrite || !match.profile.custom?.[k]));
+              if (Object.keys(custom).length) patch.custom = {...match.profile.custom, ...custom};
               if (Object.keys(patch).length) await saveProfile(match.id, patch);
             } else await saveProfile(null, profile, {create: true});
           } catch { /* đã báo lỗi; nhập tiếp dòng sau */ }
@@ -446,10 +518,35 @@
     byId('tk-group').onchange = e => { prefs.group = e.target.value; remember(); render(); };
     byId('tk-views').onclick = e => { const b = e.target.closest('[data-view]'); if (b) { prefs.view = b.dataset.view; remember(); render(); } };
     document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { prefs.mode = b.dataset.mode; remember(); render(); });
-    byId('tk-cols').onchange = e => {
-      const key = e.target.value;
-      prefs.hidden = e.target.checked ? prefs.hidden.filter(k => k !== key) : [...prefs.hidden, key];
-      remember(); render();
+    const menu = byId('tk-cols');
+    menu.onchange = e => {
+      const t = e.target;
+      if (t.dataset.show) { colOf(t.dataset.show).hidden = !t.checked; saveSchema(); }
+      if (t.dataset.rename) { const col = colOf(t.dataset.rename); col.label = t.value.trim().slice(0, 60) || col.baseLabel; t.blur(); saveSchema(); }
+      if (t.name === 'type') t.form.elements.options.hidden = t.value !== 'select';
+    };
+    menu.onkeydown = e => { if (e.key === 'Enter' && e.target.dataset.rename) e.target.blur(); };
+    menu.onsubmit = e => {
+      e.preventDefault();
+      const f = e.target.elements, label = f.label.value.trim().slice(0, 60);
+      if (!label) return;
+      addCustom(label, f.type.value, f.type.value === 'select' ? f.options.value.split(',').map(s => s.trim()).filter(Boolean) : []);
+      saveSchema();
+      renderColsMenu();
+      toast(`Đã thêm cột "${label}".`);
+    };
+    menu.onclick = async e => {
+      const del = e.target.closest('[data-del-col]')?.dataset.delCol;
+      if (del && await GDHomeShell.confirm({title: 'Xoá cột', message: `Xoá cột "${colOf(del).label}"? Dữ liệu đã nhập trong cột này sẽ không hiện nữa.`, okText: 'Xoá cột', danger: true})) {
+        schema.custom = schema.custom.filter(c => c.id !== del);
+        ALL = ALL.filter(c => c.key !== del);
+        saveSchema(); renderColsMenu();
+      }
+      if (e.target.closest('[data-reset-cols]')) {
+        schema.columns = [];
+        prefs.hidden = null; remember();
+        refreshCols(); saveSchema(); renderColsMenu();
+      }
     };
     document.addEventListener('click', e => {
       const act = e.target.closest('[data-act]')?.dataset.act;
@@ -462,8 +559,33 @@
       });
     });
     const wrap = byId('tk-wrap');
+    // Kéo mép phải tiêu đề = chỉnh độ rộng; bấm đúp = về tự động
+    let resizing = false, resizedAt = 0, dragCol = null;
+    wrap.addEventListener('pointerdown', e => {
+      const handle = e.target.closest('.tk-resize');
+      if (!handle) return;
+      e.preventDefault();
+      resizing = true;
+      const key = handle.dataset.resize, th = handle.parentElement, x0 = e.clientX, w0 = Math.round(th.getBoundingClientRect().width);
+      const cells = [th, ...wrap.querySelectorAll(`[data-c="${key}"]`)], draggable = th.draggable;
+      th.draggable = false;   // không để trình duyệt bắt đầu kéo cột khi đang chỉnh độ rộng
+      handle.setPointerCapture?.(e.pointerId);
+      let width = w0;
+      const move = ev => { width = Math.max(60, Math.round(w0 + ev.clientX - x0)); for (const c of cells) Object.assign(c.style, {width: width + 'px', minWidth: width + 'px', maxWidth: width + 'px'}); };
+      const up = () => {
+        document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up);
+        th.draggable = draggable; resizing = false; resizedAt = Date.now();
+        if (width !== w0) { colOf(key).width = width; saveSchema(); }
+      };
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
+    });
+    wrap.addEventListener('dblclick', e => {
+      const handle = e.target.closest('.tk-resize');
+      if (handle) { colOf(handle.dataset.resize).width = 0; saveSchema(); }
+    });
     wrap.addEventListener('click', e => {
       const th = e.target.closest('thead th[data-sort]');
+      if (th && (e.target.closest('.tk-resize') || Date.now() - resizedAt < 300)) return;
       if (th) {
         const key = th.dataset.sort, cur = prefs.sort || {key: 'deadline', dir: 1};
         prefs.sort = {key, dir: cur.key === key ? -cur.dir : 1};
@@ -483,9 +605,33 @@
       if (e.key === 'Enter' && e.target.matches('input[data-f]')) e.target.blur();
     });
     // Kanban: kéo thẻ sang cột khác = đổi trạng thái
-    wrap.addEventListener('dragstart', e => { const card = e.target.closest('.tk-card'); if (card) e.dataTransfer.setData('text/plain', card.dataset.row); });
-    wrap.addEventListener('dragover', e => { if (e.target.closest('.tk-lane')) e.preventDefault(); });
+    // Bảng: kéo tiêu đề cột sang chỗ khác = đổi thứ tự
+    const dropSide = (e, th) => { const r = th.getBoundingClientRect(); return th.cellIndex === 0 || e.clientX > r.left + r.width / 2 ? 'after' : 'before'; };
+    const clearDrop = () => wrap.querySelectorAll('.tk-drop-before, .tk-drop-after').forEach(th => th.classList.remove('tk-drop-before', 'tk-drop-after'));
+    wrap.addEventListener('dragstart', e => {
+      if (resizing) return e.preventDefault();
+      const th = e.target.closest?.('thead th[data-sort]');
+      if (th) { dragCol = th.dataset.sort; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/x-col', dragCol); return; }
+      const card = e.target.closest('.tk-card'); if (card) e.dataTransfer.setData('text/plain', card.dataset.row);
+    });
+    wrap.addEventListener('dragend', () => { dragCol = null; clearDrop(); });
+    wrap.addEventListener('dragover', e => {
+      const th = dragCol && e.target.closest('thead th[data-sort]');
+      if (th) { e.preventDefault(); clearDrop(); if (th.dataset.sort !== dragCol) th.classList.add('tk-drop-' + dropSide(e, th)); return; }
+      if (!dragCol && e.target.closest('.tk-lane')) e.preventDefault();
+    });
     wrap.addEventListener('drop', e => {
+      const th = dragCol && e.target.closest('thead th[data-sort]');
+      if (th) {
+        e.preventDefault();
+        const from = dragCol, side = dropSide(e, th);
+        dragCol = null; clearDrop();
+        if (th.dataset.sort === from) return;
+        const moved = ALL.find(c => c.key === from), rest = ALL.filter(c => c.key !== from);
+        rest.splice(rest.findIndex(c => c.key === th.dataset.sort) + (side === 'after' ? 1 : 0), 0, moved);
+        ALL = rest;
+        return saveSchema();
+      }
       const lane = e.target.closest('.tk-lane'), id = e.dataTransfer.getData('text/plain');
       if (!lane || !id) return;
       e.preventDefault();
@@ -497,6 +643,8 @@
     try {
       const res = await api('/api/project-hub/overview');
       projects = res.projects || [];
+      // đang chờ lưu cấu hình cột thì giữ bản trên máy
+      if (res.tableSchema && !schemaDirty) { schema = {columns: res.tableSchema.columns || [], custom: res.tableSchema.custom || []}; refreshCols(); }
       render();
     } catch (error) {
       byId('tk-wrap').innerHTML = `<p class="tk-empty">${error.status === 401 ? 'Cần đăng nhập. Mở <a href="/tools">Trang chủ công cụ</a> để đăng nhập Gmail rồi quay lại.' : esc(error.message)}</p>`;

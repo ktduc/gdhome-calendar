@@ -23,7 +23,36 @@ function cleanProfile(value) {
   const profile = Object.fromEntries(projectFields.filter(field => typeof value?.[field] === 'string')
     .map(field => [field,value[field].trim().slice(0,field === 'project' ? 200 : 500)]));
   if (Array.isArray(value?.payments)) profile.payments = cleanPayments(value.payments);
+  // Giá trị các cột anh tự thêm ở Bảng thống kê (id cột -> chữ)
+  if (value?.custom && typeof value.custom === 'object' && !Array.isArray(value.custom)) {
+    profile.custom = Object.fromEntries(Object.entries(value.custom).filter(([id,v]) => /^c_[a-z0-9]{1,24}$/i.test(id) && typeof v === 'string')
+      .slice(0,60).map(([id,v]) => [id,v.trim().slice(0,500)]));
+  }
   return profile;
+}
+
+// Cấu hình cột của Bảng thống kê dự án (dùng chung mọi máy): thứ tự, độ rộng, ẩn/hiện, tên, cột tự thêm
+const columnTypes = ['text','number','money','date','select','people','check'];
+function cleanTableSchema(value) {
+  const str = (v,max) => String(v ?? '').trim().slice(0,max);
+  const custom = (Array.isArray(value?.custom) ? value.custom : []).slice(0,40)
+    .filter(c => /^c_[a-z0-9]{1,24}$/i.test(c?.id) && columnTypes.includes(c.type) && str(c.label,60))
+    .map(c => ({id:c.id,label:str(c.label,60),type:c.type,options:(Array.isArray(c.options) ? c.options : []).map(o => str(o,40)).filter(Boolean).slice(0,50)}));
+  const columns = (Array.isArray(value?.columns) ? value.columns : []).slice(0,100)
+    .filter(c => /^[a-z0-9_:]{1,40}$/i.test(c?.key))
+    .map(c => ({key:c.key,...(str(c.label,60) ? {label:str(c.label,60)} : {}),...(Number(c.width) ? {width:Math.min(800,Math.max(60,Math.round(Number(c.width))))} : {}),hidden:c.hidden === true}));
+  return {columns,custom};
+}
+
+async function writeTableSchema(store,key,schema,defaultSchedule) {
+  return withScheduleWrite(key,async () => {
+    const data = await store.get(key) || defaultSchedule();
+    data.projectTable = cleanTableSchema(schema);
+    data._version = (data._version || 0)+1;
+    data._updatedAt = new Date().toISOString();
+    await store.put(key,data);
+    return data.projectTable;
+  });
 }
 
 function profileFor(owner,legacy = {}) {
@@ -65,4 +94,4 @@ async function writeProjectProfile(store,key,body,defaultSchedule,legacy) {
   });
 }
 
-module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite,cleanProfile,projectFields};
+module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite,cleanProfile,projectFields,cleanTableSchema,writeTableSchema};
