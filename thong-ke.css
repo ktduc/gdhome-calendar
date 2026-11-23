@@ -1,0 +1,92 @@
+/* Bảng thống kê dự án (/thong-ke) */
+.tk-body { margin: 0; background: #f4f1ec; color: var(--gd-ink, #1e293b); font: 13px/1.4 Roboto, system-ui, sans-serif; }
+.tk-main { padding: 12px 16px 24px; }
+.tk-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.tk-bar input[type=search] { flex: 0 1 230px; min-width: 160px; height: 32px; padding: 0 10px; border: 1px solid #d8d2c8; border-radius: 8px; background: #fff; font: inherit; }
+.tk-views { display: flex; flex-wrap: wrap; gap: 4px; }
+.tk-views button, .tk-mode button { height: 30px; padding: 0 9px; border: 1px solid #d8d2c8; border-radius: 8px; background: #fff; color: #5a4e41; font: 500 12.5px Roboto, sans-serif; cursor: pointer; }
+.tk-views button[aria-selected=true], .tk-mode .is-on { background: #5a4e41; border-color: #5a4e41; color: #fff; }
+.tk-views b { display: inline-block; min-width: 16px; padding: 0 4px; border-radius: 8px; background: #b91c1c; color: #fff; font-size: 11px; }
+.tk-mode { display: flex; gap: 2px; }
+.tk-field { display: flex; align-items: center; gap: 6px; color: #5a4e41; }
+.tk-field select { height: 30px; border: 1px solid #d8d2c8; border-radius: 8px; background: #fff; font: inherit; }
+.tk-cols { position: relative; }
+.tk-cols-menu { position: absolute; z-index: 50; top: calc(100% + 4px); left: 0; display: grid; gap: 4px; min-width: 210px; max-height: 60vh; overflow: auto; padding: 10px;
+  background: #fff; border: 1px solid #d8d2c8; border-radius: 10px; box-shadow: 0 10px 28px rgba(50, 42, 34, .18); }
+.tk-empty { padding: 32px; text-align: center; color: #6f675d; }
+.tk-muted { color: #8a7f72; }
+
+/* Bảng: cuộn ngang trong khung, tiêu đề và cột Dự án đứng yên */
+.tk-wrap { overflow: auto; max-height: calc(100vh - 128px); border: 1px solid #d8d2c8; border-radius: 10px; background: #fff; }
+.tk-table { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+.tk-table th, .tk-table td { padding: 0; border-bottom: 1px solid #ece7df; border-right: 1px solid #f1ede6; vertical-align: middle; white-space: nowrap; }
+.tk-table thead th { position: sticky; top: 0; z-index: 3; padding: 8px 8px; background: #ece7df; color: #5a4e41; font: 600 11.5px Roboto, sans-serif; text-transform: uppercase; letter-spacing: .2px; text-align: left; cursor: pointer; user-select: none; }
+.tk-table thead th:first-child, .tk-table tbody th[scope=row], .tk-table tfoot th { position: sticky; left: 0; z-index: 2; background: inherit; }
+.tk-table thead th:first-child { z-index: 4; background: #ece7df; }
+.tk-table tbody tr { background: #fff; }
+.tk-table tbody th[scope=row] { background: #fff; box-shadow: 1px 0 0 #e2dcd2; }
+.tk-table tbody tr:hover, .tk-table tbody tr:hover th[scope=row] { background: #faf7f2; }
+.tk-table tr.is-late, .tk-table tr.is-late th[scope=row] { background: #fdf0ef; }
+.tk-table tr.is-soon, .tk-table tr.is-soon th[scope=row] { background: #fff8e8; }
+.tk-table tr.is-done, .tk-table tr.is-done th[scope=row] { background: #f4f4f2; color: #8a8a85; }
+.tk-table td > input, .tk-table td > select, .tk-name input { box-sizing: border-box; width: 100%; height: 32px; padding: 0 8px; border: 0; background: transparent; color: inherit; font: inherit; }
+.tk-table td > input:focus, .tk-table td > select:focus, .tk-name input:focus { outline: 2px solid #c9b89f; outline-offset: -2px; background: #fff; }
+.tk-table input::placeholder { color: #9a8f82; font-style: italic; }
+.tk-table select.is-auto { color: #9a8f82; font-style: italic; }
+.tk-table td > input[type=checkbox] { width: 16px; height: 16px; margin: 0 auto; display: block; }
+.tk-table .tk-num { text-align: right; font-variant-numeric: tabular-nums; }
+.tk-col-name { min-width: 230px; }
+.tk-col-text { min-width: 180px; }
+.tk-col-text:nth-child(2) { min-width: 240px; }
+.tk-col-date { width: 128px; }
+.tk-col-people { min-width: 140px; }
+.tk-col-select { min-width: 132px; }
+.tk-col-deadline { min-width: 190px; padding: 0 8px !important; }
+.tk-col-deadlineLabel { min-width: 120px; padding: 0 8px !important; }
+.tk-col-money { min-width: 130px; }
+.tk-col-number { min-width: 96px; }
+.tk-col-check { width: 72px; }
+.tk-col-payments { min-width: 150px; padding: 0 6px !important; }
+.tk-name { display: flex; align-items: center; min-width: 230px; }
+.tk-name input { font-weight: 600; }
+.tk-links { display: flex; gap: 2px; padding-right: 6px; opacity: .55; }
+.tk-links a { text-decoration: none; font-size: 13px; padding: 2px; border-radius: 4px; }
+tr:hover .tk-links { opacity: 1; }
+.tk-deadline { font-variant-numeric: tabular-nums; }
+.tk-left { color: #6f675d; }
+.is-late .tk-left, .is-soon .tk-left { color: #b45309; font-weight: 600; }
+.tk-chip { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 6px; background: #ece7df; color: #5a4e41; font-size: 11.5px; font-weight: 500; }
+.tk-chip.is-late { background: #b91c1c; color: #fff; }
+.tk-pay { height: 26px; padding: 0 8px; border: 1px solid #d8d2c8; border-radius: 6px; background: #fff; color: #5a4e41; font: 12px Roboto, sans-serif; cursor: pointer; }
+.tk-pay.is-due { border-color: #b45309; background: #fff4e0; color: #92400e; font-weight: 600; }
+.tk-group th { position: sticky; left: 0; padding: 6px 10px !important; background: #f4f1ec !important; color: #5a4e41; font-weight: 600; text-align: left; }
+.tk-group small, .tk-sum small { color: #8a7f72; font-weight: 400; }
+.tk-sum th, .tk-sum td { position: sticky; bottom: 0; padding: 7px 8px !important; background: #ece7df !important; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+.tk-sum th { text-align: left; z-index: 3; }
+
+/* Kanban */
+.tk-board { display: flex; gap: 12px; align-items: flex-start; padding: 12px; min-height: 300px; }
+.tk-lane { flex: 0 0 280px; display: grid; gap: 8px; padding: 10px; border-radius: 12px; background: #f4f1ec; }
+.tk-lane h3 { margin: 0 0 2px; font-size: 13px; color: #5a4e41; }
+.tk-lane h3 small { color: #8a7f72; font-weight: 400; }
+.tk-card { display: grid; gap: 4px; padding: 10px; border: 1px solid #e2dcd2; border-radius: 10px; background: #fff; cursor: grab; }
+.tk-card a { color: inherit; text-decoration: none; }
+.tk-card small { color: #6f675d; white-space: normal; }
+.tk-card.is-late { border-color: #e7b3ae; background: #fdf0ef; }
+.tk-card.is-soon { border-color: #f0d49b; background: #fff8e8; }
+
+/* Hộp thoại nhập */
+.tk-dialog { width: min(560px, 94vw); max-height: 90vh; overflow: auto; padding: 18px; box-sizing: border-box; }
+.tk-dialog.is-wide { width: min(980px, 94vw); }
+.tk-dialog h2 { margin: 0 0 12px; }
+.tk-dialog h3 { margin: 14px 0 6px; font-size: 14px; }
+.tk-contract-src { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.tk-contract-src textarea { flex: 1 0 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #d8d2c8; border-radius: 8px; font: 12.5px/1.45 Roboto, sans-serif; resize: vertical; }
+.tk-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px 12px; margin-top: 12px; }
+.tk-grid label { display: grid; gap: 3px; font-size: 12px; color: #5a4e41; }
+.tk-grid input, .tk-grid select, .tk-mini input, .tk-mini select { box-sizing: border-box; width: 100%; height: 30px; padding: 0 8px; border: 1px solid #d8d2c8; border-radius: 7px; background: #fff; font: 13px Roboto, sans-serif; }
+.tk-mini { width: 100%; border-collapse: collapse; }
+.tk-mini th, .tk-mini td { padding: 4px 6px; border-bottom: 1px solid #ece7df; text-align: left; font-size: 12.5px; }
+.tk-x { width: 26px; height: 26px; border: 0; border-radius: 6px; background: transparent; color: #8a7f72; font-size: 18px; cursor: pointer; }
+.tk-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 14px; }
+.tk-csv-list { max-height: 46vh; overflow: auto; margin: 10px 0; border: 1px solid #ece7df; border-radius: 8px; }

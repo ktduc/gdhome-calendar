@@ -6,7 +6,8 @@ const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 // Tên file từ header có thể đã mã hoá %xx hoặc là chữ thường có dấu % ("100%.pdf"): giải mã được thì giải, không thì giữ nguyên
 const safeDecode = value => { try { return decodeURIComponent(value); } catch { return value; } };
 const fontkit = require('@pdf-lib/fontkit');
-const { projectList, writeProjectProfile } = require('./project-profiles');
+const { projectList, writeProjectProfile, withScheduleWrite } = require('./project-profiles');
+const { projectRow, projectTasks, designFeeAfterDiscount } = require('./project-table');
 const {
   resolveAi,
   loadUserCfg,
@@ -178,7 +179,7 @@ class ProjectAssets {
 
 function calculateProjectStats(projectId, scheduleData, materialsData, hubRecord) {
   // 1. Tiến độ
-  const tasks = (scheduleData?.tasks || []).filter(t => t.ownerId === projectId);
+  const tasks = projectTasks(projectId, scheduleData);   // việc thuộc dự án qua giai đoạn (calendar.ownerId), việc không có ownerId
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter(t => (t.progress || 0) >= 100).length;
   const percentComplete = totalTasks > 0
@@ -1458,11 +1459,14 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     const projects = rawProjects.map(p => {
       const hubRecord = hub.projects?.[p.id] || defaultProjectRecord(p.id);
       const stats = calculateProjectStats(p.id, schedule, materials, hubRecord);
+      const auto = projectRow(p, schedule);
+      auto.feeDue = p.profile.constructionSignedAt ? designFeeAfterDiscount(p.profile.designValue, p.profile.constructionValue) : null;
       return {
         id: p.id,
         name: p.name,
         profile: p.profile,
         stats,
+        auto,
         updatedAt: hubRecord.updatedAt
       };
     });
@@ -1534,6 +1538,46 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
     await hubStore.saveProject(result.project.id, record);
 
     return sendJson(res, 200, { success: true, project: result.project });
+  }
+
+  // 4a. Áp dụng HĐTK: ghi hồ sơ + đợt thanh toán, tạo giai đoạn "THIẾT KẾ" với các mốc (ngày đã tính ở trình duyệt theo ngày làm việc)
+  if (urlPath === '/api/project-hub/contract/apply' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const isDate = value => /^\d{4}-\d{2}-\d{2}$/.test(String(value || ''));
+    const tasks = (Array.isArray(body?.tasks) ? body.tasks : []).slice(0, 20)
+      .filter(task => task && isDate(task.startDate) && isDate(task.endDate) && task.startDate <= task.endDate && String(task.title || '').trim());
+    if (!body?.profile || typeof body.profile !== 'object') return sendJson(res, 400, { success: false, message: 'Thiếu hồ sơ dự án.' });
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const legacy = (await store.get(matKey)) || {};
+    const profile = { ...body.profile, payments: Array.isArray(body.payments) ? body.payments : undefined };
+    if (!profile.buildingType) profile.buildingType = guessBuildingType(profile.project, profile.address);
+    const result = await writeProjectProfile(store, dataKey, { projectId: body.projectId, create: !body.projectId, profile }, defaultSchedule, legacy);
+    let added = 0;
+    if (tasks.length) await withScheduleWrite(dataKey, async () => {
+      const data = (await store.get(dataKey)) || defaultSchedule();
+      const ownerId = result.project.id;
+      data.calendars ||= [];
+      data.tasks ||= [];
+      let calendar = data.calendars.find(cal => cal.ownerId === ownerId && /THIẾT KẾ/i.test(cal.name || ''));
+      if (!calendar) {
+        calendar = { id: 'cal_' + crypto.randomUUID(), ownerId, name: 'THIẾT KẾ', visible: true, color: '#cc0000' };
+        data.calendars.push(calendar);
+      }
+      const colors = { layout: '#7b1fa2', '3d': '#cc0000', edit3d: '#f57c00', hskt: '#2e7d32' };
+      let previous = null;
+      for (const task of tasks) {
+        const entry = { id: 'task_' + crypto.randomUUID(), calendarId: calendar.id, title: String(task.title).trim().slice(0, 200),
+          startDate: task.startDate, endDate: task.endDate, color: colors[task.kind] || '#0288d1', skipSundays: true, showCount: true,
+          progress: 0, note: 'Theo HĐTK', assignee: String(task.assignee || '').slice(0, 200), predecessors: previous ? [{ id: previous, type: 'FS' }] : [] };
+        data.tasks.push(entry);
+        previous = entry.id;
+        added++;
+      }
+      data._version = (data._version || 0) + 1;
+      data._updatedAt = new Date().toISOString();
+      await store.put(dataKey, data);
+    });
+    return sendJson(res, 200, { success: true, project: result.project, tasksAdded: added });
   }
 
   // 4b. GĐ18B.3: Tự điền Hồ sơ dự án từ Notion + tệp hợp đồng/báo giá (AI)

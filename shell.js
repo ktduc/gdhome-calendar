@@ -50,7 +50,7 @@ window.GDHomeShell = (() => {
 
   function menu(element) {
     if (!element) return;
-    const links = [['/','Lập tiến độ'],['/chot-ma','Chốt mã vật liệu'],['/du-an','Quản lý dự án'],['/giao-viec','Giao việc · Nhà thầu'],['/so-sanh','Bảng so sánh'],['/tools','Trang chủ']];
+    const links = [['/','Lập tiến độ'],['/chot-ma','Chốt mã vật liệu'],['/du-an','Quản lý dự án'],['/thong-ke','Bảng thống kê dự án'],['/giao-viec','Giao việc · Nhà thầu'],['/so-sanh','Bảng so sánh'],['/tools','Trang chủ']];
     element.onkeydown = event => {
       if (event.key === 'Escape' && element.open) { element.open = false; element.querySelector('summary').focus(); event.stopPropagation(); }
     };

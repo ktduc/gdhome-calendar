@@ -1,0 +1,513 @@
+// Bảng thống kê dự án (/thong-ke): mỗi dự án 1 dòng như bảng Notion cũ, sửa thẳng trên ô.
+// Ô để trống thì hiện giá trị "tự" (chữ xám) lấy từ Lịch / Chốt mã do server tính (project-table.js).
+// Nhập: hợp đồng thiết kế (Word / dán chữ, contract-parse.js) và bảng Notion xuất CSV.
+(() => {
+  const esc = value => GDHomeShell.escape(value ?? '');
+  const byId = id => document.getElementById(id);
+  const api = (url, body) => GDHomeShell.api(url, body ? {method: 'POST', body} : {});
+  const toast = message => GDHomeShell.toast(message);
+  const PREF_KEY = 'gdhome-thong-ke-v1';
+  const STAGES = ['Thiết kế', 'Thi công', 'Hoàn thành', 'Tạm dừng'];
+  const STATUS3D = ['Chưa làm', 'Đang triển khai', 'Chờ phản hồi', 'Xong lần 1', 'Xong lần 2', 'Xong lần 3', 'Đang chỉnh sửa', 'Đã chốt'];
+  const STATUS_HSKT = ['Chưa làm', 'Đang triển khai', 'Đã gửi', 'Đang chỉnh sửa', 'Đã chốt'];
+  const MATERIALS = ['Chưa làm', 'Đang làm', 'Xong'];
+  // Cột của bảng. auto(p) = giá trị tự tính khi ô tay để trống.
+  const COLS = [
+    {key: 'project', label: 'Dự án', type: 'name'},
+    {key: 'address', label: 'Vị trí', type: 'text'},
+    {key: 'phone', label: 'SĐT', type: 'text'},
+    {key: 'signedAt', label: 'Ngày ký HĐTK', type: 'date'},
+    {key: 'designer3d', label: 'Triển khai 3D', type: 'people', auto: p => p.auto?.designer3d},
+    {key: 'status3d', label: 'Trạng thái 3D', type: 'select', options: STATUS3D, auto: p => p.auto?.status3d},
+    {key: 'designerHskt', label: 'Triển khai HSKT', type: 'people', auto: p => p.auto?.designerHskt},
+    {key: 'statusHskt', label: 'Trạng thái HSKT', type: 'select', options: STATUS_HSKT, auto: p => p.auto?.statusHskt},
+    {key: 'deadline', label: 'Deadline sắp tới', type: 'deadline', readonly: true},
+    {key: 'deadlineLabel', label: 'ND deadline', type: 'deadlineLabel', readonly: true},
+    {key: 'stage', label: 'Trạng thái', type: 'select', options: STAGES, auto: p => p.profile.constructionSignedAt ? 'Thi công' : 'Thiết kế'},
+    {key: 'materialsStatus', label: 'Mã VL', type: 'select', options: MATERIALS, auto: p => materialsAuto(p)},
+    {key: 'constructionSignedAt', label: 'Ngày ký HĐTC', type: 'date'},
+    {key: 'furnishAt', label: 'Ngày lên đồ', type: 'date'},
+    {key: 'supervisor', label: 'Giám sát', type: 'people'},
+    {key: 'contractor', label: 'Thầu thi công', type: 'people'},
+    {key: 'checkDo', label: 'Check đồ', type: 'check'},
+    {key: 'area', label: 'Diện tích m²', type: 'number', sum: true},
+    {key: 'designPrice', label: 'Đơn giá TK', type: 'money'},
+    {key: 'designValue', label: 'Giá trị HĐTK', type: 'money', sum: true, auto: p => designValueAuto(p)},
+    {key: 'constructionValue', label: 'Giá trị thi công ƯT', type: 'money', sum: true},
+    {key: 'payments', label: 'Thanh toán', type: 'payments', readonly: true},
+    {key: 'customer', label: 'Khách / Bên A', type: 'text', hidden: true},
+    {key: 'contractNo', label: 'Số HĐ', type: 'text', hidden: true},
+    {key: 'email', label: 'Email', type: 'text', hidden: true},
+    {key: 'note', label: 'Ghi chú', type: 'text', hidden: true},
+  ];
+  const VIEWS = [
+    ['all', 'Tất cả'], ['design', 'Đang thiết kế'], ['build', 'Thi công'], ['soon', 'Deadline 7 ngày'],
+    ['late', 'Trễ hạn'], ['pay', 'Chờ thu tiền'], ['done', 'Hoàn thành'],
+  ];
+  let projects = [], prefs = {view: 'all', group: '', mode: 'table', hidden: null, sort: null};
+  try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF_KEY)) || {}); } catch { /* trình duyệt chặn bộ nhớ: dùng mặc định */ }
+  prefs.hidden ||= COLS.filter(col => col.hidden).map(col => col.key);
+  const remember = () => { try { localStorage.setItem(PREF_KEY, JSON.stringify(prefs)); } catch { /* bỏ qua */ } };
+
+  // ------------------------------------------------------------ giá trị
+  const num = value => Number(String(value ?? '').replace(/[^\d.]/g, '')) || 0;
+  const fmtMoney = value => value === '' || value == null ? '' : Math.round(num(value)).toLocaleString('vi-VN');
+  const fmtDate = iso => iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : '';
+  function materialsAuto(p) {
+    const m = p.stats?.materials;
+    if (!m?.totalRows) return '';
+    return m.confirmedRows >= m.totalRows ? 'Xong' : m.confirmedRows ? 'Đang làm' : 'Chưa làm';
+  }
+  function designValueAuto(p) {
+    const {area, designPrice, vat} = p.profile;
+    return area && designPrice ? String(Math.round(num(area) * num(designPrice) * (1 + (Number(vat) || 0) / 100))) : '';
+  }
+  const colOf = key => COLS.find(col => col.key === key);
+  function val(p, key) {
+    if (key === 'project') return p.name;
+    if (key === 'deadline') return p.auto?.deadline?.end || '';
+    if (key === 'deadlineLabel') return p.auto?.deadline?.label || '';
+    const manual = p.profile[key];
+    if (manual) return manual;
+    return colOf(key)?.auto?.(p) || '';
+  }
+  function paymentDue(p, pay) {
+    if (pay.paidAt || !num(pay.amount)) return false;
+    const m = pay.milestone || pay.label || '', s3 = val(p, 'status3d'), sh = val(p, 'statusHskt');
+    if (/ký/i.test(m)) return true;
+    if (/3D/i.test(m)) return s3 === 'Đã chốt' || ['Đang triển khai', 'Đã gửi', 'Đang chỉnh sửa', 'Đã chốt'].includes(sh);
+    if (/HSKT|kỹ thuật/i.test(m)) return ['Đã gửi', 'Đã chốt'].includes(sh);
+    return false;
+  }
+  const duePayments = p => (p.profile.payments || []).filter(pay => paymentDue(p, pay));
+  const daysLeft = p => p.auto?.deadline ? p.auto.deadline.daysLeft : null;
+
+  function visible() {
+    const q = byId('tk-search').value.trim().toLowerCase();
+    let list = projects.filter(p => {
+      const stage = val(p, 'stage');
+      switch (prefs.view) {
+        case 'design': return stage === 'Thiết kế';
+        case 'build': return stage === 'Thi công';
+        case 'soon': return daysLeft(p) !== null && daysLeft(p) <= 7;
+        case 'late': return p.auto?.overdue?.length > 0;
+        case 'pay': return duePayments(p).length > 0;
+        case 'done': return stage === 'Hoàn thành';
+        default: return true;
+      }
+    });
+    if (q) list = list.filter(p => [p.name, ...Object.values(p.profile).filter(v => typeof v === 'string'), p.auto?.designer3d, p.auto?.designerHskt]
+      .join(' ').toLowerCase().includes(q));
+    const sort = prefs.sort || {key: 'deadline', dir: 1};
+    const col = colOf(sort.key);
+    const key = p => {
+      const v = val(p, sort.key);
+      if (col && ['number', 'money'].includes(col.type)) return num(v);
+      return String(v || '').toLowerCase();
+    };
+    return list.sort((a, b) => {
+      const x = key(a), y = key(b);
+      if (x === '' || x === 0) return y === '' || y === 0 ? 0 : 1;   // ô trống luôn xuống cuối
+      if (y === '' || y === 0) return -1;
+      return (x > y ? 1 : x < y ? -1 : 0) * sort.dir;
+    });
+  }
+  function groupKeys(p) {
+    const v = val(p, prefs.group);
+    const keys = colOf(prefs.group)?.type === 'people' ? String(v).split(',').map(s => s.trim()).filter(Boolean) : [v];
+    return keys.length && keys[0] ? keys : ['(trống)'];
+  }
+
+  // ------------------------------------------------------------ vẽ bảng
+  function cell(p, col) {
+    const v = p.profile[col.key] ?? '', auto = col.auto?.(p) || '', f = `data-id="${esc(p.id)}" data-f="${col.key}"`;
+    switch (col.type) {
+      case 'name':
+        return `<div class="tk-name"><input ${f} value="${esc(p.name)}" aria-label="Tên dự án">
+          <span class="tk-links"><a href="/du-an?project=${encodeURIComponent(p.id)}" title="Hồ sơ dự án">📁</a><a href="/?project=${encodeURIComponent(p.id)}" title="Lịch tiến độ">📅</a><a href="/chot-ma?project=${encodeURIComponent(p.id)}" title="Chốt mã">🏷</a></span></div>`;
+      case 'date': return `<input type="date" ${f} value="${esc(v)}">`;
+      case 'check': return `<input type="checkbox" ${f} ${v ? 'checked' : ''} aria-label="${esc(col.label)}">`;
+      case 'number': return `<input class="tk-num" inputmode="decimal" ${f} value="${esc(v ? String(v).replace('.', ',') : '')}" placeholder="${esc(auto)}">`;
+      case 'money': return `<input class="tk-num" inputmode="numeric" ${f} value="${esc(fmtMoney(v || ''))}" placeholder="${esc(fmtMoney(auto))}">`;
+      case 'select': {
+        const options = [...new Set([...col.options, v].filter(Boolean))];
+        return `<select ${f} class="${v ? '' : 'is-auto'}" data-tone="${esc(v || auto)}"><option value="">${auto ? 'tự: ' + esc(auto) : '—'}</option>` +
+          options.map(o => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
+      }
+      case 'people': return `<input ${f} list="tk-people" value="${esc(v)}" placeholder="${esc(auto)}">`;
+      case 'deadline': {
+        const d = p.auto?.deadline, late = p.auto?.overdue || [];
+        const lateChip = late.length ? `<span class="tk-chip is-late" title="${esc(late.map(t => t.label + ' ' + fmtDate(t.end)).join('\n'))}">Trễ ${late.length}</span>` : '';
+        if (!d) return lateChip || '<span class="tk-muted">—</span>';
+        const left = d.daysLeft === 0 ? 'hôm nay' : 'còn ' + d.daysLeft + ' ngày';
+        return `<span class="tk-deadline">${fmtDate(d.start)}${d.start !== d.end ? ' → ' + fmtDate(d.end) : ''}</span> <small class="tk-left">${left}</small>${lateChip}`;
+      }
+      case 'deadlineLabel': return p.auto?.deadline ? `<span class="tk-chip">${esc(p.auto.deadline.label)}</span>` : '';
+      case 'payments': {
+        const list = p.profile.payments || [], paid = list.filter(x => x.paidAt).length, due = duePayments(p);
+        if (!list.length) return `<button type="button" class="tk-pay" data-pay="${esc(p.id)}">+ đợt</button>`;
+        return `<button type="button" class="tk-pay${due.length ? ' is-due' : ''}" data-pay="${esc(p.id)}" title="${esc(list.map(x => x.label + ': ' + fmtMoney(x.amount) + (x.paidAt ? ' ✓ ' + fmtDate(x.paidAt) : '')).join('\n'))}">${paid}/${list.length} đợt${due.length ? ' · chờ thu ' + fmtMoney(due.reduce((s, x) => s + num(x.amount), 0)) : ''}</button>`;
+      }
+      default: return `<input ${f} value="${esc(v)}" placeholder="${esc(auto)}">`;
+    }
+  }
+  function rowClass(p) {
+    const left = daysLeft(p), stage = val(p, 'stage');
+    if (stage === 'Hoàn thành' || stage === 'Tạm dừng') return 'is-done';
+    if (p.auto?.overdue?.length) return 'is-late';
+    if (left !== null && left <= 2) return 'is-soon';
+    return '';
+  }
+  const cols = () => COLS.filter(col => !prefs.hidden.includes(col.key));
+  const sums = list => cols().map(col => col.sum ? list.reduce((s, p) => s + num(val(p, col.key)), 0) : null);
+  function sumRow(list, label) {
+    return `<tr class="tk-sum"><th>${esc(label)} <small>${list.length} dự án</small></th>` +
+      sums(list).slice(1).map((s, i) => `<td>${s === null ? '' : (cols()[i + 1].type === 'money' ? fmtMoney(s) : s.toLocaleString('vi-VN'))}</td>`).join('') + '</tr>';
+  }
+  function renderTable(list) {
+    const sort = prefs.sort || {key: 'deadline', dir: 1};
+    const head = '<thead><tr>' + cols().map(col => `<th data-sort="${col.key}" class="tk-col-${col.type}">${esc(col.label)}${sort.key === col.key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}</th>`).join('') + '</tr></thead>';
+    const row = p => `<tr class="${rowClass(p)}" data-row="${esc(p.id)}">` + cols().map((col, i) => i ? `<td class="tk-col-${col.type}">${cell(p, col)}</td>` : `<th scope="row">${cell(p, col)}</th>`).join('') + '</tr>';
+    let body;
+    if (prefs.group) {
+      const groups = new Map();
+      for (const p of list) for (const k of groupKeys(p)) (groups.get(k) || groups.set(k, []).get(k)).push(p);
+      const order = colOf(prefs.group)?.options || [];
+      const keys = [...groups.keys()].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b, 'vi'));
+      body = keys.map(k => `<tbody><tr class="tk-group"><th colspan="${cols().length}">${esc(k)} <small>${groups.get(k).length}</small></th></tr>${groups.get(k).map(row).join('')}</tbody>`).join('');
+    } else body = '<tbody>' + list.map(row).join('') + '</tbody>';
+    byId('tk-wrap').innerHTML = `<table class="tk-table">${head}${body}<tfoot>${sumRow(list, 'Tổng')}</tfoot></table>` +
+      (list.length ? '' : '<p class="tk-empty">Không có dự án nào trong chế độ xem này.</p>');
+  }
+  function renderBoard(list) {
+    const field = ['stage', 'status3d', 'statusHskt'].includes(prefs.group) ? prefs.group : 'stage';
+    const col = colOf(field);
+    const lanes = [...new Set([...col.options, ...list.map(p => val(p, field)).filter(Boolean)])];
+    const card = p => `<article class="tk-card ${rowClass(p)}" draggable="true" data-row="${esc(p.id)}">
+      <a href="/du-an?project=${encodeURIComponent(p.id)}"><strong>${esc(p.name)}</strong></a>
+      <small>${esc(p.profile.address || '')}</small>
+      <div>${cell(p, colOf('deadline'))} ${cell(p, colOf('deadlineLabel'))}</div>
+      <small>${esc([val(p, 'designer3d'), val(p, 'designerHskt')].filter(Boolean).join(' · '))}</small></article>`;
+    byId('tk-wrap').innerHTML = `<div class="tk-board" data-field="${field}">` + ['', ...lanes].map(lane => {
+      const items = list.filter(p => (val(p, field) || '') === lane);
+      if (!lane && !items.length) return '';
+      return `<section class="tk-lane" data-lane="${esc(lane)}"><h3>${esc(lane || '(trống)')} <small>${items.length}</small></h3>${items.map(card).join('')}</section>`;
+    }).join('') + '</div>';
+  }
+  function render() {
+    byId('tk-views').innerHTML = VIEWS.map(([id, label]) => {
+      const count = id === 'late' ? projects.filter(p => p.auto?.overdue?.length).length : id === 'pay' ? projects.filter(p => duePayments(p).length).length : 0;
+      return `<button type="button" role="tab" aria-selected="${prefs.view === id}" data-view="${id}">${label}${count ? ` <b>${count}</b>` : ''}</button>`;
+    }).join('');
+    byId('tk-group').value = prefs.group;
+    document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('is-on', b.dataset.mode === prefs.mode));
+    byId('tk-cols').innerHTML = COLS.slice(1).map(col => `<label><input type="checkbox" value="${col.key}" ${prefs.hidden.includes(col.key) ? '' : 'checked'}> ${esc(col.label)}</label>`).join('');
+    const people = [...new Set(projects.flatMap(p => ['designer3d', 'designerHskt', 'supervisor', 'contractor'].flatMap(k => String(val(p, k)).split(',').map(s => s.trim()))).filter(Boolean))].sort();
+    (byId('tk-people') || document.body.appendChild(Object.assign(document.createElement('datalist'), {id: 'tk-people'}))).innerHTML = people.map(n => `<option value="${esc(n)}">`).join('');
+    const list = visible();
+    if (prefs.mode === 'board') renderBoard(list); else renderTable(list);
+  }
+
+  // ------------------------------------------------------------ lưu
+  async function saveProfile(id, patch, {create = false} = {}) {
+    const status = byId('save-status');
+    GDHomeShell.saveStatus(status, 'saving');
+    try {
+      const result = await api('/api/projects', create ? {create: true, profile: patch} : {projectId: id, profile: patch});
+      GDHomeShell.saveStatus(status, 'saved');
+      return result.project;
+    } catch (error) {
+      GDHomeShell.saveStatus(status, 'error', error.message);
+      toast('Không lưu được: ' + error.message);
+      throw error;
+    }
+  }
+  async function saveField(id, field, value) {
+    const p = projects.find(x => x.id === id);
+    if (!p) return;
+    const project = await saveProfile(id, {[field]: value});
+    p.profile = project.profile;
+    p.name = project.name;
+    render();
+  }
+  function readInput(input) {
+    const col = colOf(input.dataset.f);
+    if (col.type === 'check') return input.checked ? '1' : '';
+    if (col.type === 'money') return input.value.replace(/[^\d]/g, '');
+    if (col.type === 'number') { const n = parseFloat(input.value.replace(/\./g, '').replace(',', '.')); return Number.isFinite(n) ? String(n) : ''; }
+    if (col.type === 'people') return input.value.split(',').map(s => s.trim()).filter(Boolean).join(', ');
+    return input.value.trim();
+  }
+
+  // ------------------------------------------------------------ hộp thoại dùng chung
+  function openDialog(title, body, wide = true) {
+    const dialog = document.createElement('dialog');
+    dialog.className = 'tk-dialog' + (wide ? ' is-wide' : '');
+    document.body.append(dialog);
+    GDHomeShell.dialog(dialog, `<h2>${esc(title)}</h2>${body}`);
+    dialog.addEventListener('close', () => dialog.remove(), {once: true});
+    dialog.showModal();
+    return dialog;
+  }
+
+  // Thanh toán theo đợt
+  function openPayments(id) {
+    const p = projects.find(x => x.id === id);
+    const list = (p.profile.payments || []).map(x => ({...x}));
+    const dialog = openDialog('Thanh toán · ' + p.name, '<form class="tk-pay-form"><table class="tk-mini"><thead><tr><th>Đợt</th><th>Mốc</th><th>Số tiền</th><th>Ngày thu</th><th></th></tr></thead><tbody></tbody></table>' +
+      '<p><button type="button" class="btn btn-outline btn-sm" data-add>+ Thêm đợt</button></p><div class="tk-actions"><button class="btn btn-primary">Lưu</button></div></form>', false);
+    const tbody = dialog.querySelector('tbody'), form = dialog.querySelector('form');
+    const paint = () => { tbody.innerHTML = list.map((x, i) => `<tr data-i="${i}"><td><input name="label" value="${esc(x.label)}"></td><td><select name="milestone">${['Ký hợp đồng', 'Chốt 3D', 'Giao HSKT', 'Khác'].map(m => `<option${m === x.milestone ? ' selected' : ''}>${m}</option>`).join('')}</select></td>` +
+      `<td><input name="amount" class="tk-num" value="${esc(fmtMoney(x.amount))}"></td><td><input type="date" name="paidAt" value="${esc(x.paidAt)}"></td><td><button type="button" class="tk-x" data-del="${i}" aria-label="Xoá đợt">×</button></td></tr>`).join(''); };
+    paint();
+    form.oninput = e => { const tr = e.target.closest('tr[data-i]'); if (tr) list[tr.dataset.i][e.target.name] = e.target.name === 'amount' ? e.target.value.replace(/[^\d]/g, '') : e.target.value; };
+    form.onclick = e => {
+      if (e.target.matches('[data-add]')) { list.push({label: 'Đợt ' + (list.length + 1), milestone: 'Khác', amount: '', paidAt: ''}); paint(); }
+      if (e.target.dataset.del) { list.splice(Number(e.target.dataset.del), 1); paint(); }
+    };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      await saveField(id, 'payments', list);
+      dialog.close();
+    };
+  }
+
+  // ------------------------------------------------------------ nhập HĐTK
+  const norm = s => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]/g, '');
+  function matchProject(profile) {
+    const phone = norm(profile.phone), name = norm(String(profile.customer || '').replace(/^(anh|chị|ông|bà)\s+/i, ''));
+    return projects.find(p => phone && norm(p.profile.phone) === phone)
+      || projects.find(p => name.length > 4 && (norm(p.name).includes(name) || norm(p.profile.customer).includes(name)));
+  }
+  function milestoneDates(milestones, start, name) {
+    let from = start, out = [];
+    for (const m of milestones) {
+      const s = out.length ? getNextWorkingDateStr(out[out.length - 1].endDate, true) : from;
+      out.push({kind: m.kind, days: m.days, title: m.prefix + ' - ' + name.toUpperCase(), startDate: s, endDate: computeEndDateByWorkingDays(s, m.days, true)});
+    }
+    return out;
+  }
+  const CONTRACT_FIELDS = [['customer', 'Khách / Bên A'], ['representative', 'Người đại diện'], ['phone', 'SĐT'], ['email', 'Email'], ['taxCode', 'Mã số thuế'],
+    ['contractNo', 'Số HĐ'], ['signedAt', 'Ngày ký', 'date'], ['address', 'Vị trí công trình'], ['customerAddress', 'Địa chỉ Bên A'], ['area', 'Diện tích m²'],
+    ['designPrice', 'Đơn giá TK'], ['vat', 'VAT %'], ['designValue', 'Giá trị HĐTK'], ['note', 'Ghi chú']];
+  function openContract() {
+    const dialog = openDialog('Nhập hợp đồng thiết kế', `<div class="tk-contract-src">
+      <button type="button" class="btn btn-outline" data-pick>📄 Chọn file Word (.docx)</button>
+      <span class="tk-muted">hoặc dán đoạn chữ hợp đồng (Ctrl+V) rồi bấm Đọc</span>
+      <textarea rows="5" placeholder="Dán nội dung hợp đồng vào đây…"></textarea>
+      <button type="button" class="btn btn-primary btn-sm" data-read>Đọc hợp đồng</button></div><div class="tk-contract-out"></div>`);
+    const out = dialog.querySelector('.tk-contract-out'), area = dialog.querySelector('textarea');
+    const show = text => {
+      const parsed = GDHomeContract.parseContract(text);
+      if (!parsed.profile.customer && !parsed.profile.contractNo) { out.innerHTML = '<p class="tk-muted">Không nhận ra hợp đồng theo mẫu GD HOME. Kiểm tra lại đoạn chữ.</p>'; return; }
+      renderContractForm(out, parsed, dialog);
+    };
+    const input = byId('tk-file-docx');
+    dialog.querySelector('[data-pick]').onclick = () => { input.value = ''; input.click(); };
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      try { show(await GDHomeContract.docxText(await file.arrayBuffer())); } catch (error) { out.innerHTML = `<p class="tk-muted">${esc(error.message)}</p>`; }
+    };
+    dialog.querySelector('[data-read]').onclick = () => show(area.value);
+    area.addEventListener('paste', () => setTimeout(() => area.value.length > 200 && show(area.value)));
+  }
+  function renderContractForm(out, {profile, payments, milestones}, dialog) {
+    const match = matchProject(profile);
+    const name = match?.name || profile.customer || '';
+    out.innerHTML = `<form class="tk-contract-form">
+      <div class="tk-grid"><label>Dự án<select name="target"><option value="">+ Tạo dự án mới</option>${projects.map(p => `<option value="${esc(p.id)}"${p === match ? ' selected' : ''}>${esc(p.name)}</option>`).join('')}</select></label>
+      <label>Tên dự án<input name="project" value="${esc(name)}" required></label>
+      ${CONTRACT_FIELDS.map(([k, label, type]) => `<label>${label}<input name="${k}" ${type === 'date' ? 'type="date"' : ''} value="${esc(['designPrice', 'designValue'].includes(k) ? fmtMoney(profile[k] || '') : profile[k] || '')}"></label>`).join('')}</div>
+      <h3>Thanh toán</h3><table class="tk-mini"><tbody>${payments.map((x, i) => `<tr><td>${esc(x.label)}</td><td><input class="tk-num" data-pay="${i}" value="${esc(fmtMoney(x.amount))}"></td></tr>`).join('') || '<tr><td class="tk-muted">Không thấy các đợt thanh toán.</td></tr>'}</tbody></table>
+      <h3><label><input type="checkbox" name="makeTasks" ${milestones.length && !(match?.auto?.taskCount) ? 'checked' : ''} ${milestones.length ? '' : 'disabled'}> Tạo mốc tiến độ trên Lịch (giai đoạn THIẾT KẾ)</label></h3>
+      <div class="tk-grid"><label>Người làm 3D<input name="who3d" list="tk-people"></label><label>Người làm HSKT<input name="whoHskt" list="tk-people"></label></div>
+      <table class="tk-mini tk-ms"><thead><tr><th>Việc</th><th>Ngày LV</th><th>Bắt đầu</th><th>Kết thúc</th></tr></thead><tbody></tbody></table>
+      ${match?.auto?.taskCount ? '<p class="tk-muted">Dự án này đã có ' + match.auto.taskCount + ' việc trên Lịch – bỏ chọn nếu không muốn thêm mốc.</p>' : ''}
+      <div class="tk-actions"><button class="btn btn-primary">Lưu vào dự án</button></div></form>`;
+    const form = out.querySelector('form'), msBody = form.querySelector('.tk-ms tbody');
+    let rows = [];
+    const paintMs = () => {
+      const start = form.elements.signedAt.value || new Date().toISOString().slice(0, 10);
+      rows = milestoneDates(milestones, start, form.elements.project.value || 'DỰ ÁN');
+      msBody.innerHTML = rows.map(r => `<tr><td>${esc(r.title)}</td><td>${r.days}</td><td>${fmtDate(r.startDate)}</td><td>${fmtDate(r.endDate)}</td></tr>`).join('');
+    };
+    paintMs();
+    form.elements.signedAt.onchange = paintMs;
+    form.elements.project.oninput = paintMs;
+    form.elements.target.onchange = () => { const p = projects.find(x => x.id === form.elements.target.value); if (p) form.elements.project.value = p.name; paintMs(); };
+    form.onsubmit = async e => {
+      e.preventDefault();
+      const f = form.elements, patch = {project: f.project.value.trim()};
+      for (const [k] of CONTRACT_FIELDS) { const v = f[k].value.trim(); if (v) patch[k] = ['designPrice', 'designValue'].includes(k) ? v.replace(/[^\d]/g, '') : v; }
+      const pays = payments.map((x, i) => ({...x, amount: form.querySelector(`[data-pay="${i}"]`).value.replace(/[^\d]/g, '')}));
+      const tasks = f.makeTasks?.checked ? rows.map(r => ({...r, assignee: r.kind === 'hskt' ? f.whoHskt.value : f.who3d.value})) : [];
+      const button = form.querySelector('.tk-actions button');
+      button.disabled = true;
+      try {
+        const res = await api('/api/project-hub/contract/apply', {projectId: f.target.value || undefined, profile: patch, payments: pays, tasks});
+        toast(`Đã lưu "${res.project.name}"` + (res.tasksAdded ? ` và tạo ${res.tasksAdded} mốc trên Lịch.` : '.'));
+        dialog.close();
+        await load();
+      } catch (error) { toast(error.message); button.disabled = false; }
+    };
+  }
+
+  // ------------------------------------------------------------ nhập CSV Notion
+  function parseCsv(text) {
+    const rows = [[]];
+    let field = '', quoted = false;
+    text = text.replace(/^﻿/, '');
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quoted) {
+        if (c === '"' && text[i + 1] === '"') { field += '"'; i++; } else if (c === '"') quoted = false; else field += c;
+      } else if (c === '"') quoted = true;
+      else if (c === ',') { rows[rows.length - 1].push(field); field = ''; }
+      else if (c === '\n' || c === '\r') { if (c === '\r' && text[i + 1] === '\n') i++; rows[rows.length - 1].push(field); field = ''; rows.push([]); }
+      else field += c;
+    }
+    rows[rows.length - 1].push(field);
+    return rows.filter(r => r.some(x => x.trim()));
+  }
+  const CSV_MAP = {duan: 'project', ten: 'project', name: 'project', vitri: 'address', diachi: 'address', phone: 'phone', sdt: 'phone', sodienthoai: 'phone',
+    ngaykihdtk: 'signedAt', ngaykyhdtk: 'signedAt', ngayki: 'signedAt', ngayky: 'signedAt', trienkhai3d: 'designer3d', trangthai3d: 'status3d',
+    trienkhaihskt: 'designerHskt', trangthaihskt: 'statusHskt', ngaykihdtc: 'constructionSignedAt', ngaykyhdtc: 'constructionSignedAt', ngaylendo: 'furnishAt',
+    giamsat: 'supervisor', trangthai: 'stage', mavl: 'materialsStatus', thauthicong: 'contractor', checkdo: 'checkDo', dientich: 'area',
+    giatrihd: 'constructionValue', giatrithicong: 'constructionValue', dongiatk: 'designPrice', dongia: 'designPrice', ghichu: 'note', khachhang: 'customer', email: 'email'};
+  const MONTHS = {january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12};
+  function csvDate(v) {
+    const first = String(v).split('→')[0].trim();
+    let m = first.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[0];
+    m = first.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if (m) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    m = first.match(/^([A-Za-z]+)\s+(\d{1,2}),\s*(\d{4})/);
+    if (m && MONTHS[m[1].toLowerCase()]) return `${m[3]}-${String(MONTHS[m[1].toLowerCase()]).padStart(2, '0')}-${m[2].padStart(2, '0')}`;
+    return '';
+  }
+  function csvValue(field, raw) {
+    const v = String(raw || '').trim();
+    if (!v) return '';
+    const col = colOf(field);
+    if (col?.type === 'date') return csvDate(v);
+    if (field === 'checkDo') return /^(yes|true|1|x|có|✓)$/i.test(v) ? '1' : '';
+    if (field === 'materialsStatus') return /done|xong/i.test(v) ? 'Xong' : /progress|đang/i.test(v) ? 'Đang làm' : /not|chưa/i.test(v) ? 'Chưa làm' : v;
+    if (field === 'designPrice') return /k$/i.test(v) ? String(num(v) * 1000) : String(num(v));
+    if (['constructionValue', 'area'].includes(field)) return String(num(v.replace(/,(?=\d{3}\b)/g, '')));
+    if (col?.options) return col.options.find(o => norm(o) === norm(v)) || v.charAt(0) + v.slice(1).toLowerCase();
+    return v;
+  }
+  function openCsv() {
+    const input = byId('tk-file-csv');
+    input.value = '';
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      const rows = parseCsv(await file.text());
+      const head = rows.shift().map(h => CSV_MAP[norm(h)] || '');
+      if (!head.includes('project')) return GDHomeShell.alert('Không thấy cột "Dự án" trong file CSV. Xuất bảng Notion bằng Export → Markdown & CSV.');
+      const items = rows.map(r => {
+        const profile = {};
+        head.forEach((f, i) => { const v = f && csvValue(f, r[i]); if (v) profile[f] = v; });
+        const match = projects.find(p => norm(p.name) === norm(profile.project));
+        return {profile, match};
+      }).filter(x => x.profile.project);
+      const dialog = openDialog('Nhập bảng Notion (CSV)', `<p>${items.length} dự án · ${items.filter(x => x.match).length} trùng tên dự án đã có (cập nhật), ${items.filter(x => !x.match).length} tạo mới.
+        Cột nhận ra: ${[...new Set(head.filter(Boolean))].map(f => colOf(f)?.label || f).join(', ')}.</p>
+        <label><input type="checkbox" name="overwrite"> Ghi đè ô đã có dữ liệu (mặc định chỉ điền ô trống)</label>
+        <div class="tk-csv-list"><table class="tk-mini"><tbody>${items.map((x, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td>${esc(x.profile.project)}</td><td>${x.match ? 'Cập nhật' : '<b>Tạo mới</b>'}</td><td class="tk-muted">${Object.keys(x.profile).length - 1} ô</td></tr>`).join('')}</tbody></table></div>
+        <div class="tk-actions"><span class="tk-muted" role="status"></span><button type="button" class="btn btn-primary" data-go>Nhập</button></div>`);
+      dialog.querySelector('[data-go]').onclick = async e => {
+        e.target.disabled = true;
+        const overwrite = dialog.querySelector('[name=overwrite]').checked, status = dialog.querySelector('[role=status]');
+        const chosen = [...dialog.querySelectorAll('[data-i]:checked')].map(c => items[c.dataset.i]);
+        let done = 0;
+        for (const {profile, match} of chosen) {
+          try {
+            if (match) {
+              const patch = Object.fromEntries(Object.entries(profile).filter(([k]) => k !== 'project' && (overwrite || !match.profile[k])));
+              if (Object.keys(patch).length) await saveProfile(match.id, patch);
+            } else await saveProfile(null, profile, {create: true});
+          } catch { /* đã báo lỗi; nhập tiếp dòng sau */ }
+          status.textContent = `Đã nhập ${++done}/${chosen.length}…`;
+        }
+        dialog.close();
+        toast(`Đã nhập ${done} dự án từ Notion.`);
+        await load();
+      };
+    };
+    input.click();
+  }
+
+  // ------------------------------------------------------------ sự kiện
+  function wire() {
+    byId('tk-search').oninput = () => render();
+    byId('tk-group').onchange = e => { prefs.group = e.target.value; remember(); render(); };
+    byId('tk-views').onclick = e => { const b = e.target.closest('[data-view]'); if (b) { prefs.view = b.dataset.view; remember(); render(); } };
+    document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { prefs.mode = b.dataset.mode; remember(); render(); });
+    byId('tk-cols').onchange = e => {
+      const key = e.target.value;
+      prefs.hidden = e.target.checked ? prefs.hidden.filter(k => k !== key) : [...prefs.hidden, key];
+      remember(); render();
+    };
+    document.addEventListener('click', e => {
+      const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'contract') openContract();
+      if (act === 'csv') openCsv();
+      if (act === 'new') GDHomeShell.prompt?.('Tên dự án mới', '').then(async name => {
+        if (!name?.trim()) return;
+        await saveProfile(null, {project: name.trim()}, {create: true});
+        await load();
+      });
+    });
+    const wrap = byId('tk-wrap');
+    wrap.addEventListener('click', e => {
+      const th = e.target.closest('thead th[data-sort]');
+      if (th) {
+        const key = th.dataset.sort, cur = prefs.sort || {key: 'deadline', dir: 1};
+        prefs.sort = {key, dir: cur.key === key ? -cur.dir : 1};
+        remember(); render();
+      }
+      const pay = e.target.closest('[data-pay]');
+      if (pay && pay.tagName === 'BUTTON') openPayments(pay.dataset.pay);
+    });
+    wrap.addEventListener('change', e => {
+      const input = e.target.closest('[data-f]');
+      if (!input) return;
+      const value = input.dataset.f === 'project' ? input.value.trim() : readInput(input);
+      if (input.dataset.f === 'project' && !value) return render();
+      saveField(input.dataset.id, input.dataset.f, value).catch(() => render());
+    });
+    wrap.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.target.matches('input[data-f]')) e.target.blur();
+    });
+    // Kanban: kéo thẻ sang cột khác = đổi trạng thái
+    wrap.addEventListener('dragstart', e => { const card = e.target.closest('.tk-card'); if (card) e.dataTransfer.setData('text/plain', card.dataset.row); });
+    wrap.addEventListener('dragover', e => { if (e.target.closest('.tk-lane')) e.preventDefault(); });
+    wrap.addEventListener('drop', e => {
+      const lane = e.target.closest('.tk-lane'), id = e.dataTransfer.getData('text/plain');
+      if (!lane || !id) return;
+      e.preventDefault();
+      saveField(id, wrap.querySelector('.tk-board').dataset.field, lane.dataset.lane);
+    });
+  }
+
+  async function load() {
+    try {
+      const res = await api('/api/project-hub/overview');
+      projects = res.projects || [];
+      render();
+    } catch (error) {
+      byId('tk-wrap').innerHTML = `<p class="tk-empty">${error.status === 401 ? 'Cần đăng nhập. Mở <a href="/tools">Trang chủ công cụ</a> để đăng nhập Gmail rồi quay lại.' : esc(error.message)}</p>`;
+    }
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    GDHomeShell.layout?.();
+    wire();
+    load();
+    window.addEventListener('focus', () => { if (!document.querySelector('.tk-dialog[open]') && !document.activeElement?.matches('[data-f]')) load(); });
+  });
+  window.GDHomeThongKe = {parseCsv, csvValue, csvDate};
+})();

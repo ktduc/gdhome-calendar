@@ -2280,6 +2280,62 @@ cases['12.7'] = async page => {
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
+cases['thong-ke'] = async page => {
+  // Bảng thống kê dự án: cột tự từ Lịch, sửa ô lưu server, nhập HĐTK (dán chữ) tạo dự án + mốc, nhập CSV Notion
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/thong-ke');
+  const row = page.locator('tr[data-row=p1]');
+  await row.waitFor();
+  assert.match(await row.getAttribute('class'),/is-late/,'Dòng có việc trễ hạn tô đỏ');
+  assert.equal(await row.locator('[data-f=designer3d]').getAttribute('placeholder'),'GD-NHẬT');
+  assert.match(await row.locator('.tk-col-deadlineLabel').innerText(),/3D/);
+  assert.match(await row.locator('.tk-pay').innerText(),/chờ thu 5\.000\.000/);
+  assert.equal(await row.locator('[data-f=designValue]').getAttribute('placeholder'),'25.000.000');
+  await row.locator('[data-f=supervisor]').fill('GD - ĐỨC BÉ');
+  await row.locator('[data-f=supervisor]').press('Enter');
+  await page.waitForFunction(async () => (await GDHomeShell.api('/api/project-hub/overview')).projects[0].profile.supervisor === 'GD - ĐỨC BÉ');
+  // Nhập HĐTK bằng dán chữ
+  await page.locator('[data-shell-slot=primary]').click();
+  await page.locator('.tk-dialog textarea').fill(['HỢP ĐỒNG THIẾT KẾ NỘI THẤT','Số: HDKT/GD-TK/02032026','Hôm nay, ngày 02 tháng 03 năm 2026, tại văn phòng',
+    'ĐẠI DIỆN BÊN A\t: CHỦ ĐẦU TƯ','Đại diện\t: Ông Trần Thử','Điện thoại\t: 0900000001','ĐẠI DIỆN BÊN B\t: CÔNG TY GD',
+    '- cho bên A có địa chỉ tại Căn 2, Tòa Thử','- Khối lượng thiết kế : 80 m2   Đơn giá thiết kế: 200.000 VNĐ',
+    '- Đợt 1: Ngay sau khi 2 bên ký kết hợp đồng này, Bên A đặt cọc cho Bên B số tiền là: 8.000.000 VNĐ',
+    ' Sau 10 ngày làm việc kể từ ngày ký hợp đồng và chốt layout mặt bằng, bên B trình cho bên A phương án thiết kế phối cảnh 3D lần 01.',
+    ' Thời gian triển khai và bàn giao hồ sơ kỹ thuật chi tiết nội thất: 08 ngày kể từ ngày thống nhất'].join('\n'));
+  await page.locator('.tk-dialog [data-read]').click();
+  const form = page.locator('.tk-contract-form');
+  assert.equal(await form.locator('[name=project]').inputValue(),'Anh Trần Thử');
+  assert.equal(await form.locator('.tk-ms tbody tr').count(),2);
+  await form.locator('.tk-actions button').click();
+  await page.locator('.tk-dialog').waitFor({state:'detached'});
+  const added = page.locator('tr', {has: page.locator('input[value="Anh Trần Thử"]')});
+  await added.waitFor();
+  assert.equal(await added.locator('[data-f=signedAt]').inputValue(),'2026-03-02');
+  const schedule = (await page.evaluate(() => GDHomeShell.api('/api/schedule'))).data;
+  assert.deepEqual(schedule.tasks.filter(t => /TRẦN THỬ/.test(t.title)).map(t => t.title.split(' - ')[0]),['3D','HSKT']);
+  // Nhập CSV Notion: 1 dự án trùng tên (điền ô trống), 1 dự án mới
+  const csv = '﻿DỰ ÁN,VỊ TRÍ,NGÀY KÍ HĐTK,TRẠNG THÁI 3D,ĐƠN GIÁ TK,DIỆN TÍCH,CHECK ĐỒ,MÃ VL\n' +
+    '"Căn hộ mẫu GĐ8","Vị trí khác","14/11/2026","ĐÃ CHỐT",300K,120,Yes,In progress\n"Chị Notion Mới","Ngõ 1, Hà Nội","November 5, 2026","XONG LẦN 1",250K,92,No,Not started\n';
+  await page.locator('summary', {hasText:'Nhập'}).click();
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'),page.locator('.hdr-menu-item[data-act=csv]').click()]);
+  await chooser.setFiles({name:'notion.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});
+  await page.locator('.tk-dialog [data-go]').click();
+  await page.locator('.tk-dialog').waitFor({state:'detached'});
+  const fresh = page.locator('tr', {has: page.locator('input[value="Chị Notion Mới"]')});
+  await fresh.waitFor();
+  assert.equal(await fresh.locator('[data-f=signedAt]').inputValue(),'2026-11-05');
+  assert.equal(await fresh.locator('[data-f=status3d]').inputValue(),'Xong lần 1');
+  assert.equal(await fresh.locator('[data-f=designPrice]').inputValue(),'250.000');
+  assert.equal(await row.locator('[data-f=address]').inputValue(),'Căn 1, Tòa Mẫu','Không ghi đè ô đã có');
+  assert.equal(await row.locator('[data-f=status3d]').inputValue(),'Đã chốt');
+  assert.equal(await row.locator('[data-f=checkDo]').isChecked(),true);
+  // Kanban: kéo thẻ sang cột Thi công
+  await page.locator('[data-mode=board]').click();
+  await page.locator('.tk-card[data-row=p1]').dragTo(page.locator('.tk-lane[data-lane="Thi công"]'));
+  await page.waitForFunction(async () => (await GDHomeShell.api('/api/project-hub/overview')).projects.find(p => p.id === 'p1').profile.stage === 'Thi công');
+  await page.locator('[data-mode=table]').click();
+};
+
 async function openMaterials(page) {
   await page.goto('/chot-ma');
   await page.locator('#materials:not([inert])').waitFor();
@@ -5736,6 +5792,12 @@ async function main() {
           {id:'md-b1',calendarId:'cB',title:'Ép cọc',startDate:'2026-11-02',endDate:'2026-11-04',predecessors:[]});
       }
       if (key === 'todo') caseSchedule.tasks.push({id:'todo-base',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-06'});
+      if (key === 'thong-ke') {
+        const day = n => { const d = new Date(); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+        caseSchedule.projectOwners[0].profile = {address:'Căn 1, Tòa Mẫu',area:'100',designPrice:'250000',payments:[{label:'Đợt 1',milestone:'Ký hợp đồng',amount:'5000000',paidAt:''}]};
+        caseSchedule.tasks.push({id:'tk-1',calendarId:'c1',title:'3D - CĂN HỘ MẪU',startDate:day(-1),endDate:day(1),assignee:'GD-NHẬT'},
+          {id:'tk-2',calendarId:'c1',title:'GỬI HỒ SƠ - CĂN HỘ MẪU',startDate:day(-5),endDate:day(-3)});
+      }
       if (key === '17.2') {
         caseSchedule.calendars.push({id:'other-cal',ownerId:'gd13-other',name:'Khác',visible:true,color:'#a00'});
         caseSchedule.tasks.push({id:'gd17-task',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-03'});

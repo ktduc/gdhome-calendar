@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Bảng thống kê dự án · GD HOME</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shell.css">
+  <link rel="stylesheet" href="/tools.css">
+  <link rel="stylesheet" href="/thong-ke.css">
+  <script src="/shell.js" defer></script>
+  <script src="/holidays-data.js" defer></script>
+  <script src="/scheduler.js" defer></script>
+  <script src="/contract-parse.js" defer></script>
+  <script src="/integrations-client.js" defer></script>
+  <script src="/thong-ke.js" defer></script>
+  <link rel="stylesheet" href="/timeline-todo.css">
+  <script src="/timeline-todo.js" defer></script>
+</head>
+<body class="tk-body">
+  <header class="app-header">
+    <div class="header-left">
+      <a class="app-logo" href="/thong-ke">
+        <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
+        <span>Bảng thống kê dự án</span>
+      </a>
+      <details class="gd-tools-menu" data-shell-menu></details>
+    </div>
+    <div class="header-right">
+      <div class="shell-toolbar">
+        <details class="hdr-dropdown" data-shell-slot="file">
+          <summary class="btn btn-outline">Nhập ▾</summary>
+          <div class="hdr-dropdown-menu">
+            <button type="button" class="hdr-menu-item" data-act="contract">📄 Nhập hợp đồng thiết kế (Word / dán chữ)</button>
+            <button type="button" class="hdr-menu-item" data-act="csv">⬇ Nhập bảng Notion (CSV)</button>
+            <button type="button" class="hdr-menu-item" data-act="new">+ Tạo dự án trống</button>
+          </div>
+        </details>
+        <span id="save-status" class="save-status is-inline is-saved" role="status">✓ Đã lưu</span>
+        <button type="button" class="btn btn-primary" data-shell-slot="primary" data-act="contract">📄 Nhập HĐTK</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="tk-main">
+    <div class="tk-bar">
+      <input type="search" id="tk-search" placeholder="Tìm dự án, khách, địa chỉ, người…" aria-label="Tìm">
+      <div class="tk-views" id="tk-views" role="tablist" aria-label="Chế độ xem"></div>
+      <label class="tk-field" title="Nhóm theo">Nhóm
+        <select id="tk-group">
+          <option value="">Không nhóm</option>
+          <option value="stage">Trạng thái</option>
+          <option value="status3d">Trạng thái 3D</option>
+          <option value="statusHskt">Trạng thái HSKT</option>
+          <option value="designer3d">Người làm 3D</option>
+          <option value="designerHskt">Người làm HSKT</option>
+          <option value="supervisor">Giám sát</option>
+        </select>
+      </label>
+      <div class="tk-mode" role="group" aria-label="Kiểu hiển thị">
+        <button type="button" data-mode="table" class="is-on">▦ Bảng</button>
+        <button type="button" data-mode="board">▥ Kanban</button>
+      </div>
+      <details class="tk-cols">
+        <summary class="btn btn-outline btn-sm">Cột ▾</summary>
+        <div class="tk-cols-menu" id="tk-cols"></div>
+      </details>
+    </div>
+    <div class="tk-wrap" id="tk-wrap"><p class="tk-empty">Đang tải…</p></div>
+  </main>
+  <input type="file" id="tk-file-docx" accept=".docx" hidden>
+  <input type="file" id="tk-file-csv" accept=".csv,text/csv" hidden>
+</body>
+</html>

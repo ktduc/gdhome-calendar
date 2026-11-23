@@ -1930,6 +1930,10 @@ function openTaskModal(task = null, defaultStartDate = null, presetCalendarId = 
   const startInput = document.getElementById('task-start-date');
   const endInput = document.getElementById('task-end-date');
   const noteInput = document.getElementById('task-note');
+  const assigneeInput = document.getElementById('task-assignee');
+  // Gợi ý tên người đã dùng ở các việc khác
+  document.getElementById('task-assignee-list').innerHTML = [...new Set(AppState.tasks.flatMap(t => String(t.assignee || '').split(',').map(n => n.trim()).filter(Boolean)))]
+    .sort().map(name => '<option value="' + escapeHtml(name) + '">').join('');
   const progressSelect = document.getElementById('task-progress');
   const deleteBtn = document.getElementById('btn-delete-task');
   const skipSundaysCheckbox = document.getElementById('task-skip-sundays');
@@ -1947,6 +1951,7 @@ function openTaskModal(task = null, defaultStartDate = null, presetCalendarId = 
     startInput.value = task.startDate;
     endInput.value = task.endDate;
     noteInput.value = task.note || '';
+    assigneeInput.value = task.assignee || '';
     if (progressSelect) progressSelect.value = String(task.progress || 0);
     selectSwatchColorInModal(task.color || targetCal.color || '#cc0000');
     skipSundaysCheckbox.checked = task.skipSundays !== false;
@@ -1966,6 +1971,7 @@ function openTaskModal(task = null, defaultStartDate = null, presetCalendarId = 
     endInput.value = formatDateStr(defEnd);
 
     noteInput.value = '';
+    assigneeInput.value = '';
     if (progressSelect) progressSelect.value = '0';
     renderPaletteSwatchesUI();
     selectSwatchColorInModal(getNextSequentialPaletteColor(targetCal.id));
@@ -2416,6 +2422,7 @@ function setupEvents() {
     const startDate = document.getElementById('task-start-date').value;
     const endDate = document.getElementById('task-end-date').value;
     const note = document.getElementById('task-note').value.trim();
+    const assignee = document.getElementById('task-assignee').value.split(',').map(n => n.trim()).filter(Boolean).join(', ');
     const skipSundays = document.getElementById('task-skip-sundays').checked;
     const showCount = document.getElementById('task-show-count').checked;
     const progressEl = document.getElementById('task-progress');
@@ -2446,6 +2453,7 @@ function setupEvents() {
         task.showCount = showCount;
         task.progress = progress;
         task.note = note;
+        task.assignee = assignee;
         if (AppState.autoCascadeShift !== false && (oldStart !== task.startDate || oldEnd !== task.endDate)) {
           if (typeof cascadeShiftSubsequentTasks === 'function') {
             cascadeShiftSubsequentTasks(task, oldStart, oldEnd);
@@ -2463,7 +2471,8 @@ function setupEvents() {
         skipSundays,
         showCount,
         progress,
-        note
+        note,
+        assignee
       });
     }
 

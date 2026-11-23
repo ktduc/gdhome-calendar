@@ -1,6 +1,16 @@
 const {randomUUID} = require('node:crypto');
 
-const projectFields = ['project','address','customer','phone','email','contract','buildingType'];
+// Hồ sơ dự án = 1 dòng của Bảng thống kê dự án (/thong-ke). Ngày dạng YYYY-MM-DD, số tiền / diện tích ghi số thô.
+const projectFields = ['project','address','customer','phone','email','contract','buildingType',
+  'representative','customerAddress','taxCode','contractNo','signedAt','area','designPrice','vat','designValue','constructionValue',
+  'constructionSignedAt','furnishAt','designer3d','status3d','designerHskt','statusHskt','supervisor','contractor','stage',
+  'materialsStatus','checkDo','note'];
+const paymentFields = ['label','amount','milestone','paidAt'];
+
+function cleanPayments(list) {
+  return list.slice(0,12).filter(item => item && typeof item === 'object')
+    .map(item => Object.fromEntries(paymentFields.map(field => [field,String(item[field] ?? '').trim().slice(0,200)])));
+}
 const scheduleQueues = new Map();
 
 function withScheduleWrite(key,write) {
@@ -10,8 +20,10 @@ function withScheduleWrite(key,write) {
 }
 
 function cleanProfile(value) {
-  return Object.fromEntries(projectFields.filter(field => typeof value?.[field] === 'string')
+  const profile = Object.fromEntries(projectFields.filter(field => typeof value?.[field] === 'string')
     .map(field => [field,value[field].trim().slice(0,field === 'project' ? 200 : 500)]));
+  if (Array.isArray(value?.payments)) profile.payments = cleanPayments(value.payments);
+  return profile;
 }
 
 function profileFor(owner,legacy = {}) {
@@ -53,4 +65,4 @@ async function writeProjectProfile(store,key,body,defaultSchedule,legacy) {
   });
 }
 
-module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite};
+module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite,cleanProfile,projectFields};
