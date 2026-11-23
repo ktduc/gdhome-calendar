@@ -1226,6 +1226,8 @@ window.GDHomeAssets = (() => {
   },true);
 
   function filePicker(accept,multiple = true) {
+    const pasted = window.GDHomeShell?.takePastedFiles?.();      // vừa Ctrl+V vào nút này (shell.js)
+    if (pasted?.length) return Promise.resolve(multiple ? pasted : pasted.slice(0,1));
     return new Promise(resolve => {
       const input = document.createElement('input');
       input.type = 'file'; input.accept = accept; input.multiple = multiple;

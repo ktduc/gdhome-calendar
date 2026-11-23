@@ -13,12 +13,7 @@
   let queue = {jobs: [], avgMs: 45000, now: Date.now()}, queueTimer = null, clockSkew = 0;
   let activeSlot = null;
 
-  async function api(url, options = {}) {
-    const res = await fetch(url, {...options, headers: GDHomeShell.authHeaders()});
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok) throw Object.assign(new Error(json.message || 'Lỗi ' + res.status), {status: res.status});
-    return json;
-  }
+  const api = GDHomeShell.api;
   const post = (url, body) => api(url, {method: 'POST', body: JSON.stringify(body || {})});
 
   // ---------------------------------------------------------------- LƯU + HOÀN TÁC / LÀM LẠI

@@ -1648,6 +1648,43 @@ cases['9.5'] = async page => {
   assert.equal(await pick.getAttribute('aria-pressed'),'true');
 };
 
+// Ctrl+V ảnh chung (shell.js): ô tải ảnh gần chuột nhận ảnh; nút dùng filePicker nhận ảnh không mở hộp chọn tệp; không có ô thì nhắc
+cases['paste-generic'] = async page => {
+  await page.goto('/tools');
+  await page.locator('.app-header').waitFor();
+  const paste = () => page.evaluate(() => new Promise(done => {
+    const c = Object.assign(document.createElement('canvas'),{width:20,height:20});
+    c.toBlob(blob => {
+      const data = new DataTransfer();
+      data.items.add(new File([blob],'image.png',{type:'image/png'}));
+      document.activeElement.dispatchEvent(new ClipboardEvent('paste',{clipboardData:data,bubbles:true,cancelable:true}));
+      done();
+    },'image/png');
+  }));
+  await page.evaluate(() => {
+    const d = document.createElement('dialog');
+    d.innerHTML = '<div id="a" style="height:80px">Ảnh A <input type="file" accept="image/*" id="fa"></div>' +
+      '<div id="b" style="height:80px">Ảnh B <button type="button" data-upload id="fb">Tải ảnh</button></div><input type="file" accept=".pdf" id="fpdf">';
+    document.body.append(d); d.showModal();
+    window.got = {};
+    document.getElementById('fa').onchange = e => { window.got.a = e.target.files[0].name; };
+    document.getElementById('fb').onclick = async () => { window.got.b = (await GDHomeAssets.filePicker('image/*'))[0]?.name; };
+  });
+  await page.mouse.move(...await page.locator('#a').boundingBox().then(r => [r.x + 5,r.y + 5]));
+  await paste();
+  await page.waitForFunction(() => window.got.a);
+  assert.match(await page.evaluate(() => window.got.a),/^dan-anh-.*\.png$/);
+  await page.mouse.move(...await page.locator('#b').boundingBox().then(r => [r.x + 5,r.y + 5]));
+  await paste();
+  await page.waitForFunction(() => window.got.b);
+  assert.match(await page.evaluate(() => window.got.b),/^dan-anh-/);
+  // Ngoài hộp thoại, chuột ở chỗ không có ô ảnh: chỉ nhắc, không làm gì
+  await page.evaluate(() => document.querySelector('dialog[open]').remove());
+  await page.mouse.move(5,600);
+  await paste();
+  await page.getByText('Rê chuột vào ô ảnh').waitFor();
+};
+
 // Ô Hạng mục nhiều dòng: Shift+Enter xuống dòng, ô cao theo chữ (không khuất), Enter sang dòng dưới; tải lại vẫn giữ xuống dòng
 cases['name-multiline'] = async page => {
   await openMaterials(page);
@@ -2615,7 +2652,7 @@ cases['13.5'] = async page => {
   const {PDFDocument} = require('pdf-lib');
   const pdf = await PDFDocument.load(await page.pdf({preferCSSPageSize:true}));
   const {width,height} = pdf.getPage(0).getSize();
-  assert.ok(Math.abs(width-841.9)<2 && Math.abs(height-595.3)<2,JSON.stringify({width,height}));
+  assert.ok(Math.abs(width-595.3)<2 && Math.abs(height-841.9)<2,'PDF Chốt mã khổ A4 dọc: '+JSON.stringify({width,height}));
   if (process.env.GD13_SCREENSHOTS) {
     const destination = process.env.GD13_SCREENSHOTS;
     await writeFile(path.join(destination,'2-bang-lam-viec.png'),workPng);

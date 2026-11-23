@@ -1,7 +1,7 @@
 {
   "name": "timeline-calendar-backend",
   "version": "2.0.0",
-  "description": "GD HOME - Lập tiến độ thi công & MS Project Timeline (server.js không còn dùng express/cors, giữ lại để khớp package-lock.json)",
+  "description": "GD HOME - Lập tiến độ thi công & MS Project Timeline",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
@@ -12,8 +12,6 @@
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
-    "cors": "^2.8.5",
-    "express": "^4.21.2",
     "pdf-lib": "^1.17.1",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },

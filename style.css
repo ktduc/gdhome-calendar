@@ -1285,7 +1285,8 @@ body {
 :is(#task-modal,#calendar-category-modal) .modal-body { min-height: 0; overflow: auto; }
 :is(#task-modal,#calendar-category-modal) :is(.form-row .col, input, select) { min-width: 0; max-width: 100%; }
 @media (max-width: 480px) {
-  #hdr-image-dropdown .hdr-dropdown-menu { left: 0; right: auto; }
+  /* Nút Copy ảnh nằm giữa hàng khi màn hẹp: menu căn theo mép phải nút, không tràn khỏi màn */
+  #hdr-image-dropdown .hdr-dropdown-menu { left: auto; right: 0; }
 }
 
 .color-palette {

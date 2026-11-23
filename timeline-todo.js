@@ -42,7 +42,11 @@
   async function api(path, options = {}) {
     const init = Object.assign({}, options, options.body ? {body: JSON.stringify(options.body)} : {});
     const res = typeof apiFetch === 'function' ? await apiFetch(path, init, false)
-      : await fetch(path, {...init, headers: window.GDHomeShell?.authHeaders?.() || {'Content-Type': 'application/json'}});
+      : null;
+    if (!res) {                                              // trang khác Lịch: dùng hàm gọi API chung
+      try { return await GDHomeShell.api(path, options); }
+      catch (e) { if (e.status === 401) st.noAuth = true; throw e; }
+    }
     if (res.status === 401) st.noAuth = true;
     const json = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(json.message || ('Lỗi ' + res.status));

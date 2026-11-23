@@ -260,6 +260,23 @@ window.GDHomeShell = (() => {
     return headers;
   }
 
+  // Gọi API chung cho mọi trang: gửi phiên đăng nhập / mật khẩu, đọc JSON, lỗi thì ném Error có status.
+  // body là object -> gửi JSON; FormData / Blob / chuỗi gửi nguyên. Hết phiên (401) báo đăng nhập lại 1 lần.
+  let expiredNotified = false;
+  async function api(url,options = {}) {
+    const {body} = options, headers = getShellAuthHeaders();
+    const plain = body && typeof body === 'object' && !(body instanceof FormData) && !(body instanceof Blob) && !(body instanceof URLSearchParams);
+    if (body && !plain && typeof body !== 'string') delete headers['Content-Type'];
+    const response = await fetch(url,{...options,headers:{...headers,...options.headers},body:plain ? JSON.stringify(body) : body});
+    const data = await response.json().catch(() => ({}));
+    if (response.status === 401 && headers.Authorization && !expiredNotified) {
+      expiredNotified = true;
+      toast('Phiên đăng nhập đã hết hạn – bấm Đăng nhập để tiếp tục (dữ liệu đang làm vẫn giữ trên máy).');
+    }
+    if (!response.ok) throw Object.assign(new Error(data.message || 'Lỗi máy chủ (' + response.status + ').'),{status:response.status,data});
+    return data;
+  }
+
   // GĐ18B.4: nội dung thông báo tiến trình dùng chung (tên dự án, bước, trang đang đọc, %).
   const JOB_DONE_TEXT = {
     review:'AI đã hoàn thành soát bản vẽ & tự động tạo đề xuất!',
@@ -696,6 +713,65 @@ window.GDHomeShell = (() => {
     return nextHidden;
   }
 
+  // ---------------------------------------------------------------------------
+  // Ctrl+V ảnh chung cho mọi trang: chỗ nào có ô tải ảnh (input file / nút "Tải ảnh") thì dán được,
+  // không cần viết riêng từng chỗ. Chạy SAU các bộ dán riêng (lắng nghe ở window): chỗ nào đã tự nhận thì bỏ qua.
+  // Chọn ô gần chuột nhất (hoặc ô đang chọn) trong hộp thoại đang mở; ngoài hộp thoại chỉ nhận khi chuột ở gần ô ảnh.
+  // ---------------------------------------------------------------------------
+  const PASTE_TARGETS = 'input[type=file]:not([webkitdirectory]):not(:disabled),[data-paste-pick],[data-upload],[data-brand-upload],.asset-drop';
+  let pointer = null, pastedFiles = null;
+  const imageInput = el => !el.matches('input') || !el.accept || /image|\.(png|jpe?g|webp|gif)/i.test(el.accept);
+  function clipboardFiles(data) {
+    const stamp = Date.now();
+    const files = [...(data?.files || [])];
+    if (!files.length) for (const item of data?.items || []) if (item.kind === 'file') { const f = item.getAsFile(); if (f) files.push(f); }
+    return files.filter(file => /^image\//.test(file.type) || file.type === 'application/pdf')
+      .map((file,i) => !file.name || /^image\.\w+$/.test(file.name)
+        ? new File([file],'dan-anh-' + stamp + '-' + (i + 1) + '.' + (file.type.split('/')[1] || 'png'),{type:file.type}) : file);
+  }
+  function pasteTarget() {
+    const dialogs = [...document.querySelectorAll('dialog[open]')], scope = dialogs[dialogs.length - 1] || document.body;
+    const under = pointer && document.elementFromPoint(pointer.x,pointer.y);
+    let node = under && scope.contains(under) ? under : (scope.contains(document.activeElement) ? document.activeElement : null);
+    for (; node && node !== document.body && node !== document.documentElement; node = node.parentElement) {
+      const list = [...node.querySelectorAll(PASTE_TARGETS)].concat(node.matches?.(PASTE_TARGETS) ? [node] : []).filter(imageInput);
+      if (list.length) {
+        const center = el => { const r = (el.getBoundingClientRect().width ? el : el.parentElement).getBoundingClientRect(); return [r.x + r.width / 2,r.y + r.height / 2]; };
+        const dist = el => pointer ? Math.hypot(...center(el).map((v,i) => v - [pointer.x,pointer.y][i])) : 0;
+        return list.sort((a,b) => dist(a) - dist(b))[0];
+      }
+      if (node === scope) break;
+    }
+    return null;
+  }
+  // filePicker() (Dữ liệu dùng chung, Chốt mã…) lấy ảnh vừa dán thay vì mở hộp chọn tệp
+  const takePastedFiles = () => { const files = pastedFiles; pastedFiles = null; return files; };
+  function onPaste(event) {
+    if (event.defaultPrevented) return;
+    const files = clipboardFiles(event.clipboardData);
+    if (!files.length) return;
+    const text = event.clipboardData.getData('text/plain');
+    if (text && event.target.closest?.('input:not([type=file]),textarea,[contenteditable=""],[contenteditable=true]')) return;
+    const target = pasteTarget();
+    if (!target) return toast('Rê chuột vào ô ảnh (hoặc bấm chọn ô) rồi Ctrl+V để dán ảnh.');
+    event.preventDefault();
+    if (target.matches('input[type=file]')) {
+      const transfer = new DataTransfer();
+      (target.multiple ? files : files.slice(0,1)).forEach(file => transfer.items.add(file));
+      target.files = transfer.files;
+      target.dispatchEvent(new Event('input',{bubbles:true}));
+      target.dispatchEvent(new Event('change',{bubbles:true}));
+    } else {
+      pastedFiles = files;
+      target.click();
+      setTimeout(() => { pastedFiles = null; },1000);    // nút không mở hộp chọn tệp: bỏ ảnh tạm
+    }
+  }
+  if (typeof window !== 'undefined') {
+    document.addEventListener('pointermove',event => { pointer = {x:event.clientX,y:event.clientY}; },{passive:true});
+    window.addEventListener('paste',onPaste);
+  }
+
   if (typeof window !== 'undefined') {
     const start = () => {
       initHubJobTracker(); layout(); refreshWorkBadges(); window.addEventListener("focus", refreshWorkBadges);
@@ -713,5 +789,5 @@ window.GDHomeShell = (() => {
     else start();
   }
 
-  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,authHeaders:getShellAuthHeaders,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
+  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,api,authHeaders:getShellAuthHeaders,takePastedFiles,clipboardFiles,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
 })();

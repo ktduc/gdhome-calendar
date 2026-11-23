@@ -32,16 +32,7 @@
     return headers;
   }
 
-  async function api(path, body, method = 'POST') {
-    const res = await fetch(path, {
-      method: body ? method : 'GET',
-      headers: authHeaders(true),
-      body: body ? JSON.stringify(body) : undefined
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.message || 'Lỗi xử lý yêu cầu.');
-    return data;
-  }
+  const api = (path, body, method = 'POST') => GDHomeShell.api(path, body ? {method, body} : {});
 
   async function fetchAssetBlobUrl(assetKey) {
     const res = await fetch(`/api/project-hub/assets/${encodeURIComponent(assetKey)}`, {
@@ -306,7 +297,7 @@
     };
 
     // Hỗ trợ Ctrl+V dán ảnh trực tiếp
-    window.addEventListener('paste', e => {
+    document.addEventListener('paste', e => {   // document: chạy trước bộ dán chung của shell.js (window)
       if (!currentProjectId || e.defaultPrevented) return;   // hộp khác (vd Phối cảnh 3D) đã nhận ảnh dán
       const items = e.clipboardData?.items;
       if (!items) return;

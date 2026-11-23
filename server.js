@@ -26,7 +26,7 @@ const { handleLibrary } = require('./shared-library');
 const {projectList,writeProjectProfile,withScheduleWrite} = require('./project-profiles');
 const { handlePublicReview } = require('./material-review');
 const { handleProjectHub } = require('./project-hub');
-const { getStorageKind } = require('./object-storage');
+const { getStorageKind, isConfigured: objectStorageReady, putObject, getObject } = require('./object-storage');
 const { driveBackup } = require('./drive-backup');
 const { handleWorkApi } = require('./work-manager');
 const { todoSync } = require('./todo-sync');
@@ -152,6 +152,8 @@ class FileStore {
 // -------------------------------------------------------------------------
 const GIST_TIMEOUT_MS = 15000;
 const GIST_INIT_BUDGET_MS = 60000;
+const MATERIAL_GAP_MS = 2000;
+const GIST_MIRROR = 'gist-mirror/';
 
 async function gistRequest(url,options,deadline = Infinity) {
   // Creating a Gist is not idempotent. The next init searches by description before trying again.
@@ -190,6 +192,9 @@ class GistStore {
     this.lastError = null;
     this.lastSyncAt = null;
     this.blockedUntil = 0;
+    this.lastPatchAt = 0;
+    this.mirrorDirty = new Set();   // tệp đổi từ lần chép dự phòng B2 gần nhất
+    this.objects = { ready: objectStorageReady, put: putObject, get: getObject };
   }
   async api(method,url,body,deadline) {
     const text = await gistRequest(`https://api.github.com${url}`,{
@@ -229,7 +234,19 @@ class GistStore {
       this.gistId = created.id;
       console.log(`- Đã tạo Gist bí mật mới để lưu dữ liệu: ${this.gistId}`);
     }
-    const gist = await this.api('GET', `/gists/${this.gistId}`,undefined,deadline);
+    let gist;
+    try { gist = await this.api('GET', `/gists/${this.gistId}`,undefined,deadline); }
+    catch (error) {
+      // GitHub khoá (hết hạn mức) / sập lúc server khởi động: mở từ bản chép trên B2 (ghi khi tắt server và mỗi 10 phút),
+      // không đẩy lên Gist tới khi GitHub mở lại. Lỗi khác (mạng chập chờn) thì để connectStore thử lại.
+      if (!(error.rateLimited || error.upstreamStatus >= 500) || !this.objects.ready()) throw error;
+      const at = await this.loadMirror().catch(() => { throw error; });
+      this.blockedUntil = error.resetAt || Date.now() + 5 * 60000;
+      this.lastError = `Đang chạy từ bản dự phòng B2 (${at}) vì GitHub lỗi: ${error.message}`;
+      console.error('[GIST]', this.lastError);
+      if (this.dirty.size) this.schedule(this.blockedUntil - Date.now() + 2000);
+      return;
+    }
     for (const [name, file] of Object.entries(gist.files || {})) {
       let content = file.content;
       if (file.truncated && file.raw_url) {
@@ -242,6 +259,33 @@ class GistStore {
       }
     }
     this.lastSyncAt = new Date().toISOString();
+    this.cache.forEach((value, name) => this.mirrorDirty.add(name));   // mỗi lần khởi động chép đủ 1 lượt sang B2
+  }
+  // Bản chép Gist trên B2: dùng khi GitHub khoá đúng lúc server khởi động
+  async mirror() {
+    if (!this.objects.ready() || !this.mirrorDirty.size) return;
+    const names = [...this.mirrorDirty];
+    this.mirrorDirty.clear();
+    try {
+      for (const name of names) if (this.cache.has(name)) {
+        await this.objects.put(GIST_MIRROR + name, Buffer.from(JSON.stringify(this.cache.get(name))), 'application/json', { timeout: 20000 });
+      }
+      await this.objects.put(GIST_MIRROR + '_index.json', Buffer.from(JSON.stringify({ at: new Date().toISOString(), files: [...this.cache.keys()], pending: [...this.dirty] })),
+        'application/json', { timeout: 20000 });
+    } catch (error) {
+      names.forEach(name => this.mirrorDirty.add(name));
+      console.error('[GIST] Chưa chép được bản dự phòng sang B2:', error.message);
+    }
+  }
+  async loadMirror() {
+    const index = JSON.parse((await this.objects.get(GIST_MIRROR + '_index.json', { timeout: 20000 })).buf.toString('utf8'));
+    for (const name of index.files || []) {
+      try { this.cache.set(name, parseData((await this.objects.get(GIST_MIRROR + name, { timeout: 20000 })).buf.toString('utf8'), `B2/${name}`)); }
+      catch (error) { if (error.status !== 404) throw error; }
+    }
+    // Phần lúc tắt máy chưa lên được Gist: đẩy lên khi GitHub mở lại (các tệp khác Gist đã có bản mới nhất)
+    for (const name of index.pending || []) if (this.cache.has(name)) this.dirty.add(name);
+    return index.at;
   }
   async get(key) {
     const name = fileNameForKey(key);
@@ -252,6 +296,7 @@ class GistStore {
     const name = fileNameForKey(key);
     this.cache.set(name, JSON.parse(JSON.stringify(data)));
     this.dirty.add(name);
+    this.mirrorDirty.add(name);
     try { await this.local.put(key, data); } catch (e) { /* bản dự phòng trên máy: bỏ qua lỗi */ }
     this.schedule(1500);
   }
@@ -262,15 +307,23 @@ class GistStore {
     this.schedule(Math.max(1500,this.blockedUntil - Date.now() + 2000));
   }
   async putMaterials(writes) {
+    // Giãn nhịp: tối đa 1 lần gọi GitHub mỗi MATERIAL_GAP_MS (gõ liên tục trước đây làm hết 5000 lượt/giờ)
+    if (this.blockedUntil > Date.now()) return this.queueUntilReset(writes);
+    const gap = this.lastPatchAt + MATERIAL_GAP_MS - Date.now();
+    if (gap > 0) await new Promise(resolve => setTimeout(resolve, gap));
     if (this.flushing) await this.flushing;
     if (this.blockedUntil > Date.now()) return this.queueUntilReset(writes);
-    const pending = writes.map(([key]) => fileNameForKey(key)).filter(name => this.dirty.delete(name));
-    const files = Object.fromEntries(writes.map(([key,data]) => [
-      fileNameForKey(key), { content: JSON.stringify(data, null, 2) }
-    ]));
+    const names = writes.map(([key]) => fileNameForKey(key));
+    // Gửi kèm các tệp khác đang chờ (Lịch, thư viện…) trong cùng 1 lần gọi
+    const pending = [...new Set([...this.dirty, ...names])].filter(name => this.dirty.delete(name));
+    const files = Object.fromEntries(pending.filter(name => !names.includes(name))
+      .map(name => [name, { content: JSON.stringify(this.cache.get(name), null, 2) }]));
+    writes.forEach(([key,data]) => { files[fileNameForKey(key)] = { content: JSON.stringify(data, null, 2) }; });
+    this.lastPatchAt = Date.now();
     try {
       await this.api('PATCH', `/gists/${this.gistId}`, { files });
       this.blockedUntil = 0;
+      this.lastSyncAt = new Date().toISOString();
     } catch (error) {
       for (const name of pending) this.dirty.add(name);
       if (error.rateLimited) {
@@ -283,6 +336,7 @@ class GistStore {
     }
     for (const [key,data] of writes) {
       this.cache.set(fileNameForKey(key), JSON.parse(JSON.stringify(data)));
+      this.mirrorDirty.add(fileNameForKey(key));
       try { await this.local.put(key,data); } catch (error) { console.error('[Chốt mã] Lỗi ghi bản dự phòng:', error.code); }
     }
   }
@@ -299,6 +353,7 @@ class GistStore {
     const files = {};
     names.forEach(n => { files[n] = { content: JSON.stringify(this.cache.get(n), null, 2) }; });
     let failed = false;
+    this.lastPatchAt = Date.now();
     this.flushing = this.api('PATCH', `/gists/${this.gistId}`, { files })
       .then(() => { this.lastError = null; this.blockedUntil = 0; this.lastSyncAt = new Date().toISOString(); })
       .catch(err => {
@@ -346,6 +401,10 @@ async function initStore() {
 function connectStore() {
   initStore().then(ready => {
     console.log('[STORE] Sẵn sàng:',ready.kind);
+    if (ready.mirror) {
+      ready.mirror();
+      setInterval(() => ready.mirror(), 10 * 60000).unref();
+    }
     if (AUTH_MODE === 'google' && backups.available) {
       const tick = () => backups.tick(ready).catch(() => console.error('[DRIVE] Không chạy được lịch sao lưu.'));
       setInterval(tick,15*60000).unref();
@@ -486,8 +545,29 @@ function readRawBody(req, limit = MAX_UPLOAD_BYTES) {
   });
 }
 
+// Tự đánh ?v= theo nội dung file JS/CSS khi trả trang HTML: sửa file là trình duyệt tải bản mới, không phải tăng số tay
+// (số ?v= viết tay trong .html bị thay thế). Băm theo thời điểm sửa file nên chỉ đọc lại khi file đổi.
+const assetHashes = new Map();
+function assetVersion(rel) {
+  const file = path.join(ROOT_DIR, rel);
+  try {
+    const mtime = fs.statSync(file).mtimeMs, hit = assetHashes.get(rel);
+    if (hit?.mtime === mtime) return hit.hash;
+    const hash = crypto.createHash('sha1').update(fs.readFileSync(file)).digest('hex').slice(0, 10);
+    assetHashes.set(rel, { mtime, hash });
+    return hash;
+  } catch { return null; }
+}
+function versionAssets(htmlText) {
+  return htmlText.replace(/((?:src|href)=["'])(\/?)([\w./-]+\.(?:js|css))(?:\?v=[^"']*)?(["'])/g, (all, open, slash, rel, close) => {
+    const hash = STATIC_FILES.has(rel) && assetVersion(rel);
+    return hash ? `${open}${slash}${rel}?v=${hash}${close}` : all;
+  });
+}
+
 function serveStatic(req, res, urlPath) {
-  let rel = decodeURIComponent(urlPath.split('?')[0]);
+  let rel;
+  try { rel = decodeURIComponent(urlPath.split('?')[0]); } catch { rel = '/_invalid'; }   // URL hỏng -> 404, không làm sập server
   if (rel === '/' || rel === '') rel = '/index.html';
   if (rel === '/tools') rel = '/tools.html';
   if (rel === '/chot-ma') rel = '/chot-ma.html';
@@ -517,6 +597,7 @@ function serveStatic(req, res, urlPath) {
       res.end('Not found');
       return;
     }
+    if (ext === '.html') buf = Buffer.from(versionAssets(buf.toString('utf8')));
     res.writeHead(200, {
       'Content-Type': STATIC_MIME[ext],
       'Cache-Control': rel === '/duyet.html' ? 'no-store' : ext === '.html' ? 'no-cache' : 'public, max-age=60',
@@ -782,6 +863,9 @@ async function gracefulExit() {
       if (!store.dirty?.size || store.lastError) break;
     }
   } catch (e) { /* bỏ qua */ }
+  // Chép bản mới nhất sang B2 (kể cả phần chưa lên được Gist vì GitHub khoá) để lần khởi động sau không mất
+  try { if (store?.mirror) await Promise.race([store.mirror(), new Promise(r => setTimeout(r, Math.max(3000, deadline + 10000 - Date.now())))]); }
+  catch (e) { /* bỏ qua */ }
   process.exit(0);
 }
 process.on('SIGTERM', gracefulExit);
@@ -799,4 +883,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { server, GistStore, initStore, signSession, verifySession, fileNameForKey, getStore: () => store };
+module.exports = { server, GistStore, initStore, signSession, verifySession, fileNameForKey, versionAssets, getStore: () => store };
