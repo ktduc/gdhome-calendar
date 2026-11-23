@@ -1433,8 +1433,10 @@ window.GDHomeAssets = (() => {
       async function paint() {
         try { data = await loadLibrary(); } catch (error) { panel.innerHTML = '<p class="asset-empty">' + esc(error.message) + '</p>'; return; }
         if (!panel.isConnected) return;
-        categoryId ||= categoryFor(data,groupName)?.id || 'all';
         const available = data.items.filter(item => !item.hidden && (item.full || item.kind === 'paint' || item.kind === 'wood'));
+        // Hạng mục tự tạo theo nhóm của bảng chốt mã thường còn trống: khi đó mở "Tất cả hạng mục" thay vì danh sách rỗng
+        const groupCategory = categoryFor(data,groupName)?.id;
+        categoryId ||= groupCategory && available.some(item => item.categoryId === groupCategory) ? groupCategory : 'all';
         const scoped = available.filter(item => categoryId === 'all' || item.categoryId === categoryId);
         pruneFacets(scoped,facets);
         const candidates = searchItems(scoped,query);

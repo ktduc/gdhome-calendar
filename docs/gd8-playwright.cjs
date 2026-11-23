@@ -763,12 +763,14 @@ cases['23.6'] = async page => {
   const search = sidebar.getByRole('searchbox',{name:'Tìm theo mã…',exact:true});
   await search.fill('FILTER-236');
   await library.locator('.asset-card').getByText('FILTER-236',{exact:true}).waitFor();
-  const label = sidebar.locator('label:has(input[data-facet=brand][data-value=GD23])');
-  await label.evaluate(label => { label.closest('details').open = true; });
-  const placement = await label.evaluate(label => {
+  // Hộp thư viện có thể vẽ lại khi dữ liệu vừa lưu xong: mở nhóm và đo trong cùng một bước, trên phần tử đang hiển thị
+  const placement = await (await page.waitForFunction(() => {
+    const label = document.querySelector('.asset-library-dialog .asset-filter-sidebar input[data-facet=brand][data-value=GD23]')?.closest('label');
+    if (!label) return null;
+    label.closest('details').open = true;
     const input = label.querySelector('input').getBoundingClientRect(), text = label.querySelector('span').getBoundingClientRect();
-    return {input:input.x,text:text.x,background:getComputedStyle(label.closest('.asset-filter-sidebar')).backgroundColor};
-  });
+    return input.width ? {input:input.x,text:text.x,background:getComputedStyle(label.closest('.asset-filter-sidebar')).backgroundColor} : null;
+  })).jsonValue();
   assert.ok(placement.input > placement.text);
   assert.notEqual(placement.background,'rgb(0, 0, 0)');
   if (process.env.GD23_SCREENSHOTS) await page.screenshot({path:path.join(process.env.GD23_SCREENSHOTS,'gd23-filter.png')});
