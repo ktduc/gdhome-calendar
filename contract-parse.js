@@ -90,12 +90,19 @@
       .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
   }
 
-  // Đọc word/document.xml trong file .docx (zip) bằng DecompressionStream của trình duyệt, không cần thư viện
+  // Đọc word/document.xml trong file .docx (zip)
   async function docxText(buffer) {
+    const xml = await zipText(buffer, name => name === 'word/document.xml', 'Không đọc được file Word (.docx).');
+    if (xml == null) throw new Error('File Word không có nội dung văn bản.');
+    return docxXmlText(xml);
+  }
+
+  // Chữ của tệp đầu tiên trong zip có tên thoả test() (null nếu không có), giải nén bằng DecompressionStream, không cần thư viện
+  async function zipText(buffer, test, badZip = 'Không đọc được file zip.') {
     const bytes = new Uint8Array(buffer), view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
     let eocd = -1;
     for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 65557); i--) if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
-    if (eocd < 0) throw new Error('Không đọc được file Word (.docx).');
+    if (eocd < 0) throw new Error(badZip);
     let at = view.getUint32(eocd + 16, true);
     const count = view.getUint16(eocd + 10, true);
     for (let n = 0; n < count; n++) {
@@ -103,18 +110,18 @@
       const nameLen = view.getUint16(at + 28, true), extra = view.getUint16(at + 30, true), comment = view.getUint16(at + 32, true);
       const local = view.getUint32(at + 42, true);
       const name = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLen));
-      if (name === 'word/document.xml') {
+      if (test(name)) {
         const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
         const data = bytes.subarray(start, start + size);
-        const xml = method === 0 ? data : new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
-        return docxXmlText(new TextDecoder().decode(xml));
+        const out = method === 0 ? data : new Uint8Array(await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer());
+        return new TextDecoder().decode(out);
       }
       at += 46 + nameLen + extra + comment;
     }
-    throw new Error('File Word không có nội dung văn bản.');
+    return null;
   }
 
-  const api = {parseContract, docxText, docxXmlText};
+  const api = {parseContract, docxText, docxXmlText, zipText};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GDHomeContract = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -14,6 +14,7 @@
     {id: 'tcqt', label: 'TC XONG CHƯA QT', stages: ['TC xong chưa QT'], color: '#b91c1c'},
     {id: 'tk', label: 'THIẾT KẾ', stages: ['Thiết kế'], color: '#1d4ed8'},
     {id: 'tkqt', label: 'TK XONG CHƯA QT', stages: ['TK xong chưa QT'], color: '#7c3aed'},
+    {id: 'khac', label: 'CHỜ · KHÁC', stages: null, color: '#0f766e'},   // giai đoạn tự đặt (vd "Chưa kí", "Đã gửi layout - chờ")
     {id: 'xong', label: 'ĐÃ QT · TẠM DỪNG', stages: ['Hoàn thành', 'Tạm dừng'], color: '#6b7280', collapsed: true},
   ];
   const STATUS3D = ['Chưa làm', 'Đang triển khai', 'Chờ phản hồi', 'Xong lần 1', 'Xong lần 2', 'Xong lần 3', 'Đang chỉnh sửa', 'Đã chốt'];
@@ -221,7 +222,8 @@
     const wrap = byId('tk-wrap');
     wrap.className = 'tk-wrap is-sections';
     wrap.innerHTML = SECTIONS.map(sec => {
-      const items = list.filter(p => sec.stages.includes(val(p, 'stage'))), closed = prefs.collapsed.includes(sec.id);
+      const known = SECTIONS.flatMap(s => s.stages || []);
+      const items = list.filter(p => sec.stages ? sec.stages.includes(val(p, 'stage')) : !known.includes(val(p, 'stage'))), closed = prefs.collapsed.includes(sec.id);
       return `<section class="tk-sec${closed || !items.length ? ' is-collapsed' : ''}${!closed && !items.length ? ' is-empty' : ''}" data-sec="${sec.id}" style="--sec:${sec.color}">
         <div class="tk-sec-side"><button type="button" class="tk-sec-tag" data-sec-toggle="${sec.id}" title="${closed ? 'Mở' : 'Thu gọn'} phần ${esc(sec.label)}">${esc(sec.label)} <small>${items.length}</small></button>
         <button type="button" class="tk-sec-cfg" data-sec-cols="${sec.id}" title="Chọn cột hiện trong phần ${esc(sec.label)}" aria-label="Chọn cột hiện">⚙</button></div>
@@ -489,6 +491,9 @@
     if (m && MONTHS[m[1].toLowerCase()]) return `${m[3]}-${String(MONTHS[m[1].toLowerCase()]).padStart(2, '0')}-${m[2].padStart(2, '0')}`;
     return '';
   }
+  const STAGE_ALIAS = {xongthietke: 'TK xong chưa QT', tkxong: 'TK xong chưa QT', xongthicong: 'TC xong chưa QT', tcxong: 'TC xong chưa QT', daquyettoan: 'Hoàn thành'};
+  // Cột Notion tự tính (công thức / rollup): bảng này tự tính lại từ Lịch nên mặc định không tạo cột riêng
+  const CSV_AUTO = new Set(['deadlinesaptoi', 'nddeadline', 'songayconlai', 'songayconl', 'gdhomeid', 'tiendo']);
   function csvValue(field, raw) {
     const v = String(raw || '').trim();
     if (!v) return '';
@@ -498,6 +503,7 @@
     if (field === 'materialsStatus') return /done|xong/i.test(v) ? 'Xong' : /progress|đang/i.test(v) ? 'Đang làm' : /not|chưa/i.test(v) ? 'Chưa làm' : v;
     if (field === 'designPrice') return /k$/i.test(v) ? String(num(v) * 1000) : String(num(v));
     if (['constructionValue', 'area'].includes(field)) return String(num(v.replace(/,(?=\d{3}\b)/g, '')));
+    if (field === 'stage' && STAGE_ALIAS[norm(v)]) return STAGE_ALIAS[norm(v)];
     if (col?.options) return col.options.find(o => norm(o) === norm(v)) || v.charAt(0) + v.slice(1).toLowerCase();
     return v;
   }
@@ -507,28 +513,40 @@
     input.onchange = async () => {
       const file = input.files[0];
       if (!file) return;
-      const rows = parseCsv(await file.text());
+      // Notion xuất ra file .zip: lấy file .csv bên trong
+      const text = /\.zip$/i.test(file.name) ? await GDHomeContract.zipText(await file.arrayBuffer(), name => /\.csv$/i.test(name)) : await file.text();
+      if (text == null) return GDHomeShell.alert('Trong file zip không có bảng .csv.');
+      const rows = parseCsv(text);
       const raw = rows.shift();
       const head = raw.map(h => CSV_MAP[norm(h)] || ALL.find(col => col.custom && norm(col.label) === norm(h))?.key || '');
       // Cột Notion chưa có trong bảng: đề nghị tạo cột riêng, đoán kiểu ngày / số theo dữ liệu
-      const unknown = raw.map((h, i) => ({i, label: h.trim(), values: rows.map(r => String(r[i] || '').trim()).filter(Boolean)})).filter(x => !head[x.i] && x.label && x.values.length);
+      const unknown = raw.map((h, i) => ({i, label: h.trim(), auto: CSV_AUTO.has(norm(h)), values: rows.map(r => String(r[i] || '').trim()).filter(Boolean)})).filter(x => !head[x.i] && x.label && x.values.length);
       if (!head.includes('project')) return GDHomeShell.alert('Không thấy cột "Dự án" trong file CSV. Xuất bảng Notion bằng Export → Markdown & CSV.');
+      const seen = new Map(), used = new Set();
       const items = rows.map(r => {
         const profile = {};
-        head.forEach((f, i) => { const v = f && csvValue(f, r[i]); if (v) { if (/^c_/.test(f)) (profile.custom ||= {})[f] = v; else profile[f] = v; } });
-        const match = projects.find(p => norm(p.name) === norm(profile.project));
+        head.forEach((f, i) => { const v = f && csvValue(f, r[i]); if (v && !profile[f]) { if (/^c_/.test(f)) (profile.custom ||= {})[f] = v; else profile[f] = v; } });
+        if (!profile.project) return null;
+        const n = (seen.get(norm(profile.project)) || 0) + 1;   // 2 dòng trùng tên trong Notion: giữ cả hai, thêm (2)
+        seen.set(norm(profile.project), n);
+        if (n > 1) profile.project += ` (${n})`;
+        // Ghép với dự án đã có: trùng tên, trùng SĐT, hoặc tên khách nằm trong tên dự án; mỗi dự án chỉ ghép 1 dòng
+        let match = projects.find(p => norm(p.name) === norm(profile.project)) || matchProject({phone: profile.phone, customer: profile.project});
+        if (match && used.has(match.id)) match = null;
+        if (match) used.add(match.id);
         return {profile, match, row: r};
-      }).filter(x => x.profile.project);
-      const dialog = openDialog('Nhập bảng Notion (CSV)', `<p>${items.length} dự án · ${items.filter(x => x.match).length} trùng tên dự án đã có (cập nhật), ${items.filter(x => !x.match).length} tạo mới.
+      }).filter(Boolean);
+      const options = projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('');
+      const dialog = openDialog('Nhập bảng Notion (CSV)', `<p>${items.length} dự án · ${items.filter(x => x.match).length} ghép vào dự án đã có (cập nhật), ${items.filter(x => !x.match).length} tạo mới. Kiểm tra cột "Vào dự án" trước khi nhập.
         Cột nhận ra: ${[...new Set(head.filter(Boolean))].map(f => colOf(f)?.label || f).join(', ')}.</p>
-        ${unknown.length ? `<p><b>Cột chưa có trong bảng</b> – tick để tạo cột riêng:</p><p class="tk-csv-new">${unknown.map((x, n) => `<label><input type="checkbox" data-new="${n}" checked> ${esc(x.label)}</label>`).join(' ')}</p>` : ''}
+        ${unknown.length ? `<p><b>Cột chưa có trong bảng</b> – tick để tạo cột riêng:</p><p class="tk-csv-new">${unknown.map((x, n) => `<label${x.auto ? ' title="Notion tự tính; bảng này tự tính lại từ Lịch"' : ''}><input type="checkbox" data-new="${n}" ${x.auto ? '' : 'checked'}> ${esc(x.label)}${x.auto ? ' <small class="tk-muted">(tự tính)</small>' : ''}</label>`).join(' ')}</p>` : ''}
         <label><input type="checkbox" name="overwrite"> Ghi đè ô đã có dữ liệu (mặc định chỉ điền ô trống)</label>
-        <div class="tk-csv-list"><table class="tk-mini"><tbody>${items.map((x, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td>${esc(x.profile.project)}</td><td>${x.match ? 'Cập nhật' : '<b>Tạo mới</b>'}</td><td class="tk-muted">${Object.keys(x.profile).length - 1} ô</td></tr>`).join('')}</tbody></table></div>
+        <div class="tk-csv-list"><table class="tk-mini"><tbody>${items.map((x, i) => `<tr><td><input type="checkbox" data-i="${i}" checked></td><td>${esc(x.profile.project)}</td><td><select data-t="${i}" aria-label="Vào dự án"><option value="">+ Tạo mới</option>${options.replace(`value="${esc(x.match?.id)}"`, `value="${esc(x.match?.id)}" selected`)}</select></td><td class="tk-muted">${Object.keys(x.profile).length - 1} ô</td></tr>`).join('')}</tbody></table></div>
         <div class="tk-actions"><span class="tk-muted" role="status"></span><button type="button" class="btn btn-primary" data-go>Nhập</button></div>`);
       dialog.querySelector('[data-go]').onclick = async e => {
         e.target.disabled = true;
         const overwrite = dialog.querySelector('[name=overwrite]').checked, status = dialog.querySelector('[role=status]');
-        const chosen = [...dialog.querySelectorAll('[data-i]:checked')].map(c => items[c.dataset.i]);
+        const chosen = [...dialog.querySelectorAll('[data-i]:checked')].map(c => ({...items[c.dataset.i], match: projects.find(p => p.id === dialog.querySelector(`[data-t="${c.dataset.i}"]`).value)}));
         const created = [...dialog.querySelectorAll('[data-new]:checked')].map(c => unknown[c.dataset.new]);
         for (const x of created) {
           const type = x.values.every(v => csvDate(v)) ? 'date' : x.values.every(v => /^-?[\d.,]+$/.test(v)) ? 'number' : 'text';

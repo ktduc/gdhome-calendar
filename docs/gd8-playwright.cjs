@@ -2352,6 +2352,7 @@ cases['thong-ke'] = async page => {
   assert.equal(await fresh.locator('[data-f=status3d]').inputValue(),'Xong lần 1');
   assert.equal(await fresh.locator('[data-f=designPrice]').inputValue(),'250.000');
   const loai = (await overview()).tableSchema.custom.find(c => c.label === 'LOẠI NHÀ');
+  assert.equal(await page.evaluate(() => GDHomeThongKe.csvValue('stage', 'XONG THIẾT KẾ')), 'TK xong chưa QT', 'Trạng thái Notion XONG THIẾT KẾ vào phần TK xong chưa QT');
   assert.ok(loai, 'Cột Notion lạ thành cột riêng');
   assert.equal(await fresh.locator(`[data-f="${loai.id}"]`).inputValue(),'Biệt thự');
   assert.equal(await row.locator('[data-f=address]').inputValue(),'Căn 1, Tòa Mẫu','Không ghi đè ô đã có');

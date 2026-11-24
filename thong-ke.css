@@ -19,6 +19,8 @@
 .tk-col-label:hover, .tk-col-label:focus { border-color: #d8d2c8; background: #fff; }
 .tk-col-add { display: grid; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px solid #ece7df; }
 .tk-col-add input, .tk-col-add select { height: 28px; padding: 0 8px; border: 1px solid #d8d2c8; border-radius: 7px; background: #fff; font: inherit; }
+.tk-csv-list select { max-width: 260px; height: 26px; border: 1px solid #d8d2c8; border-radius: 6px; background: #fff; font: 12px Roboto, sans-serif; }
+.tk-csv-list input[type=checkbox] { width: 16px; height: 16px; }
 .tk-csv-new { display: flex; flex-wrap: wrap; gap: 4px 14px; }
 .tk-sec-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; max-height: 55vh; overflow: auto; }
 .tk-empty { padding: 32px; text-align: center; color: #6f675d; }
