@@ -271,7 +271,7 @@ async function captureStatsImage(root) {
   if (!window.html2canvas) {
     canvasLoader ||= new Promise((resolve,reject) => {
       const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      script.src = '/vendor/html2canvas.min.js';
       script.onload = resolve;
       script.onerror = () => { canvasLoader = null; reject(new Error('Không tải được bộ xuất ảnh.')); };
       document.head.append(script);
