@@ -860,11 +860,11 @@ function getMspTargetCalendars() {
     AppState.mspScope === 'next-1-week' ||
     AppState.mspScope === 'next-2-weeks'
   ) {
-    list = AppState.calendars.filter(c => c.visible !== false);
+    list = AppState.calendars.filter(calShown);
   } else {
     // Mặc định khi chọn 'active-project': các giai đoạn (đang bật) của DỰ ÁN đang chọn
     const ownerId = activeCal ? activeCal.ownerId : null;
-    list = AppState.calendars.filter(c => c.ownerId === ownerId && c.visible !== false);
+    list = AppState.calendars.filter(c => c.ownerId === ownerId && calShown(c));
   }
   if (list.length === 0 && activeCal) list = [activeCal];
   return list;
@@ -1099,7 +1099,7 @@ function renderDemucSidebar() {
   container.innerHTML = '';
 
   const visibleCalIds = new Set(
-    AppState.calendars.filter(c => c.visible !== false).map(c => c.id)
+    AppState.calendars.filter(calShown).map(c => c.id)
   );
   const relevantTasks = AppState.tasks.filter(t => visibleCalIds.has(t.calendarId));
 

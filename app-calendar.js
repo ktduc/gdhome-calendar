@@ -73,7 +73,9 @@ function renderCalendarSidebar() {
   if (activeNameEl) activeNameEl.textContent = activeCal.name;
   if (activeDotEl) activeDotEl.style.backgroundColor = activeCal.color;
 
+  const hiddenOwners = AppState.projectOwners.filter(o => !ownerActive(o.id));
   AppState.projectOwners.forEach(owner => {
+    if (!ownerActive(owner.id)) return;
     const ownerCalendars = AppState.calendars.filter(c => c.ownerId === owner.id);
     const groupEl = document.createElement('div');
     groupEl.className = `project-owner-group ${owner.collapsed ? 'is-collapsed' : ''}`;
@@ -395,6 +397,28 @@ function renderCalendarSidebar() {
     container.appendChild(groupEl);
   });
 
+  // Nút hiện / ẩn dự án đã xong, tạm dừng... (chỉ lọc hiển thị)
+  const showAll = getShowAllProjects();
+  const inactiveCount = AppState.projectOwners.filter(o => {
+    const s = ownerStage(o);
+    return s !== 'thiết kế' && s !== 'thi công';
+  }).length;
+  if (inactiveCount > 0 && (showAll || hiddenOwners.length > 0)) {
+    const toggleBtn = document.createElement('button');
+    toggleBtn.type = 'button';
+    toggleBtn.id = 'toggle-inactive-projects';
+    toggleBtn.style.cssText = 'display:block; width:100%; margin:6px 0; padding:4px 8px; font-size:11px; color:#64748b; background:none; border:1px dashed #cbd5e1; border-radius:6px; cursor:pointer;';
+    toggleBtn.textContent = showAll ? 'Ẩn dự án đã xong' : `Hiện ${inactiveCount} dự án đã xong / tạm dừng`;
+    toggleBtn.addEventListener('click', () => {
+      setShowAllProjects(!showAll);
+      normalizeAppState();
+      renderCalendarSidebar();
+      renderCalendar();
+      if (typeof renderMSProjectView === 'function' && AppState.viewMode === 'msproject') renderMSProjectView();
+    });
+    container.appendChild(toggleBtn);
+  }
+
   if (typeof renderDemucSidebar === 'function') {
     renderDemucSidebar();
   }
@@ -624,7 +648,7 @@ function setupSidebarEvents() {
 
 function getVisibleTasks() {
   const visibleCalIds = new Set(
-    (AppState.calendars || []).filter(c => c.visible !== false).map(c => c.id)
+    (AppState.calendars || []).filter(calShown).map(c => c.id)
   );
   return (AppState.tasks || []).filter(t => visibleCalIds.has(t.calendarId) && t.visibleOnBoard !== false);
 }

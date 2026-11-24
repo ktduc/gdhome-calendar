@@ -45,7 +45,31 @@ function cleanTableSchema(value) {
   const sections = Object.fromEntries(Object.entries(value?.sections && typeof value.sections === 'object' ? value.sections : {})
     .filter(([id,v]) => /^[a-z]{1,12}$/.test(id) && Array.isArray(v?.hidden)).slice(0,10)
     .map(([id,v]) => [id,{hidden:v.hidden.filter(k => /^[a-z0-9_:]{1,40}$/i.test(k)).slice(0,100)}]));
-  return {columns,custom,sections};
+  // Lựa chọn có màu của cột Chọn 1 / Người (như Notion): {key: [{name, color}]}
+  const colors = ['gray','brown','orange','yellow','green','blue','purple','pink','red'];
+  const options = Object.fromEntries(Object.entries(value?.options && typeof value.options === 'object' ? value.options : {})
+    .filter(([key,list]) => /^[a-z0-9_:]{1,40}$/i.test(key) && Array.isArray(list)).slice(0,60)
+    .map(([key,list]) => [key,list.filter(o => str(o?.name,60)).slice(0,200).map(o => ({name:str(o.name,60),color:colors.includes(o.color) ? o.color : 'gray'}))]));
+  return {columns,custom,sections,options};
+}
+
+// Xoá hẳn 1 dự án: hồ sơ + các lịch (giai đoạn) + công việc của dự án đó
+async function deleteProject(store,key,projectId,confirmName,defaultSchedule) {
+  return withScheduleWrite(key,async () => {
+    const data = await store.get(key) || defaultSchedule();
+    const owner = (data.projectOwners || []).find(entry => entry.id === projectId);
+    if (!owner) throw Object.assign(new Error('Không tìm thấy dự án.'),{status:404});
+    if (String(confirmName || '').trim() !== owner.name) throw Object.assign(new Error('Tên xác nhận không khớp tên dự án.'),{status:400});
+    const calendarIds = new Set((data.calendars || []).filter(cal => cal.ownerId === projectId).map(cal => cal.id));
+    const taskCount = (data.tasks || []).length;
+    data.projectOwners = data.projectOwners.filter(entry => entry !== owner);
+    data.calendars = (data.calendars || []).filter(cal => !calendarIds.has(cal.id));
+    data.tasks = (data.tasks || []).filter(task => !calendarIds.has(task.calendarId));
+    data._version = (data._version || 0)+1;
+    data._updatedAt = new Date().toISOString();
+    await store.put(key,data);
+    return {removedTasks:taskCount-data.tasks.length};
+  });
 }
 
 async function writeTableSchema(store,key,schema,defaultSchedule) {
@@ -98,4 +122,4 @@ async function writeProjectProfile(store,key,body,defaultSchedule,legacy) {
   });
 }
 
-module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite,cleanProfile,projectFields,cleanTableSchema,writeTableSchema};
+module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite,cleanProfile,projectFields,cleanTableSchema,writeTableSchema,deleteProject};

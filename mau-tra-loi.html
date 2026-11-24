@@ -13,6 +13,8 @@
   <script src="/shell.js" defer></script>
   <script src="/mau-tra-loi-data.js" defer></script>
   <script src="/mau-tra-loi.js" defer></script>
+  <script src="/khao-sat-data.js" defer></script>
+  <script src="/khao-sat-admin.js" defer></script>
 </head>
 <body class="mt-body">
   <header class="app-header">
@@ -32,6 +34,10 @@
   </header>
 
   <main class="mt-main">
+    <div class="mt-tabs" role="tablist">
+      <button type="button" data-tab="mau" class="is-on">Mẫu trả lời</button>
+      <button type="button" data-tab="khao-sat">Khảo sát khách</button>
+    </div>
     <div class="mt-bar">
       <div class="mt-seg" id="mt-kh" role="group" aria-label="Cách gọi khách">
         <button type="button" data-kh="chị">Chị</button>
@@ -52,6 +58,24 @@
       <section class="mt-list" id="mt-list" aria-label="Danh sách mẫu"></section>
       <section class="mt-view" id="mt-view" aria-label="Xem trước"></section>
     </div>
+    <section class="sv-panel" id="sv-panel" hidden aria-label="Khảo sát khách">
+      <div class="sv-row">
+        <label class="mt-field">Chọn dự án <select id="sv-project"><option value="">- Chọn dự án -</option></select></label>
+        <button type="button" class="btn btn-primary" id="sv-create">Tạo link khảo sát</button>
+        <button type="button" class="btn btn-outline" id="sv-refresh">Tải lại câu trả lời</button>
+      </div>
+      <p class="sv-status" id="sv-status" role="status"></p>
+      <div class="sv-box" id="sv-box" hidden>
+        <input id="sv-link" type="text" readonly aria-label="Link khảo sát">
+        <button type="button" class="btn btn-outline" id="sv-copy-link">Copy link</button>
+        <button type="button" class="btn btn-primary" id="sv-copy-msg">Copy tin nhắn mời khách</button>
+      </div>
+      <div class="sv-detail" id="sv-detail" hidden>
+        <h2>Tóm tắt nhu cầu</h2>
+        <pre class="mt-preview" id="sv-summary"></pre>
+        <button type="button" class="btn btn-primary" id="sv-copy-summary">Copy tóm tắt nhu cầu</button>
+      </div>
+    </section>
   </main>
 </body>
 </html>

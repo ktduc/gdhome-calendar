@@ -32,6 +32,7 @@ const { handleWorkApi } = require('./work-manager');
 const { todoSync } = require('./todo-sync');
 const { handleCompare } = require('./compare');
 const { handleReplyTemplates } = require('./reply-templates');
+const { handleSurveyPublic, handleSurveyAdmin } = require('./survey');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -67,7 +68,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app-core.js', 'app-calendar.js', 'app-timeline.js', 'app-io.js', 'app-ai.js', 'catalogue-pdf.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'gdhome-logo-sq.png', 'gemini-mark.js', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css', 'timeline-todo.js', 'timeline-todo.css', 'so-sanh.html', 'so-sanh.js', 'so-sanh.css', 'thong-ke.html', 'thong-ke.js', 'thong-ke.css', 'contract-parse.js', 'mau-tra-loi.html', 'mau-tra-loi.js', 'mau-tra-loi.css', 'mau-tra-loi-data.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app-core.js', 'app-calendar.js', 'app-timeline.js', 'app-io.js', 'app-ai.js', 'catalogue-pdf.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'gdhome-logo-sq.png', 'gemini-mark.js', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css', 'timeline-todo.js', 'timeline-todo.css', 'so-sanh.html', 'so-sanh.js', 'so-sanh.css', 'thong-ke.html', 'thong-ke.js', 'thong-ke.css', 'contract-parse.js', 'mau-tra-loi.html', 'mau-tra-loi.js', 'mau-tra-loi.css', 'mau-tra-loi-data.js', 'khao-sat.html', 'khao-sat.js', 'khao-sat.css', 'khao-sat-data.js', 'khao-sat-admin.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -579,6 +580,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === '/thong-ke') rel = '/thong-ke.html';
   if (rel === '/favicon.ico') rel = '/gdhome-icon.png';
   if (rel.startsWith('/duyet/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(7))) rel = '/duyet.html';
+  if (rel.startsWith('/khao-sat/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(10))) rel = '/khao-sat.html';
   const filePath = path.normalize(path.join(ROOT_DIR, rel));
   const relFromRoot = path.relative(ROOT_DIR, filePath).replace(/\\/g, '/');
   const ext = path.extname(filePath).toLowerCase();
@@ -603,7 +605,7 @@ function serveStatic(req, res, urlPath) {
     if (ext === '.html') buf = Buffer.from(versionAssets(buf.toString('utf8')));
     res.writeHead(200, {
       'Content-Type': STATIC_MIME[ext],
-      'Cache-Control': rel === '/duyet.html' ? 'no-store' : ext === '.html' ? 'no-cache' : 'public, max-age=60',
+      'Cache-Control': rel === '/duyet.html' || rel === '/khao-sat.html' ? 'no-store' : ext === '.html' ? 'no-cache' : 'public, max-age=60',
       'Referrer-Policy': 'no-referrer'
     });
     res.end(buf);
@@ -656,6 +658,8 @@ async function handleApi(req, res, urlPath) {
   if (urlPath.startsWith('/api/review/')) {
     return handlePublicReview(req,urlPath,{ res,store,MaterialStore,readJsonBody,sendJson,dataDir:DATA_DIR,secret:SESSION_SECRET });
   }
+
+  if (urlPath.startsWith('/api/survey/')) return handleSurveyPublic(req,res,urlPath,{ store,readJsonBody,sendJson });
 
   if (urlPath === '/api/drive-backup/callback' && req.method === 'GET') {
     let linked = false;
@@ -726,6 +730,9 @@ async function handleApi(req, res, urlPath) {
   }
   if (urlPath === '/api/reply-templates') {
     return handleReplyTemplates(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
+  }
+  if (urlPath.startsWith('/api/surveys/')) {
+    return handleSurveyAdmin(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
   }
   if (urlPath === '/api/todos' || urlPath.startsWith('/api/todos/')) {
     return todos.handle(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
@@ -822,7 +829,7 @@ const loopMonitor = setInterval(() => {
 loopMonitor.unref();
 
 function safeRequestUrl(url) {
-  return url.replace(/^(\/api\/review\/|\/duyet\/)[^/]+/,'$1[ẩn]');
+  return url.replace(/^(\/api\/review\/|\/duyet\/|\/api\/survey\/|\/khao-sat\/)[^/]+/,'$1[ẩn]');
 }
 
 const server = http.createServer(async (req,res) => {

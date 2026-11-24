@@ -1,0 +1,217 @@
+/* Bộ câu hỏi "Khảo sát nhu cầu trước thiết kế" – dùng chung trình duyệt (khao-sat.js, mau-tra-loi) và Node (survey.js).
+ * Câu trả lời lưu dạng {id câu: 'giá trị' | ['giá trị',…] | 'chữ', 'id.khac': 'chữ ô Khác'}.
+ * showIf (nhóm hoặc câu): {q, in:[…]} / {q, notIn:[…]} hoặc mảng nhiều điều kiện (phải đúng hết); q phải đang hiện. */
+(root => {
+  const clean = value => String(value == null ? '' : value).trim();
+  const TEXT_MAX = 1000, OTHER_MAX = 300;
+
+  // 'a:Nhãn A;b:Nhãn B' -> [{v:'a', l:'Nhãn A'}]
+  const parseOptions = text => String(text || '').split(';').map(part => {
+    const i = part.indexOf(':');
+    return {v: part.slice(0, i).trim(), l: part.slice(i + 1).trim()};
+  }).filter(o => o.v && o.l);
+  // Q(id, loại, nhãn ngắn (dùng khi tóm tắt), câu hỏi, 'giá trị:nhãn;…', {other, showIf})
+  const Q = (id, type, short, text, options, extra) => ({id, type, short, text, options: parseOptions(options), ...extra});
+  const OTHER = {other: true};
+
+  const RESIDENTIAL = {q: 'loai_nha', in: ['chung_cu', 'nha_pho', 'biet_thu']};
+  const HOUSE = {q: 'loai_nha', in: ['nha_pho', 'biet_thu']};
+  const KIDS = {q: 'thanh_vien', in: ['tre_nho', 'tre_hoc', 'thanh_thieu']};
+  const ELDERLY = {q: 'thanh_vien', in: ['ong_ba']};
+
+  const GROUPS = [
+    {id: 'chung', title: 'Thông tin chung', intro: 'Vài câu đầu để GD HOME biết mình đang cần thiết kế gì.', questions: [
+      Q('loai_nha', 'one', 'Loại công trình', 'Công trình cần thiết kế là loại nào?', 'chung_cu:Chung cư;nha_pho:Nhà phố;biet_thu:Biệt thự;van_phong:Văn phòng;cua_hang:Cửa hàng / showroom;khac:Loại khác'),
+      Q('tinh_trang', 'one', 'Tình trạng hiện tại', 'Công trình đang ở tình trạng nào?', 'tho:Mới nhận bàn giao thô;co_ban:Đã hoàn thiện cơ bản, cần làm lại nội thất;dang_o:Đang ở, cần cải tạo;xay_moi:Đang xây mới / chưa có nhà'),
+      Q('dien_tich', 'text', 'Diện tích', 'Diện tích sử dụng (m²) và địa chỉ / tên dự án? (ghi ngắn)', ''),
+      Q('muc_dich', 'one', 'Mục đích sử dụng', 'Mình dùng công trình để làm gì?', 'o_chinh:Để ở lâu dài;nghi_duong:Nghỉ dưỡng / ở không thường xuyên;cho_thue:Cho thuê;kinh_doanh:Kinh doanh, làm việc', {showIf: RESIDENTIAL})
+    ]},
+    {id: 'gia_dinh', title: 'Gia đình & thói quen', intro: 'Hiểu người ở thì mới thiết kế đúng nhu cầu.', showIf: RESIDENTIAL, questions: [
+      Q('so_nguoi', 'one', 'Số người ở', 'Có bao nhiêu người thường xuyên ở trong nhà?', '1:1 người;2:2 người;3_4:3 - 4 người;5_6:5 - 6 người;7:Từ 7 người trở lên'),
+      Q('thanh_vien', 'many', 'Thành viên', 'Trong nhà có những ai?', 'vo_chong:Vợ chồng;tre_nho:Trẻ nhỏ dưới 6 tuổi;tre_hoc:Trẻ đi học;thanh_thieu:Thanh thiếu niên;ong_ba:Ông bà / người lớn tuổi;giup_viec:Người giúp việc ở lại;khach_o_lai:Khách / họ hàng hay ở lại', OTHER),
+      Q('thu_cung', 'many', 'Thú cưng', 'Nhà có nuôi thú cưng không?', 'khong:Không nuôi;cho:Chó;meo:Mèo;chim_ca:Chim / cá / thú nhỏ', OTHER),
+      Q('thoi_quen', 'many', 'Thói quen sinh hoạt', 'Cả nhà hay làm gì ở nhà?', 'nau_an:Nấu ăn hàng ngày;tiep_khach:Tiếp khách, tụ tập bạn bè;lam_viec:Làm việc tại nhà;xem_phim:Xem phim, chơi game;the_thao:Tập gym, yoga;doc_sach:Đọc sách;cay_canh:Trồng cây, chăm sưu tầm;nhac:Nhạc cụ, karaoke', OTHER),
+      Q('gio_o_nha', 'one', 'Thời gian ở nhà', 'Nhà mình thường ở nhà vào lúc nào?', 'toi:Chủ yếu buổi tối và cuối tuần;ca_ngay:Có người ở nhà cả ngày;thay_doi:Không cố định'),
+      Q('van_dong', 'one', 'Đi lại khó khăn', 'Có ai đi lại khó khăn hoặc cần lưu ý an toàn (người già, trẻ nhỏ)?', 'khong:Không;co:Có, cần lưu ý (sàn chống trơn, tay vịn, bo góc…)')
+    ]},
+    {id: 'nha_pho', title: 'Nhà phố / biệt thự', intro: 'Những điểm đặc thù của nhà nhiều tầng.', showIf: HOUSE, questions: [
+      Q('so_tang', 'one', 'Số tầng', 'Nhà có mấy tầng (tính cả tum, hầm nếu có)?', '2:2 tầng;3:3 tầng;4:4 tầng;5:5 tầng;6:Từ 6 tầng'),
+      Q('thang_may', 'one', 'Thang máy', 'Thang máy thế nào?', 'co_san:Đã có sẵn;se_lap:Sẽ lắp thang máy;du_phong:Chừa hố dự phòng, lắp sau;khong:Không dùng thang máy'),
+      Q('cau_thang', 'one', 'Cầu thang', 'Cầu thang hiện tại ra sao?', 'giu:Giữ nguyên;doi_mat:Chỉ ốp lại bậc, đổi lan can;lam_lai:Muốn làm lại kiểu mới;chua_co:Chưa xây'),
+      Q('gieng_troi', 'one', 'Giếng trời', 'Giếng trời / khoảng thông tầng?', 'giu:Có sẵn, muốn giữ và trang trí;them:Muốn mở thêm lấy sáng;khong:Không có / không cần'),
+      Q('tho_tang_tren', 'one', 'Phòng thờ', 'Phòng thờ đặt ở đâu?', 'tang_tren:Tầng trên cùng;tang_khac:Một tầng khác;phong_khach:Góc trong phòng khách;khong:Không cần phòng thờ'),
+      Q('san_gara', 'many', 'Sân / gara', 'Tầng trệt cần bố trí gì?', 'xe_may:Chỗ để xe máy;o_to_1:Gara 1 ô tô;o_to_2:Gara 2 ô tô trở lên;san_vuon:Sân trước / sân vườn;tieu_canh:Tiểu cảnh, cây xanh;khu_giat:Khu giặt phơi', OTHER),
+      Q('chong_nong_am', 'many', 'Vấn đề nhiệt / ẩm', 'Nhà đang gặp vấn đề nào về nóng, ẩm, thấm?', 'tang_nong:Tầng trên cùng rất nóng;tay:Tường hướng tây nắng gắt;nom_am:Nồm, ẩm mốc;tham:Thấm dột;gio_lua:Gió lùa mạnh;toi:Thiếu sáng, bí;khong:Chưa thấy vấn đề', OTHER),
+      Q('huong_nha', 'one', 'Hướng nhà', 'Hướng mặt tiền (nếu biết)?', 'dong:Đông;tay:Tây;nam:Nam;bac:Bắc;khac:Đông Nam / Tây Bắc / chưa rõ'),
+      Q('ban_cong_san_thuong', 'many', 'Ban công / sân thượng', 'Ban công, sân thượng muốn dùng thế nào?', 'giat_phoi:Giặt phơi;cay_canh:Vườn rau, cây cảnh;tra_ca_phe:Góc trà, cà phê;bbq:Tiệc nướng;khong:Không cần quan tâm', OTHER),
+      Q('be_boi_gym', 'many', 'Tiện ích riêng', 'Biệt thự: cần tiện ích riêng nào?', 'be_boi:Bể bơi;vuon:Sân vườn lớn;gym:Phòng gym;giai_tri:Phòng karaoke / chiếu phim;ham_ruou:Hầm rượu;bbq:Khu BBQ ngoài trời', {showIf: {q: 'loai_nha', in: ['biet_thu']}, ...OTHER})
+    ]},
+    {id: 'chung_cu', title: 'Căn hộ chung cư', intro: 'Các lưu ý riêng khi cải tạo trong chung cư.', showIf: {q: 'loai_nha', in: ['chung_cu']}, questions: [
+      Q('quy_dinh_bql', 'one', 'Quy định ban quản lý', 'Đã nắm quy định thi công của ban quản lý toà nhà chưa?', 'da_biet:Đã nắm, đã có quy định;chua_biet:Chưa biết, nhờ GD HOME hỏi giúp'),
+      Q('cai_tao_tho', 'one', 'Mức cải tạo', 'Mức độ cải tạo mong muốn?', 'chi_noi_that:Chỉ làm nội thất, giữ nguyên hiện trạng;nhe:Cải tạo nhẹ (đổi gạch, sơn, trần, điện nước);lon:Muốn đục phá / dời vách nếu được phép'),
+      Q('logia', 'one', 'Logia / máy giặt', 'Máy giặt và phơi đồ bố trí thế nào?', 'logia:Ở logia, có che chắn;wc:Trong WC;giau_tu:Giấu máy giặt trong tủ;chua_biet:Chưa biết, cần tư vấn'),
+      Q('dieu_hoa', 'one', 'Điều hoà', 'Điều hoà dự kiến?', 'treo:Treo tường;am_tran:Âm trần nối ống gió;giu_hien_trang:Giữ hệ thống hiện có;chua_biet:Chưa biết, cần tư vấn'),
+      Q('view_nang', 'one', 'Ánh sáng / view', 'Căn hộ có đặc điểm gì về ánh sáng, view?', 'nang_tay:Nắng chiều gay gắt;toi:Hơi tối, ít sáng;view_dep:View đẹp, muốn tận dụng;binh_thuong:Bình thường')
+    ]},
+    {id: 'van_phong', title: 'Văn phòng / cửa hàng', intro: 'Nhu cầu không gian làm việc, kinh doanh.', showIf: {q: 'loai_nha', in: ['van_phong', 'cua_hang']}, questions: [
+      Q('nhan_su', 'one', 'Số nhân sự', 'Số người làm việc / phục vụ cùng lúc?', 'duoi_10:Dưới 10 người;10_30:10 - 30 người;30_60:30 - 60 người;tren_60:Trên 60 người'),
+      Q('khu_vuc', 'many', 'Khu vực cần có', 'Cần những khu vực nào?', 'le_tan:Lễ tân / quầy thu ngân;lam_viec:Khu làm việc chung;giam_doc:Phòng giám đốc;hop:Phòng họp;tiep_khach:Khu tiếp khách;pantry:Pantry / bếp nhỏ;kho:Kho, lưu trữ hồ sơ;server:Phòng máy chủ;nghi:Phòng nghỉ;trung_bay:Khu trưng bày sản phẩm', OTHER),
+      Q('thuong_hieu', 'one', 'Nhận diện thương hiệu', 'Có cần thể hiện nhận diện thương hiệu (logo, màu) trong thiết kế?', 'co:Có, đã có bộ nhận diện;chua:Muốn GD HOME gợi ý;khong:Không cần'),
+      Q('thiet_bi_vp', 'many', 'Hạ tầng thiết bị', 'Hạ tầng kỹ thuật cần lưu ý?', 'mang:Mạng, cáp, tủ rack;man_hinh:Màn hình / máy chiếu họp;camera:Camera, chấm công;in_an:Khu máy in;dieu_hoa:Điều hoà trung tâm', OTHER),
+      Q('khach_den', 'one', 'Khách đến', 'Khách hàng ghé trực tiếp nhiều không?', 'nhieu:Nhiều, cần ấn tượng ngay cửa;it:Ít, chủ yếu nội bộ')
+    ]},
+    {id: 'khach', title: 'Phòng khách', intro: 'Không gian tiếp khách và sinh hoạt chung.', showIf: RESIDENTIAL, questions: [
+      Q('pk_khach', 'one', 'Lượng khách', 'Nhà có hay tiếp khách đông không?', 'it:Ít khách;thinh_thoang:Thỉnh thoảng 6 - 10 người;nhieu:Thường xuyên đông người'),
+      Q('pk_sofa', 'one', 'Kiểu sofa', 'Bộ ghế phòng khách mong muốn?', 'goc_l:Sofa góc chữ L;van:Sofa văng + ghế đơn;thap:Sofa thấp / ngồi bệt;ghe_go:Bộ bàn ghế gỗ;chua_biet:Chưa biết, cần tư vấn'),
+      Q('pk_tv', 'one', 'TV / giải trí', 'Giải trí trong phòng khách?', 'tv_treo:TV treo tường;tv_ke:TV đặt trên kệ;may_chieu:Máy chiếu;khong:Không dùng TV'),
+      Q('pk_chuc_nang', 'many', 'Chức năng thêm', 'Phòng khách cần thêm gì?', 'ke_sach:Kệ sách;trung_bay:Tủ trưng bày / sưu tầm;ruou:Tủ / quầy rượu;doc_sach:Góc đọc sách;piano:Piano / nhạc cụ;giay:Tủ giày ngay lối vào;goc_tre:Góc chơi cho trẻ', OTHER),
+      Q('pk_cam_giac', 'one', 'Cảm giác không gian', 'Phòng khách mình thích kiểu nào?', 'thoang:Thoáng, ít đồ;am_cung:Ấm cúng, nhiều chi tiết;sang_trong:Sang trọng, ấn tượng')
+    ]},
+    {id: 'bep', title: 'Bếp & phòng ăn', intro: 'Thói quen nấu nướng quyết định cách bố trí bếp.', showIf: RESIDENTIAL, questions: [
+      Q('bep_nau', 'one', 'Mức độ nấu ăn', 'Nhà mình nấu ăn nhiều không?', 'nhieu:Nấu hàng ngày, nhiều món (chiên xào nhiều);vua:Nấu vài bữa trong tuần;it:Ít khi nấu, chủ yếu hâm nóng / ăn ngoài'),
+      Q('bep_kieu', 'one', 'Kiểu tủ bếp', 'Dáng tủ bếp mong muốn?', 'chu_i:Chữ I (thẳng);chu_l:Chữ L;chu_u:Chữ U;song_song:Song song 2 dãy;chua_biet:Chưa biết, cần tư vấn'),
+      Q('bep_kin', 'one', 'Bếp mở / kín', 'Bếp nên mở hay kín?', 'mo:Bếp mở liền phòng khách;kin:Bếp kín, tách mùi bằng cửa kính;bep_doi:Bếp đôi (bếp nấu nặng + bếp trưng bày)'),
+      Q('bep_dao', 'one', 'Đảo bếp / quầy bar', 'Có muốn đảo bếp hoặc quầy bar không?', 'dao:Có đảo bếp;bar:Quầy bar nhỏ;khong:Không cần'),
+      Q('bep_thiet_bi', 'many', 'Thiết bị bếp', 'Thiết bị bếp dự kiến?', 'tu:Bếp từ;gas:Bếp gas;hut_mui:Máy hút mùi;lo_nuong:Lò nướng âm;lo_vi_song:Lò vi sóng;rua_bat:Máy rửa bát;tu_lanh_lon:Tủ lạnh lớn (side-by-side);loc_nuoc:Máy lọc nước âm tủ;tu_ruou:Tủ bảo quản rượu / thực phẩm;may_xay:Máy xay, ép, nồi chiên đặt cố định', OTHER),
+      Q('bep_luu_tru', 'many', 'Lưu trữ bếp', 'Cần chỗ cất đồ bếp nào?', 'do_kho:Tủ đồ khô, kho thực phẩm;gia_vi:Kệ gia vị gần bếp;noi_chao:Ngăn kéo nồi chảo;bat_dia:Tủ chén bát lớn;thung_rac:Thùng rác phân loại âm tủ', OTHER),
+      Q('ban_an', 'one', 'Bàn ăn', 'Bàn ăn dùng cho bao nhiêu người?', 'bon:4 người;sau:6 người;tam:8 người trở lên;mo_rong:Bàn kéo dài được;chi_bar:Chỉ ăn ở quầy bar / đảo bếp'),
+      Q('ban_an_vi_tri', 'one', 'Vị trí bàn ăn', 'Bàn ăn đặt ở đâu?', 'canh_bep:Sát khu bếp;phong_rieng:Phòng ăn riêng;canh_khach:Liền khu phòng khách')
+    ]},
+    {id: 'ngu', title: 'Phòng ngủ', intro: 'Không gian nghỉ ngơi cho từng thành viên.', showIf: RESIDENTIAL, questions: [
+      Q('pn_so', 'one', 'Số phòng ngủ', 'Cần bao nhiêu phòng ngủ?', '1:1 phòng;2:2 phòng;3:3 phòng;4:4 phòng;5:5 phòng trở lên'),
+      Q('pn_master', 'many', 'Phòng ngủ chính', 'Phòng ngủ chính cần có gì?', 'wc_rieng:WC riêng;wic:Phòng thay đồ (walk-in closet);trang_diem:Bàn trang điểm;lam_viec:Góc làm việc;doc_sach:Ghế đọc sách;tv:TV;ban_cong:Cửa ra ban công', OTHER),
+      Q('pn_giuong', 'one', 'Kích thước giường', 'Giường ngủ chính?', '1m6:1m6;1m8:1m8;2m:2m trở lên;co_hoc:Giường có hộc chứa đồ;chua_biet:Chưa biết, cần tư vấn'),
+      Q('pn_con', 'many', 'Phòng của con', 'Phòng của con cần?', 'giuong_tang:Giường tầng;ban_hoc:Bàn học;choi:Góc chơi, sàn chơi;do_choi:Tủ đồ chơi, sách;rieng:Mỗi bé một phòng;chung:Các bé ở chung', {showIf: KIDS, ...OTHER}),
+      Q('pn_ong_ba', 'one', 'Phòng ông bà', 'Phòng người lớn tuổi?', 'tang_tret:Ưu tiên tầng thấp / gần WC;co_thang:Có thể lên cầu thang;chua_biet:Chưa quyết định', {showIf: ELDERLY}),
+      Q('pn_khach', 'one', 'Phòng khách ngủ qua đêm', 'Cần phòng cho khách ngủ lại?', 'co:Có, 1 phòng riêng;da_nang:Phòng đa năng (làm việc + khách);khong:Không cần'),
+      Q('pn_rem_sang', 'one', 'Ánh sáng phòng ngủ', 'Ánh sáng và độ ồn phòng ngủ?', 'toi:Cần tối, cản sáng hoàn toàn;tu_nhien:Thích nhiều ánh sáng tự nhiên;chong_on:Cần cách âm (đường ồn, hàng xóm)')
+    ]},
+    {id: 'wc', title: 'Nhà vệ sinh', intro: 'Chi tiết khu vệ sinh và tắm giặt.', showIf: RESIDENTIAL, questions: [
+      Q('wc_so', 'one', 'Số WC', 'Cần bao nhiêu nhà vệ sinh?', '1:1;2:2;3:3;4:4 trở lên'),
+      Q('wc_kho_uot', 'one', 'Phân khu khô / ướt', 'Cách ngăn khu tắm?', 'kinh:Vách kính tắm đứng;rem:Rèm / chỉ để vòi hoa sen;bon:Có bồn tắm;khong:Không cần phân tách'),
+      Q('wc_thiet_bi', 'many', 'Thiết bị WC', 'Thiết bị mong muốn?', 'bon_tam:Bồn tắm nằm;bon_cau_tt:Bồn cầu thông minh;sen_cay:Sen cây;lavabo_doi:Lavabo đôi;tu_guong:Tủ gương;may_giat:Máy giặt đặt trong WC;xong_hoi:Xông hơi / sưởi;ban_dung:Bàn vệ sinh', OTHER),
+      Q('wc_thong_gio', 'one', 'Thông gió', 'WC có cửa sổ lấy sáng / thông gió không?', 'co:Có cửa sổ;khong:Không, cần quạt hút tốt;chua_biet:Chưa rõ'),
+      Q('wc_an_toan', 'one', 'An toàn', 'WC cần lưu ý an toàn (người già, trẻ nhỏ)?', 'co:Có (sàn chống trơn, tay vịn, tránh bậc);khong:Không đặc biệt', {showIf: [RESIDENTIAL, {q: 'thanh_vien', in: ['ong_ba', 'tre_nho']}]})
+    ]},
+    {id: 'lam_viec', title: 'Làm việc & học tập', intro: 'Góc làm việc, học bài tại nhà.', showIf: RESIDENTIAL, questions: [
+      Q('lv_ai', 'many', 'Người cần chỗ làm việc', 'Ai cần chỗ làm việc, học tập tại nhà?', 'chu_nha:Chủ nhà;vo_chong:Cả hai vợ chồng;con:Con học bài;khong:Không ai cần', OTHER),
+      Q('lv_kieu', 'one', 'Kiểu góc làm việc', 'Chỗ làm việc mong muốn?', 'phong_rieng:Phòng làm việc riêng;goc:Góc nhỏ trong phòng ngủ / khách;ban_doi:Bàn dài dùng chung;chua_biet:Chưa biết, cần tư vấn', {showIf: {q: 'lv_ai', notIn: ['khong']}}),
+      Q('lv_thiet_bi', 'many', 'Thiết bị làm việc', 'Thiết bị làm việc?', 'hai_man:2 màn hình trở lên;pc:Máy tính để bàn cấu hình cao;in:Máy in;quay:Quay phim / livestream;sach:Nhiều sách, tài liệu', {showIf: {q: 'lv_ai', notIn: ['khong']}, ...OTHER})
+    ]},
+    {id: 'tho', title: 'Thờ cúng', intro: 'Không gian tâm linh của gia đình.', showIf: RESIDENTIAL, questions: [
+      Q('tho_co', 'one', 'Bàn thờ', 'Nhà có cần bàn thờ không?', 'phong_rieng:Phòng thờ riêng;tu_tho:Tủ thờ / bàn thờ đứng;treo:Bàn thờ treo tường;khong:Không cần'),
+      Q('tho_loai', 'many', 'Thờ gì', 'Thờ những gì?', 'gia_tien:Gia tiên;phat:Phật;than_tai:Thần tài - Thổ địa;khac:Khác', {showIf: {q: 'tho_co', notIn: ['khong']}, ...OTHER}),
+      Q('tho_vi_tri', 'one', 'Vị trí', 'Vị trí đặt bàn thờ trong căn hộ?', 'phong_khach:Phòng khách;phong_ngu:Trong phòng ngủ;canh_bep:Gần bếp / hành lang;chua_biet:Chưa biết, cần tư vấn', {showIf: [{q: 'loai_nha', in: ['chung_cu']}, {q: 'tho_co', notIn: ['khong']}]})
+    ]},
+    {id: 'luu_tru', title: 'Lưu trữ & đồ đạc', intro: 'Càng đủ thông tin, tủ thiết kế càng vừa với đồ của mình.', showIf: RESIDENTIAL, questions: [
+      Q('lt_quan_ao', 'one', 'Lượng quần áo', 'Lượng quần áo, túi xách, phụ kiện?', 'it:Vừa phải, tủ âm là đủ;nhieu:Nhiều, cần tủ lớn;rat_nhieu:Rất nhiều, nên có phòng thay đồ'),
+      Q('lt_giay', 'one', 'Lượng giày dép', 'Số lượng giày dép của cả nhà?', 'it:Dưới 10 đôi;vua:10 - 30 đôi;nhieu:Trên 30 đôi / sưu tầm'),
+      Q('lt_sach', 'one', 'Sách', 'Sách, tài liệu?', 'it:Ít;vua:Vài kệ;nhieu:Rất nhiều, như thư viện'),
+      Q('lt_the_thao', 'many', 'Đồ thể thao', 'Đồ thể thao, giải trí cần cất?', 'xe_dap:Xe đạp;golf:Gậy golf;vot:Vợt, bóng;cam_trai:Đồ cắm trại, du lịch;gym:Thiết bị gym tại nhà;khong:Không có', OTHER),
+      Q('lt_khac', 'many', 'Đồ cồng kềnh khác', 'Đồ cồng kềnh khác cần chỗ cất?', 'vali:Vali;tet:Đồ Tết, đồ cúng;tre_em:Đồ trẻ em (xe đẩy, đồ chơi);dung_cu:Dụng cụ sửa chữa;hut_bui:Máy hút bụi, robot, thang;thuc_pham:Kho thực phẩm khô, nước uống', OTHER),
+      Q('lt_kho', 'one', 'Kho', 'Có cần phòng / ngăn kho riêng?', 'phong:Có, phòng kho riêng;gam:Tận dụng gầm cầu thang / hộc;khong:Không cần')
+    ]},
+    {id: 'thong_minh', title: 'Thiết bị thông minh', intro: 'Chọn mức nhà thông minh phù hợp ngân sách.', showIf: RESIDENTIAL, questions: [
+      Q('tb_muc', 'one', 'Nhà thông minh', 'Mức độ nhà thông minh mong muốn?', 'khong:Không cần;co_ban:Cơ bản (đèn, rèm, ổ cắm);nhieu:Nhiều, điều khiển toàn nhà;chua_biet:Chưa biết, cần tư vấn'),
+      Q('tb_loai', 'many', 'Thiết bị muốn có', 'Muốn điều khiển những gì?', 'den:Đèn theo cảnh;rem:Rèm điện;khoa:Khoá vân tay / thẻ;camera:Camera an ninh;dieu_hoa:Điều hoà thông minh;am_thanh:Loa âm thanh đa vùng;cam_bien:Cảm biến (khói, rò nước, chuyển động);robot:Robot hút bụi, lau nhà', {showIf: {q: 'tb_muc', in: ['co_ban', 'nhieu', 'chua_biet']}, ...OTHER})
+    ]},
+    {id: 'phong_cach', title: 'Phong cách & màu sắc', intro: 'Chọn thoải mái, có thể chọn nhiều phong cách.', questions: [
+      Q('ps_phong_cach', 'many', 'Phong cách ưa thích', 'Mình thích phong cách nào? (chọn tối đa 3)', 'hien_dai:Hiện đại;modern_farmhouse:Modern Farmhouse;indochine:Indochine;japandi:Japandi;tan_co_dien:Tân cổ điển;toi_gian:Tối giản (Minimalist);scandinavian:Bắc Âu (Scandinavian);wabi_sabi:Wabi-sabi;industrial:Industrial (công nghiệp);luxury:Sang trọng (Luxury);chua_biet:Chưa biết, cần tư vấn', OTHER),
+      Q('ps_mau', 'many', 'Màu yêu thích', 'Màu sắc chủ đạo yêu thích?', 'trang_kem:Trắng, kem;go_sang:Gỗ sáng;go_toi:Gỗ tối (óc chó);xam:Xám;den:Đen;xanh_la:Xanh lá, xanh rêu;xanh_navy:Xanh navy;vang_dong:Vàng đồng;pastel:Pastel nhẹ;mau_dat:Màu đất', OTHER),
+      Q('ps_vat_lieu', 'many', 'Vật liệu', 'Vật liệu muốn thấy trong nhà?', 'go_tn:Gỗ tự nhiên;da:Đá, đá nung;kim_loai:Kim loại;kinh:Kính;vai:Vải, boucle;may_tre:Mây tre, cói;be_tong:Bê tông, xi măng', OTHER),
+      Q('ps_anh_sang', 'one', 'Ánh sáng đèn', 'Ánh sáng đèn mong muốn?', 'trang:Trắng sáng, rõ ràng;vang:Vàng ấm, thư giãn;ket_hop:Kết hợp theo từng khu'),
+      Q('ps_tham_khao', 'text', 'Hình ảnh tham khảo', 'Link Pinterest / hình ảnh nhà mình thích (nếu có)?', ''),
+      Q('ps_khong_thich', 'text', 'Điều không thích', 'Điều gì mình chắc chắn KHÔNG thích?', '')
+    ]},
+    {id: 'ngan_sach', title: 'Ngân sách & thời gian', intro: 'Để GD HOME đề xuất phương án sát thực tế.', questions: [
+      Q('ns_noi_that', 'one', 'Ngân sách nội thất', 'Ngân sách nội thất dự kiến (không gồm phần thô)?', 'duoi_200:Dưới 200 triệu;200_400:200 - 400 triệu;400_700:400 - 700 triệu;700_1000:700 triệu - 1 tỷ;tren_1000:Trên 1 tỷ;chua_biet:Chưa xác định, cần tư vấn'),
+      Q('ns_gom', 'many', 'Hạng mục trong ngân sách', 'Ngân sách đó đã gồm những hạng mục nào?', 'thiet_ke:Thiết kế;thi_cong:Thi công hoàn thiện;noi_that_roi:Nội thất rời;den:Đèn;rem:Rèm;decor:Đồ trang trí;thiet_bi:Thiết bị bếp, điện tử', OTHER),
+      Q('ns_vao_o', 'one', 'Thời gian vào ở', 'Mong muốn vào ở sau bao lâu?', 'duoi_2:Dưới 2 tháng;3_4:3 - 4 tháng;5_6:5 - 6 tháng;tren_6:Trên 6 tháng;chua_biet:Chưa xác định'),
+      Q('ns_moc', 'text', 'Mốc thời gian', 'Có mốc cố định nào (Tết, đám cưới, sinh em bé…)?', ''),
+      Q('ns_uu_tien', 'many', 'Ưu tiên', 'Điều quan trọng nhất với mình? (chọn tối đa 3)', 'ben:Bền, dùng lâu;dep:Đẹp, ấn tượng;re:Chi phí hợp lý;de_ve_sinh:Dễ vệ sinh, ít bảo trì;tien_do:Thi công nhanh;thong_minh:Tiện nghi, công nghệ;luu_tru:Nhiều chỗ chứa đồ;suc_khoe:An toàn, thân thiện sức khoẻ'),
+      Q('ns_quyet_dinh', 'one', 'Người quyết định', 'Ai cùng quyết định thiết kế?', 'mot:Mình tự quyết;vo_chong:Hai vợ chồng;gia_dinh:Cả gia đình (bố mẹ, anh chị em)'),
+      Q('cuoi_ghi_chu', 'text', 'Điều khác muốn GD HOME biết', 'Còn điều gì mình muốn GD HOME lưu ý không?', '')
+    ]}
+  ];
+
+  GROUPS.forEach(group => group.questions.forEach(q => { q.group = group.id; }));
+  const QUESTIONS = GROUPS.flatMap(group => group.questions);
+  const QUESTION_BY_ID = Object.fromEntries(QUESTIONS.map(q => [q.id, q]));
+
+  const asList = value => Array.isArray(value) ? value.map(String) : value == null || value === '' ? [] : [String(value)];
+  function conditionOk(cond, answers, visible) {
+    if (!cond) return true;
+    if (Array.isArray(cond)) return cond.every(c => conditionOk(c, answers, visible));
+    if (!visible.has(cond.q)) return false;
+    const given = asList(answers[cond.q]);
+    if (cond.in) return given.some(v => cond.in.includes(v));
+    return given.length > 0 && !given.some(v => (cond.notIn || []).includes(v));
+  }
+
+  // Các nhóm kèm câu đang hiện theo câu trả lời hiện tại (nhóm không còn câu nào thì bỏ).
+  function visibleGroups(answers) {
+    answers = answers || {};
+    const visible = new Set();
+    const out = [];
+    for (const group of GROUPS) {
+      // Nhóm ẩn thì mọi câu của nhóm ẩn; điều kiện trong nhóm xét theo các câu đã hiện trước đó.
+      const groupOk = conditionOk(group.showIf, answers, visible);
+      const questions = [];
+      for (const q of group.questions) {
+        if (groupOk && conditionOk(q.showIf, answers, visible)) { visible.add(q.id); questions.push(q); }
+      }
+      if (questions.length) out.push({...group, questions});
+    }
+    return out;
+  }
+  const visibleQuestions = answers => visibleGroups(answers).flatMap(group => group.questions);
+
+  // Làm sạch câu trả lời từ khách: chỉ id câu có thật, giá trị nằm trong danh sách đáp án, giới hạn độ dài.
+  function cleanAnswers(raw) {
+    const out = {};
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+    for (const q of QUESTIONS) {
+      const value = raw[q.id];
+      if (q.type === 'text') {
+        const text = typeof value === 'string' ? value.replace(/\r/g, '').trim().slice(0, TEXT_MAX) : '';
+        if (text) out[q.id] = text;
+        continue;
+      }
+      const allowed = new Set(q.options.map(o => o.v));
+      if (q.type === 'one') {
+        if (typeof value === 'string' && allowed.has(value)) out[q.id] = value;
+      } else if (Array.isArray(value)) {
+        const list = [...new Set(value.filter(v => typeof v === 'string' && allowed.has(v)))];
+        if (list.length) out[q.id] = list;
+      }
+      const other = q.other && typeof raw[q.id + '.khac'] === 'string' ? raw[q.id + '.khac'].replace(/\s+/g, ' ').trim().slice(0, OTHER_MAX) : '';
+      if (other) out[q.id + '.khac'] = other;
+    }
+    return out;
+  }
+
+  function answerText(q, answers) {
+    const labels = new Map(q.options.map(o => [o.v, o.l]));
+    const parts = q.type === 'text' ? [clean(answers[q.id])] : asList(answers[q.id]).map(v => labels.get(v)).filter(Boolean);
+    const other = clean(answers[q.id + '.khac']);
+    if (other) parts.push('Khác: ' + other);
+    return parts.filter(Boolean).join(', ');
+  }
+
+  // Bản tóm tắt nhu cầu theo nhóm (chỉ nhóm / câu đang hiện và đã trả lời) để copy; bước đầu cho "tổng hợp thành nhiệm vụ".
+  function summarize(answers, projectName) {
+    answers = answers || {};
+    const blocks = [];
+    for (const group of visibleGroups(answers)) {
+      const lines = group.questions.map(q => [q, answerText(q, answers)]).filter(([, text]) => text)
+        .map(([q, text]) => '- ' + q.short + ': ' + text);
+      if (lines.length) blocks.push(group.title.toUpperCase() + '\n' + lines.join('\n'));
+    }
+    if (!blocks.length) return '';
+    return ('NHU CẦU KHÁCH' + (projectName ? ' - ' + projectName : '') + '\n\n' + blocks.join('\n\n')).trim();
+  }
+
+  const api = {GROUPS, QUESTIONS, QUESTION_BY_ID, parseOptions, visibleGroups, visibleQuestions, cleanAnswers, summarize, answerText};
+  if (typeof module !== 'undefined' && module.exports) module.exports = api;
+  else root.GDHomeSurveyData = api;
+})(typeof window !== 'undefined' ? window : globalThis);

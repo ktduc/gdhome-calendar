@@ -11,8 +11,8 @@
   // Các phần của bảng (cùng 1 dữ liệu, lọc theo Giai đoạn); thứ tự ưu tiên từ trên xuống
   const SECTIONS = [
     {id: 'tc', label: 'THI CÔNG', stages: ['Thi công'], color: '#b45309'},
-    {id: 'tcqt', label: 'TC XONG CHƯA QT', stages: ['TC xong chưa QT'], color: '#b91c1c'},
     {id: 'tk', label: 'THIẾT KẾ', stages: ['Thiết kế'], color: '#1d4ed8'},
+    {id: 'tcqt', label: 'TC XONG CHƯA QT', stages: ['TC xong chưa QT'], color: '#b91c1c'},
     {id: 'tkqt', label: 'TK XONG CHƯA QT', stages: ['TK xong chưa QT'], color: '#7c3aed'},
     {id: 'khac', label: 'CHỜ · KHÁC', stages: null, color: '#0f766e'},   // giai đoạn tự đặt (vd "Chưa kí", "Đã gửi layout - chờ")
     {id: 'xong', label: 'ĐÃ QT · TẠM DỪNG', stages: ['Hoàn thành', 'Tạm dừng'], color: '#6b7280', collapsed: true},
@@ -61,7 +61,7 @@
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF_KEY)) || {}); } catch { /* trình duyệt chặn bộ nhớ: dùng mặc định */ }
   if (!prefs.v2) { prefs.mode = 'sections'; prefs.v2 = true; }   // lần đầu có chia phần: mở chế độ Theo phần
   prefs.collapsed ||= SECTIONS.filter(s => s.collapsed).map(s => s.id);
-  let schema = {columns: [], custom: [], sections: {}}, ALL = [];
+  let schema = {columns: [], custom: [], sections: {}, options: {}}, ALL = [];
   // Danh sách cột đã áp cấu hình: cột mặc định + cột riêng, theo thứ tự / tên / độ rộng / ẩn đã lưu
   function refreshCols() {
     const base = [...COLS, ...schema.custom.map(c => ({key: c.id, label: c.label, type: c.type, options: c.options, sum: ['number', 'money'].includes(c.type), custom: true}))];
@@ -157,7 +157,8 @@
   }
   function groupKeys(p) {
     const v = val(p, prefs.group);
-    const keys = colOf(prefs.group)?.type === 'people' ? String(v).split(',').map(s => s.trim()).filter(Boolean) : [v];
+    const col = colOf(prefs.group);
+    const keys = ['people', 'select'].includes(col?.type) ? splitVals(col, v).map(x => canon(col, x)) : [v];
     return keys.length && keys[0] ? keys : ['(trống)'];
   }
 
@@ -167,17 +168,16 @@
     switch (col.type) {
       case 'name':
         return `<div class="tk-name"><input ${f} value="${esc(p.name)}" aria-label="Tên dự án">
-          <span class="tk-links"><a href="/du-an?project=${encodeURIComponent(p.id)}" title="Hồ sơ dự án">📁</a><a href="/?project=${encodeURIComponent(p.id)}" title="Lịch tiến độ">📅</a><a href="/chot-ma?project=${encodeURIComponent(p.id)}" title="Chốt mã">🏷</a></span></div>`;
+          <span class="tk-links"><a href="/du-an?project=${encodeURIComponent(p.id)}" title="Hồ sơ dự án">📁</a><a href="/?project=${encodeURIComponent(p.id)}" title="Lịch tiến độ">📅</a><a href="/chot-ma?project=${encodeURIComponent(p.id)}" title="Chốt mã">🏷</a><button type="button" class="tk-more" data-more="${esc(p.id)}" title="Xoá dự án…" aria-label="Xoá dự án">⋯</button></span></div>`;
       case 'date': return `<input type="date" ${f} value="${esc(v)}">`;
       case 'check': return `<input type="checkbox" ${f} ${v ? 'checked' : ''} aria-label="${esc(col.label)}">`;
       case 'number': return `<input class="tk-num" inputmode="decimal" ${f} value="${esc(v ? String(v).replace('.', ',') : '')}" placeholder="${esc(auto)}">`;
       case 'money': return `<input class="tk-num" inputmode="numeric" ${f} value="${esc(fmtMoney(v || ''))}" placeholder="${esc(fmtMoney(auto))}">`;
-      case 'select': {
-        const options = [...new Set([...(col.options || []), v].filter(Boolean))];
-        return `<select ${f} class="${v ? '' : 'is-auto'}" data-tone="${esc(v || auto)}"><option value="">${auto ? 'tự: ' + esc(auto) : '—'}</option>` +
-          options.map(o => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('') + '</select>';
+      case 'select': case 'people': {
+        const vals = splitVals(col, v).map(x => canon(col, x));
+        const chips = vals.length ? vals.map(x => chip(col, x)).join('') : auto ? `<span class="tk-auto">tự: ${esc(auto)}</span>` : '';
+        return `<button type="button" class="tk-tags" ${f} title="${esc(vals.join(', ') || (auto ? 'Tự: ' + auto : 'Bấm để chọn'))}">${chips}</button>`;
       }
-      case 'people': return `<input ${f} list="tk-people" value="${esc(v)}" placeholder="${esc(auto)}">`;
       case 'deadline': {
         const d = p.auto?.deadline, late = p.auto?.overdue || [];
         const lateChip = late.length ? `<span class="tk-chip is-late" title="${esc(late.map(t => t.label + ' ' + fmtDate(t.end)).join('\n'))}">Trễ ${late.length}</span>` : '';
@@ -264,7 +264,7 @@
   function renderBoard(list) {
     const field = ['stage', 'status3d', 'statusHskt'].includes(prefs.group) ? prefs.group : 'stage';
     const col = colOf(field);
-    const lanes = [...new Set([...col.options, ...list.map(p => val(p, field)).filter(Boolean)])];
+    const lanes = optionsOf(col).map(o => o.name);
     const card = p => `<article class="tk-card ${rowClass(p)}" draggable="true" data-row="${esc(p.id)}">
       <a href="/du-an?project=${encodeURIComponent(p.id)}"><strong>${esc(p.name)}</strong></a>
       <small>${esc(p.profile.address || '')}</small>
@@ -272,7 +272,7 @@
       <small>${esc([val(p, 'designer3d'), val(p, 'designerHskt')].filter(Boolean).join(' · '))}</small></article>`;
     byId('tk-wrap').className = 'tk-wrap';
     byId('tk-wrap').innerHTML = `<div class="tk-board" data-field="${field}">` + ['', ...lanes].map(lane => {
-      const items = list.filter(p => (val(p, field) || '') === lane);
+      const items = list.filter(p => (val(p, field) ? canon(col, val(p, field)) : '') === lane);
       if (!lane && !items.length) return '';
       return `<section class="tk-lane" data-lane="${esc(lane)}"><h3>${esc(lane || '(trống)')} <small>${items.length}</small></h3>${items.map(card).join('')}</section>`;
     }).join('') + '</div>';
@@ -287,6 +287,7 @@
       `<form class="tk-col-add"><b>+ Thêm thuộc tính</b><input name="label" placeholder="Tên cột, vd: Hướng nhà" required>
         <select name="type">${CUSTOM_TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
         <input name="options" placeholder="Các lựa chọn, cách nhau bằng dấu phẩy" hidden><button class="btn btn-primary btn-sm">Thêm cột</button></form>` +
+      '<button type="button" class="btn btn-outline btn-sm" data-sync-values title="Gộp các giá trị viết khác nhau (hoa/thường, dấu cách) về cùng 1 lựa chọn">⟳ Đồng bộ giá trị trùng</button>' +
       '<button type="button" class="btn btn-outline btn-sm" data-reset-cols>↺ Thứ tự, độ rộng, tên về mặc định</button>';
   }
   const newColId = () => 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
@@ -298,6 +299,7 @@
   }
 
   function render() {
+    optCache.clear();
     byId('tk-views').innerHTML = VIEWS.map(([id, label]) => {
       const count = id === 'late' ? projects.filter(p => p.auto?.overdue?.length).length : id === 'pay' ? projects.filter(p => duePayments(p).length).length : 0;
       return `<button type="button" role="tab" aria-selected="${prefs.view === id}" data-view="${id}">${label}${count ? ` <b>${count}</b>` : ''}</button>`;
@@ -327,13 +329,224 @@
       throw error;
     }
   }
+  const patchOf = (p, field, value) => colOf(field)?.custom ? {custom: {...p.profile.custom, [field]: value}} : {[field]: value};
+  const currentOf = (p, field) => field === 'project' ? p.name : colOf(field)?.custom ? (p.profile.custom?.[field] ?? '') : (p.profile[field] ?? (field === 'payments' ? [] : ''));
   async function saveField(id, field, value) {
     const p = projects.find(x => x.id === id);
     if (!p) return;
-    const project = await saveProfile(id, colOf(field)?.custom ? {custom: {...p.profile.custom, [field]: value}} : {[field]: value});
+    const before = patchOf(p, field, currentOf(p, field)), after = patchOf(p, field, value);
+    const project = await saveProfile(id, after);
     p.profile = project.profile;
     p.name = project.name;
+    record([{id, before, after}]);
     render();
+  }
+  // Lưu nhiều dự án 1 lượt (đổi tên lựa chọn, đồng bộ giá trị…) = 1 bước hoàn tác
+  async function saveMany(changes, label) {
+    let done = 0;
+    for (const c of changes) {
+      const p = projects.find(x => x.id === c.id);
+      try { const project = await saveProfile(c.id, c.after); if (p) { p.profile = project.profile; p.name = project.name; } done++; } catch { /* đã báo lỗi */ }
+    }
+    if (changes.length) record(changes);
+    render();
+    if (label) toast(`${label}: ${done} dự án.`);
+  }
+
+  // ------------------------------------------------------------ hoàn tác / làm lại (các ô đã sửa trong phiên này)
+  const undoStack = [], redoStack = [];
+  function record(changes) { undoStack.push(changes); if (undoStack.length > 100) undoStack.shift(); redoStack.length = 0; paintUndo(); }
+  function paintUndo() { document.querySelector('[data-undo]').disabled = !undoStack.length; document.querySelector('[data-redo]').disabled = !redoStack.length; }
+  async function stepHistory(from, to, key) {
+    const changes = from.pop();
+    if (!changes) return;
+    for (const c of changes) {
+      const p = projects.find(x => x.id === c.id);
+      try { const project = await saveProfile(c.id, c[key]); if (p) { p.profile = project.profile; p.name = project.name; } } catch { /* đã báo lỗi */ }
+    }
+    to.push(changes);
+    paintUndo();
+    render();
+    toast(key === 'before' ? 'Đã hoàn tác.' : 'Đã làm lại.');
+  }
+  const undo = () => stepHistory(undoStack, redoStack, 'before');
+  const redo = () => stepHistory(redoStack, undoStack, 'after');
+
+  // ------------------------------------------------------------ thẻ màu: lựa chọn của cột Chọn 1 / Người (như Notion)
+  const PALETTE = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'];
+  const PALETTE_NAME = {gray: 'Xám', brown: 'Nâu', orange: 'Cam', yellow: 'Vàng', green: 'Xanh lá', blue: 'Xanh dương', purple: 'Tím', pink: 'Hồng', red: 'Đỏ'};
+  const hashColor = name => PALETTE[[...norm(name)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
+  const splitVals = (col, v) => col.type === 'people' ? String(v || '').split(',').map(s => s.trim()).filter(Boolean) : (v ? [String(v)] : []);
+  const rawOf = (p, col) => (col.custom ? p.profile.custom?.[col.key] : p.profile[col.key]) || '';
+  const optCache = new Map();
+  // Danh sách lựa chọn: đã lưu (thứ tự, màu) + giá trị đang có trong dữ liệu; các cách viết khác nhau (hoa/thường, dấu cách, gạch) gộp làm 1, lấy cách viết dùng nhiều nhất
+  function optionsOf(col) {
+    if (optCache.has(col.key)) return optCache.get(col.key);
+    const list = (schema.options?.[col.key] || (col.options || []).map(name => ({name, color: hashColor(name)}))).map(o => ({...o}));
+    const known = new Set(list.map(o => norm(o.name))), counts = new Map();
+    for (const p of projects) for (const v of splitVals(col, rawOf(p, col))) {
+      const k = norm(v);
+      if (!k || known.has(k)) continue;
+      const m = counts.get(k) || new Map();
+      m.set(v, (m.get(v) || 0) + 1);
+      counts.set(k, m);
+    }
+    for (const m of counts.values()) { const name = [...m].sort((a, b) => b[1] - a[1])[0][0]; list.push({name, color: hashColor(name)}); }
+    optCache.set(col.key, list);
+    return list;
+  }
+  const canon = (col, v) => optionsOf(col).find(o => norm(o.name) === norm(v))?.name || v;
+  const chip = (col, name) => `<span class="tk-tag c-${optionsOf(col).find(o => o.name === name)?.color || hashColor(name)}">${esc(name)}</span>`;
+  function storeOptions(col, list) {
+    schema.options = {...schema.options, [col.key]: list.map(o => ({name: o.name, color: o.color}))};
+    optCache.delete(col.key);
+    saveSchema();
+  }
+  // Thay giá trị trong mọi dự án (đổi tên / xoá lựa chọn / gộp)
+  function remapChanges(col, mapFn) {
+    const changes = [];
+    for (const p of projects) {
+      const raw = rawOf(p, col);
+      if (!raw) continue;
+      const next = [...new Set(splitVals(col, raw).map(mapFn).filter(Boolean))].join(', ');
+      if (next !== raw) changes.push({id: p.id, before: patchOf(p, col.key, raw), after: patchOf(p, col.key, next)});
+    }
+    return changes;
+  }
+  // Chuẩn hoá: mọi ô Chọn 1 / Người về đúng tên lựa chọn (gộp "GD- KHIÊM" / "GD - KHIÊM", "ĐÃ CHỐT" / "Đã chốt")
+  async function syncValues() {
+    const changes = [];
+    for (const col of ALL.filter(c => ['select', 'people'].includes(c.type))) {
+      for (const c of remapChanges(col, v => canon(col, v))) {
+        const same = changes.find(x => x.id === c.id);
+        if (same) { Object.assign(same.before, c.before); Object.assign(same.after, c.after); if (c.after.custom) same.after.custom = {...same.after.custom, ...c.after.custom}; } else changes.push(c);
+      }
+    }
+    if (!changes.length) return toast('Dữ liệu đã đồng bộ, không có giá trị lệch.');
+    if (!await GDHomeShell.confirm({title: 'Đồng bộ giá trị', message: `Sửa ${changes.length} dự án có giá trị viết khác nhau về cùng 1 lựa chọn? (hoàn tác được bằng ↶)`, okText: 'Đồng bộ'})) return;
+    await saveMany(changes, 'Đã đồng bộ');
+  }
+
+  let picker = null;
+  function closePicker(commit = true) {
+    if (!picker) return;
+    const {pop, done} = picker;
+    picker = null;
+    pop.remove();
+    document.removeEventListener('mousedown', outside, true);
+    if (commit) done();
+  }
+  const outside = e => { if (picker && !picker.pop.contains(e.target)) closePicker(); };
+  function openTagPicker(btn) {
+    closePicker();
+    const p = projects.find(x => x.id === btn.dataset.id), col = colOf(btn.dataset.f), multi = col.type === 'people';
+    let selected = splitVals(col, rawOf(p, col)).map(v => canon(col, v)), editing = null, query = '';
+    const original = selected.join(', ');
+    const pop = document.createElement('div');
+    pop.className = 'tk-pop';
+    pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', col.label);
+    document.body.append(pop);
+    const r = btn.getBoundingClientRect();
+    pop.style.left = Math.min(r.left, innerWidth - 290) + 'px';
+    pop.style.top = (r.bottom + 390 > innerHeight ? Math.max(8, r.top - 384) : r.bottom + 2) + 'px';
+    const done = () => { const value = selected.join(', '); if (value !== original) saveField(p.id, col.key, value); };
+    picker = {pop, done};
+    const paint = () => {
+      const opts = optionsOf(col);
+      if (editing) {
+        const o = opts.find(x => x.name === editing);
+        pop.innerHTML = `<div class="tk-opt-edit"><b>Sửa lựa chọn</b><input data-rename-opt value="${esc(o.name)}" aria-label="Tên lựa chọn">
+          <div class="tk-swatches">${PALETTE.map(c => `<button type="button" class="c-${c}" data-color="${c}" title="${PALETTE_NAME[c]}" aria-label="${PALETTE_NAME[c]}" aria-pressed="${o.color === c}"></button>`).join('')}</div>
+          <button type="button" class="btn btn-outline btn-sm" data-del-opt>🗑 Xoá lựa chọn khỏi mọi dự án</button>
+          <button type="button" class="btn btn-primary btn-sm" data-back>Xong</button></div>`;
+        pop.querySelector('[data-rename-opt]').focus();
+        return;
+      }
+      const q = norm(query), shown = opts.filter(o => !q || norm(o.name).includes(q));
+      pop.innerHTML = `<div class="tk-pop-head">${selected.map(v => `<span class="tk-tag c-${opts.find(o => o.name === v)?.color || hashColor(v)}">${esc(v)}<button type="button" data-unpick="${esc(v)}" aria-label="Bỏ ${esc(v)}">×</button></span>`).join('')}
+        <input data-q value="${esc(query)}" placeholder="${multi ? 'Tìm hoặc thêm người…' : 'Tìm hoặc thêm lựa chọn…'}" aria-label="Tìm lựa chọn"></div>
+        <div class="tk-pop-list"><small>${multi ? 'Chọn một hoặc nhiều' : 'Chọn một'} · ⋯ để đổi tên, màu</small>${shown.map(o => `<div class="tk-opt" data-pick="${esc(o.name)}"><span class="tk-check">${selected.includes(o.name) ? '✓' : ''}</span><span class="tk-tag c-${o.color}">${esc(o.name)}</span><button type="button" class="tk-edit" data-edit="${esc(o.name)}" aria-label="Sửa ${esc(o.name)}">⋯</button></div>`).join('')}
+        ${query.trim() && !opts.some(o => norm(o.name) === q) ? `<div class="tk-opt" data-create><span class="tk-check">+</span>Tạo <span class="tk-tag c-${hashColor(query)}">${esc(query.trim())}</span></div>` : ''}
+        ${!multi && selected.length ? '<div class="tk-opt" data-clear><span class="tk-check">×</span>Để trống (dùng giá trị tự)</div>' : ''}</div>`;
+      const input = pop.querySelector('[data-q]');
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    };
+    const pick = name => {
+      if (multi) selected = selected.includes(name) ? selected.filter(x => x !== name) : [...selected, name];
+      else { selected = [name]; closePicker(); return; }
+      query = '';
+      paint();
+    };
+    pop.addEventListener('input', e => { if (e.target.matches('[data-q]')) { query = e.target.value; paint(); } });
+    pop.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { e.preventDefault(); if (editing) { editing = null; paint(); } else { closePicker(); btn.focus(); } }
+      if (e.key === 'Enter' && e.target.matches('[data-q]')) {
+        e.preventDefault();
+        const q = norm(query), hit = optionsOf(col).find(o => norm(o.name) === q) || optionsOf(col).find(o => q && norm(o.name).includes(q));
+        if (hit) pick(hit.name); else if (query.trim()) pop.querySelector('[data-create]')?.click();
+      }
+      if (e.key === 'Enter' && e.target.matches('[data-rename-opt]')) { e.preventDefault(); pop.querySelector('[data-back]').click(); }
+    });
+    pop.addEventListener('click', async e => {
+      const t = e.target;
+      if (t.closest('[data-edit]')) { e.stopPropagation(); editing = t.closest('[data-edit]').dataset.edit; return paint(); }
+      if (t.closest('[data-unpick]')) { selected = selected.filter(x => x !== t.closest('[data-unpick]').dataset.unpick); return paint(); }
+      if (t.closest('[data-pick]')) return pick(t.closest('[data-pick]').dataset.pick);
+      if (t.closest('[data-clear]')) { selected = []; return closePicker(); }
+      if (t.closest('[data-create]')) {
+        const name = query.trim().slice(0, 60);
+        storeOptions(col, [...optionsOf(col), {name, color: hashColor(name)}]);
+        return pick(name);
+      }
+      if (t.dataset.color) { storeOptions(col, optionsOf(col).map(o => o.name === editing ? {...o, color: t.dataset.color} : o)); return paint(); }
+      if (t.matches('[data-back]')) {
+        const name = pop.querySelector('[data-rename-opt]').value.trim().slice(0, 60), old = editing;
+        editing = null;
+        if (name && name !== old) {
+          const clash = optionsOf(col).find(o => o.name !== old && norm(o.name) === norm(name));
+          storeOptions(col, optionsOf(col).filter(o => !clash || o.name !== old).map(o => o.name === old ? {...o, name} : o));
+          selected = selected.map(x => x === old ? (clash?.name || name) : x);
+          await saveMany(remapChanges(col, v => norm(v) === norm(old) ? (clash?.name || name) : v), `Đã đổi "${old}" → "${clash?.name || name}"`);
+        }
+        return picker && paint();
+      }
+      if (t.matches('[data-del-opt]')) {
+        const old = editing;
+        if (!await GDHomeShell.confirm({title: 'Xoá lựa chọn', message: `Xoá "${old}" khỏi cột ${col.label} và khỏi mọi dự án đang dùng? (hoàn tác được bằng ↶)`, okText: 'Xoá', danger: true})) return;
+        editing = null;
+        storeOptions(col, optionsOf(col).filter(o => o.name !== old));
+        selected = selected.filter(x => x !== old);
+        await saveMany(remapChanges(col, v => norm(v) === norm(old) ? '' : v), `Đã xoá "${old}"`);
+        return picker && paint();
+      }
+    });
+    setTimeout(() => document.addEventListener('mousedown', outside, true));
+    paint();
+  }
+
+  // ------------------------------------------------------------ xoá dự án (gõ đúng tên để xác nhận)
+  function openDeleteProject(id) {
+    const p = projects.find(x => x.id === id);
+    if (!p) return;
+    const dialog = openDialog('Xoá dự án', `<p>Xoá hẳn <b>${esc(p.name)}</b> cùng ${p.auto?.taskCount || 0} việc trên Lịch. Không hoàn tác được.</p>
+      <p class="tk-muted">Chỉ muốn cất đi? Chuyển giai đoạn sang <b>Hoàn thành</b> hoặc <b>Tạm dừng</b> – dự án vẫn còn trong phần ĐÃ QT · TẠM DỪNG.</p>
+      <div class="tk-grid"><label>Gõ đúng tên dự án để xác nhận<input data-confirm autocomplete="off"></label></div>
+      <div class="tk-actions"><button type="button" class="btn btn-outline" data-archive>Chuyển sang Tạm dừng</button><button type="button" class="btn btn-danger" data-delete disabled>Xoá dự án</button></div>`, false);
+    const input = dialog.querySelector('[data-confirm]'), del = dialog.querySelector('[data-delete]');
+    input.oninput = () => { del.disabled = input.value.trim() !== p.name; };
+    dialog.querySelector('[data-archive]').onclick = async () => { dialog.close(); await saveField(id, 'stage', 'Tạm dừng'); };
+    del.onclick = async () => {
+      del.disabled = true;
+      try {
+        const res = await api('/api/project-hub/project/delete', {projectId: id, confirmName: input.value.trim()});
+        dialog.close();
+        toast(`Đã xoá "${p.name}"` + (res.removedTasks ? ` và ${res.removedTasks} việc trên Lịch.` : '.'));
+        await load();
+      } catch (error) { toast(error.message); del.disabled = false; }
+    };
+    input.focus();
   }
   function readInput(input) {
     const col = colOf(input.dataset.f);
@@ -604,12 +817,22 @@
         ALL = ALL.filter(c => c.key !== del);
         saveSchema(); renderColsMenu();
       }
+      if (e.target.closest('[data-sync-values]')) syncValues();
       if (e.target.closest('[data-reset-cols]')) {
         schema.columns = [];
         prefs.hidden = null; remember();
         refreshCols(); saveSchema(); renderColsMenu();
       }
     };
+    document.querySelector('[data-undo]').onclick = undo;
+    document.querySelector('[data-redo]').onclick = redo;
+    // Ctrl+Z / Ctrl+Y khi không gõ trong ô chữ (ô chữ giữ hoàn tác riêng của trình duyệt)
+    document.addEventListener('keydown', e => {
+      if (!(e.ctrlKey || e.metaKey) || e.target.matches('input:not([type=checkbox]), textarea, select') || document.querySelector('dialog[open]')) return;
+      const k = e.key.toLowerCase();
+      if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+      if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+    });
     document.addEventListener('click', e => {
       const act = e.target.closest('[data-act]')?.dataset.act;
       if (act === 'contract') openContract();
@@ -665,6 +888,10 @@
       if (toggle) { prefs.collapsed = prefs.collapsed.includes(toggle) ? prefs.collapsed.filter(x => x !== toggle) : [...prefs.collapsed, toggle]; remember(); render(); }
       const secCols = e.target.closest('[data-sec-cols]')?.dataset.secCols;
       if (secCols) openSectionCols(secCols);
+      const tags = e.target.closest('.tk-tags');
+      if (tags) openTagPicker(tags);
+      const more = e.target.closest('[data-more]')?.dataset.more;
+      if (more) openDeleteProject(more);
       const pay = e.target.closest('[data-pay]');
       if (pay && pay.tagName === 'BUTTON') openPayments(pay.dataset.pay);
     });
@@ -718,7 +945,7 @@
       const res = await api('/api/project-hub/overview');
       projects = res.projects || [];
       // đang chờ lưu cấu hình cột thì giữ bản trên máy
-      if (res.tableSchema && !schemaDirty) { schema = {columns: res.tableSchema.columns || [], custom: res.tableSchema.custom || [], sections: res.tableSchema.sections || {}}; refreshCols(); }
+      if (res.tableSchema && !schemaDirty) { schema = {columns: res.tableSchema.columns || [], custom: res.tableSchema.custom || [], sections: res.tableSchema.sections || {}, options: res.tableSchema.options || {}}; refreshCols(); }
       render();
     } catch (error) {
       byId('tk-wrap').innerHTML = `<p class="tk-empty">${error.status === 401 ? 'Cần đăng nhập. Mở <a href="/tools">Trang chủ công cụ</a> để đăng nhập Gmail rồi quay lại.' : esc(error.message)}</p>`;
@@ -731,5 +958,5 @@
     load();
     window.addEventListener('focus', () => { if (!document.querySelector('.tk-dialog[open]') && !document.activeElement?.matches('[data-f]')) load(); });
   });
-  window.GDHomeThongKe = {parseCsv, csvValue, csvDate};
+  window.GDHomeThongKe = {parseCsv, csvValue, csvDate, undo, redo};
 })();

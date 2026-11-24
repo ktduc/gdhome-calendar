@@ -1,0 +1,42 @@
+/* Khảo sát khách (/khao-sat/<token>): mobile-first, tông be/nâu GD HOME */
+:root { --ks-bg: #f4f1ec; --ks-ink: #3b3329; --ks-brown: #5a4e41; --ks-line: #d8d2c8; --ks-soft: #ece7df; --ks-muted: #8a7f72; }
+* { box-sizing: border-box; }
+.ks-body { margin: 0; background: var(--ks-bg); color: var(--ks-ink); font: 16px/1.5 Roboto, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-text-size-adjust: 100%; }
+.ks-top { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: #fff; border-bottom: 1px solid var(--ks-line); }
+.ks-logo { width: 44px; height: 44px; object-fit: contain; }
+.ks-top h1 { margin: 0; font-size: 18px; color: var(--ks-brown); }
+.ks-top p { margin: 0; font-size: 13px; color: var(--ks-muted); }
+.ks-progress { position: sticky; top: 0; z-index: 5; height: 5px; background: var(--ks-soft); }
+.ks-progress i { display: block; height: 100%; width: 0; background: var(--ks-brown); transition: width .25s; }
+.ks-main { max-width: 720px; margin: 0 auto; padding: 18px 16px 110px; }
+.ks-loading, .ks-error { text-align: center; color: var(--ks-muted); padding: 40px 0; }
+.ks-title { margin: 0 0 4px; font-size: 22px; color: var(--ks-brown); }
+.ks-intro { margin: 0 0 18px; color: var(--ks-muted); font-size: 14px; }
+.ks-notice { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: #fff; border: 1px solid var(--ks-line); font-size: 14px; color: var(--ks-brown); }
+.ks-q { margin: 0 0 22px; padding: 0; border: 0; min-width: 0; }
+.ks-q legend, .ks-q > label.ks-qt { display: block; padding: 0; margin: 0 0 8px; font-weight: 500; font-size: 16px; }
+.ks-hint { font-weight: 400; font-size: 12.5px; color: var(--ks-muted); }
+.ks-opts { display: grid; gap: 8px; }
+.ks-opt { position: relative; display: block; }
+.ks-opt input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.ks-opt span { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 10px 14px; border: 1.5px solid var(--ks-line); border-radius: 12px; background: #fff; transition: border-color .15s, background .15s; }
+.ks-opt span::before { content: ""; flex: none; width: 20px; height: 20px; border: 2px solid var(--ks-line); border-radius: 50%; background: #fff; }
+.ks-many .ks-opt span::before { border-radius: 6px; }
+.ks-opt input:checked + span { border-color: var(--ks-brown); background: var(--ks-soft); font-weight: 500; }
+.ks-opt input:checked + span::before { border-color: var(--ks-brown); background: var(--ks-brown) radial-gradient(#fff 35%, transparent 38%); }
+.ks-many .ks-opt input:checked + span::before { background: var(--ks-brown); box-shadow: inset 0 0 0 3px #fff; }
+.ks-opt input:focus-visible + span { outline: 3px solid #b9a98f; outline-offset: 1px; }
+.ks-q input[type=text], .ks-q textarea { width: 100%; margin-top: 8px; padding: 12px 14px; border: 1.5px solid var(--ks-line); border-radius: 12px; background: #fff; color: inherit; font: inherit; }
+.ks-q textarea { margin-top: 0; min-height: 88px; resize: vertical; }
+.ks-q input[type=text]:focus, .ks-q textarea:focus { outline: none; border-color: var(--ks-brown); }
+.ks-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid var(--ks-line); }
+.ks-nav[hidden] { display: none; }
+.ks-stepno { color: var(--ks-muted); font-size: 13px; }
+.ks-btn { min-height: 48px; padding: 0 22px; border-radius: 12px; border: 1.5px solid var(--ks-brown); font: 500 16px Roboto, system-ui, sans-serif; cursor: pointer; }
+.ks-primary { background: var(--ks-brown); color: #fff; }
+.ks-ghost { background: #fff; color: var(--ks-brown); }
+.ks-btn:disabled { opacity: .45; cursor: default; }
+.ks-thanks { text-align: center; padding: 36px 8px; }
+.ks-thanks h2 { color: var(--ks-brown); margin: 8px 0; }
+.ks-thanks .ks-btn { margin-top: 14px; }
+@media (min-width: 720px) { .ks-opts.ks-grid2 { grid-template-columns: 1fr 1fr; } .ks-main { padding-top: 28px; } }

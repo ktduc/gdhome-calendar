@@ -43,6 +43,17 @@
 .mt-form textarea { resize: vertical; }
 .mt-form small { color: #8a7f72; font-weight: 400; }
 
+.mt-tabs { display: flex; gap: 2px; margin-bottom: 10px; }
+.mt-tabs button { height: 34px; padding: 0 16px; border: 1px solid #d8d2c8; border-radius: 8px; background: #fff; color: #5a4e41; font: 500 13px Roboto, sans-serif; cursor: pointer; }
+.mt-tabs button.is-on { background: #5a4e41; border-color: #5a4e41; color: #fff; }
+.mt-grid[hidden], .sv-panel[hidden], .sv-box[hidden], .sv-detail[hidden] { display: none; }
+.sv-panel { display: grid; gap: 10px; max-width: 900px; padding: 14px 16px; background: #fff; border: 1px solid #d8d2c8; border-radius: 10px; }
+.sv-row, .sv-box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.sv-row select { height: 32px; min-width: 260px; padding: 0 8px; border: 1px solid #d8d2c8; border-radius: 8px; background: #fff; font: inherit; }
+.sv-box input { flex: 1 1 320px; height: 32px; padding: 0 10px; border: 1px solid #d8d2c8; border-radius: 8px; background: #faf8f5; font: inherit; }
+.sv-status { margin: 0; font-weight: 500; color: #8a7f72; }
+.sv-status[data-state=sent] { color: #2f7d4f; }
+.sv-detail h2 { margin: 4px 0 8px; font: 700 15px Roboto, sans-serif; color: #3b3329; }
 @media (min-width: 1900px) { .mt-body { font-size: 14px; } .mt-grid { grid-template-columns: 260px minmax(320px, 460px) minmax(0, 1fr); } .mt-preview { font-size: 15px; } }
 @media (max-width: 1100px) { .mt-grid { grid-template-columns: 180px minmax(220px, 300px) minmax(0, 1fr); } }
 @media (max-width: 860px) { .mt-grid { grid-template-columns: 1fr; } .mt-side { position: static; } .mt-list, .mt-view { max-height: none; } }

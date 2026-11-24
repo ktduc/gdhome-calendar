@@ -88,6 +88,30 @@ cases['24.2'] = async page => {
   }
 };
 
+cases['lich-active'] = async page => {
+  // Lịch chỉ hiện dự án Thiết kế / Thi công; dự án Hoàn thành ẩn, có nút hiện lại và nhớ sau khi tải lại
+  await page.goto('/', {waitUntil: 'domcontentloaded'});
+  await page.locator('.project-owner-header').first().waitFor();
+  await page.locator('#btn-view-msproject').click();
+  await page.locator('.msp-task-bar[data-task-id="la-on"]').waitFor();
+  assert.equal(await page.locator('.msp-task-bar[data-task-id="la-done"]').count(),0,'Dự án Hoàn thành không hiện');
+  assert.equal(await page.locator('.project-owner-header').count(),1,'Thanh bên chỉ có dự án đang làm');
+  assert.equal(await page.evaluate(() => getVisibleTasks().map(t => t.id).join()),'la-on');
+  assert.equal(await page.evaluate(() => AppState.calendars.every(c => c.visible !== false)),true,'Không đổi dữ liệu lưu');
+  const toggle = page.locator('#toggle-inactive-projects');
+  assert.equal((await toggle.textContent()).trim(),'Hiện 1 dự án đã xong / tạm dừng');
+  await toggle.click();
+  await page.locator('.msp-task-bar[data-task-id="la-done"]').waitFor();
+  assert.equal(await page.locator('.project-owner-header').count(),2);
+  assert.equal((await toggle.textContent()).trim(),'Ẩn dự án đã xong');
+  await page.waitForTimeout(1500);   // chờ lưu nền xong, tránh hộp xung đột phiên bản
+  await page.reload({waitUntil: 'domcontentloaded'});
+  await page.locator('.project-owner-header').first().waitFor();
+  assert.equal(await page.locator('.project-owner-header').count(),2,'Nhớ trạng thái sau khi tải lại');
+  await page.locator('#toggle-inactive-projects').click();
+  await page.waitForFunction(() => document.querySelectorAll('.project-owner-header').length === 1);
+};
+
 cases['todo'] = async page => {
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();
@@ -2289,24 +2313,43 @@ cases['thong-ke'] = async page => {
   assert.equal(await page.locator('.tk-sec[data-sec=tk] tr[data-row=p1]').count(),1,'Mặc định Theo phần: dự án thiết kế nằm ở phần THIẾT KẾ');
   await page.locator('[data-mode=table]').click();
   assert.match(await row.getAttribute('class'),/is-late/,'Dòng có việc trễ hạn tô đỏ');
-  assert.equal(await row.locator('[data-f=designer3d]').getAttribute('placeholder'),'GD-NHẬT');
+  assert.match(await row.locator('[data-f=designer3d]').innerText(),/tự: GD-NHẬT/,'Người làm 3D tự từ Lịch');
   assert.match(await row.locator('.tk-col-deadlineLabel').innerText(),/3D/);
   assert.match(await row.locator('.tk-pay').innerText(),/chờ thu 5\.000\.000/);
   assert.equal(await row.locator('[data-f=designValue]').getAttribute('placeholder'),'25.000.000');
-  await row.locator('[data-f=supervisor]').fill('GD - ĐỨC BÉ');
-  await row.locator('[data-f=supervisor]').press('Enter');
-  await page.waitForFunction(async () => (await GDHomeShell.api('/api/project-hub/overview')).projects[0].profile.supervisor === 'GD - ĐỨC BÉ');
-  assert.match(await row.locator('.tk-col-daysLeft').innerText(),/ngày|Hôm nay/,'Cột Số ngày còn');
-  // Cột: thêm thuộc tính riêng (Chọn 1), điền giá trị, chỉnh độ rộng, kéo đổi chỗ – lưu trên server
   const overview = () => page.evaluate(() => GDHomeShell.api('/api/project-hub/overview'));
   const until = async (test, message) => { for (let i = 0; i < 50; i++) { if (test(await overview())) return; await page.waitForTimeout(100); } throw new Error(message); };
+  const sup = o => o.projects.find(p => p.id === 'p1').profile.supervisor;
+  // Cột Người = thẻ màu: gõ tên mới + Enter tạo lựa chọn, Esc đóng và lưu
+  await row.locator('[data-f=supervisor]').click();
+  await page.locator('.tk-pop [data-q]').fill('GD - ĐỨC BÉ');
+  await page.locator('.tk-pop [data-q]').press('Enter');
+  await page.locator('.tk-pop [data-q]').press('Escape');
+  await until(o => sup(o) === 'GD - ĐỨC BÉ', 'Lưu người giám sát');
+  assert.match(await row.locator('[data-f=supervisor] .tk-tag').innerText(),/GD - ĐỨC BÉ/);
+  // Hoàn tác / làm lại
+  await page.locator('[data-undo]').click();
+  await until(o => !sup(o), 'Hoàn tác xoá giám sát');
+  await page.locator('[data-redo]').click();
+  await until(o => sup(o) === 'GD - ĐỨC BÉ', 'Làm lại');
+  // Đổi màu + đổi tên lựa chọn: đổi luôn trong mọi dự án
+  await row.locator('[data-f=supervisor]').click();
+  await page.locator('.tk-pop [data-edit="GD - ĐỨC BÉ"]').click();
+  await page.locator('.tk-pop [data-color=green]').click();
+  await page.locator('.tk-pop [data-rename-opt]').fill('GD - ĐỨC');
+  await page.locator('.tk-pop [data-back]').click();
+  await until(o => sup(o) === 'GD - ĐỨC' && o.tableSchema.options?.supervisor?.some(x => x.name === 'GD - ĐỨC' && x.color === 'green'), 'Đổi tên + màu lựa chọn');
+  await page.keyboard.press('Escape');
+  assert.match(await row.locator('.tk-col-daysLeft').innerText(),/ngày|Hôm nay/,'Cột Số ngày còn');
+  // Cột: thêm thuộc tính riêng (Chọn 1), điền giá trị, chỉnh độ rộng, kéo đổi chỗ – lưu trên server
   await page.locator('.tk-cols summary').click();
   await page.locator('.tk-col-add [name=label]').fill('Hướng nhà');
   await page.locator('.tk-col-add [name=type]').selectOption('select');
   await page.locator('.tk-col-add [name=options]').fill('Đông, Tây');
   await page.locator('.tk-col-add button').click();
   await page.locator('.tk-cols summary').click();
-  await row.locator('select[data-f^="c_"]').selectOption('Tây');
+  await row.locator('button[data-f^="c_"]').click();
+  await page.locator('.tk-pop [data-pick="Tây"]').click();
   await until(o => Object.values(o.projects.find(p => p.id === 'p1').profile.custom || {}).includes('Tây') && o.tableSchema.custom.length, 'Lưu cột riêng + giá trị');
   assert.deepEqual((await overview()).tableSchema.custom.map(c => [c.label, c.type, c.options]), [['Hướng nhà', 'select', ['Đông', 'Tây']]]);
   await page.locator('#tk-wrap').evaluate(wrap => { wrap.scrollLeft = 0; });   // ô cột riêng ở cuối bảng đã cuộn sang phải
@@ -2349,14 +2392,14 @@ cases['thong-ke'] = async page => {
   const fresh = page.locator('tr', {has: page.locator('input[value="Chị Notion Mới"]')});
   await fresh.waitFor();
   assert.equal(await fresh.locator('[data-f=signedAt]').inputValue(),'2026-11-05');
-  assert.equal(await fresh.locator('[data-f=status3d]').inputValue(),'Xong lần 1');
+  assert.equal(await fresh.locator('[data-f=status3d]').innerText(),'Xong lần 1');
   assert.equal(await fresh.locator('[data-f=designPrice]').inputValue(),'250.000');
   const loai = (await overview()).tableSchema.custom.find(c => c.label === 'LOẠI NHÀ');
   assert.equal(await page.evaluate(() => GDHomeThongKe.csvValue('stage', 'XONG THIẾT KẾ')), 'TK xong chưa QT', 'Trạng thái Notion XONG THIẾT KẾ vào phần TK xong chưa QT');
   assert.ok(loai, 'Cột Notion lạ thành cột riêng');
   assert.equal(await fresh.locator(`[data-f="${loai.id}"]`).inputValue(),'Biệt thự');
   assert.equal(await row.locator('[data-f=address]').inputValue(),'Căn 1, Tòa Mẫu','Không ghi đè ô đã có');
-  assert.equal(await row.locator('[data-f=status3d]').inputValue(),'Đã chốt');
+  assert.equal(await row.locator('[data-f=status3d]').innerText(),'Đã chốt');
   assert.equal(await row.locator('[data-f=checkDo]').isChecked(),true);
   // Kanban: kéo thẻ sang cột Thi công
   await page.locator('[data-mode=board]').click();
@@ -2371,7 +2414,15 @@ cases['thong-ke'] = async page => {
   await until(o => o.tableSchema.sections?.tc?.hidden?.includes('address'), 'Lưu cột hiện riêng phần THI CÔNG');
   assert.equal(await page.locator('.tk-sec[data-sec=tc] th[data-sort=address]').count(),0);
   assert.equal(await page.locator('.tk-sec[data-sec=tk] th[data-sort=address]').count(),1,'Phần khác vẫn hiện cột');
+  assert.deepEqual(await page.$$eval('.tk-sec', ss => ss.slice(0, 2).map(s => s.dataset.sec)), ['tc', 'tk'], 'Thiết kế ngay dưới Thi công');
+  // Xoá dự án: ⋯ ở ô Dự án, gõ đúng tên
   await page.locator('[data-mode=table]').click();
+  const gone = page.locator('tr', {has: page.locator('input[value="Chị Notion Mới"]')});
+  await gone.hover();
+  await gone.locator('[data-more]').click();
+  await page.locator('.tk-dialog [data-confirm]').fill('Chị Notion Mới');
+  await page.locator('.tk-dialog [data-delete]').click();
+  await until(o => !o.projects.some(p => p.name === 'Chị Notion Mới'), 'Xoá dự án');
 };
 
 cases['mau-tra-loi'] = async page => {
@@ -2402,6 +2453,57 @@ cases['mau-tra-loi'] = async page => {
   await page.locator('[data-act=reset]').click();
   await page.locator('.mt-item[data-id=chao] strong').filter({hasText:'Lời chào nhận dự án'}).waitFor();
   assert.deepEqual((await saved()).items,[]);
+};
+
+cases['khao-sat'] = async (page,{browser}) => {
+  // Khảo sát khách: anh tạo link cho dự án p1 -> khách (ngữ cảnh riêng, màn điện thoại) chọn Nhà phố, tick vài ý, Gửi -> anh thấy "Đã gửi" + tóm tắt
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/mau-tra-loi',{waitUntil:'domcontentloaded'});
+  await page.locator('.mt-tabs [data-tab=khao-sat]').click();
+  await page.locator('#sv-project option[value=p1]').waitFor({state:'attached'});
+  await page.locator('#sv-project').selectOption('p1');
+  assert.match(await page.locator('#sv-status').innerText(),/Chưa tạo link/);
+  await page.locator('#sv-create').click();
+  await page.waitForFunction(() => /\/khao-sat\/[\w-]{20,}$/.test(document.getElementById('sv-link').value));
+  const link = await page.locator('#sv-link').inputValue();
+  assert.equal(link.startsWith(new URL(page.url()).origin),true);
+
+  const context = await browser.newContext({baseURL:new URL(page.url()).origin,viewport:{width:390,height:844}});
+  const guest = await context.newPage();
+  guest.setDefaultTimeout(4000);
+  const errors = [];
+  guest.on('pageerror',error => errors.push(error.message));
+  try {
+    await guest.goto(link,{waitUntil:'domcontentloaded'});
+    await guest.locator('.ks-opt').first().waitFor();
+    assert.equal(await guest.locator('#ks-next').isDisabled(),true,'Chưa chọn loại nhà thì chưa qua được bước 1');
+    await guest.locator('.ks-opt',{hasText:'Nhà phố'}).click();
+    const next = guest.locator('#ks-next');
+    for (let i = 0; i < 20 && (await guest.locator('.ks-title').innerText()) !== 'Nhà phố / biệt thự'; i++) await next.click();
+    assert.equal(await guest.locator('.ks-title').innerText(),'Nhà phố / biệt thự');
+    assert.equal(await guest.getByText('Nhà có mấy tầng').count(),1);
+    assert.equal(await guest.evaluate(() => document.documentElement.scrollWidth <= innerWidth),true,'Không tràn ngang trên điện thoại');
+    await guest.locator('.ks-opt',{hasText:'Sẽ lắp thang máy'}).click();
+    await guest.locator('.ks-opt',{hasText:'Tầng trên cùng rất nóng'}).click();
+    for (let i = 0; i < 20 && (await next.innerText()) !== 'Gửi cho GD HOME'; i++) await next.click();
+    await next.click();
+    await guest.locator('.ks-thanks').waitFor();
+    // mở lại link: câu trả lời còn, báo đã gửi
+    await guest.goto(link,{waitUntil:'domcontentloaded'});
+    await guest.locator('.ks-notice',{hasText:'đã gửi khảo sát'}).waitFor();
+    assert.equal(await guest.locator('.ks-opt input:checked').count(),1);
+    assert.deepEqual(errors,[]);
+  } finally { await context.close(); }
+
+  await page.locator('#sv-refresh').click();
+  await page.locator('#sv-status',{hasText:'Đã gửi lúc'}).waitFor();
+  const summary = await page.locator('#sv-summary').innerText();
+  assert.match(summary,/Loại công trình: Nhà phố/);
+  assert.match(summary,/Thang máy: Sẽ lắp thang máy/);
+  assert.match(summary,/Tầng trên cùng rất nóng/);
+  await page.locator('#sv-copy-msg').click();
+  const info = await page.evaluate(() => GDHomeShell.api('/api/surveys/p1'));
+  assert.equal(info.path,new URL(link).pathname);
 };
 
 async function openMaterials(page) {
@@ -5858,6 +5960,13 @@ async function main() {
           {id:'md-a2',calendarId:'c1',title:'Xây tường',startDate:'2026-11-04',endDate:'2026-11-05',predecessors:[]},
           {id:'md-a3',calendarId:'c1',title:'Trát',startDate:'2026-11-06',endDate:'2026-11-07',predecessors:[]},
           {id:'md-b1',calendarId:'cB',title:'Ép cọc',startDate:'2026-11-02',endDate:'2026-11-04',predecessors:[]});
+      }
+      if (key === 'lich-active') {
+        caseSchedule.projectOwners[0].profile = {stage:'Thi công'};
+        caseSchedule.projectOwners.push({id:'la-p2',name:'Nhà đã xong',profile:{stage:'Hoàn thành'}});
+        caseSchedule.calendars.push({id:'la-c2',ownerId:'la-p2',name:'Xong',visible:true,color:'#06c'});
+        caseSchedule.tasks.push({id:'la-on',calendarId:'c1',title:'Việc đang làm',startDate:'2026-11-02',endDate:'2026-11-04'},
+          {id:'la-done',calendarId:'la-c2',title:'Việc đã xong',startDate:'2026-11-02',endDate:'2026-11-04'});
       }
       if (key === 'todo') caseSchedule.tasks.push({id:'todo-base',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-06'});
       if (key === 'thong-ke') {

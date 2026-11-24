@@ -681,6 +681,12 @@ function normalizeAppState() {
   if (!AppState.activeCalendarId || !AppState.calendars.some(c => c.id === AppState.activeCalendarId)) {
     AppState.activeCalendarId = AppState.calendars[0].id;
   }
+  // Giai đoạn đang chọn thuộc dự án bị ẩn -> chuyển sang giai đoạn của dự án đang làm (chỉ đổi chỗ đang xem)
+  const curCal = AppState.calendars.find(c => c.id === AppState.activeCalendarId);
+  if (curCal && !ownerActive(curCal.ownerId)) {
+    const alt = AppState.calendars.find(c => ownerActive(c.ownerId));
+    if (alt) AppState.activeCalendarId = alt.id;
+  }
   const defaultCalId = AppState.calendars[0].id;
   AppState.tasks.forEach(t => {
     if (!t.calendarId || !AppState.calendars.some(c => c.id === t.calendarId)) {
@@ -700,6 +706,28 @@ function normalizeAppState() {
     inferMissingPredecessors(AppState.tasks);
   }
 }
+
+// Chỉ hiện dự án đang Thiết kế / Thi công (lọc lúc hiển thị, không đổi dữ liệu lưu)
+const SHOW_ALL_PROJECTS_KEY = 'gdhome_show_all_projects';
+function getShowAllProjects() {
+  try { return localStorage.getItem(SHOW_ALL_PROJECTS_KEY) === '1'; } catch (e) { return false; }
+}
+function setShowAllProjects(on) {
+  try { localStorage.setItem(SHOW_ALL_PROJECTS_KEY, on ? '1' : '0'); } catch (e) { /* bỏ qua */ }
+}
+function ownerStage(owner) {
+  const p = (owner && owner.profile) || {};
+  return String(p.stage || (p.constructionSignedAt ? 'Thi công' : 'Thiết kế')).replace(/\s+/g, ' ').trim().toLowerCase();
+}
+function ownerActive(ownerId) {
+  if (getShowAllProjects()) return true;
+  const owner = (AppState.projectOwners || []).find(o => o.id === ownerId);
+  if (!owner) return true;
+  try { if (new URLSearchParams(location.search).get('project') === ownerId) return true; } catch (e) { /* bỏ qua */ }
+  const s = ownerStage(owner);
+  return s === 'thiết kế' || s === 'thi công';
+}
+function calShown(c) { return c.visible !== false && ownerActive(c.ownerId); }
 
 function getActiveCalendar() {
   if (!Array.isArray(AppState.calendars) || AppState.calendars.length === 0) {
@@ -827,7 +855,7 @@ function getTitleProject(mode) {
   if (mode === 'msproject' && typeof getMspTargetCalendars === 'function') {
     cals = getMspTargetCalendars();
   } else {
-    cals = AppState.calendars.filter(c => c.visible !== false);
+    cals = AppState.calendars.filter(calShown);
   }
   const ownerIds = [...new Set(cals.map(c => c.ownerId))];
   if (ownerIds.length !== 1) return null;
@@ -839,7 +867,7 @@ function getTitleProjectName(mode) {
   if (mode === 'msproject' && typeof getMspTargetCalendars === 'function') {
     cals = getMspTargetCalendars();
   } else {
-    cals = AppState.calendars.filter(c => c.visible !== false);
+    cals = AppState.calendars.filter(calShown);
   }
   const ownerIds = [...new Set(cals.map(c => c.ownerId))];
   if (ownerIds.length !== 1) return null;
