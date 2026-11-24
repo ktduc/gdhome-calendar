@@ -1891,11 +1891,12 @@ window.GDHomeAssets = (() => {
     };
   }
 
-  function modal(className,title) {
+  function modal(className,title,page = false) {
     const dialog = document.createElement('dialog');
-    dialog.className = 'shell-dialog asset-dialog ' + className;
-    dialog.innerHTML = '<button type="button" class="close-dialog" aria-label="Đóng">×</button><h2>' + esc(title) + '</h2><div class="asset-dialog-body"></div>';
-    document.body.append(dialog);
+    dialog.className = 'shell-dialog asset-dialog ' + className + (page ? ' is-page' : '');
+    dialog.innerHTML = (page ? '' : '<button type="button" class="close-dialog" aria-label="Đóng">×</button>') + '<h2>' + esc(title) + '</h2><div class="asset-dialog-body"></div>';
+    (page ? document.querySelector('main') || document.body : document.body).append(dialog);
+    if (page) { dialog.show(); return {dialog,body:dialog.querySelector('.asset-dialog-body')}; }   // trang /du-lieu: nằm trong trang, không đóng
     dialog.querySelector('.close-dialog').onclick = () => dialog.close();
     dialog.addEventListener('click',event => { if (event.target === dialog) dialog.close(); });
     dialog.onclose = () => dialog.remove();
@@ -3530,8 +3531,8 @@ window.GDHomeAssets = (() => {
     paint().catch(error => { status.textContent = error.message; });
   }
 
-  function openLibrary({groupName,categoryId,onPick} = {}) {
-    const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung');
+  function openLibrary({groupName,categoryId,onPick,page} = {}) {
+    const {dialog,body} = modal('asset-library-dialog','📚 Dữ liệu dùng chung',page);
     // Hoàn tác / Làm lại mọi thay đổi của Dữ liệu dùng chung (lịch sử giữ trên server, 20 bước)
     dialog.querySelector('h2').insertAdjacentHTML('afterend','<div class="asset-history" role="group" aria-label="Lịch sử thay đổi">' +
       '<button type="button" data-history="undo" title="Hoàn tác thay đổi vừa làm (Ctrl+Z)">↶ Hoàn tác</button>' +
@@ -4179,7 +4180,8 @@ window.GDHomeAssets = (() => {
     paint();
   }
 
-  if (location.hash === '#library') addEventListener('load',() => setTimeout(() => openLibrary(),300));
+  if (document.body?.dataset.libraryPage != null) openLibrary({page:true});
+  else if (location.hash === '#library') location.replace('/du-lieu');
 
   return {configure,ensureCategoriesFor,libraryItemMatches:(full,code) => !!library?.items.some(item => item.full === full && (item.code === code || item.name === code)),invalidateRenders,loadRenders,uploadRenders,loadLibrary,uploadToLibrary,addItems,deleteItems,updateItem,saveCategory,deleteCategory,
     categoryFor,openLibrary,openRenders,pickRender,pickLibrary,pickPaint,pickWood,loadPaintData,loadWoodData,storeAsset,closePicker,editView,viewCss,viewStyle,clampView,hydrate,assetUrl,displayAttribute,displayOptions,

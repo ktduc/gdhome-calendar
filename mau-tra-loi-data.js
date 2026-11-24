@@ -143,15 +143,25 @@
       ten: clean(opts && opts.ten) || 'Đức', du_an: clean(opts && opts.du_an) || 'nhà mình'};
   }
 
+  // Khách là "em" thì bỏ giọng quá trang trọng: "nhé ạ" -> "nhé", "…không ạ?" -> "…không em?", "ạ" cuối câu/ý -> "nhé". Anh/chị/cô/chú giữ nguyên.
+  function softenEnding(text, kh) {
+    const s = String(text == null ? '' : text);
+    if (clean(kh).toLowerCase() !== 'em') return s;
+    return s.replace(/\snhé\s+ạ(?![\p{L}])/gu, ' nhé').replace(/\sạ(?=\?)/g, ' em').replace(/\sạ(?![\p{L}])/gu, ' nhé');
+  }
+
+  // Bỏ dấu + hạ chữ thường để tìm không phân biệt dấu ("nha pho" khớp "nhà phố").
+  const fold = text => String(text == null ? '' : text).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
+
   // Thay biến; {kh}/{toi} đứng đầu văn bản, đầu dòng hoặc sau dấu chấm câu thì viết hoa chữ đầu ("Chị ơi", "Anh chị ơi").
   function applyVars(text, opts) {
     const v = varsOf(opts);
-    return String(text == null ? '' : text).replace(/\{(kh|toi|ten|du_an)\}/g, (all, key, offset, whole) => {
+    return softenEnding(String(text == null ? '' : text).replace(/\{(kh|toi|ten|du_an)\}/g, (all, key, offset, whole) => {
       const value = v[key];
       if (key !== 'kh' && key !== 'toi') return value;
       const before = whole.slice(0, offset);
       return !before.trim() || /\n\s*$/.test(before) || /[.!?…]\s+$/.test(before) ? value.charAt(0).toUpperCase() + value.slice(1) : value;
-    });
+    }), v.kh);
   }
 
   // Ghép tin nhắn: items bỏ các ý trong tập `off` (chỉ số chưa tick), đánh số lại, rồi thay biến.
@@ -177,7 +187,7 @@
     return merged.concat(items.filter(t => !baseIds.has(t.id)).map(t => ({...t})));
   }
 
-  const api = {GROUPS, BASE, applyVars, buildMessage, mergeTemplates, varsOf};
+  const api = {GROUPS, BASE, applyVars, buildMessage, mergeTemplates, varsOf, softenEnding, fold};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GDHomeReplyData = api;
 })(typeof window !== 'undefined' ? window : globalThis);

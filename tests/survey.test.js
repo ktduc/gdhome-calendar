@@ -108,6 +108,20 @@ test('server: tạo link ổn định, khách lưu / gửi, chủ xem lại; tok
   assert.ok(secret.includes(link.json.token));
 });
 
+test('server: danh sách khảo sát chỉ gồm khách đã có trả lời, mới nhất trước, theo tài khoản', async () => {
+  const {pub, adm} = harness();
+  const a = (await adm('POST', '/api/surveys/link', {projectId: 'a', name: 'A'})).json.token;
+  const b = (await adm('POST', '/api/surveys/link', {projectId: 'b', name: 'B'})).json.token;
+  await adm('POST', '/api/surveys/link', {projectId: 'c', name: 'C chưa điền'});
+  await pub('POST', '/api/survey/' + a, {answers: {loai_nha: 'nha_pho'}, submit: true});
+  await new Promise(resolve => setTimeout(resolve, 5));
+  await pub('POST', '/api/survey/' + b, {answers: {loai_nha: 'chung_cu'}});
+  const list = (await adm('GET', '/api/surveys')).json.surveys;
+  assert.deepEqual(list.map(x => x.projectId), ['b', 'a']);
+  assert.ok(list[1].submittedAt > 0 && !list[0].submittedAt);
+  assert.deepEqual((await adm('GET', '/api/surveys', null, 'khac@x.vn')).json.surveys, []);
+});
+
 test('server: giới hạn kích thước body công khai', async () => {
   const {pub, adm} = harness();
   const {json} = await adm('POST', '/api/surveys/link', {projectId: 'p1'});

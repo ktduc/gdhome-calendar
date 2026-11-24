@@ -20,6 +20,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const integrations = require('./integrations');
 const { handleMaterials, MaterialStore } = require('./materials');
 const { handleLibrary } = require('./shared-library');
@@ -32,6 +33,7 @@ const { handleWorkApi } = require('./work-manager');
 const { todoSync } = require('./todo-sync');
 const { handleCompare } = require('./compare');
 const { handleReplyTemplates } = require('./reply-templates');
+const { handleHome } = require('./home-page');
 const { handleSurveyPublic, handleSurveyAdmin } = require('./survey');
 
 const PORT = process.env.PORT || 3000;
@@ -46,6 +48,8 @@ const GIST_ID_ENV = (process.env.GIST_ID || '').trim();
 const GIST_DESC = 'GD HOME - du lieu lich tien do';
 const GOOGLE_CLIENT_ID = (process.env.GOOGLE_CLIENT_ID || '').trim();
 const ALLOWED_EMAILS = (process.env.ALLOWED_EMAILS || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+// Quản trị trang chủ (ảnh bìa). Bỏ trống = email đầu trong ALLOWED_EMAILS, hoặc người đặt ảnh bìa đầu tiên.
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || ALLOWED_EMAILS[0] || '').split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
 const AUTH_MODE = GOOGLE_CLIENT_ID ? 'google' : (APP_PASSWORD ? 'password' : 'none');
 const SESSION_SECRET = process.env.SESSION_SECRET ||
   crypto.createHash('sha256').update(`gdhome|${GOOGLE_CLIENT_ID}|${GITHUB_TOKEN}|${APP_PASSWORD}|${ROOT_DIR}`).digest('hex');
@@ -68,7 +72,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app-core.js', 'app-calendar.js', 'app-timeline.js', 'app-io.js', 'app-ai.js', 'catalogue-pdf.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'gdhome-logo-sq.png', 'gemini-mark.js', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css', 'timeline-todo.js', 'timeline-todo.css', 'so-sanh.html', 'so-sanh.js', 'so-sanh.css', 'thong-ke.html', 'thong-ke.js', 'thong-ke.css', 'contract-parse.js', 'mau-tra-loi.html', 'mau-tra-loi.js', 'mau-tra-loi.css', 'mau-tra-loi-data.js', 'khao-sat.html', 'khao-sat.js', 'khao-sat.css', 'khao-sat-data.js', 'khao-sat-admin.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app-core.js', 'app-calendar.js', 'app-timeline.js', 'app-io.js', 'app-ai.js', 'catalogue-pdf.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'gdhome-logo-sq.png', 'gemini-mark.js', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css', 'timeline-todo.js', 'timeline-todo.css', 'so-sanh.html', 'so-sanh.js', 'so-sanh.css', 'thong-ke.html', 'thong-ke.js', 'du-lieu.html', 'home.js', 'home.css', 'thong-ke.css', 'contract-parse.js', 'mau-tra-loi.html', 'mau-tra-loi.js', 'mau-tra-loi.css', 'mau-tra-loi-data.js', 'khao-sat.html', 'khao-sat.js', 'khao-sat.css', 'khao-sat-data.js', 'khao-sat-admin.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -567,6 +571,8 @@ function versionAssets(htmlText) {
   });
 }
 
+const COMPRESSIBLE = new Set(['.html', '.css', '.js', '.json', '.svg']);
+const compressedCache = new Map();
 function serveStatic(req, res, urlPath) {
   let rel;
   try { rel = decodeURIComponent(urlPath.split('?')[0]); } catch { rel = '/_invalid'; }   // URL hỏng -> 404, không làm sập server
@@ -578,6 +584,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === '/mau-tra-loi') rel = '/mau-tra-loi.html';
   if (rel === '/so-sanh') rel = '/so-sanh.html';
   if (rel === '/thong-ke') rel = '/thong-ke.html';
+  if (rel === '/du-lieu') rel = '/du-lieu.html';
   if (rel === '/favicon.ico') rel = '/gdhome-icon.png';
   if (rel.startsWith('/duyet/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(7))) rel = '/duyet.html';
   if (rel.startsWith('/khao-sat/') && /^[A-Za-z0-9_-]+$/.test(rel.slice(10))) rel = '/khao-sat.html';
@@ -603,11 +610,34 @@ function serveStatic(req, res, urlPath) {
       return;
     }
     if (ext === '.html') buf = Buffer.from(versionAssets(buf.toString('utf8')));
-    res.writeHead(200, {
+    const noStore = rel === '/duyet.html' || rel === '/khao-sat.html';
+    // ?v= khớp băm nội dung hiện tại -> an toàn cache dài hạn (file đổi thì ?v= đổi theo)
+    const queryV = new URLSearchParams(urlPath.split('#')[0].split('?')[1] || '').get('v');
+    const immutable = (ext === '.js' || ext === '.css') && queryV && queryV === assetVersion(relFromRoot);
+    const headers = {
       'Content-Type': STATIC_MIME[ext],
-      'Cache-Control': rel === '/duyet.html' || rel === '/khao-sat.html' ? 'no-store' : ext === '.html' ? 'no-cache' : 'public, max-age=60',
+      'Cache-Control': noStore ? 'no-store' : immutable ? 'public, max-age=31536000, immutable' : ext === '.html' ? 'no-cache' : 'public, max-age=60',
       'Referrer-Policy': 'no-referrer'
-    });
+    };
+    if (COMPRESSIBLE.has(ext) && buf.length > 1024 && !noStore) {
+      headers.Vary = 'Accept-Encoding';
+      const accept = String(req.headers['accept-encoding'] || '');
+      const enc = /(^|[\s,])br(?![\w-])/.test(accept) ? 'br' : /(^|[\s,])gzip(?![\w-])/.test(accept) ? 'gzip' : '';
+      if (enc) {
+        const key = enc + ':' + rel + ':' + buf.length + ':' + crypto.createHash('sha1').update(buf).digest('hex').slice(0, 12);
+        let packed = compressedCache.get(key);
+        if (!packed) {
+          packed = enc === 'br'
+            ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } })
+            : zlib.gzipSync(buf, { level: 6 });
+          if (compressedCache.size > 200) compressedCache.clear();
+          compressedCache.set(key, packed);
+        }
+        headers['Content-Encoding'] = enc;
+        buf = packed;
+      }
+    }
+    res.writeHead(200, headers);
     res.end(buf);
   });
 }
@@ -660,6 +690,8 @@ async function handleApi(req, res, urlPath) {
   }
 
   if (urlPath.startsWith('/api/survey/')) return handleSurveyPublic(req,res,urlPath,{ store,readJsonBody,sendJson });
+  // Trang chủ: xem ảnh bìa không cần đăng nhập, chỉ admin được đổi
+  if (urlPath === '/api/home') return handleHome(req,res,{ store,dataKey:resolveDataKey(req),admins:ADMIN_EMAILS,readJsonBody,sendJson });
 
   if (urlPath === '/api/drive-backup/callback' && req.method === 'GET') {
     let linked = false;
@@ -697,6 +729,18 @@ async function handleApi(req, res, urlPath) {
       await backups.runNow(store,dataKey);
       return sendJson(res,202,await backups.status(store,dataKey));
     }
+    try {
+      if (req.method === 'GET' && urlPath === '/api/drive-backup/list') {
+        return sendJson(res,200,{files:await backups.list(store,dataKey)});
+      }
+      if (req.method === 'POST' && urlPath === '/api/drive-backup/restore') {
+        const body = await readJsonBody(req);
+        return sendJson(res,200,{success:true,...await backups.restore(store,dataKey,body?.fileId)});
+      }
+    } catch (error) {
+      if (!error.status) console.error('[DRIVE] Khôi phục/đọc danh sách lỗi:',error.message);
+      return sendJson(res,error.status || 500,{message:error.status ? error.message : 'Khôi phục chưa xong: '+error.message});
+    }
     if (req.method === 'POST' && urlPath === '/api/drive-backup/unlink') {
       const notice = await backups.unlink(store,dataKey);
       return sendJson(res,200,{...await backups.status(store,dataKey),notice});
@@ -731,7 +775,7 @@ async function handleApi(req, res, urlPath) {
   if (urlPath === '/api/reply-templates') {
     return handleReplyTemplates(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
   }
-  if (urlPath.startsWith('/api/surveys/')) {
+  if (urlPath === '/api/surveys' || urlPath.startsWith('/api/surveys/')) {
     return handleSurveyAdmin(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
   }
   if (urlPath === '/api/todos' || urlPath.startsWith('/api/todos/')) {

@@ -134,3 +134,58 @@ test('OAuth Drive, sao lưu theo ngày Việt Nam và dừng khi hủy liên k�
   assert.equal(uploads.length,2);
   assert.equal((await backup.status(store,account)).linked,false);
 });
+
+test('Danh sách và khôi phục từ Drive: chặn tệp ngoài thư mục, sao lưu bản hiện tại trước khi ghi đè',async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(),'gdhome-drive-restore-'));
+  t.after(() => fs.rm(dir,{recursive:true,force:true}));
+  const chunks = [];
+  const old = createSnapshot({store:memoryStore([[account,{_version:1,tasks:[{title:'Bản cũ'}]}]]),account,assets:{read:async () => null}});
+  for await (const chunk of old.stream) chunks.push(chunk);
+  const oldArchive = Buffer.concat(chunks);
+  const store = memoryStore([[account,{_version:5,tasks:[{title:'Hiện tại'}]}]]);
+  const events = [];
+  const uploads = [];
+  const backup = driveBackup({secret:'test-secret',dataDir:dir,env:{
+    GOOGLE_DRIVE_CLIENT_ID:'test-id',GOOGLE_DRIVE_CLIENT_SECRET:'test-secret',
+    GOOGLE_DRIVE_REDIRECT_URI:'https://gdhome.test/api/drive-backup/callback'
+  },fetchFn:async (url,options = {}) => {
+    if (url === 'https://oauth2.googleapis.com/token') {
+      return Response.json({access_token:'access',refresh_token:'refresh'});
+    }
+    if (url.includes('/v1/userinfo')) return Response.json({email_verified:true,email:account});
+    if (url.includes('/drive/v3/files?spaces=') && url.includes('appProperties')) return Response.json({files:[{id:'folder'}]});
+    if (url.includes('/drive/v3/files?spaces=')) {
+      const q = new URL(url).searchParams;
+      assert.equal(q.get('q'),"'folder' in parents and trashed=false");
+      assert.equal(q.get('orderBy'),'createdTime desc');
+      return Response.json({files:[{id:'good-file',name:'GDHOME-a',createdTime:'2026-11-01T00:00:00Z',size:'42'}]});
+    }
+    if (url.includes('/upload/drive/v3/files?uploadType=')) {
+      uploads.push(JSON.parse(options.body).name);
+      events.push('upload');
+      return new Response('',{headers:{Location:'https://www.googleapis.com/drive-upload-session'}});
+    }
+    if (url.endsWith('/drive-upload-session')) return Response.json({id:'safety'});
+    if (url.includes('/files/outside-file?')) return Response.json({id:'outside-file',parents:['other-folder']});
+    if (url.includes('/files/good-file?alt=media')) return new Response(oldArchive);
+    if (url.includes('/files/good-file?')) return Response.json({id:'good-file',parents:['folder']});
+    throw new Error('Unexpected URL '+url);
+  }});
+  const query = new URL(backup.connect(account)).searchParams;
+  assert.equal(await backup.callback(store,new URLSearchParams({state:query.get('state'),code:'c'})),true);
+  while ((await backup.status(store,account)).busy) await new Promise(resolve => setImmediate(resolve));
+  uploads.length = 0; events.length = 0;
+
+  assert.deepEqual(await backup.list(store,account),[{id:'good-file',name:'GDHOME-a',createdTime:'2026-11-01T00:00:00Z',size:42}]);
+  await assert.rejects(backup.restore(store,account,'outside-file'),{status:404});
+  assert.equal(uploads.length,0);
+  assert.equal((await store.get(account)).tasks[0].title,'Hiện tại');
+  await assert.rejects(backup.restore(store,'other@example.com','good-file'),{status:400});
+
+  const result = await backup.restore(store,account,'good-file');
+  assert.equal(result.files,0);
+  assert.equal(uploads.length,1);
+  assert.match(uploads[0],/truoc-khoi-phuc/);
+  assert.equal((await store.get(account)).tasks[0].title,'Bản cũ');
+  assert.deepEqual((await fs.readdir(dir)).filter(name => name.startsWith('restore-')),[]);
+});

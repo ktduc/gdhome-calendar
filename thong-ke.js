@@ -126,7 +126,9 @@
   const daysLeft = p => p.auto?.deadline ? p.auto.deadline.daysLeft : null;
 
   function visible() {
-    const q = byId('tk-search').value.trim().toLowerCase();
+    // Tìm không dấu, từng từ: "nha pho q7" khớp "Nhà phố … Q.7"
+    const fold = s => String(s || '').normalize('NFD').replace(/\p{M}/gu, '').replace(/đ/gi, 'd').toLowerCase();
+    const q = fold(byId('tk-search').value).split(/\s+/).filter(Boolean);
     let list = projects.filter(p => {
       const stage = val(p, 'stage');
       switch (prefs.view) {
@@ -139,8 +141,10 @@
         default: return true;
       }
     });
-    if (q) list = list.filter(p => [p.name, ...Object.values(p.profile).filter(v => typeof v === 'string'), ...Object.values(p.profile.custom || {}), p.auto?.designer3d, p.auto?.designerHskt]
-      .join(' ').toLowerCase().includes(q));
+    if (q.length) list = list.filter(p => {
+      const text = fold([p.name, ...Object.values(p.profile).filter(v => typeof v === 'string'), ...Object.values(p.profile.custom || {}), p.auto?.designer3d, p.auto?.designerHskt].join(' '));
+      return q.every(w => text.includes(w));
+    });
     const sort = prefs.sort || {key: 'deadline', dir: 1};
     const col = colOf(sort.key);
     const key = p => {
@@ -168,7 +172,7 @@
     switch (col.type) {
       case 'name':
         return `<div class="tk-name"><input ${f} value="${esc(p.name)}" aria-label="Tên dự án">
-          <span class="tk-links"><a href="/du-an?project=${encodeURIComponent(p.id)}" title="Hồ sơ dự án">📁</a><a href="/?project=${encodeURIComponent(p.id)}" title="Lịch tiến độ">📅</a><a href="/chot-ma?project=${encodeURIComponent(p.id)}" title="Chốt mã">🏷</a><button type="button" class="tk-more" data-more="${esc(p.id)}" title="Xoá dự án…" aria-label="Xoá dự án">⋯</button></span></div>`;
+          <span class="tk-links"><a href="/du-an?project=${encodeURIComponent(p.id)}" title="Hồ sơ dự án">📁</a><a href="/?project=${encodeURIComponent(p.id)}" title="Lịch tiến độ">📅</a><a href="/chot-ma?project=${encodeURIComponent(p.id)}" title="Chốt mã">🏷</a><button type="button" class="tk-more" data-more="${esc(p.id)}" title="Gộp / xoá dự án…" aria-label="Gộp hoặc xoá dự án">⋯</button></span></div>`;
       case 'date': return `<input type="date" ${f} value="${esc(v)}">`;
       case 'check': return `<input type="checkbox" ${f} ${v ? 'checked' : ''} aria-label="${esc(col.label)}">`;
       case 'number': return `<input class="tk-num" inputmode="decimal" ${f} value="${esc(v ? String(v).replace('.', ',') : '')}" placeholder="${esc(auto)}">`;
@@ -530,12 +534,30 @@
   function openDeleteProject(id) {
     const p = projects.find(x => x.id === id);
     if (!p) return;
-    const dialog = openDialog('Xoá dự án', `<p>Xoá hẳn <b>${esc(p.name)}</b> cùng ${p.auto?.taskCount || 0} việc trên Lịch. Không hoàn tác được.</p>
+    const others = projects.filter(x => x.id !== id).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
+    const dialog = openDialog(p.name, `<h3 class="tk-h3">Gộp vào dự án khác</h3>
+      <p class="tk-muted">Chuyển giai đoạn, việc trên Lịch và bảng Chốt mã sang dự án được chọn; ô hồ sơ còn trống bên đó lấy từ dự án này. Sau đó dự án này bị xoá.</p>
+      <div class="tk-actions"><select data-target aria-label="Gộp vào dự án"><option value="">— Chọn dự án —</option>${others.map(x => `<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select>
+      <button type="button" class="btn btn-primary" data-merge disabled>Gộp</button></div>
+      <h3 class="tk-h3">Xoá dự án</h3><p>Xoá hẳn <b>${esc(p.name)}</b> cùng ${p.auto?.taskCount || 0} việc trên Lịch. Không hoàn tác được.</p>
       <p class="tk-muted">Chỉ muốn cất đi? Chuyển giai đoạn sang <b>Hoàn thành</b> hoặc <b>Tạm dừng</b> – dự án vẫn còn trong phần ĐÃ QT · TẠM DỪNG.</p>
       <div class="tk-grid"><label>Gõ đúng tên dự án để xác nhận<input data-confirm autocomplete="off"></label></div>
       <div class="tk-actions"><button type="button" class="btn btn-outline" data-archive>Chuyển sang Tạm dừng</button><button type="button" class="btn btn-danger" data-delete disabled>Xoá dự án</button></div>`, false);
     const input = dialog.querySelector('[data-confirm]'), del = dialog.querySelector('[data-delete]');
     input.oninput = () => { del.disabled = input.value.trim() !== p.name; };
+    const target = dialog.querySelector('[data-target]'), merge = dialog.querySelector('[data-merge]');
+    target.onchange = () => { merge.disabled = !target.value; };
+    merge.onclick = async () => {
+      const to = projects.find(x => x.id === target.value);
+      if (!to || !await GDHomeShell.confirm({title: 'Gộp dự án', message: `Gộp "${p.name}" vào "${to.name}"? Dự án "${p.name}" sẽ bị xoá sau khi gộp.`, okText: 'Gộp', danger: true})) return;
+      merge.disabled = true;
+      try {
+        const res = await api('/api/project-hub/project/merge', {sourceId: id, targetId: to.id});
+        dialog.close();
+        toast(`Đã gộp vào "${to.name}" (${res.movedCalendars} giai đoạn, ${res.movedSheets || 0} bảng chốt mã).`);
+        await load();
+      } catch (error) { toast(error.message); merge.disabled = false; }
+    };
     dialog.querySelector('[data-archive]').onclick = async () => { dialog.close(); await saveField(id, 'stage', 'Tạm dừng'); };
     del.onclick = async () => {
       del.disabled = true;

@@ -1,5 +1,10 @@
 const crypto = require('node:crypto');
-const {createSnapshot} = require('./backup-snapshot');
+const path = require('node:path');
+const fsp = require('node:fs/promises');
+const {createWriteStream} = require('node:fs');
+const {Readable} = require('node:stream');
+const {pipeline} = require('node:stream/promises');
+const {createSnapshot,inspectSnapshot,restoreSnapshot} = require('./backup-snapshot');
 
 const storeKey = 'drive-backup-links-v1';
 const folderMime = 'application/vnd.google-apps.folder';
@@ -218,6 +223,57 @@ function driveBackup({secret,dataDir,env = process.env,fetchFn = fetch,snapshot 
     if (!available || !link || account === 'shared') throw fail(400,'Hãy liên kết thư mục Drive trước.');
     run(store,account,link)?.catch(() => {});
   }
+  async function access(store,account,signal) {
+    const link = (await links(store))[account];
+    if (!available || !link || account === 'shared') throw fail(400,'Hãy liên kết thư mục Drive trước.');
+    const {access_token} = await tokens({refresh_token:decrypt(link.token),grant_type:'refresh_token'},signal);
+    return {link,token:access_token,headers:{Authorization:'Bearer '+access_token}};
+  }
+  async function list(store,account) {
+    const {link,headers} = await access(store,account);
+    const query = new URLSearchParams({spaces:'drive',fields:'files(id,name,createdTime,size)',pageSize:'30',
+      orderBy:'createdTime desc',q:"'"+link.folder+"' in parents and trashed=false"});
+    const response = await request(drive+'/files?'+query,{headers});
+    if (!response.ok) throw fail(502,'Không đọc được danh sách bản sao trên Drive.');
+    return ((await response.json().catch(() => ({}))).files || []).map(({id,name,createdTime,size}) =>
+      ({id,name,createdTime,size:Number(size) || 0}));
+  }
+  async function restore(store,account,fileId) {
+    if (typeof fileId !== 'string' || !/^[\w-]{5,200}$/.test(fileId)) throw fail(400,'Mã bản sao không hợp lệ.');
+    if (jobs.has(account)) throw fail(409,'Đang sao lưu hoặc khôi phục. Hãy thử lại sau.');
+    const controller = new AbortController();
+    const {signal} = controller;
+    jobs.set(account,controller);
+    const temp = path.join(dataDir,'restore-'+crypto.randomUUID()+'.ndjson.gz');
+    let archive;
+    try {
+      const {link,token,headers} = await access(store,account,signal);
+      const meta = await request(drive+'/files/'+fileId+'?fields=id,parents,trashed',{headers,signal});
+      const info = meta.ok ? await meta.json().catch(() => ({})) : {};
+      if (!info.id || info.trashed || !info.parents?.includes(link.folder)) {
+        throw fail(404,'Bản sao không nằm trong thư mục sao lưu đã liên kết.');
+      }
+      const file = await request(drive+'/files/'+fileId+'?alt=media',{headers,signal});
+      if (!file.ok || !file.body) throw fail(502,'Không tải được bản sao từ Drive.');
+      await pipeline(Readable.fromWeb(file.body),createWriteStream(temp));
+      let checked;
+      try { checked = await inspectSnapshot(temp,{account}); }
+      catch (error) { throw fail(422,error.message); }
+      if (checked.missing.length) {
+        throw fail(409,'Bản sao có '+checked.missing.length+' tệp đã mất ở nguồn nên không khôi phục trọn vẹn được.');
+      }
+      const now = clock();
+      archive = snapshot({store,account,dataDir,signal,now});
+      await uploadArchive(request,token,link.folder,
+        'GDHOME-truoc-khoi-phuc-'+now.toISOString().replace(/[:.]/g,'-')+'.ndjson.gz',archive.stream,signal);
+      await restoreSnapshot(temp,{store,account,dataDir,apply:true,allowMissing:false});
+      return {files:checked.files,createdAt:checked.createdAt};
+    } finally {
+      archive?.stream.destroy();
+      jobs.delete(account);
+      await fsp.rm(temp,{force:true}).catch(() => {});
+    }
+  }
   async function tick(store) {
     if (!available || ticking) return;
     const {date,hour} = vietnamDay(clock());
@@ -229,7 +285,7 @@ function driveBackup({secret,dataDir,env = process.env,fetchFn = fetch,snapshot 
       }
     } finally { ticking = false; }
   }
-  return {available,connect,callback,status,unlink,runNow,tick};
+  return {available,connect,callback,status,unlink,runNow,list,restore,tick};
 }
 
 module.exports = {driveBackup,vietnamDay};

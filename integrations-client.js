@@ -42,7 +42,8 @@ window.GDHomeConnections = (() => {
           (data.error || data.notice ? '<p role="alert">' + html(data.error || data.notice) + '</p>' : '') +
           (data.linked ? '<div class="connection-actions"><a href="' + html(data.folderUrl) + '" target="_blank" rel="noopener">Mở thư mục Drive</a>' +
           '<button type="button" data-drive-action="run"' + (data.busy ? ' disabled' : '') + '>Sao lưu ngay</button>' +
-          '<button type="button" data-drive-action="unlink">Hủy liên kết</button></div>' :
+          '<button type="button" data-drive-action="restore"' + (data.busy ? ' disabled' : '') + '>Khôi phục…</button>' +
+          '<button type="button" data-drive-action="unlink">Hủy liên kết</button></div><div data-drive-restore></div>' :
           '<button type="button" data-drive-action="connect"' + (!data.available ? ' disabled' : '') + '>Liên kết thư mục Drive</button>');
         if (data.busy && data.linked) timer = setTimeout(() => refresh(),3000);
       } catch (error) {
@@ -51,10 +52,39 @@ window.GDHomeConnections = (() => {
         section.querySelectorAll('button').forEach(button => { button.disabled = false; });
       }
     }
+    async function pickRestore(button) {
+      const box = section.querySelector('[data-drive-restore]');
+      const say = text => { box.textContent = text; };
+      button.disabled = true;
+      say('Đang đọc danh sách bản sao…');
+      try {
+        const {files} = await settings(undefined,endpoint + '/list');
+        if (!files.length) return say('Chưa có bản sao nào trong thư mục Drive.');
+        box.innerHTML = '<select data-restore-file aria-label="Chọn bản sao">' + files.map(file =>
+          '<option value="' + html(file.id) + '">' + html(new Date(file.createdTime).toLocaleString('vi-VN') + ' · ' +
+          (file.size/1048576).toFixed(1) + ' MB' + (file.name.includes('truoc-khoi-phuc') ? ' · trước khôi phục' : '')) +
+          '</option>').join('') + '</select> <button type="button" data-restore-go>Khôi phục bản này</button>';
+        box.querySelector('[data-restore-go]').onclick = async event => {
+          const go = event.currentTarget, select = box.querySelector('[data-restore-file]');
+          const label = select.selectedOptions[0].textContent;
+          if (!await GDHomeShell.confirm({title:'Khôi phục dữ liệu',okText:'Khôi phục',danger:true,
+            message:'Bản sao ' + label + ' sẽ ghi đè dữ liệu hiện tại. Bản hiện tại sẽ được sao lưu lên Drive trước khi khôi phục.'})) return;
+          go.disabled = select.disabled = true;
+          say('Đang sao lưu bản hiện tại và khôi phục… Vui lòng không đóng trang.');
+          try {
+            const result = await settings({fileId:select.value},endpoint + '/restore');
+            say('Đã khôi phục ' + result.files + ' tệp. Đang tải lại trang…');
+            setTimeout(() => location.reload(),1500);
+          } catch (error) { say(error.message); }
+        };
+      } catch (error) { say(error.message); }
+      finally { button.disabled = false; }
+    }
     section.onclick = async event => {
       const button = event.target.closest('[data-drive-action]');
       if (!button) return;
       const action = button.dataset.driveAction;
+      if (action === 'restore') return pickRestore(button);
       if (action === 'unlink' && !await GDHomeShell.confirm('Dừng sao lưu hằng ngày và hủy liên kết thư mục Drive?')) return;
       button.disabled = true;
       refresh(action);

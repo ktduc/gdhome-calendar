@@ -7,11 +7,11 @@
   <!-- Google Fonts: Roboto (với độ mảnh 100, 300 cho ngày âm nét cực mảnh) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://unpkg.com">
+  <link rel="preload" as="script" href="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js">
   <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,300&display=swap" rel="stylesheet">
-  <!-- Lucide Icons -->
-  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-  <!-- html2canvas for Export PNG & Copy Clipboard -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <!-- html2canvas for Export PNG & Copy Clipboard (chỉ dùng khi bấm xuất, nên defer; lucide nạp ở cuối trang) -->
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <link rel="stylesheet" href="shell.css?v=gd26">
   <link rel="stylesheet" href="style.css?v=gd25.1">
   <link rel="stylesheet" href="asset-library.css?v=undo1">
@@ -1043,6 +1043,7 @@
   </div>
 
   <button type="button" class="save-status is-saved" id="save-status-indicator" title="Trạng thái lưu dữ liệu">✓ Đã lưu</button>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
   <script src="holidays-data.js?v=20261107k"></script>
   <script src="scheduler.js?v=20261108mat"></script>
   <script src="export-canvas.js?v=wm2"></script>

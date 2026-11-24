@@ -6,7 +6,7 @@ const { PDFDocument, rgb, StandardFonts } = require('pdf-lib');
 // Tên file từ header có thể đã mã hoá %xx hoặc là chữ thường có dấu % ("100%.pdf"): giải mã được thì giải, không thì giữ nguyên
 const safeDecode = value => { try { return decodeURIComponent(value); } catch { return value; } };
 const fontkit = require('@pdf-lib/fontkit');
-const { projectList, writeProjectProfile, withScheduleWrite, writeTableSchema, deleteProject } = require('./project-profiles');
+const { projectList, writeProjectProfile, withScheduleWrite, writeTableSchema, deleteProject, mergeProject } = require('./project-profiles');
 const { projectRow, projectTasks, designFeeAfterDiscount } = require('./project-table');
 const {
   resolveAi,
@@ -1545,6 +1545,14 @@ async function handleProjectHub(req, urlPath, { res, store, dataKey, readJsonBod
   if (urlPath === '/api/project-hub/project/delete' && req.method === 'POST') {
     const body = await readJsonBody(req);
     const result = await deleteProject(store, dataKey, body?.projectId, body?.confirmName, defaultSchedule);
+    return sendJson(res, 200, { success: true, ...result });
+  }
+
+  // 4e. Gộp dự án: POST /api/project-hub/project/merge {sourceId, targetId}
+  if (urlPath === '/api/project-hub/project/merge' && req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const matKey = 'mat-v1-' + crypto.createHash('sha256').update(dataKey).digest('hex');
+    const result = await mergeProject(store, dataKey, body?.sourceId, body?.targetId, defaultSchedule, matKey);
     return sendJson(res, 200, { success: true, ...result });
   }
 

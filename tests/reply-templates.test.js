@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const {applyVars, buildMessage, mergeTemplates, BASE} = require('../mau-tra-loi-data.js');
+const {applyVars, buildMessage, mergeTemplates, softenEnding, fold, BASE} = require('../mau-tra-loi-data.js');
 const {normalizeDoc} = require('../reply-templates.js');
 
 test('thay biến xưng hô, viết hoa đầu câu', () => {
@@ -40,4 +40,20 @@ test('server lọc dữ liệu mẫu: giới hạn mẫu và độ dài', () => 
   assert.deepEqual(doc.items[0].items, ['i']);
   assert.deepEqual(doc.deleted, ['chao']);
   assert.equal(normalizeDoc({items: Array.from({length: 500}, (_, i) => ({id: 'x' + i, title: 't'}))}).items.length, 300);
+});
+
+test('khách xưng "em": bỏ "ạ" cuối câu, anh/chị giữ nguyên', () => {
+  assert.equal(softenEnding('Gửi giúp {toi} nhé ạ. Cảm ơn nhiều ạ!', 'em'), 'Gửi giúp {toi} nhé. Cảm ơn nhiều nhé!');
+  assert.equal(softenEnding('Mình đã chốt chưa ạ?', 'em'), 'Mình đã chốt chưa em?');
+  assert.equal(softenEnding('Vâng ạ, em xem\nDạ ạ', 'Em'), 'Vâng nhé, em xem\nDạ nhé');
+  assert.equal(softenEnding('Dạ, bạn Hạnh ở đạo ạ', 'em'), 'Dạ, bạn Hạnh ở đạo nhé');
+  assert.equal(softenEnding('Cảm ơn nhiều ạ.', 'chị'), 'Cảm ơn nhiều ạ.');
+  assert.equal(applyVars('{toi} cảm ơn {kh} ạ.', {kh: 'em'}), 'Anh cảm ơn em nhé.');
+  assert.match(buildMessage(BASE.find(x => x.id === 'chao'), {kh: 'em'}), /phụ trách thiết kế nhà mình nhé$/);
+  assert.match(buildMessage(BASE.find(x => x.id === 'chao'), {kh: 'anh'}), /ạ$/);
+});
+
+test('tìm kiếm không phân biệt dấu', () => {
+  assert.ok(fold('Nhà phố Đẹp').includes(fold('nha pho')));
+  assert.equal(fold('Đường'), 'duong');
 });

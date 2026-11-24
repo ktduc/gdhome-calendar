@@ -2304,6 +2304,58 @@ cases['12.7'] = async page => {
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
+cases['home'] = async page => {
+  // Trang chủ: 2 hàng công cụ đúng thứ tự, menu cùng thứ tự, logo về trang chủ, ảnh bìa, đổi nền; /du-lieu là trang riêng; gộp dự án
+  const order = ['/thong-ke','/mau-tra-loi','/','/chot-ma','/du-an','/giao-viec','/so-sanh','/du-lieu'];
+  for (const width of [1280,1440,1920,2560]) {
+    await page.setViewportSize({width,height:900});
+    await page.goto('/tools',{waitUntil:'domcontentloaded'});
+    await page.locator('.home-tile').first().waitFor();
+    assert.deepEqual(await page.$$eval('.home-row', rows => rows.map(r => r.querySelectorAll('.home-tile').length)),[4,4]);
+    assert.deepEqual(await page.$$eval('.home-tile', a => a.map(x => x.getAttribute('href'))),order);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Không tràn ngang ở ' + width);
+  }
+  assert.equal(await page.locator('#projects').count(),0,'Bỏ danh sách Dự án của tôi');
+  await page.locator('.gd-tools-menu summary').click();
+  assert.deepEqual((await page.$$eval('.gd-tools-menu nav a', a => a.map(x => x.getAttribute('href')))).slice(0,8),order);
+  await page.keyboard.press('Escape');
+  // Ảnh bìa (chế độ không đăng nhập = 1 tài khoản, được sửa)
+  await page.locator('.home-cover-actions:not([hidden])').waitFor();
+  const cover = 'data:image/png;base64,' + imageFixture;
+  await page.evaluate(c => GDHomeShell.api('/api/home',{method:'POST',body:{cover:c}}),cover);
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForFunction(() => document.querySelector('#home-cover').classList.contains('has-image'));
+  await page.locator('[data-bg=sage]').click();
+  await page.reload({waitUntil:'domcontentloaded'});
+  assert.equal(await page.locator('[data-bg=sage]').getAttribute('aria-pressed'),'true','Nền nhớ trên máy');
+  // Logo ở trang khác về trang chủ
+  await page.goto('/thong-ke',{waitUntil:'domcontentloaded'});
+  await page.locator('tr[data-row=p1]').waitFor();
+  assert.equal(await page.locator('.app-logo').getAttribute('href'),'/tools');
+  // Gộp dự án qua nút ⋯
+  await page.locator('[data-mode=table]').click();
+  const before = await page.evaluate(() => GDHomeShell.api('/api/project-hub/overview'));
+  if (before.projects.length > 1) {
+    const [src, dst] = before.projects;
+    const row = page.locator(`tr[data-row="${src.id}"]`);
+    await row.hover();
+    await row.locator('[data-more]').click();
+    await page.locator('.tk-dialog [data-target]').selectOption(dst.id);
+    await page.locator('.tk-dialog [data-merge]').click();
+    await page.locator('.gd-ask button', {hasText: 'Gộp'}).last().click();
+    await page.waitForFunction(async id => !(await GDHomeShell.api('/api/project-hub/overview')).projects.some(p => p.id === id), src.id);
+  }
+  // Tìm không dấu
+  await page.locator('#tk-search').fill('du an');
+  // Dữ liệu dùng chung là trang riêng, không có nút đóng
+  await page.goto('/du-lieu',{waitUntil:'domcontentloaded'});
+  const library = page.locator('.asset-library-dialog.is-page');
+  await library.waitFor();
+  assert.equal(await library.locator('.close-dialog').count(),0);
+  await page.mouse.click(5,300);
+  assert.ok(await library.isVisible(),'Bấm ra ngoài không đóng trang');
+};
+
 cases['thong-ke'] = async page => {
   // Bảng thống kê dự án: cột tự từ Lịch, sửa ô lưu server, nhập HĐTK (dán chữ) tạo dự án + mốc, nhập CSV Notion
   await page.setViewportSize({width:1440,height:900});
@@ -2428,7 +2480,7 @@ cases['thong-ke'] = async page => {
 cases['mau-tra-loi'] = async page => {
   // Mẫu trả lời khách: đổi xưng hô, xem trước thay biến, sửa mẫu lưu server, tải lại vẫn còn
   await page.setViewportSize({width:1440,height:900});
-  await page.goto('/mau-tra-loi');
+  await page.goto('/mau-tra-loi',{waitUntil:'domcontentloaded'});
   await page.locator('.mt-item[data-id=chao]').waitFor();
   await page.locator('.mt-item[data-id=chao]').click();
   assert.match(await page.locator('#mt-preview').innerText(),/^Em chào chị - em Đức/);
@@ -2447,12 +2499,44 @@ cases['mau-tra-loi'] = async page => {
   await page.locator('.mt-item[data-id=chao] .mt-tag').waitFor();
   const saved = () => page.evaluate(() => GDHomeShell.api('/api/reply-templates'));
   assert.equal((await saved()).items[0].title,'Chào khách mới (đã sửa)');
-  await page.reload();
+  await page.reload({waitUntil:'domcontentloaded'});
   assert.match(await page.locator('.mt-item[data-id=chao] strong').innerText(),/Chào khách mới \(đã sửa\)/);
   await page.locator('.mt-item[data-id=chao]').click();
   await page.locator('[data-act=reset]').click();
   await page.locator('.mt-item[data-id=chao] strong').filter({hasText:'Lời chào nhận dự án'}).waitFor();
   assert.deepEqual((await saved()).items,[]);
+  // Khách xưng "em": không kết câu bằng "ạ"
+  await page.locator('#mt-kh [data-kh=em]').click();
+  assert.match(await page.locator('#mt-preview').innerText(),/nhà mình nhé$/);
+  await page.locator('#mt-kh [data-kh=chị]').click();
+  assert.match(await page.locator('#mt-preview').innerText(),/nhà mình ạ$/);
+  // Tìm không dấu
+  await page.locator('#mt-search').fill('loi chao nhan du an');
+  await page.locator('.mt-item[data-id=chao]').waitFor();
+  assert.equal(await page.locator('.mt-item').count(),1);
+  await page.locator('#mt-search').fill('');
+  // Chuột phải: nhân bản rồi xoá (có xác nhận); Esc đóng menu
+  await page.locator('.mt-item[data-id=chao]').click({button:'right'});
+  await page.locator('.mt-menu').waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.mt-menu').count(),0);
+  await page.locator('.mt-item[data-id=chao]').click({button:'right'});
+  await page.locator('.mt-menu button',{hasText:'Nhân bản'}).click();
+  const copyItem = page.locator('.mt-item',{hasText:'(bản sao)'});
+  await copyItem.waitFor();
+  await copyItem.click({button:'right'});
+  await page.locator('.mt-menu button',{hasText:'Xoá mẫu'}).click();
+  await page.locator('.gd-ask [data-ask=ok]').click();
+  await copyItem.waitFor({state:'detached'});
+  assert.deepEqual((await saved()).items,[]);
+  // Chuột phải nhóm: menu 3 mục; ý tick chọn: menu 3 mục
+  await page.locator('#mt-groups button[data-g]:not([data-g=""])').first().click({button:'right'});
+  assert.equal(await page.locator('.mt-menu button').count(),3);
+  await page.keyboard.press('Escape');
+  await page.locator('.mt-item[data-id=note-thiet-bi]').click();
+  await page.locator('#mt-checks label').first().click({button:'right'});
+  assert.deepEqual(await page.locator('.mt-menu button').allInnerTexts(),['Thêm ý','Sửa ý','Xoá ý']);
+  await page.keyboard.press('Escape');
 };
 
 cases['khao-sat'] = async (page,{browser}) => {
@@ -2504,10 +2588,15 @@ cases['khao-sat'] = async (page,{browser}) => {
   await page.locator('#sv-copy-msg').click();
   const info = await page.evaluate(() => GDHomeShell.api('/api/surveys/p1'));
   assert.equal(info.path,new URL(link).pathname);
+  // Bỏ chọn dự án: hiện danh sách khách đã trả lời, bấm vào mở chi tiết
+  await page.locator('#sv-project').selectOption('');
+  await page.locator('#sv-list button[data-id=p1][data-state=sent]').waitFor();
+  await page.locator('#sv-list button[data-id=p1]').click();
+  await page.locator('#sv-summary',{hasText:'Nhà phố'}).waitFor();
 };
 
 async function openMaterials(page) {
-  await page.goto('/chot-ma');
+  await page.goto('/chot-ma',{waitUntil:'domcontentloaded'});   // không chờ CDN ngoài (unpkg, fonts)
   await page.locator('#materials:not([inert])').waitFor();
   const listButton = page.getByRole('button',{name:'Bảng mẫu GĐ8',exact:true});
   const firstRow = page.locator('[data-row="g1-r1"]');
@@ -2530,11 +2619,9 @@ cases['15.1'] = async page => {
     assert.equal(await menu.evaluate(d => d.open),false,selector + ' đóng khi Esc');
   }
   await page.locator('.gd-tools-menu summary').click();
-  await page.locator('[data-open-library]').click();
-  const library = page.locator('dialog.asset-library-dialog');
-  await library.waitFor();
-  await page.mouse.click(5,5);
-  await library.waitFor({state:'detached'});
+  // Dữ liệu dùng chung giờ là trang riêng /du-lieu (25/11/2026)
+  await page.locator('.gd-tools-menu nav a[href="/du-lieu"]').click();
+  await page.locator('dialog.asset-library-dialog.is-page').waitFor();
 };
 
 cases['15.2'] = async page => {

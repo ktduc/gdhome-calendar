@@ -428,3 +428,8 @@
 @media(max-width:650px){.catalogue-review:has(>[data-catalogue-details]:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(145px,42%)}}
 .wood-crop-actions{display:flex;justify-content:flex-end;margin-top:10px}
 .asset-filter-actions{display:flex;flex-wrap:wrap;gap:5px;align-items:center}.asset-filter-actions>button{flex:1;padding:6px;font-size:12px}.asset-ai-filter-group{display:grid;grid-template-columns:auto 1fr;gap:5px;padding:9px 0;border-bottom:1px solid #ddd}.asset-ai-filter-group small{grid-column:2;color:#64748b}.asset-ai-filter-dialog [data-ai-filter-results]{max-height:50vh;overflow:auto}
+
+/* Trang /du-lieu: thư viện nằm trong trang, chiếm hết phần dưới header */
+.library-page{margin:0;background:var(--gd-sidebar-background,#eef1f5)}
+body.library-page>main.library-main{max-width:none;padding:12px clamp(12px,2vw,24px)}
+.asset-library-dialog.is-page[open]{position:static;border:0!important;outline:none;border-radius:16px;width:100%;max-width:none;height:calc(100dvh - var(--gd-header-height,52px) - 24px);max-height:none;margin:0;box-shadow:0 1px 2px #0000000a,0 8px 24px #0000000f}

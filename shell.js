@@ -50,15 +50,23 @@ window.GDHomeShell = (() => {
 
   function menu(element) {
     if (!element) return;
-    const links = [['/','Lập tiến độ'],['/chot-ma','Chốt mã vật liệu'],['/du-an','Quản lý dự án'],['/thong-ke','Bảng thống kê dự án'],['/giao-viec','Giao việc · Nhà thầu'],['/so-sanh','Bảng so sánh'],['/mau-tra-loi','Mẫu trả lời khách'],['/tools','Trang chủ']];
     element.onkeydown = event => {
       if (event.key === 'Escape' && element.open) { element.open = false; element.querySelector('summary').focus(); event.stopPropagation(); }
     };
+    const here = location.pathname.replace(/\.html$/,'').replace(/^\/index$/,'/');
+    const link = ([href,label,glyph]) => '<a href="' + href + '"' + (here === href ? ' aria-current="page"' : '') + '><span class="gd-menu-glyph">' + glyph + '</span>' + label + '</a>';
     element.innerHTML = '<summary>GD HOME Tools</summary><nav aria-label="GD HOME Tools">' +
-      links.map(([href,label]) => '<a href="' + href + '">' + label + '</a>').join('') +
-      (element.dataset.shellMenu === 'public' ? '' : '<button type="button" data-open-library>📚 Dữ liệu dùng chung</button>' +
-        '<button type="button" data-open-connections>⚙ Kết nối</button>') + '</nav>';
+      TOOL_ROWS.map(row => '<div class="gd-menu-row">' + row.map(link).join('') + '</div>').join('') +
+      '<div class="gd-menu-row">' + link(['/tools','Trang chủ','⌂']) +
+      (element.dataset.shellMenu === 'public' ? '' : '<button type="button" data-open-connections><span class="gd-menu-glyph">⚙</span>Kết nối</button>') + '</div></nav>';
   }
+  // Thứ tự công cụ dùng chung cho trang chủ và menu GD HOME Tools (anh Đức chốt 25/11/2026)
+  const TOOL_ROWS = [
+    [['/thong-ke','Thống kê dự án','📊','Mọi dự án một bảng: thi công, thiết kế, hạn, thanh toán.'],['/mau-tra-loi','Mẫu trả lời khách','💬','Câu nhắn mẫu, khảo sát khách trước thiết kế.'],
+      ['/','Lập tiến độ','📅','Lịch thiết kế và Timeline thi công.'],['/chot-ma','Chốt mã vật liệu','🏷','Chọn, xác nhận và đặt vật liệu.']],
+    [['/du-an','Quản lý dự án','📁','Hồ sơ dự án, HSKT và phối cảnh 3D.'],['/giao-viec','Giao việc thầu','🧰','Nhà thầu, phiếu giao việc, ghép PDF hồ sơ.'],
+      ['/so-sanh','Bảng so sánh','⚖','Soạn bảng so sánh phương án, vật liệu cho khách.'],['/du-lieu','Dữ liệu dùng chung','📚','Ảnh mẫu vật liệu theo hạng mục cho mọi dự án.']]
+  ];
 
   function dropdown(command,label,glyph,body,variant = 'outline') {
     return '<details class="hdr-dropdown"><summary class="btn btn-' + escape(variant) + '" data-header-command="' +
@@ -442,8 +450,16 @@ window.GDHomeShell = (() => {
     const button = event.target.closest?.('[data-open-library]');
     if (!button) return;
     button.closest('details')?.removeAttribute('open');
-    if (window.GDHomeAssets) window.GDHomeAssets.openLibrary();
-    else location.href = '/tools#library';
+    location.href = '/du-lieu';
+  });
+  // Bấm logo ở mọi trang về Trang chủ
+  document.querySelectorAll('.app-logo').forEach(logo => {
+    if (logo.tagName === 'A') { logo.href = '/tools'; return; }
+    logo.setAttribute('role','link');
+    logo.tabIndex = 0;
+    logo.style.cursor = 'pointer';
+    logo.onclick = () => { location.href = '/tools'; };
+    logo.onkeydown = event => { if (event.key === 'Enter') location.href = '/tools'; };
   });
   // GĐ18B.2: Đồng bộ kênh BroadcastChannel('gdhome-assets') sang GDHomeAssets (để tab Chốt mã tự cập nhật khi Quản lý dự án thêm/xoá/đổi thứ tự ảnh)
   try {
@@ -789,5 +805,5 @@ window.GDHomeShell = (() => {
     else start();
   }
 
-  return { escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,api,authHeaders:getShellAuthHeaders,takePastedFiles,clipboardFiles,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
+  return { TOOL_ROWS,escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,api,authHeaders:getShellAuthHeaders,takePastedFiles,clipboardFiles,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
 })();

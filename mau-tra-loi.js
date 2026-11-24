@@ -30,9 +30,9 @@
   }
 
   function visible() {
-    const q = state.q.trim().toLowerCase();
+    const q = D.fold(state.q.trim());
     return state.list.filter(t => (!state.group || t.group === state.group) &&
-      (!q || (t.title + ' ' + t.body + ' ' + t.items.join(' ')).toLowerCase().includes(q)));
+      (!q || D.fold(t.title + ' ' + t.body + ' ' + t.items.join(' ')).includes(q)));
   }
 
   function renderBar() {
@@ -146,7 +146,102 @@
     }
   }
 
+  // Menu chuột phải dùng chung: entries = [[nhãn, hàm, đỏ?]]; Esc / bấm ra ngoài / lăn chuột thì đóng.
+  const closeMenu = () => document.querySelectorAll('.mt-menu').forEach(el => el.remove());
+  function menu(event, entries) {
+    event.preventDefault();
+    closeMenu();
+    const el = document.createElement('div');
+    el.className = 'mt-menu';
+    el.setAttribute('role', 'menu');
+    entries.forEach(([label, fn, danger]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('role', 'menuitem'); b.textContent = label;
+      if (danger) b.className = 'is-danger';
+      b.addEventListener('click', () => { closeMenu(); fn(); });
+      el.append(b);
+    });
+    document.body.append(el);
+    el.style.left = Math.max(4, Math.min(event.clientX, innerWidth - el.offsetWidth - 4)) + 'px';
+    el.style.top = Math.max(4, Math.min(event.clientY, innerHeight - el.offsetHeight - 4)) + 'px';
+    el.querySelector('button').focus();
+  }
+
+  function addTemplate(group) {
+    state.editing = {id: uid(), group: group || 'Khác', title: '', body: '', items: [], style: 'num', _new: true};
+    renderView(); byId('mt-view').querySelector('[name=title]')?.focus();
+  }
+
+  async function addGroup() {
+    const name = await S.prompt('Tên nhóm mới (nhóm hiện ở cột trái khi có mẫu đầu tiên):', '', {placeholder: 'Ví dụ: Khách VIP'});
+    if (name && name.trim()) addTemplate(name.trim().slice(0, 50));
+  }
+
+  async function renameGroup(g) {
+    const name = ((await S.prompt('Đổi tên nhóm “' + g + '”:', g)) || '').trim().slice(0, 50);
+    if (!name || name === g) return;
+    const moved = state.list.filter(t => t.group === g).map(t => ({...plain(t), group: name}));
+    const ids = new Set(moved.map(t => t.id));
+    state.saved = {...state.saved, items: [...state.saved.items.filter(x => !ids.has(x.id)), ...moved]};
+    if (await persist()) { if (state.group === g) state.group = name; renderAll(); S.toast('Đã đổi tên nhóm'); }
+  }
+
+  async function deleteGroup(g) {
+    const rows = state.list.filter(t => t.group === g);
+    const ok = await S.confirm({title: 'Xoá nhóm', message: 'Xoá nhóm “' + g + '” cùng ' + rows.length + ' mẫu trong nhóm? Mẫu gốc có thể khôi phục lại.', okText: 'Xoá nhóm', danger: true});
+    if (!ok) return;
+    const ids = new Set(rows.map(t => t.id));
+    state.saved = {items: state.saved.items.filter(x => !ids.has(x.id)),
+      deleted: [...new Set([...state.saved.deleted, ...rows.filter(t => t._base).map(t => t.id)])]};
+    if (await persist()) { if (state.group === g) state.group = ''; if (ids.has(state.sel)) state.sel = ''; renderAll(); S.toast('Đã xoá nhóm'); }
+  }
+
+  // Ý tick chọn của mẫu đang xem: change(items) sửa mảng ý, trả false nếu huỷ
+  async function editItems(change) {
+    const t = find(state.sel), items = t.items.slice();
+    if (await change(items) === false) return;
+    if (await upsert({...plain(t), items})) { state.off = new Set(); renderAll(); }
+  }
+  const itemMenu = (event, i) => menu(event, [
+    ['Thêm ý', () => editItems(async items => {
+      const text = ((await S.prompt('Nội dung ý mới:', '')) || '').trim();
+      if (!text) return false;
+      items.splice(i + 1, 0, text);
+    })],
+    ['Sửa ý', () => {
+      const t = find(state.sel);
+      if (t.items[i].includes('\n')) { state.editing = plain(t); return renderView(); } // ý nhiều dòng: sửa trong form
+      return editItems(async items => {
+        const text = ((await S.prompt('Sửa ý:', items[i])) || '').trim();
+        if (!text || text === items[i]) return false;
+        items[i] = text;
+      });
+    }],
+    ['Xoá ý', () => editItems(async items => {
+      if (!await S.confirm({title: 'Xoá ý', message: 'Xoá ý “' + items[i].split('\n')[0].slice(0, 80) + '”?', okText: 'Xoá', danger: true})) return false;
+      items.splice(i, 1);
+    }), true]]);
+
   function bind() {
+    document.addEventListener('pointerdown', event => { if (!event.target.closest('.mt-menu')) closeMenu(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenu(); });
+    window.addEventListener('blur', closeMenu);
+    window.addEventListener('resize', closeMenu);
+    document.addEventListener('wheel', closeMenu, {passive: true}); // không dùng scroll: render lại danh sách cũng phát scroll
+    byId('mt-groups').addEventListener('contextmenu', event => {
+      const g = event.target.closest('button[data-g]')?.dataset.g;
+      menu(event, g ? [['Thêm nhóm', addGroup], ['Đổi tên', () => renameGroup(g)], ['Xoá nhóm', () => deleteGroup(g), true]] : [['Thêm nhóm', addGroup]]);
+    });
+    byId('mt-list').addEventListener('contextmenu', event => {
+      const b = event.target.closest('.mt-item');
+      if (!b) return menu(event, [['Thêm mẫu', () => addTemplate(state.group)]]);
+      select(b.dataset.id);
+      menu(event, [['Thêm mẫu', () => addTemplate(find(b.dataset.id)?.group)], ['Sửa', () => act('edit')], ['Nhân bản', () => act('dup')], ['Xoá mẫu', () => act('del'), true]]);
+    });
+    byId('mt-view').addEventListener('contextmenu', event => {
+      const box = event.target.closest('#mt-checks label');
+      if (box && !state.editing) itemMenu(event, +box.querySelector('input').dataset.i);
+    });
     byId('mt-kh').addEventListener('click', event => {
       const b = event.target.closest('button[data-kh]');
       if (!b) return;
@@ -184,10 +279,7 @@
       delete next._new;
       if (await upsert(next)) { state.editing = null; state.sel = next.id; state.off = new Set(); renderAll(); S.toast('Đã lưu mẫu'); }
     });
-    byId('mt-new').addEventListener('click', () => {
-      state.editing = {id: uid(), group: state.group || 'Khác', title: '', body: '', items: [], style: 'num', _new: true};
-      renderView(); byId('mt-view').querySelector('[name=title]')?.focus();
-    });
+    byId('mt-new').addEventListener('click', () => addTemplate(state.group));
     byId('mt-restore').addEventListener('click', async () => {
       state.saved = {...state.saved, deleted: []};
       if (await persist()) { renderAll(); S.toast('Đã khôi phục mẫu gốc'); }

@@ -57,3 +57,14 @@
 @media (min-width: 1900px) { .mt-body { font-size: 14px; } .mt-grid { grid-template-columns: 260px minmax(320px, 460px) minmax(0, 1fr); } .mt-preview { font-size: 15px; } }
 @media (max-width: 1100px) { .mt-grid { grid-template-columns: 180px minmax(220px, 300px) minmax(0, 1fr); } }
 @media (max-width: 860px) { .mt-grid { grid-template-columns: 1fr; } .mt-side { position: static; } .mt-list, .mt-view { max-height: none; } }
+
+.mt-menu { position: fixed; z-index: 1000; display: grid; min-width: 150px; padding: 4px; background: #fff; border: 1px solid #d8d2c8; border-radius: 8px; box-shadow: 0 6px 20px rgba(60, 50, 40, .18); }
+.mt-menu button { padding: 7px 12px; border: 0; border-radius: 6px; background: transparent; color: #3b3329; font: 500 13px Roboto, sans-serif; text-align: left; cursor: pointer; }
+.mt-menu button:hover, .mt-menu button:focus { background: #f4f1ec; outline: none; }
+.mt-menu button.is-danger { color: #b3261e; }
+.sv-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.sv-list button { display: flex; justify-content: space-between; gap: 12px; width: 100%; padding: 9px 12px; border: 1px solid #ece7df; border-radius: 8px; background: #faf8f5; color: #3b3329; font: 500 13px Roboto, sans-serif; text-align: left; cursor: pointer; }
+.sv-list button:hover { background: #ece7df; }
+.sv-list small { color: #8a7f72; font-weight: 400; }
+.sv-list [data-state=sent] small { color: #2f7d4f; }
+.sv-list[hidden] { display: none; }

@@ -72,6 +72,42 @@ async function deleteProject(store,key,projectId,confirmName,defaultSchedule) {
   });
 }
 
+// Gộp dự án nguồn vào dự án đích: chuyển giai đoạn + việc trên Lịch, bảng Chốt mã; ô hồ sơ trống của đích lấy từ nguồn; xoá nguồn.
+async function mergeProject(store,key,sourceId,targetId,defaultSchedule,materialKey) {
+  if (!sourceId || sourceId === targetId) throw Object.assign(new Error('Chọn dự án khác để gộp vào.'),{status:400});
+  const result = await withScheduleWrite(key,async () => {
+    const data = await store.get(key) || defaultSchedule();
+    const owners = data.projectOwners || [];
+    const source = owners.find(entry => entry.id === sourceId), target = owners.find(entry => entry.id === targetId);
+    if (!source || !target) throw Object.assign(new Error('Không tìm thấy dự án.'),{status:404});
+    const from = source.profile || {}, to = target.profile ||= {};
+    for (const [field,value] of Object.entries(from)) {
+      if (field === 'custom') to.custom = {...value,...Object.fromEntries(Object.entries(to.custom || {}).filter(([,v]) => v))};
+      else if (field === 'payments' && Array.isArray(value)) to.payments = [...(to.payments || []),...value];
+      else if (to[field] == null || to[field] === '' || (Array.isArray(to[field]) && !to[field].length)) to[field] = value;
+    }
+    let moved = 0;
+    for (const cal of data.calendars || []) if (cal.ownerId === sourceId) { cal.ownerId = targetId; moved++; }
+    data.projectOwners = owners.filter(entry => entry !== source);
+    data._version = (data._version || 0)+1;
+    data._updatedAt = new Date().toISOString();
+    await store.put(key,data);
+    return {movedCalendars:moved,targetName:target.name};
+  });
+  if (materialKey) {
+    const materials = await store.get(materialKey);
+    const sheets = (materials?.sheets || []).filter(sheet => sheet.projectId === sourceId);
+    if (sheets.length) {
+      sheets.forEach(sheet => { sheet.projectId = targetId; });
+      materials._version = (materials._version || 0)+1;
+      materials._updatedAt = new Date().toISOString();
+      await store.put(materialKey,materials);
+    }
+    result.movedSheets = sheets.length;
+  }
+  return result;
+}
+
 async function writeTableSchema(store,key,schema,defaultSchedule) {
   return withScheduleWrite(key,async () => {
     const data = await store.get(key) || defaultSchedule();
@@ -122,4 +158,4 @@ async function writeProjectProfile(store,key,body,defaultSchedule,legacy) {
   });
 }
 
-module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite,cleanProfile,projectFields,cleanTableSchema,writeTableSchema,deleteProject};
+module.exports = {projectList,profileFor,writeProjectProfile,withScheduleWrite,cleanProfile,projectFields,cleanTableSchema,writeTableSchema,deleteProject,mergeProject};

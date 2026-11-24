@@ -63,12 +63,14 @@
 .tk-col-number { min-width: 96px; }
 .tk-col-check { width: 72px; }
 .tk-col-payments { min-width: 150px; padding: 0 6px !important; }
-.tk-name { display: flex; align-items: center; }
+.tk-name { position: relative; display: flex; align-items: center; }
 .tk-name input { min-width: 0; }
 .tk-name input { font-weight: 600; }
-.tk-links { display: flex; gap: 2px; padding-right: 6px; opacity: 0; }
+/* Icon chỉ hiện khi rê chuột, nổi đè lên cuối tên – không chiếm chỗ của tên */
+.tk-links { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); display: none; gap: 2px; padding: 2px 4px 2px 14px; border-radius: 8px; background: linear-gradient(90deg, transparent, #fff 12px); }
+.tk-h3 { margin: 4px 0 6px; font-size: 14px; }
 .tk-links a { text-decoration: none; font-size: 13px; padding: 2px; border-radius: 4px; }
-tr:hover .tk-links, .tk-name:focus-within .tk-links { opacity: 1; }
+tr:hover .tk-links { display: flex; }
 .tk-more { border: 0; background: transparent; color: #8a7f72; font-size: 14px; line-height: 1; padding: 2px 4px; border-radius: 4px; cursor: pointer; }
 .tk-more:hover { background: #ece7df; }
 .tk-undo { display: flex; gap: 2px; }

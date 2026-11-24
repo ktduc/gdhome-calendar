@@ -56,7 +56,7 @@ async function handleSurveyPublic(req, res, urlPath, {store, readJsonBody, sendJ
   return sendJson(res, 200, publicEntry(entry));
 }
 
-// /api/surveys/link (POST {projectId, name}) tạo/lấy link; /api/surveys/<projectId> (GET) xem câu trả lời; cần đăng nhập
+// /api/surveys/link (POST {projectId, name}) tạo/lấy link; /api/surveys (GET) danh sách khảo sát đã có trả lời; /api/surveys/<projectId> (GET) xem câu trả lời; cần đăng nhập
 async function handleSurveyAdmin(req, res, urlPath, {store, dataKey, readJsonBody, sendJson}) {
   const key = keyFor(dataKey);
   if (urlPath === '/api/surveys/link' && req.method === 'POST') {
@@ -81,6 +81,14 @@ async function handleSurveyAdmin(req, res, urlPath, {store, dataKey, readJsonBod
       return current;
     });
     return sendJson(res, 200, {projectId, token: entry.token, path: '/khao-sat/' + entry.token, ...publicEntry(entry)});
+  }
+  if (urlPath === '/api/surveys' && req.method === 'GET') {
+    // Danh sách khách đã có câu trả lời (đang điền / đã gửi), mới nhất trước
+    const projects = (await store.get(key))?.projects || {};
+    const surveys = Object.entries(projects).filter(([, e]) => e.updatedAt || e.submittedAt)
+      .map(([projectId, e]) => ({projectId, token: e.token, path: '/khao-sat/' + e.token, ...publicEntry(e)}))
+      .sort((a, b) => Math.max(b.updatedAt, b.submittedAt) - Math.max(a.updatedAt, a.submittedAt));
+    return sendJson(res, 200, {surveys});
   }
   const match = /^\/api\/surveys\/([^/]+)$/.exec(urlPath);
   if (match && req.method === 'GET') {
