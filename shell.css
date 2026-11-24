@@ -1022,3 +1022,13 @@ body{-webkit-font-smoothing:antialiased}
 .gd-menu-glyph{font-size:22px;line-height:1}
 @media(max-width:560px){.gd-menu-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .app-header:has(details[open]){z-index:1000}   /* menu đang mở nổi trên bảng Việc cần làm (z 900) */
+
+/* ===== Tone màu chung mọi trang (chọn ở Trang chủ, lưu trên máy: gdhome_tone) ===== */
+:root,html[data-tone=sand]{--gd-page-bg:#f4f1ec;--gd-sidebar-background:#ece6dc;--gd-overlay-bg:#f6f3ee;--gd-dialog-bg:#f6f3ee;--gd-ios-glass:rgba(250,248,245,.82);--gd-tone-accent:#7d2025}
+html[data-tone=mist]{--gd-page-bg:#eef2f6;--gd-sidebar-background:#e3e9f0;--gd-overlay-bg:#f2f5f9;--gd-dialog-bg:#f2f5f9;--gd-ios-glass:rgba(246,248,251,.82);--gd-tone-accent:#1f4f8a}
+html[data-tone=sage]{--gd-page-bg:#eef3ee;--gd-sidebar-background:#e1ebe1;--gd-overlay-bg:#f2f6f2;--gd-dialog-bg:#f2f6f2;--gd-ios-glass:rgba(246,250,246,.82);--gd-tone-accent:#2f6b3e;--gd-primary:#3d7a4c;--gd-primary-hover:#2f6b3e}
+html[data-tone=dusk]{--gd-page-bg:#f3eef5;--gd-sidebar-background:#e9e1ee;--gd-overlay-bg:#f6f1f8;--gd-dialog-bg:#f6f1f8;--gd-ios-glass:rgba(250,247,252,.82);--gd-tone-accent:#5b3a8c;--gd-primary:#7550b0;--gd-primary-hover:#5b3a8c}
+html[data-tone] body{background:var(--gd-page-bg)}
+html[data-tone] :is(.app-sidebar,.material-sidebar,.shell-sidebar){background-color:var(--gd-sidebar-background)}
+.gd-tools-menu summary{color:var(--gd-tone-accent)}
+html[data-theme="dark"] .home-cover{filter:invert(1) hue-rotate(180deg)}   /* ảnh bìa giữ đúng màu khi giao diện tối */

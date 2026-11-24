@@ -98,7 +98,10 @@ tr:hover .tk-links { display: flex; }
 .tk-opt .tk-edit:hover { background: #ece7df; }
 .tk-opt-edit { display: grid; gap: 6px; padding: 8px; }
 .tk-opt-edit input { height: 28px; padding: 0 8px; border: 1px solid #d8d2c8; border-radius: 6px; font: inherit; }
-.tk-swatches { display: flex; flex-wrap: wrap; gap: 4px; }
+.tk-swatches { display: grid; grid-template-columns: repeat(9, 24px); gap: 4px; }
+.c-gray-d { background: #6b645c; color: #fff; } .c-brown-d { background: #8a5a3b; color: #fff; } .c-orange-d { background: #d9731a; color: #fff; }
+.c-yellow-d { background: #c9a114; color: #fff; } .c-green-d { background: #3f8a4f; color: #fff; } .c-blue-d { background: #2f6fc0; color: #fff; }
+.c-purple-d { background: #7550b0; color: #fff; } .c-pink-d { background: #c2457f; color: #fff; } .c-red-d { background: #b8352a; color: #fff; }
 .tk-swatches button { width: 24px; height: 24px; border: 2px solid transparent; border-radius: 6px; cursor: pointer; }
 .tk-swatches button[aria-pressed=true] { border-color: #5a4e41; }
 .tk-deadline { font-variant-numeric: tabular-nums; }

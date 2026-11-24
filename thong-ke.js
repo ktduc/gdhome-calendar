@@ -377,9 +377,11 @@
   const redo = () => stepHistory(redoStack, undoStack, 'after');
 
   // ------------------------------------------------------------ thẻ màu: lựa chọn của cột Chọn 1 / Người (như Notion)
-  const PALETTE = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'];
+  const LIGHT = ['gray', 'brown', 'orange', 'yellow', 'green', 'blue', 'purple', 'pink', 'red'];
+  const PALETTE = [...LIGHT, ...LIGHT.map(c => c + '-d')];   // hàng 2: màu đậm, chữ trắng
   const PALETTE_NAME = {gray: 'Xám', brown: 'Nâu', orange: 'Cam', yellow: 'Vàng', green: 'Xanh lá', blue: 'Xanh dương', purple: 'Tím', pink: 'Hồng', red: 'Đỏ'};
-  const hashColor = name => PALETTE[[...norm(name)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % PALETTE.length];
+  LIGHT.forEach(c => { PALETTE_NAME[c + '-d'] = PALETTE_NAME[c] + ' đậm'; });
+  const hashColor = name => LIGHT[[...norm(name)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % LIGHT.length];
   const splitVals = (col, v) => col.type === 'people' ? String(v || '').split(',').map(s => s.trim()).filter(Boolean) : (v ? [String(v)] : []);
   const rawOf = (p, col) => (col.custom ? p.profile.custom?.[col.key] : p.profile[col.key]) || '';
   const optCache = new Map();

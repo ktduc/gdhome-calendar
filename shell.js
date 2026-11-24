@@ -46,7 +46,25 @@ window.GDHomeShell = (() => {
     });
   }
   try { applyTheme(localStorage.getItem(THEME_KEY)); } catch { applyTheme('light'); }
-  window.addEventListener('storage', event => { if (event.key === THEME_KEY) applyTheme(event.newValue); });
+  // Tone màu chung (chọn ở Trang chủ): đổi nền, thanh bên, hộp thoại, nút chính của mọi trang
+  const TONE_KEY = 'gdhome_tone', TONES = ['sand','mist','sage','dusk','night'];
+  function applyTone(tone) {
+    tone = TONES.includes(tone) ? tone : 'sand';
+    document.documentElement.dataset.tone = tone === 'night' ? 'sand' : tone;
+    return tone;
+  }
+  function setTone(tone) {
+    tone = applyTone(tone);
+    try { localStorage.setItem(TONE_KEY,tone); localStorage.setItem(THEME_KEY,tone === 'night' ? 'dark' : 'light'); } catch {}
+    applyTheme(tone === 'night' ? 'dark' : 'light');
+    return tone;
+  }
+  const getTone = () => { try { return applyTone(localStorage.getItem(TONE_KEY) || localStorage.getItem('gdhome-home-bg')); } catch { return applyTone(); } };
+  getTone();
+  window.addEventListener('storage', event => {
+    if (event.key === THEME_KEY) applyTheme(event.newValue);
+    if (event.key === TONE_KEY) applyTone(event.newValue);
+  });
 
   function menu(element) {
     if (!element) return;
@@ -805,5 +823,5 @@ window.GDHomeShell = (() => {
     else start();
   }
 
-  return { TOOL_ROWS,escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,api,authHeaders:getShellAuthHeaders,takePastedFiles,clipboardFiles,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
+  return { TOOL_ROWS,TONES,getTone,setTone,escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,api,authHeaders:getShellAuthHeaders,takePastedFiles,clipboardFiles,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
 })();

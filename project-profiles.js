@@ -46,7 +46,7 @@ function cleanTableSchema(value) {
     .filter(([id,v]) => /^[a-z]{1,12}$/.test(id) && Array.isArray(v?.hidden)).slice(0,10)
     .map(([id,v]) => [id,{hidden:v.hidden.filter(k => /^[a-z0-9_:]{1,40}$/i.test(k)).slice(0,100)}]));
   // Lựa chọn có màu của cột Chọn 1 / Người (như Notion): {key: [{name, color}]}
-  const colors = ['gray','brown','orange','yellow','green','blue','purple','pink','red'];
+  const colors = ['gray','brown','orange','yellow','green','blue','purple','pink','red'].flatMap(c => [c,c+'-d']);   // -d = hàng màu đậm
   const options = Object.fromEntries(Object.entries(value?.options && typeof value.options === 'object' ? value.options : {})
     .filter(([key,list]) => /^[a-z0-9_:]{1,40}$/i.test(key) && Array.isArray(list)).slice(0,60)
     .map(([key,list]) => [key,list.filter(o => str(o?.name,60)).slice(0,200).map(o => ({name:str(o.name,60),color:colors.includes(o.color) ? o.color : 'gray'}))]));

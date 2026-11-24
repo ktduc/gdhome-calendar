@@ -2332,6 +2332,8 @@ cases['home'] = async page => {
   await page.goto('/thong-ke',{waitUntil:'domcontentloaded'});
   await page.locator('tr[data-row=p1]').waitFor();
   assert.equal(await page.locator('.app-logo').getAttribute('href'),'/tools');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.tone),'sage','Tone chọn ở trang chủ áp cho trang khác');
+  assert.equal(await page.evaluate(() => getComputedStyle(document.body).backgroundColor),'rgb(238, 243, 238)');
   // Gộp dự án qua nút ⋯
   await page.locator('[data-mode=table]').click();
   const before = await page.evaluate(() => GDHomeShell.api('/api/project-hub/overview'));

@@ -1,7 +1,7 @@
 // Trang chủ GD HOME Tools: ảnh bìa (admin đổi), 2 hàng công cụ theo GDHomeShell.TOOL_ROWS, nền tự chọn (lưu trên máy)
 (() => {
   const $ = s => document.querySelector(s), esc = GDHomeShell.escape;
-  const BG_KEY = 'gdhome-home-bg';
+  const TONE_NAME = {sand: 'Cát', mist: 'Sương', sage: 'Lá', dusk: 'Hoàng hôn', night: 'Đêm'};
   const BGS = {
     sand: 'linear-gradient(180deg,#f5f2ed 0%,#ece6dc 100%)',
     mist: 'linear-gradient(180deg,#f2f4f7 0%,#e4e9f0 100%)',
@@ -14,22 +14,14 @@
   $('#home-tools').innerHTML = GDHomeShell.TOOL_ROWS.map(row => '<div class="home-row">' + row.map(([href, label, glyph, note]) =>
     '<a class="home-tile" href="' + href + '"><span class="home-tile-icon">' + glyph + '</span><strong>' + esc(label) + '</strong><small>' + esc(note) + '</small></a>').join('') + '</div>').join('');
 
-  // Nền
+  // Tone màu: đổi ở đây thì mọi trang đổi theo (GDHomeShell.setTone)
   const bgBar = $('.home-bg');
-  bgBar.insertAdjacentHTML('beforeend', Object.entries(BGS).map(([id, css]) => '<button type="button" data-bg="' + id + '" style="background:' + css + '" aria-label="Nền ' + id + '"></button>').join(''));
-  function setBg(id) {
-    if (!BGS[id]) id = 'sand';
-    document.body.style.background = BGS[id];
-    document.body.classList.toggle('home-dark-bg', id === 'night');
-    bgBar.querySelectorAll('[data-bg]').forEach(b => b.setAttribute('aria-pressed', b.dataset.bg === id));
-  }
-  let saved; try { saved = localStorage.getItem(BG_KEY); } catch {}
-  setBg(saved);
+  bgBar.insertAdjacentHTML('beforeend', Object.entries(BGS).map(([id, css]) => '<button type="button" data-bg="' + id + '" style="background:' + css + '" title="' + TONE_NAME[id] + '" aria-label="Tone ' + TONE_NAME[id] + '"></button>').join(''));
+  const paintBg = id => bgBar.querySelectorAll('[data-bg]').forEach(b => b.setAttribute('aria-pressed', b.dataset.bg === id));
+  paintBg(GDHomeShell.getTone());
   bgBar.onclick = event => {
     const id = event.target.closest('[data-bg]')?.dataset.bg;
-    if (!id) return;
-    try { localStorage.setItem(BG_KEY, id); } catch {}
-    setBg(id);
+    if (id) paintBg(GDHomeShell.setTone(id));
   };
 
   // Ảnh bìa

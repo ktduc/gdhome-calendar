@@ -1,9 +1,9 @@
 /* Trang chủ kiểu iOS: ảnh bìa bo góc, ô công cụ dạng thẻ kính mờ, 2 hàng x 4 */
-body.home-body{margin:0;min-height:100dvh;color:#1d1d1f;font:15px/1.45 var(--gd-font);background:#f5f2ed;background-attachment:fixed}
+body.home-body{margin:0;min-height:100dvh;color:#1d1d1f;font:15px/1.45 var(--gd-font);background:var(--gd-page-bg,#f4f1ec)}
 .home-main{box-sizing:border-box;max-width:1680px;margin:0 auto;padding:20px clamp(16px,3vw,40px) 40px}
 .home-cover{position:relative;display:flex;align-items:flex-end;justify-content:space-between;gap:16px;min-height:clamp(180px,26vh,320px);
   padding:28px 32px;border-radius:24px;overflow:hidden;box-sizing:border-box;color:#fff;
-  background:linear-gradient(135deg,#7d2025 0%,#3a2f2b 100%);background-size:cover;box-shadow:0 12px 36px rgba(0,0,0,.14)}
+  background:linear-gradient(135deg,var(--gd-tone-accent,#7d2025) 0%,#2b2623 100%);background-size:cover;box-shadow:0 12px 36px rgba(0,0,0,.14)}
 .home-cover.has-image::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0) 40%,rgba(0,0,0,.45) 100%)}
 .home-cover>*{position:relative}
 .home-cover h1{margin:0;font-size:clamp(26px,2.6vw,38px);font-weight:700;letter-spacing:-.02em}
@@ -28,10 +28,6 @@ body.home-body{margin:0;min-height:100dvh;color:#1d1d1f;font:15px/1.45 var(--gd-
 .home-bg{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:22px;color:#6e6e73;font-size:12px}
 .home-bg button{width:24px;height:24px;padding:0;border-radius:50%;border:1px solid rgba(0,0,0,.12);cursor:pointer}
 .home-bg button[aria-pressed=true]{box-shadow:0 0 0 2px #fff,0 0 0 4px #0a84ff}
-body.home-dark-bg{color:#f5f5f7}
-body.home-dark-bg .home-tile{background:rgba(44,44,46,.72);border-color:rgba(255,255,255,.08);color:#f5f5f7}
-body.home-dark-bg .home-tile small,body.home-dark-bg .home-bg{color:#a1a1a6}
-body.home-dark-bg .home-tile-icon{background:linear-gradient(160deg,#3a3a3c,#2c2c2e)}
 #notice:empty{display:none}
 @media(max-width:1100px){.home-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:560px){.home-row{grid-template-columns:minmax(0,1fr)}.home-cover{padding:20px;flex-direction:column;align-items:flex-start}}
