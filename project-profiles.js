@@ -41,7 +41,11 @@ function cleanTableSchema(value) {
   const columns = (Array.isArray(value?.columns) ? value.columns : []).slice(0,100)
     .filter(c => /^[a-z0-9_:]{1,40}$/i.test(c?.key))
     .map(c => ({key:c.key,...(str(c.label,60) ? {label:str(c.label,60)} : {}),...(Number(c.width) ? {width:Math.min(800,Math.max(60,Math.round(Number(c.width))))} : {}),hidden:c.hidden === true}));
-  return {columns,custom};
+  // Cột hiển thị riêng từng phần của bảng (THI CÔNG, THIẾT KẾ…): {id: {hidden:[key]}}
+  const sections = Object.fromEntries(Object.entries(value?.sections && typeof value.sections === 'object' ? value.sections : {})
+    .filter(([id,v]) => /^[a-z]{1,12}$/.test(id) && Array.isArray(v?.hidden)).slice(0,10)
+    .map(([id,v]) => [id,{hidden:v.hidden.filter(k => /^[a-z0-9_:]{1,40}$/i.test(k)).slice(0,100)}]));
+  return {columns,custom,sections};
 }
 
 async function writeTableSchema(store,key,schema,defaultSchedule) {

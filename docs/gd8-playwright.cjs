@@ -2283,9 +2283,11 @@ function viewPosition(page) {
 cases['thong-ke'] = async page => {
   // Bảng thống kê dự án: cột tự từ Lịch, sửa ô lưu server, nhập HĐTK (dán chữ) tạo dự án + mốc, nhập CSV Notion
   await page.setViewportSize({width:1440,height:900});
-  await page.goto('/thong-ke');
+  await page.goto('/thong-ke', {waitUntil: 'domcontentloaded'});
   const row = page.locator('tr[data-row=p1]');
   await row.waitFor();
+  assert.equal(await page.locator('.tk-sec[data-sec=tk] tr[data-row=p1]').count(),1,'Mặc định Theo phần: dự án thiết kế nằm ở phần THIẾT KẾ');
+  await page.locator('[data-mode=table]').click();
   assert.match(await row.getAttribute('class'),/is-late/,'Dòng có việc trễ hạn tô đỏ');
   assert.equal(await row.locator('[data-f=designer3d]').getAttribute('placeholder'),'GD-NHẬT');
   assert.match(await row.locator('.tk-col-deadlineLabel').innerText(),/3D/);
@@ -2358,8 +2360,47 @@ cases['thong-ke'] = async page => {
   // Kanban: kéo thẻ sang cột Thi công
   await page.locator('[data-mode=board]').click();
   await page.locator('.tk-card[data-row=p1]').dragTo(page.locator('.tk-lane[data-lane="Thi công"]'));
-  await page.waitForFunction(async () => (await GDHomeShell.api('/api/project-hub/overview')).projects.find(p => p.id === 'p1').profile.stage === 'Thi công');
+  await until(o => o.projects.find(p => p.id === 'p1').profile.stage === 'Thi công', 'Kéo thẻ Kanban đổi giai đoạn');
+  // Theo phần: p1 sang phần THI CÔNG; chọn cột riêng cho phần THI CÔNG
+  await page.locator('[data-mode=sections]').click();
+  await page.locator('.tk-sec[data-sec=tc] tr[data-row=p1]').waitFor();
+  await page.locator('[data-sec-cols=tc]').click();
+  await page.locator('.tk-dialog .tk-sec-list input[value=address]').uncheck();
+  await page.locator('.tk-dialog').press('Escape');
+  await until(o => o.tableSchema.sections?.tc?.hidden?.includes('address'), 'Lưu cột hiện riêng phần THI CÔNG');
+  assert.equal(await page.locator('.tk-sec[data-sec=tc] th[data-sort=address]').count(),0);
+  assert.equal(await page.locator('.tk-sec[data-sec=tk] th[data-sort=address]').count(),1,'Phần khác vẫn hiện cột');
   await page.locator('[data-mode=table]').click();
+};
+
+cases['mau-tra-loi'] = async page => {
+  // Mẫu trả lời khách: đổi xưng hô, xem trước thay biến, sửa mẫu lưu server, tải lại vẫn còn
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/mau-tra-loi');
+  await page.locator('.mt-item[data-id=chao]').waitFor();
+  await page.locator('.mt-item[data-id=chao]').click();
+  assert.match(await page.locator('#mt-preview').innerText(),/^Em chào chị - em Đức/);
+  await page.locator('#mt-kh [data-kh=anh]').click();
+  assert.match(await page.locator('#mt-preview').innerText(),/^Em chào anh - em Đức/);
+  await page.locator('#mt-kh [data-kh=em]').click();
+  assert.match(await page.locator('#mt-preview').innerText(),/^Anh chào em - anh Đức/);
+  await page.locator('#mt-kh [data-kh=anh]').click();
+  await page.locator('.mt-item[data-id=note-thiet-bi]').click();
+  await page.locator('#mt-checks input[data-i="0"]').uncheck();
+  assert.doesNotMatch(await page.locator('#mt-preview').innerText(),/Robot hút bụi/);
+  await page.locator('.mt-item[data-id=chao]').click();
+  await page.locator('[data-act=edit]').click();
+  await page.locator('#mt-form [name=title]').fill('Chào khách mới (đã sửa)');
+  await page.locator('#mt-form button[type=submit]').click();
+  await page.locator('.mt-item[data-id=chao] .mt-tag').waitFor();
+  const saved = () => page.evaluate(() => GDHomeShell.api('/api/reply-templates'));
+  assert.equal((await saved()).items[0].title,'Chào khách mới (đã sửa)');
+  await page.reload();
+  assert.match(await page.locator('.mt-item[data-id=chao] strong').innerText(),/Chào khách mới \(đã sửa\)/);
+  await page.locator('.mt-item[data-id=chao]').click();
+  await page.locator('[data-act=reset]').click();
+  await page.locator('.mt-item[data-id=chao] strong').filter({hasText:'Lời chào nhận dự án'}).waitFor();
+  assert.deepEqual((await saved()).items,[]);
 };
 
 async function openMaterials(page) {

@@ -20,6 +20,7 @@
 .tk-col-add { display: grid; gap: 6px; margin-top: 6px; padding-top: 8px; border-top: 1px solid #ece7df; }
 .tk-col-add input, .tk-col-add select { height: 28px; padding: 0 8px; border: 1px solid #d8d2c8; border-radius: 7px; background: #fff; font: inherit; }
 .tk-csv-new { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.tk-sec-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; max-height: 55vh; overflow: auto; }
 .tk-empty { padding: 32px; text-align: center; color: #6f675d; }
 .tk-muted { color: #8a7f72; }
 
@@ -77,6 +78,24 @@ tr:hover .tk-links { opacity: 1; }
 .tk-group small, .tk-sum small { color: #8a7f72; font-weight: 400; }
 .tk-sum th, .tk-sum td { position: sticky; bottom: 0; padding: 7px 8px !important; background: #ece7df !important; font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
 .tk-sum th { text-align: left; z-index: 3; }
+
+/* Theo phần: mỗi phần 1 bảng, thẻ màu tên phần xoay dọc */
+.tk-wrap.is-sections { overflow: visible; max-height: none; border: 0; background: transparent; display: grid; gap: 10px; }
+.tk-sec { display: flex; align-items: stretch; border: 1px solid #d8d2c8; border-radius: 10px; background: #fff; overflow: hidden; }
+.tk-sec-side { flex: none; display: flex; flex-direction: column; width: 30px; background: var(--sec); }
+.tk-sec-tag { flex: 1; padding: 10px 0; border: 0; background: transparent; color: #fff; font: 700 12px Roboto, sans-serif; letter-spacing: .6px;
+  writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; cursor: pointer; }
+.tk-sec-tag small { font-weight: 400; opacity: .85; }
+.tk-sec-cfg { height: 28px; border: 0; background: rgba(0, 0, 0, .15); color: #fff; font-size: 14px; cursor: pointer; }
+.tk-sec-body { flex: 1; min-width: 0; overflow: auto; max-height: 72vh; }
+.tk-sec-body .tk-empty { padding: 14px; text-align: left; }
+.tk-sec.is-collapsed .tk-sec-side { flex: 1; flex-direction: row; width: auto; }
+.tk-sec.is-collapsed .tk-sec-tag { min-height: 0; padding: 7px 12px; writing-mode: horizontal-tb; transform: none; text-align: left; }
+.tk-sec.is-collapsed .tk-sec-cfg { width: 30px; height: auto; }
+.tk-sec.is-collapsed .tk-sec-body { display: none; }
+.tk-sec.is-empty .tk-sec-side { flex: none; width: 210px; }
+.tk-sec.is-empty .tk-sec-body { display: block; }
+.tk-sec.is-empty .tk-empty { padding: 7px 12px; }
 
 /* Kanban */
 .tk-board { display: flex; gap: 12px; align-items: flex-start; padding: 12px; min-height: 300px; }

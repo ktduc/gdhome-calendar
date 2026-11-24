@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mẫu trả lời khách · GD HOME</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shell.css">
+  <link rel="stylesheet" href="/tools.css">
+  <link rel="stylesheet" href="/mau-tra-loi.css">
+  <script src="/shell.js" defer></script>
+  <script src="/mau-tra-loi-data.js" defer></script>
+  <script src="/mau-tra-loi.js" defer></script>
+</head>
+<body class="mt-body">
+  <header class="app-header">
+    <div class="header-left">
+      <a class="app-logo" href="/mau-tra-loi">
+        <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
+        <span>Mẫu trả lời khách</span>
+      </a>
+      <details class="gd-tools-menu" data-shell-menu></details>
+    </div>
+    <div class="header-right">
+      <div class="shell-toolbar">
+        <span id="save-status" class="save-status is-inline is-saved" role="status">✓ Đã lưu</span>
+        <button type="button" class="btn btn-primary" id="mt-new">+ Thêm mẫu</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="mt-main">
+    <div class="mt-bar">
+      <div class="mt-seg" id="mt-kh" role="group" aria-label="Cách gọi khách">
+        <button type="button" data-kh="chị">Chị</button>
+        <button type="button" data-kh="anh">Anh</button>
+        <button type="button" data-kh="anh chị">Anh chị</button>
+        <button type="button" data-kh="em">Em</button>
+      </div>
+      <label class="mt-field">Tên người phụ trách <input id="mt-ten" type="text" maxlength="40" placeholder="Đức"></label>
+      <label class="mt-field">Dự án <input id="mt-duan" type="text" maxlength="60" placeholder="nhà mình"></label>
+      <span class="mt-hint" id="mt-who"></span>
+    </div>
+    <div class="mt-grid">
+      <aside class="mt-side">
+        <input type="search" id="mt-search" placeholder="Tìm mẫu…" aria-label="Tìm mẫu">
+        <nav id="mt-groups" aria-label="Nhóm mẫu"></nav>
+        <button type="button" class="btn btn-outline btn-sm" id="mt-restore" hidden></button>
+      </aside>
+      <section class="mt-list" id="mt-list" aria-label="Danh sách mẫu"></section>
+      <section class="mt-view" id="mt-view" aria-label="Xem trước"></section>
+    </div>
+  </main>
+</body>
+</html>

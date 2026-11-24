@@ -7,7 +7,15 @@
   const api = (url, body) => GDHomeShell.api(url, body ? {method: 'POST', body} : {});
   const toast = message => GDHomeShell.toast(message);
   const PREF_KEY = 'gdhome-thong-ke-v1';
-  const STAGES = ['Thiết kế', 'Thi công', 'Hoàn thành', 'Tạm dừng'];
+  const STAGES = ['Thi công', 'TC xong chưa QT', 'Thiết kế', 'TK xong chưa QT', 'Hoàn thành', 'Tạm dừng'];
+  // Các phần của bảng (cùng 1 dữ liệu, lọc theo Giai đoạn); thứ tự ưu tiên từ trên xuống
+  const SECTIONS = [
+    {id: 'tc', label: 'THI CÔNG', stages: ['Thi công'], color: '#b45309'},
+    {id: 'tcqt', label: 'TC XONG CHƯA QT', stages: ['TC xong chưa QT'], color: '#b91c1c'},
+    {id: 'tk', label: 'THIẾT KẾ', stages: ['Thiết kế'], color: '#1d4ed8'},
+    {id: 'tkqt', label: 'TK XONG CHƯA QT', stages: ['TK xong chưa QT'], color: '#7c3aed'},
+    {id: 'xong', label: 'ĐÃ QT · TẠM DỪNG', stages: ['Hoàn thành', 'Tạm dừng'], color: '#6b7280', collapsed: true},
+  ];
   const STATUS3D = ['Chưa làm', 'Đang triển khai', 'Chờ phản hồi', 'Xong lần 1', 'Xong lần 2', 'Xong lần 3', 'Đang chỉnh sửa', 'Đã chốt'];
   const STATUS_HSKT = ['Chưa làm', 'Đang triển khai', 'Đã gửi', 'Đang chỉnh sửa', 'Đã chốt'];
   const MATERIALS = ['Chưa làm', 'Đang làm', 'Xong'];
@@ -48,9 +56,11 @@
     ['all', 'Tất cả'], ['design', 'Đang thiết kế'], ['build', 'Thi công'], ['soon', 'Deadline 7 ngày'],
     ['late', 'Trễ hạn'], ['pay', 'Chờ thu tiền'], ['done', 'Hoàn thành'],
   ];
-  let projects = [], prefs = {view: 'all', group: '', mode: 'table', hidden: null, sort: null};
+  let projects = [], prefs = {view: 'all', group: '', mode: 'sections', hidden: null, sort: null, collapsed: null};
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF_KEY)) || {}); } catch { /* trình duyệt chặn bộ nhớ: dùng mặc định */ }
-  let schema = {columns: [], custom: []}, ALL = [];
+  if (!prefs.v2) { prefs.mode = 'sections'; prefs.v2 = true; }   // lần đầu có chia phần: mở chế độ Theo phần
+  prefs.collapsed ||= SECTIONS.filter(s => s.collapsed).map(s => s.id);
+  let schema = {columns: [], custom: [], sections: {}}, ALL = [];
   // Danh sách cột đã áp cấu hình: cột mặc định + cột riêng, theo thứ tự / tên / độ rộng / ẩn đã lưu
   function refreshCols() {
     const base = [...COLS, ...schema.custom.map(c => ({key: c.id, label: c.label, type: c.type, options: c.options, sum: ['number', 'money'].includes(c.type), custom: true}))];
@@ -196,25 +206,58 @@
   }
   const cols = () => ALL.filter(col => !col.hidden);
   const widthStyle = col => col.width ? ` style="width:${col.width}px;min-width:${col.width}px;max-width:${col.width}px"` : '';
-  const sums = list => cols().map(col => col.sum ? list.reduce((s, p) => s + num(val(p, col.key)), 0) : null);
-  function sumRow(list, label) {
+  // Cột hiện trong 1 phần: phần đã chọn riêng thì theo phần đó, chưa chọn thì theo menu Cột chung
+  const sectionCols = id => { const hidden = schema.sections?.[id]?.hidden; return hidden ? ALL.filter(col => col.key === 'project' || !hidden.includes(col.key)) : cols(); };
+  function sumRow(list, label, shown) {
     return `<tr class="tk-sum"><th>${esc(label)} <small>${list.length} dự án</small></th>` +
-      sums(list).slice(1).map((s, i) => `<td>${s === null ? '' : (cols()[i + 1].type === 'money' ? fmtMoney(s) : s.toLocaleString('vi-VN'))}</td>`).join('') + '</tr>';
+      shown.slice(1).map(col => { if (!col.sum) return '<td></td>'; const s = list.reduce((t, p) => t + num(val(p, col.key)), 0); return `<td>${col.type === 'money' ? fmtMoney(s) : s.toLocaleString('vi-VN')}</td>`; }).join('') + '</tr>';
   }
   function renderTable(list) {
+    byId('tk-wrap').className = 'tk-wrap';
+    byId('tk-wrap').innerHTML = tableHtml(list, cols()) + (list.length ? '' : '<p class="tk-empty">Không có dự án nào trong chế độ xem này.</p>');
+  }
+  // Theo phần: mỗi phần 1 bảng, thẻ màu tên phần xoay dọc bên trái; bấm thẻ để thu gọn, ⚙ chọn cột hiện của phần
+  function renderSections(list) {
+    const wrap = byId('tk-wrap');
+    wrap.className = 'tk-wrap is-sections';
+    wrap.innerHTML = SECTIONS.map(sec => {
+      const items = list.filter(p => sec.stages.includes(val(p, 'stage'))), closed = prefs.collapsed.includes(sec.id);
+      return `<section class="tk-sec${closed || !items.length ? ' is-collapsed' : ''}${!closed && !items.length ? ' is-empty' : ''}" data-sec="${sec.id}" style="--sec:${sec.color}">
+        <div class="tk-sec-side"><button type="button" class="tk-sec-tag" data-sec-toggle="${sec.id}" title="${closed ? 'Mở' : 'Thu gọn'} phần ${esc(sec.label)}">${esc(sec.label)} <small>${items.length}</small></button>
+        <button type="button" class="tk-sec-cfg" data-sec-cols="${sec.id}" title="Chọn cột hiện trong phần ${esc(sec.label)}" aria-label="Chọn cột hiện">⚙</button></div>
+        <div class="tk-sec-body">${closed ? '' : items.length ? tableHtml(items, sectionCols(sec.id)) : '<p class="tk-empty">Chưa có dự án ở giai đoạn này.</p>'}</div></section>`;
+    }).join('');
+  }
+  // Chọn thuộc tính hiện cho 1 phần (như Property visibility của Notion)
+  function openSectionCols(id) {
+    const sec = SECTIONS.find(s => s.id === id), shown = new Set(sectionCols(id).map(col => col.key));
+    const dialog = openDialog('Cột hiện · ' + sec.label, `<p class="tk-muted">Chỉ áp dụng cho phần ${esc(sec.label)}. Tên, thứ tự, độ rộng cột dùng chung mọi phần.</p>
+      <p><button type="button" class="btn btn-outline btn-sm" data-all="1">Hiện hết</button> <button type="button" class="btn btn-outline btn-sm" data-all="0">Ẩn hết</button>
+      <button type="button" class="btn btn-outline btn-sm" data-shared>Theo menu Cột chung</button></p>
+      <div class="tk-sec-list">${ALL.slice(1).map(col => `<label><input type="checkbox" value="${col.key}" ${shown.has(col.key) ? 'checked' : ''}> ${esc(col.label)}</label>`).join('')}</div>`, false);
+    const save = () => {
+      schema.sections = {...schema.sections, [id]: {hidden: [...dialog.querySelectorAll('.tk-sec-list input:not(:checked)')].map(c => c.value)}};
+      saveSchema();
+    };
+    dialog.addEventListener('change', save);
+    dialog.addEventListener('click', e => {
+      if (e.target.dataset.all) { dialog.querySelectorAll('.tk-sec-list input').forEach(c => { c.checked = e.target.dataset.all === '1'; }); save(); }
+      if (e.target.matches('[data-shared]')) { const {[id]: _, ...rest} = schema.sections; schema.sections = rest; saveSchema(); dialog.close(); }
+    });
+  }
+  function tableHtml(list, shown) {
     const sort = prefs.sort || {key: 'deadline', dir: 1};
-    const head = '<thead><tr>' + cols().map((col, i) => `<th data-sort="${col.key}" class="tk-col-${col.type}"${i ? ' draggable="true" title="Bấm để sắp xếp · kéo để đổi chỗ · kéo mép phải để chỉnh độ rộng"' : ''}${widthStyle(col)}>${esc(col.label)}${sort.key === col.key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}<span class="tk-resize" data-resize="${col.key}" title="Kéo để chỉnh độ rộng · bấm đúp để về tự động"></span></th>`).join('') + '</tr></thead>';
-    const row = p => `<tr class="${rowClass(p)}" data-row="${esc(p.id)}">` + cols().map((col, i) => i ? `<td class="tk-col-${col.type}" data-c="${col.key}"${widthStyle(col)}>${cell(p, col)}</td>` : `<th scope="row" class="tk-col-name" data-c="${col.key}"${widthStyle(col)}>${cell(p, col)}</th>`).join('') + '</tr>';
+    const head = '<thead><tr>' + shown.map((col, i) => `<th data-sort="${col.key}" class="tk-col-${col.type}"${i ? ' draggable="true" title="Bấm để sắp xếp · kéo để đổi chỗ · kéo mép phải để chỉnh độ rộng"' : ''}${widthStyle(col)}>${esc(col.label)}${sort.key === col.key ? (sort.dir > 0 ? ' ▲' : ' ▼') : ''}<span class="tk-resize" data-resize="${col.key}" title="Kéo để chỉnh độ rộng · bấm đúp để về tự động"></span></th>`).join('') + '</tr></thead>';
+    const row = p => `<tr class="${rowClass(p)}" data-row="${esc(p.id)}">` + shown.map((col, i) => i ? `<td class="tk-col-${col.type}" data-c="${col.key}"${widthStyle(col)}>${cell(p, col)}</td>` : `<th scope="row" class="tk-col-name" data-c="${col.key}"${widthStyle(col)}>${cell(p, col)}</th>`).join('') + '</tr>';
     let body;
     if (prefs.group) {
       const groups = new Map();
       for (const p of list) for (const k of groupKeys(p)) (groups.get(k) || groups.set(k, []).get(k)).push(p);
       const order = colOf(prefs.group)?.options || [];
       const keys = [...groups.keys()].sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99) || a.localeCompare(b, 'vi'));
-      body = keys.map(k => `<tbody><tr class="tk-group"><th colspan="${cols().length}">${esc(k)} <small>${groups.get(k).length}</small></th></tr>${groups.get(k).map(row).join('')}</tbody>`).join('');
+      body = keys.map(k => `<tbody><tr class="tk-group"><th colspan="${shown.length}">${esc(k)} <small>${groups.get(k).length}</small></th></tr>${groups.get(k).map(row).join('')}</tbody>`).join('');
     } else body = '<tbody>' + list.map(row).join('') + '</tbody>';
-    byId('tk-wrap').innerHTML = `<table class="tk-table">${head}${body}<tfoot>${sumRow(list, 'Tổng')}</tfoot></table>` +
-      (list.length ? '' : '<p class="tk-empty">Không có dự án nào trong chế độ xem này.</p>');
+    return `<table class="tk-table">${head}${body}<tfoot>${sumRow(list, 'Tổng', shown)}</tfoot></table>`;
   }
   function renderBoard(list) {
     const field = ['stage', 'status3d', 'statusHskt'].includes(prefs.group) ? prefs.group : 'stage';
@@ -225,6 +268,7 @@
       <small>${esc(p.profile.address || '')}</small>
       <div>${cell(p, colOf('deadline'))} ${cell(p, colOf('deadlineLabel'))}</div>
       <small>${esc([val(p, 'designer3d'), val(p, 'designerHskt')].filter(Boolean).join(' · '))}</small></article>`;
+    byId('tk-wrap').className = 'tk-wrap';
     byId('tk-wrap').innerHTML = `<div class="tk-board" data-field="${field}">` + ['', ...lanes].map(lane => {
       const items = list.filter(p => (val(p, field) || '') === lane);
       if (!lane && !items.length) return '';
@@ -264,7 +308,7 @@
     const people = [...new Set(projects.flatMap(p => ALL.filter(col => col.type === 'people').map(col => col.key).flatMap(k => String(val(p, k)).split(',').map(s => s.trim()))).filter(Boolean))].sort();
     (byId('tk-people') || document.body.appendChild(Object.assign(document.createElement('datalist'), {id: 'tk-people'}))).innerHTML = people.map(n => `<option value="${esc(n)}">`).join('');
     const list = visible();
-    if (prefs.mode === 'board') renderBoard(list); else renderTable(list);
+    if (prefs.mode === 'board') renderBoard(list); else if (prefs.mode === 'sections') renderSections(list); else renderTable(list);
   }
 
   // ------------------------------------------------------------ lưu
@@ -581,7 +625,15 @@
     });
     wrap.addEventListener('dblclick', e => {
       const handle = e.target.closest('.tk-resize');
-      if (handle) { colOf(handle.dataset.resize).width = 0; saveSchema(); }
+      if (handle) { colOf(handle.dataset.resize).width = 0; saveSchema(); return; }
+      // Bấm đúp tiêu đề cột = đổi tên cột
+      const th = e.target.closest('thead th[data-sort]');
+      if (th) GDHomeShell.prompt('Tên cột', colOf(th.dataset.sort).label).then(name => {
+        if (name == null) return;
+        const col = colOf(th.dataset.sort);
+        col.label = name.trim().slice(0, 60) || col.baseLabel;
+        saveSchema();
+      });
     });
     wrap.addEventListener('click', e => {
       const th = e.target.closest('thead th[data-sort]');
@@ -591,6 +643,10 @@
         prefs.sort = {key, dir: cur.key === key ? -cur.dir : 1};
         remember(); render();
       }
+      const toggle = e.target.closest('[data-sec-toggle]')?.dataset.secToggle;
+      if (toggle) { prefs.collapsed = prefs.collapsed.includes(toggle) ? prefs.collapsed.filter(x => x !== toggle) : [...prefs.collapsed, toggle]; remember(); render(); }
+      const secCols = e.target.closest('[data-sec-cols]')?.dataset.secCols;
+      if (secCols) openSectionCols(secCols);
       const pay = e.target.closest('[data-pay]');
       if (pay && pay.tagName === 'BUTTON') openPayments(pay.dataset.pay);
     });
@@ -644,7 +700,7 @@
       const res = await api('/api/project-hub/overview');
       projects = res.projects || [];
       // đang chờ lưu cấu hình cột thì giữ bản trên máy
-      if (res.tableSchema && !schemaDirty) { schema = {columns: res.tableSchema.columns || [], custom: res.tableSchema.custom || []}; refreshCols(); }
+      if (res.tableSchema && !schemaDirty) { schema = {columns: res.tableSchema.columns || [], custom: res.tableSchema.custom || [], sections: res.tableSchema.sections || {}}; refreshCols(); }
       render();
     } catch (error) {
       byId('tk-wrap').innerHTML = `<p class="tk-empty">${error.status === 401 ? 'Cần đăng nhập. Mở <a href="/tools">Trang chủ công cụ</a> để đăng nhập Gmail rồi quay lại.' : esc(error.message)}</p>`;

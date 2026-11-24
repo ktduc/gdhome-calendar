@@ -31,6 +31,7 @@ const { driveBackup } = require('./drive-backup');
 const { handleWorkApi } = require('./work-manager');
 const { todoSync } = require('./todo-sync');
 const { handleCompare } = require('./compare');
+const { handleReplyTemplates } = require('./reply-templates');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -66,7 +67,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.webp': 'image/webp'
 };
-const STATIC_FILES = new Set(['index.html', 'style.css', 'app-core.js', 'app-calendar.js', 'app-timeline.js', 'app-io.js', 'app-ai.js', 'catalogue-pdf.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'gdhome-logo-sq.png', 'gemini-mark.js', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css', 'timeline-todo.js', 'timeline-todo.css', 'so-sanh.html', 'so-sanh.js', 'so-sanh.css', 'thong-ke.html', 'thong-ke.js', 'thong-ke.css', 'contract-parse.js']);
+const STATIC_FILES = new Set(['index.html', 'style.css', 'app-core.js', 'app-calendar.js', 'app-timeline.js', 'app-io.js', 'app-ai.js', 'catalogue-pdf.js', 'scheduler.js', 'holidays-data.js', 'gdhome-icon.png', 'gdhome-logo.png', 'gdhome-logo-sq.png', 'gemini-mark.js', 'tools.html', 'shell.css', 'shell.js', 'integrations-client.js', 'ai-client.js', 'projects-client.js', 'tools-menu.css', 'tools.css', 'tools.js', 'chot-ma.html', 'material-template.js', 'material-guest.js', 'material-preferences.js', 'material-editor.js', 'material-editor-view.js', 'material-selection.js', 'material-image-ui.js', 'image-compression.js', 'material-import.js', 'material-note-suggestions.js', 'duyet.html', 'material-print.js', 'material-customer.js', 'material-release.js', 'material-task-matcher.js', 'material-deadlines.js', 'material-projects.js', 'material-ai.js', 'material-match.js', 'material-timeline.js', 'export-canvas.js', 'du-an.html', 'project-hub.css', 'project-hub-client.js', 'catalogue-import-history.js', 'library-attributes.js', 'asset-library.js', 'product-lines.js', 'library-brands.js', 'brand-manager.js', 'logo-processing.js', 'asset-library.css', 'data/paint-dulux.json', 'data/paint-jotun.json', 'data/wood-ancuong.json', 'giao-viec.html', 'giao-viec.js', 'giao-viec.css', 'timeline-todo.js', 'timeline-todo.css', 'so-sanh.html', 'so-sanh.js', 'so-sanh.css', 'thong-ke.html', 'thong-ke.js', 'thong-ke.css', 'contract-parse.js', 'mau-tra-loi.html', 'mau-tra-loi.js', 'mau-tra-loi.css', 'mau-tra-loi-data.js']);
 
 const ALLOWED_KEYS = [
   'startMonth', 'endMonth', 'scheduleMonth', 'scheduleMonthManualFor', 'extraWeeksTop', 'extraWeeksBottom', 'projectOwners',
@@ -573,6 +574,7 @@ function serveStatic(req, res, urlPath) {
   if (rel === '/chot-ma') rel = '/chot-ma.html';
   if (rel === '/du-an') rel = '/du-an.html';
   if (rel === '/giao-viec') rel = '/giao-viec.html';
+  if (rel === '/mau-tra-loi') rel = '/mau-tra-loi.html';
   if (rel === '/so-sanh') rel = '/so-sanh.html';
   if (rel === '/thong-ke') rel = '/thong-ke.html';
   if (rel === '/favicon.ico') rel = '/gdhome-icon.png';
@@ -721,6 +723,9 @@ async function handleApi(req, res, urlPath) {
   if (urlPath === '/api/compare' || urlPath.startsWith('/api/compare/')) {
     return handleCompare(req, res, urlPath, { store, dataKey, readJsonBody, sendJson,
       makeBoard: (idea, categories, onStep, fill) => integrations.compareBoard(store, dataKey, idea, categories, onStep, fill) });
+  }
+  if (urlPath === '/api/reply-templates') {
+    return handleReplyTemplates(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
   }
   if (urlPath === '/api/todos' || urlPath.startsWith('/api/todos/')) {
     return todos.handle(req, res, urlPath, { store, dataKey, readJsonBody, sendJson });
