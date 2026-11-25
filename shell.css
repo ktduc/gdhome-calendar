@@ -1059,3 +1059,13 @@ html[data-tone=dim],html[data-tone=dim] dialog{filter:brightness(.88) saturate(.
 
 /* Ngày âm nhỏ dưới ô ngày khi rê chuột (shell.js) */
 .gd-lunar-tip{position:fixed;z-index:10001;padding:1px 6px;border-radius:6px;background:rgba(40,34,28,.86);color:#fff;font:500 11px/1.5 Roboto,sans-serif;pointer-events:none;white-space:nowrap}
+
+/* Điện thoại (≤760px): bỏ khoá cao 52px của khối GĐ23B để thanh trên xuống hàng thay vì đè lên trang;
+   menu GD HOME Tools mở thành tấm phủ ngang màn hình, không lệch theo nút */
+@media (max-width:760px){
+  .app-header{height:auto !important;max-height:none !important;flex-wrap:wrap !important;row-gap:6px;padding:6px 10px !important}
+  .app-header .header-left{flex:1 1 100% !important;min-width:0}
+  .app-header .header-right{flex:1 1 100% !important;flex-wrap:wrap;gap:6px !important}
+  .app-header .header-right>.shell-toolbar{margin-left:0 !important;flex-wrap:wrap;row-gap:6px}
+  .gd-tools-menu[open]>nav{position:fixed !important;left:8px !important;right:8px !important;top:58px !important;width:auto !important;max-height:calc(100dvh - 74px);overflow:auto}
+}

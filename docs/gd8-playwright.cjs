@@ -2507,6 +2507,17 @@ cases['home'] = async page => {
   assert.equal(await library.locator('.close-dialog').count(),0);
   await page.mouse.click(5,300);
   assert.ok(await library.isVisible(),'Bấm ra ngoài không đóng trang');
+  // Điện thoại: thanh trên xuống hàng (không đè trang), menu GD HOME Tools nằm gọn trong màn, trang không bị rộng ra
+  await page.setViewportSize({width:390,height:844});
+  await page.goto('/thong-ke',{waitUntil:'domcontentloaded'});
+  await page.locator('.shell-account').waitFor();
+  const overlap = await page.evaluate(() => { const h = document.querySelector('.app-header').getBoundingClientRect(); return [...document.querySelectorAll('.app-header *')].some(el => el.getBoundingClientRect().bottom > h.bottom + 1 && el.offsetParent && !el.closest('nav,details[open] > *:not(summary)')); });
+  assert.equal(overlap,false,'Nút trên thanh trên không tràn xuống trang');
+  await page.locator('.gd-tools-menu summary').click();
+  const box = await page.locator('.gd-tools-menu nav').boundingBox();
+  assert.ok(box.x >= 0 && box.x + box.width <= 390,'Menu nằm trong màn điện thoại: ' + JSON.stringify(box));
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth),390,'Trang không bị rộng ra');
+  await page.setViewportSize({width:1440,height:900});
 };
 
 cases['thong-ke'] = async page => {
