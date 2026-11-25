@@ -2,7 +2,9 @@
  * Câu trả lời lưu dạng {id câu: 'giá trị' | ['giá trị',…] | 'chữ', 'id.khac': 'chữ ô Khác'}.
  * showIf (nhóm hoặc câu): {q, in:[…]} / {q, notIn:[…]} hoặc mảng nhiều điều kiện (phải đúng hết); q phải đang hiện.
  * optIf: {giá trị: điều kiện} – ẩn riêng 1 lựa chọn (vd "gầm cầu thang" khi là chung cư).
- * sub: {giá trị: 'a:Nhãn;…'} – tích nhỏ trong ô lựa chọn (vd Lò nướng → Âm tủ), lưu ở 'id.giá trị': ['a',…].
+ * sub: {giá trị: 'a:Nhãn;b:Nhãn|c:Nhãn'} – tích nhỏ trong ô (vd Lò nướng → Âm tủ), lưu ở 'id.giá trị': ['a',…]; ';' trong cùng nhóm = chỉ chọn 1, '|' tách nhóm độc lập.
+ * Lựa chọn khong / chua_biet ở câu chọn nhiều là phủ định: chọn nó thì bỏ các ô khác và ngược lại.
+ * type 'date': 'YYYY-MM-DD' (kèm ngày âm khi hiện); type 'rooms': [{who, items:[…], bed, mat}] – mỗi phòng ngủ 1 phần tử, số phòng theo pn_so.
  * Thứ tự nhóm: tổng thể (công trình, gia đình, phong cách, ngân sách) → đặc thù nhà → kĩ thuật → từng không gian. */
 (root => {
   const clean = value => String(value == null ? '' : value).trim();
@@ -15,7 +17,29 @@
   }).filter(o => o.v && o.l);
   // Q(id, loại, nhãn ngắn (dùng khi tóm tắt), câu hỏi, 'giá trị:nhãn;…', {other, showIf})
   const Q = (id, type, short, text, options, extra = {}) => ({id, type, short, text, options: parseOptions(options), ...extra,
-    sub: extra.sub && Object.fromEntries(Object.entries(extra.sub).map(([v, t]) => [v, parseOptions(t)]))});
+    sub: extra.sub && Object.fromEntries(Object.entries(extra.sub).map(([v, t]) => [v, t.split('|').flatMap((part, g) => parseOptions(part).map(o => ({...o, g})))]))});
+  const EXCLUSIVE = ['khong', 'chua_biet'];
+  // Ngày âm (lịch Trung Hoa của Intl; shortcut: có thể lệch 1 ngày với âm lịch VN ở vài năm hiếm, khi cần chính xác thì dùng bảng âm lịch VN)
+  const lunarText = value => {
+    try {
+      const parts = new Intl.DateTimeFormat('vi-VN-u-ca-chinese', {day: 'numeric', month: 'numeric'}).formatToParts(new Date(value + 'T12:00:00'));
+      const get = type => parts.find(p => p.type === type)?.value;
+      return get('day') ? get('day') + '/' + get('month') + ' âm lịch' : '';
+    } catch { return ''; }
+  };
+  const dateText = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '') && !isNaN(new Date(value)) ? value.split('-').reverse().join('/') + (lunarText(value) ? ' (' + lunarText(value) + ')' : '') : '';
+  // Bảng phòng ngủ: chọn phòng cho ai → các lựa chọn của phòng đó
+  const ROOM = {
+    who: parseOptions('vo_chong:Vợ chồng;con_trai:Con trai;con_gai:Con gái;em_be:Em bé;ong_ba:Ông bà;khach:Khách;giup_viec:Giúp việc;da_nang:Đa năng / làm việc'),
+    items: parseOptions('wc_rieng:WC riêng;wic:Phòng thay đồ;trang_diem:Bàn trang điểm;lam_viec:Góc làm việc;ban_hoc:Bàn học;giuong_tang:Giường tầng;goc_choi:Góc chơi, tủ đồ chơi;' +
+      'che_chan:Thành giường chắn an toàn;tv:TV;ban_cong:Cửa ra ban công;gan_wc:Gần WC, sàn chống trơn, tay vịn;sofa_giuong:Sofa giường;co_hoc:Giường có hộc chứa đồ'),
+    itemFor: {wic: ['vo_chong'], trang_diem: ['vo_chong', 'con_gai'], lam_viec: ['vo_chong', 'khach', 'da_nang'], ban_hoc: ['con_trai', 'con_gai'], giuong_tang: ['con_trai', 'con_gai'],
+      goc_choi: ['con_trai', 'con_gai', 'em_be'], che_chan: ['em_be', 'con_trai', 'con_gai'], tv: ['vo_chong', 'ong_ba', 'khach'], ban_cong: ['vo_chong'], gan_wc: ['ong_ba'], sofa_giuong: ['da_nang']},
+    beds: parseOptions('1m:1m;1m2:1m2;1m4:1m4;1m6:1m6;1m8:1m8;2m:2m trở lên'),
+    mats: parseOptions('go:Giường gỗ;da:Bọc da;ni:Bọc nỉ')
+  };
+  const roomItems = who => ROOM.items.filter(o => !ROOM.itemFor[o.v] || ROOM.itemFor[o.v].includes(who));
+  const roomCount = answers => Math.min(5, Number(answers.pn_so) || 0);
   const OTHER = {other: true};
 
   const RESIDENTIAL = {q: 'loai_nha', in: ['chung_cu', 'nha_pho', 'biet_thu']};
@@ -45,16 +69,16 @@
       Q('ps_phong_cach', 'many', 'Phong cách ưa thích', 'Mình thích phong cách nào? (chọn tối đa 3)', 'hien_dai:Hiện đại;modern_farmhouse:Modern Farmhouse;indochine:Indochine;japandi:Japandi;tan_co_dien:Tân cổ điển;toi_gian:Tối giản (Minimalist);scandinavian:Bắc Âu (Scandinavian);wabi_sabi:Wabi-sabi;industrial:Industrial (công nghiệp);luxury:Sang trọng (Luxury);chua_biet:Chưa biết, cần tư vấn', OTHER),
       Q('ps_mau', 'many', 'Màu yêu thích', 'Màu sắc chủ đạo yêu thích?', 'trang_kem:Trắng, kem;go_sang:Gỗ sáng;go_toi:Gỗ tối (óc chó);xam:Xám;den:Đen;xanh_la:Xanh lá, xanh rêu;xanh_navy:Xanh navy;vang_dong:Vàng đồng;pastel:Pastel nhẹ;mau_dat:Màu đất', OTHER),
       Q('ps_vat_lieu', 'many', 'Vật liệu', 'Vật liệu muốn thấy trong nhà?', 'go_tn:Gỗ tự nhiên;da:Đá, đá nung;kim_loai:Kim loại;kinh:Kính;vai:Vải, boucle;da_that:Da;may_tre:Mây tre, cói;gach_bong:Gạch bông;giay_dan_tuong:Giấy dán tường;be_tong:Bê tông, xi măng', OTHER),
-      Q('ps_tong_the', 'many', 'Lựa chọn chung cả nhà', 'Một số lựa chọn ảnh hưởng tới hình thức cả nhà?', 'canh_tron:Cánh tủ trơn, tay nắm âm / ẩn;tay_nam:Cánh tủ có tay nắm trang trí;van_go:Ưu tiên vân gỗ ở chỗ hay chạm;canh_son:Cánh tủ sơn màu;robot:Có robot hút bụi – đồ cần gầm cao cho robot chui;it_vat_lieu:Ít loại vật liệu, gọn và dễ phối', OTHER),
+      Q('ps_tong_the', 'many', 'Lựa chọn chung cả nhà', 'Một số lựa chọn ảnh hưởng tới hình thức cả nhà?', 'canh_tron:Cánh tủ trơn, tay nắm âm / ẩn;tay_nam:Cánh tủ có tay nắm trang trí;van_go:Ưu tiên vân gỗ ở chỗ hay chạm;canh_son:Cánh tủ sơn màu;it_vat_lieu:Ít loại vật liệu, gọn và dễ phối', OTHER),
       Q('ps_anh_sang', 'one', 'Ánh sáng đèn', 'Ánh sáng đèn mong muốn?', 'trang:Trắng sáng, rõ ràng;vang:Vàng ấm, thư giãn;ket_hop:Kết hợp theo từng khu'),
-      Q('ps_rem', 'many', 'Rèm', 'Loại rèm mong muốn?', 'vai:Rèm vải 2 lớp (voan + cản sáng);cuon:Rèm cuốn;sao:Rèm sáo gỗ / nhôm;dien:Rèm điện;chua_biet:Chưa biết, cần tư vấn'),
-      Q('ps_tham_khao', 'text', 'Hình ảnh tham khảo', 'Link Pinterest / hình ảnh nhà mình thích (nếu có)?', ''),
-      Q('ps_khong_thich', 'text', 'Điều không thích', 'Điều gì mình chắc chắn KHÔNG thích?', '')
+      Q('ps_rem', 'many', 'Rèm', 'Loại rèm mong muốn?', 'vai:Rèm vải 2 lớp (voan + cản sáng);cuon:Rèm cuốn;sao:Rèm sáo gỗ / nhôm;dien:Rèm điện;cau_vong:Rèm cầu vồng;chua_biet:Chưa biết, cần tư vấn'),
+      Q('ps_tham_khao', 'text', 'Hình ảnh tham khảo', 'Link Pinterest / hình ảnh nhà mình thích (nếu có)?', '')
     ]},
     {id: 'ngan_sach', title: 'Ngân sách & thời gian', intro: 'Để GD HOME đề xuất phương án sát thực tế.', questions: [
       Q('ns_noi_that', 'one', 'Ngân sách nội thất', 'Ngân sách nội thất dự kiến (không gồm phần thô)?', 'duoi_200:Dưới 200 triệu;200_400:200 - 400 triệu;400_700:400 - 700 triệu;700_1000:700 triệu - 1 tỷ;tren_1000:Trên 1 tỷ;chua_biet:Chưa xác định, cần tư vấn'),
       Q('ns_gom', 'many', 'Hạng mục trong ngân sách', 'Ngân sách đó đã gồm những hạng mục nào?', 'thiet_ke:Thiết kế;thi_cong:Thi công hoàn thiện;noi_that_roi:Nội thất rời;den:Đèn;rem:Rèm;decor:Đồ trang trí;thiet_bi:Thiết bị bếp, điện tử', OTHER),
       Q('ns_vao_o', 'one', 'Thời gian vào ở', 'Mong muốn vào ở sau bao lâu?', 'duoi_2:Dưới 2 tháng;3_4:3 - 4 tháng;5_6:5 - 6 tháng;tren_6:Trên 6 tháng;chua_biet:Chưa xác định', OTHER),
+      Q('ns_nhap_trach', 'date', 'Ngày nhập trạch', 'Ngày dự kiến nhập trạch (nếu đã xem ngày)?', ''),
       Q('ns_uu_tien', 'many', 'Ưu tiên', 'Điều quan trọng nhất với mình? (chọn tối đa 3)', 'ben:Bền, dùng lâu;dep:Đẹp, ấn tượng;re:Chi phí hợp lý;de_ve_sinh:Dễ vệ sinh, ít bảo trì;tien_do:Thi công nhanh;thong_minh:Tiện nghi, công nghệ;luu_tru:Nhiều chỗ chứa đồ;suc_khoe:An toàn, thân thiện sức khoẻ'),
       Q('ns_quyet_dinh', 'one', 'Người quyết định', 'Ai cùng quyết định thiết kế?', 'mot:Mình tự quyết;vo_chong:Hai vợ chồng;gia_dinh:Cả gia đình (bố mẹ, anh chị em)')
     ]},
@@ -74,7 +98,7 @@
     {id: 'chung_cu', title: 'Căn hộ chung cư', intro: 'Các lưu ý riêng khi cải tạo trong chung cư.', showIf: FLAT, questions: [
       Q('quy_dinh_bql', 'one', 'Quy định ban quản lý', 'Đã nắm quy định thi công của ban quản lý toà nhà chưa?', 'da_biet:Đã nắm, đã có quy định;chua_biet:Chưa biết, nhờ GD HOME hỏi giúp'),
       Q('cai_tao_tho', 'one', 'Mức cải tạo', 'Mức độ cải tạo mong muốn?', 'chi_noi_that:Chỉ làm nội thất, giữ nguyên hiện trạng;nhe:Cải tạo nhẹ (đổi gạch, sơn, trần, điện nước);lon:Muốn đục phá / dời vách nếu được phép'),
-      Q('logia', 'one', 'Logia / máy giặt', 'Máy giặt và phơi đồ bố trí thế nào?', 'logia:Ở logia, có che chắn;wc:Trong WC;giau_tu:Giấu máy giặt trong tủ;chua_biet:Chưa biết, cần tư vấn', {sub: {logia: 'say:Có máy sấy;dat_cao:Đặt cao, đỡ cúi', giau_tu: 'say:Có máy sấy;dat_cao:Đặt cao, đỡ cúi'}}),
+      Q('logia', 'one', 'Logia / máy giặt', 'Máy giặt và phơi đồ bố trí thế nào?', 'logia:Ở logia, có che chắn;wc:Trong WC;giau_tu:Giấu máy giặt trong tủ;chua_biet:Chưa biết, cần tư vấn', {sub: {logia: 'say:Có máy sấy|dat_cao:Đặt cao, đỡ cúi', giau_tu: 'say:Có máy sấy|dat_cao:Đặt cao, đỡ cúi'}}),
       Q('view_nang', 'one', 'Ánh sáng / view', 'Căn hộ có đặc điểm gì về ánh sáng, view?', 'nang_tay:Nắng chiều gay gắt;toi:Hơi tối, ít sáng;view_dep:View đẹp, muốn tận dụng;binh_thuong:Bình thường')
     ]},
     {id: 'van_phong', title: 'Văn phòng / cửa hàng', intro: 'Nhu cầu không gian làm việc, kinh doanh.', showIf: {q: 'loai_nha', in: ['van_phong', 'cua_hang']}, questions: [
@@ -87,8 +111,9 @@
     // ---------------------------------------------------------------- KĨ THUẬT
     {id: 'ky_thuat', title: 'Kĩ thuật điện - nước - trần', intro: 'Chốt sớm để đặt sẵn ống chờ, đường điện, vị trí thiết bị – tránh đục sửa về sau.', showIf: RESIDENTIAL, questions: [
       Q('kt_dien', 'many', 'Điện - mạng', 'Về điện và mạng, nhà mình có / cần gì?', 'ba_pha:Điện 3 pha (thang máy, máy lớn);mat_troi:Điện mặt trời;du_phong:Máy phát / bộ lưu điện dự phòng;sac_xe:Ổ sạc xe điện;tu_dien:Đã có vị trí tủ điện tổng;wifi:Wifi phủ toàn nhà;lan:Ổ mạng LAN các phòng;camera:Camera an ninh;chua_biet:Chưa rõ, cần tư vấn',
-        {optIf: {ba_pha: HOUSE, mat_troi: HOUSE, sac_xe: HOUSE}, ...OTHER}),
-      Q('kt_nuoc', 'many', 'Nước', 'Nước nóng và thiết bị nước?', 'nl_mat_troi:Nước nóng năng lượng mặt trời;nong_tong:Nóng tổng (heat pump / bình lớn);binh_phong:Bình nóng lạnh từng phòng;loc_tong:Lọc tổng đầu nguồn;be_nuoc:Bể nước ngầm / bồn mái;tang_ap:Bơm tăng áp', {optIf: {nl_mat_troi: HOUSE, be_nuoc: HOUSE}, ...OTHER}),
+        {optIf: {ba_pha: HOUSE, mat_troi: HOUSE, sac_xe: HOUSE, tu_dien: HOUSE}, ...OTHER}),
+      Q('kt_nuoc', 'many', 'Nước', 'Nước nóng và thiết bị nước?', 'nl_mat_troi:Nước nóng năng lượng mặt trời;nong_tong:Nóng tổng (heat pump / bình lớn);co_binh:Đã có bình nóng lạnh;binh_phong:Bình nóng lạnh từng phòng;nong_bep:Cần kéo nước nóng ra bếp (hiện chưa có);loc_tong:Lọc tổng đầu nguồn;be_nuoc:Bể nước ngầm / bồn mái;tang_ap:Bơm tăng áp',
+        {optIf: {nl_mat_troi: HOUSE, nong_tong: HOUSE, be_nuoc: HOUSE, tang_ap: HOUSE, co_binh: {q: 'tinh_trang', in: ['co_ban', 'dang_o']}}, ...OTHER}),
       Q('dieu_hoa', 'one', 'Điều hoà', 'Điều hoà dự kiến?', 'treo:Treo tường;am_tran:Âm trần nối ống gió / cassette;trung_tam:Điều hoà trung tâm (VRV);giu_hien_trang:Giữ hệ thống hiện có;chua_biet:Chưa biết, cần tư vấn',
         {optIf: {trung_tam: HOUSE}}),
       Q('kt_dan_nong', 'one', 'Dàn nóng', 'Dàn nóng điều hoà đặt ở đâu?', 'mai:Đưa lên mái;ban_cong:Ban công / logia;bql:Vị trí toà nhà quy định;chua_biet:Chưa rõ, cần tư vấn',
@@ -100,7 +125,7 @@
     {id: 'khach', title: 'Sảnh & phòng khách', intro: 'Lối vào, không gian tiếp khách và sinh hoạt chung.', showIf: RESIDENTIAL, questions: [
       Q('sanh', 'many', 'Sảnh / lối vào', 'Khu lối vào cần gì?', 'tu_giay:Tủ giày (cánh thoáng, tránh mùi);ghe:Ghế ngồi đi giày (kéo ra từ tủ);guong:Gương soi toàn thân;moc:Móc treo áo, túi;khong:Không cần gì thêm', OTHER),
       Q('pk_sofa', 'one', 'Kiểu sofa', 'Bộ ghế phòng khách mong muốn?', 'goc_l:Sofa góc chữ L;van:Sofa văng + ghế đơn;thap:Sofa thấp / ngồi bệt;ghe_go:Bộ bàn ghế gỗ;chua_biet:Chưa biết, cần tư vấn',
-        {sub: {goc_l: 'da:Da;ni:Nỉ / vải;cung:Đệm cứng;mem:Đệm mềm', van: 'da:Da;ni:Nỉ / vải;cung:Đệm cứng;mem:Đệm mềm', thap: 'da:Da;ni:Nỉ / vải'}}),
+        {sub: {goc_l: 'da:Da;ni:Nỉ / vải|cung:Đệm cứng;mem:Đệm mềm', van: 'da:Da;ni:Nỉ / vải|cung:Đệm cứng;mem:Đệm mềm', thap: 'da:Da;ni:Nỉ / vải'}}),
       Q('pk_tv', 'many', 'TV / giải trí', 'Giải trí trong phòng khách?', 'tv_treo:TV treo tường;tv_frame:TV khung tranh (Frame);tv_ke:TV đặt trên kệ;may_chieu:Máy chiếu;game:Máy chơi game (PlayStation…);am_thanh:Dàn âm thanh / loa;khong:Không dùng TV'),
       Q('pk_chuc_nang', 'many', 'Chức năng thêm', 'Phòng khách cần thêm gì?', 'ke_sach:Kệ sách;trung_bay:Tủ trưng bày / sưu tầm;ruou:Tủ / quầy rượu;doc_sach:Góc đọc sách;piano:Piano / nhạc cụ;goc_tre:Góc chơi cho trẻ', OTHER),
       NOTE('pk_ghi_chu', 'phòng khách')
@@ -112,22 +137,14 @@
       Q('bep_kin', 'one', 'Bếp mở / kín', 'Bếp nên mở hay kín?', 'mo:Bếp mở liền phòng khách;kin:Bếp kín, tách mùi bằng cửa kính;bep_doi:Bếp đôi (bếp nấu nặng + bếp trưng bày)'),
       Q('bep_dao', 'one', 'Đảo bếp / quầy bar', 'Có muốn đảo bếp hoặc quầy bar không?', 'dao:Có đảo bếp;bar:Quầy bar nhỏ;khong:Không cần'),
       Q('bep_thiet_bi', 'many', 'Thiết bị bếp', 'Thiết bị bếp dự kiến?', 'tu:Bếp từ;gas:Bếp gas;hut_mui:Máy hút mùi;lo_nuong:Lò nướng;lo_vi_song:Lò vi sóng;rua_bat:Máy rửa bát;tu_lanh_lon:Tủ lạnh lớn (side-by-side);loc_nuoc:Máy lọc nước;tu_ruou:Tủ bảo quản rượu / thực phẩm;may_xay:Máy xay, ép, nồi chiên đặt cố định',
-        {sub: {lo_nuong: AM_TU, lo_vi_song: AM_TU, loc_nuoc: AM_TU, rua_bat: 'am_tu:Âm tủ;dat_cao:Đặt cao, đỡ cúi', tu_lanh_lon: 'am_tu:Âm tủ;am_tuong:Âm tường'}, ...OTHER}),
+        {sub: {lo_nuong: AM_TU, lo_vi_song: AM_TU, loc_nuoc: AM_TU, rua_bat: 'am_tu:Âm tủ|dat_cao:Đặt cao, đỡ cúi', tu_lanh_lon: 'am_tu:Âm tủ;am_tuong:Âm tường'}, ...OTHER}),
       Q('bep_luu_tru', 'many', 'Lưu trữ bếp', 'Cần chỗ cất đồ bếp nào?', 'do_kho:Tủ đồ khô, kho thực phẩm;gia_vi:Kệ gia vị gần bếp;noi_chao:Ngăn kéo nồi chảo;bat_dia:Tủ chén bát lớn;thung_rac:Thùng rác phân loại âm tủ', OTHER),
       Q('ban_an', 'one', 'Bàn ăn', 'Bàn ăn dùng cho bao nhiêu người?', 'bon:4 người;sau:6 người;tam:8 người trở lên;mo_rong:Bàn kéo dài được;chi_bar:Chỉ ăn ở quầy bar / đảo bếp'),
       NOTE('bep_ghi_chu', 'bếp')
     ]},
     {id: 'ngu', title: 'Phòng ngủ', intro: 'Không gian nghỉ ngơi cho từng thành viên.', showIf: RESIDENTIAL, questions: [
       Q('pn_so', 'one', 'Số phòng ngủ', 'Cần bao nhiêu phòng ngủ?', '1:1 phòng;2:2 phòng;3:3 phòng;4:4 phòng;5:5 phòng trở lên'),
-      Q('pn_phan_bo', 'text', 'Phòng nào cho ai', 'Phòng nào cho ai? (vd: P1 bố mẹ, P2 con gái 8 tuổi, P3 ông bà…)', ''),
-      Q('pn_master', 'many', 'Phòng ngủ chính', 'Phòng ngủ chính cần có gì?', 'wc_rieng:WC riêng;wic:Phòng thay đồ (walk-in closet);trang_diem:Bàn trang điểm;lam_viec:Góc làm việc;doc_sach:Ghế đọc sách;tv:TV;ban_cong:Cửa ra ban công', OTHER),
-      Q('pn_giuong', 'one', 'Kích thước giường', 'Giường ngủ chính?', '1m6:1m6;1m8:1m8;2m:2m trở lên;co_hoc:Giường có hộc chứa đồ;chua_biet:Chưa biết, cần tư vấn',
-        {sub: Object.fromEntries(['1m6', '1m8', '2m', 'co_hoc'].map(v => [v, 'go:Gỗ;da:Bọc da;ni:Bọc nỉ']))}),
-      Q('pn_con', 'many', 'Phòng của con', 'Phòng của con cần?', 'giuong_tang:Giường tầng;ban_hoc:Bàn học;choi:Góc chơi, sàn chơi;do_choi:Tủ đồ chơi, sách;rieng:Mỗi bé một phòng;chung:Các bé ở chung',
-        {showIf: KIDS, sub: {giuong_tang: 'che_chan:Cần thành chắn an toàn'}, ...OTHER}),
-      Q('pn_con_dem', 'one', 'Đệm giường của con', 'Kích thước đệm giường của con?', '1m:1m;1m2:1m2;1m4:1m4;1m6:1m6;chua_biet:Chưa biết, cần tư vấn', {showIf: KIDS}),
-      Q('pn_ong_ba', 'one', 'Phòng ông bà', 'Phòng người lớn tuổi?', 'tang_tret:Ưu tiên tầng thấp / gần WC;co_thang:Có thể lên cầu thang;chua_biet:Chưa quyết định', {showIf: [HOUSE, ELDERLY]}),
-      Q('pn_khach', 'one', 'Phòng khách ngủ qua đêm', 'Cần phòng cho khách ngủ lại?', 'co:Có, 1 phòng riêng;da_nang:Phòng đa năng (làm việc + khách);khong:Không cần', {showIf: {q: 'thanh_vien', in: ['khach_o_lai']}}),
+      Q('pn_phong', 'rooms', 'Từng phòng ngủ', 'Từng phòng dành cho ai, cần gì?', '', {showIf: {q: 'pn_so', notIn: []}}),
       Q('pn_rem_sang', 'one', 'Ánh sáng phòng ngủ', 'Ánh sáng và độ ồn phòng ngủ?', 'toi:Cần tối, cản sáng hoàn toàn;tu_nhien:Thích nhiều ánh sáng tự nhiên;chong_on:Cần cách âm (đường ồn, hàng xóm)'),
       NOTE('pn_ghi_chu', 'các phòng ngủ')
     ]},
@@ -145,7 +162,7 @@
     ]},
     {id: 'tho', title: 'Thờ cúng', intro: 'Không gian tâm linh của gia đình.', note: 'Nên nhờ thầy xem hướng và vị trí đặt bàn thờ trước khi thiết kế, vì ảnh hưởng nhiều tới bố trí cả nhà.', showIf: RESIDENTIAL, questions: [
       Q('tho_co', 'one', 'Bàn thờ', 'Nhà có cần bàn thờ không?', 'phong_rieng:Phòng thờ riêng;tu_tho:Bàn thờ đặt sàn, dưới làm tủ thờ;treo:Bàn thờ treo tường;khong:Không cần',
-        {sub: {treo: 'huong:Có chỗ để hương;chan_khoi:Có tấm chắn khói'}}),
+        {sub: {treo: 'huong:Có chỗ để hương|chan_khoi:Có tấm chắn khói'}}),
       Q('tho_loai', 'many', 'Thờ gì', 'Thờ những gì?', 'gia_tien:Gia tiên;phat:Phật;than_tai:Thần tài - Thổ địa;khac:Khác', {showIf: {q: 'tho_co', notIn: ['khong']}, ...OTHER}),
       Q('tho_vi_tri', 'one', 'Vị trí', 'Vị trí đặt bàn thờ trong căn hộ?', 'phong_khach:Phòng khách;phong_ngu:Trong phòng ngủ;canh_bep:Gần bếp / hành lang;chua_biet:Chưa biết, cần tư vấn', {showIf: [FLAT, {q: 'tho_co', notIn: ['khong']}]}),
       Q('tho_ghi_chu', 'text', 'Ghi chú thờ cúng', 'Ghi chú thêm về thờ cúng (hướng thầy đã xem, kích thước bàn thờ cũ, đồ thờ cần giữ…)?', '', {showIf: {q: 'tho_co', notIn: ['khong']}})
@@ -158,10 +175,11 @@
     ]},
     {id: 'thong_minh', title: 'Thiết bị thông minh', intro: 'Chọn mức nhà thông minh phù hợp ngân sách.', showIf: RESIDENTIAL, questions: [
       Q('tb_muc', 'one', 'Nhà thông minh', 'Mức độ nhà thông minh mong muốn?', 'khong:Không cần;co_ban:Cơ bản (đèn, rèm, ổ cắm);nhieu:Nhiều, điều khiển toàn nhà;chua_biet:Chưa biết, cần tư vấn'),
-      Q('tb_loai', 'many', 'Thiết bị muốn có', 'Muốn điều khiển những gì?', 'den:Đèn theo cảnh;rem:Rèm điện;khoa:Khoá vân tay / thẻ;camera:Camera an ninh;dieu_hoa:Điều hoà thông minh;am_thanh:Loa âm thanh đa vùng;cam_bien:Cảm biến (khói, rò nước, chuyển động);robot:Robot hút bụi, lau nhà', {showIf: {q: 'tb_muc', in: ['co_ban', 'nhieu', 'chua_biet']}, ...OTHER})
+      Q('tb_loai', 'many', 'Thiết bị muốn có', 'Muốn điều khiển những gì?', 'den:Đèn theo cảnh;rem:Rèm điện;khoa:Khoá vân tay / thẻ;camera:Camera an ninh;dieu_hoa:Điều hoà thông minh;am_thanh:Loa âm thanh đa vùng;cam_bien:Cảm biến (khói, rò nước, chuyển động);robot:Robot hút bụi, lau nhà', {sub: {robot: 'gam:Đồ cần gầm cao cho robot chui|tram:Chừa hốc đặt trạm sạc'}, showIf: {q: 'tb_muc', in: ['co_ban', 'nhieu', 'chua_biet']}, ...OTHER})
     ]},
     {id: 'ket', title: 'Ghi chú thêm', intro: 'Gần xong rồi!', questions: [
-      Q('cuoi_ghi_chu', 'text', 'Điều khác muốn GD HOME biết', 'Còn điều gì mình muốn GD HOME lưu ý không?', '')
+      Q('cuoi_ghi_chu', 'text', 'Sở thích, mong muốn', 'Mình THÍCH gì, mong muốn điều gì ở ngôi nhà mới?', ''),
+      Q('ps_khong_thich', 'text', 'Điều không thích', 'Điều gì mình chắc chắn KHÔNG thích?', '')
     ]}
   ];
 
@@ -206,6 +224,16 @@
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
     for (const q of QUESTIONS) {
       const value = raw[q.id];
+      if (q.type === 'date') { if (typeof value === 'string' && dateText(value)) out[q.id] = value; continue; }
+      if (q.type === 'rooms') {
+        const pick = (v, list) => list.some(o => o.v === v) ? v : '';
+        const rooms = Array.isArray(value) ? value.slice(0, 5).map(r => {
+          const who = pick(r?.who, ROOM.who), ok = new Set(who ? roomItems(who).map(o => o.v) : []);
+          return {who, items: [...new Set(Array.isArray(r?.items) ? r.items.filter(v => ok.has(v)) : [])], bed: pick(r?.bed, ROOM.beds), mat: pick(r?.mat, ROOM.mats)};
+        }) : [];
+        if (rooms.some(r => r.who || r.items.length || r.bed || r.mat)) out[q.id] = rooms;
+        continue;
+      }
       if (q.type === 'text') {
         const text = typeof value === 'string' ? value.replace(/\r/g, '').trim().slice(0, TEXT_MAX) : '';
         if (text) out[q.id] = text;
@@ -215,12 +243,14 @@
       if (q.type === 'one') {
         if (typeof value === 'string' && allowed.has(value)) out[q.id] = value;
       } else if (Array.isArray(value) || typeof value === 'string') {   // chuỗi: câu cũ 'one' nay thành 'many'
-        const list = [...new Set([].concat(value).filter(v => typeof v === 'string' && allowed.has(v)))];
+        let list = [...new Set([].concat(value).filter(v => typeof v === 'string' && allowed.has(v)))];
+        if (list.some(v => !EXCLUSIVE.includes(v))) list = list.filter(v => !EXCLUSIVE.includes(v));   // "Không" lẫn với lựa chọn khác: bỏ "Không"
         if (list.length) out[q.id] = list;
       }
       // Tích nhỏ trong ô (Âm tủ…): chỉ giữ khi ô chính đang chọn
       for (const [v, subs] of Object.entries(q.sub || {})) {
-        const ok = new Set(subs.map(s => s.v)), picked = Array.isArray(raw[q.id + '.' + v]) ? raw[q.id + '.' + v].filter(s => ok.has(s)) : [];
+        const group = new Map(subs.map(s => [s.v, s.g])), seen = new Set();   // mỗi nhóm loại trừ giữ 1
+        const picked = Array.isArray(raw[q.id + '.' + v]) ? raw[q.id + '.' + v].filter(s => group.has(s) && !seen.has(group.get(s)) && seen.add(group.get(s))) : [];
         if (picked.length && asList(out[q.id]).includes(v)) out[q.id + '.' + v] = [...new Set(picked)];
       }
       const other = q.other && typeof raw[q.id + '.khac'] === 'string' ? raw[q.id + '.khac'].replace(/\s+/g, ' ').trim().slice(0, OTHER_MAX) : '';
@@ -235,6 +265,12 @@
       const subs = asList(answers[q.id + '.' + v]).map(s => (q.sub?.[v] || []).find(x => x.v === s)?.l).filter(Boolean);
       return labels.get(v) && labels.get(v) + (subs.length ? ' (' + subs.join(', ') + ')' : '');
     };
+    if (q.type === 'date') return dateText(answers[q.id]);
+    if (q.type === 'rooms') return (Array.isArray(answers[q.id]) ? answers[q.id] : []).slice(0, roomCount(answers)).map((r, i) => {
+      const label = (list, v) => list.find(o => o.v === v)?.l;
+      const bits = [...(r.items || []).map(v => label(ROOM.items, v)), r.bed && 'giường ' + label(ROOM.beds, r.bed), label(ROOM.mats, r.mat)].filter(Boolean);
+      return (r.who || bits.length) && 'P' + (i + 1) + ' ' + (label(ROOM.who, r.who) || '?') + (bits.length ? ': ' + bits.join(', ') : '');
+    }).filter(Boolean).join(' | ');
     const parts = q.type === 'text' ? [clean(answers[q.id])] : asList(answers[q.id]).map(withSub).filter(Boolean);
     const other = clean(answers[q.id + '.khac']);
     if (other) parts.push('Khác: ' + other);
@@ -254,7 +290,7 @@
     return ('NHU CẦU KHÁCH' + (projectName ? ' - ' + projectName : '') + '\n\n' + blocks.join('\n\n')).trim();
   }
 
-  const api = {GROUPS, QUESTIONS, QUESTION_BY_ID, parseOptions, visibleGroups, visibleQuestions, cleanAnswers, summarize, answerText};
+  const api = {GROUPS, QUESTIONS, QUESTION_BY_ID, EXCLUSIVE, ROOM, roomItems, roomCount, lunarText, parseOptions, visibleGroups, visibleQuestions, cleanAnswers, summarize, answerText};
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.GDHomeSurveyData = api;
 })(typeof window !== 'undefined' ? window : globalThis);

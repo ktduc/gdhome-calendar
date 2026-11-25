@@ -2785,6 +2785,31 @@ cases['khao-sat'] = async (page,{browser}) => {
   const oven = sample.locator('.ks-optbox',{has:sample.locator('.ks-opt',{hasText:'Lò nướng'})});
   await oven.locator('.ks-sub',{hasText:'Âm tủ'}).click();
   assert.equal(await oven.locator('.ks-opt input').isChecked(),true,'Tích Âm tủ thì chọn luôn Lò nướng');
+  // Âm tủ / Âm tường của tủ lạnh: chỉ 1
+  const fridge = sample.locator('.ks-optbox',{has:sample.locator('.ks-opt',{hasText:'Tủ lạnh lớn'})});
+  await fridge.locator('.ks-sub',{hasText:'Âm tủ'}).click();
+  await fridge.locator('.ks-sub',{hasText:'Âm tường'}).click();
+  assert.equal(await fridge.locator('.ks-sub input:checked').count(),1,'Âm tủ / Âm tường loại trừ nhau');
+  // Nút không xê dịch khi đổi bước; thanh trượt nhảy về bước 2, chọn "Không nuôi" bỏ các ô khác
+  const navX = () => sample.evaluate(() => ['ks-back','ks-next'].map(id => Math.round(document.getElementById(id).getBoundingClientRect().left)).join());
+  const x1 = await navX();
+  await sample.$eval('#ks-range',r => { r.value = 2; r.dispatchEvent(new Event('change',{bubbles:true})); });
+  await sample.locator('.ks-title',{hasText:'Gia đình'}).waitFor();
+  assert.equal(await navX(),x1,'Hai nút đứng yên khi đổi bước');
+  await sample.locator('.ks-opt',{hasText:'Chó'}).click();
+  await sample.locator('.ks-opt',{hasText:'Không nuôi'}).click();
+  assert.equal(await sample.locator('input[name=thu_cung]:checked').count(),1,'Chọn "Không" thì bỏ các ô khác');
+  // Bảng phòng ngủ: chọn số phòng -> P1 + các phòng cột, lựa chọn theo người ở
+  for (let i = 0; i < 20 && (await sample.locator('.ks-title').innerText()) !== 'Phòng ngủ'; i++) await sample.locator('#ks-next').click();
+  await sample.locator('.ks-opt',{hasText:'3 phòng'}).click();
+  assert.equal(await sample.locator('.ks-room').count(),3);
+  await sample.locator('[data-room="1"] [data-room-f=who]').selectOption('con_trai');
+  assert.equal(await sample.locator('[data-room="1"] .ks-sub',{hasText:'Bàn học'}).count(),1,'Phòng con có bàn học');
+  assert.equal(await sample.locator('[data-room="1"] .ks-sub',{hasText:'Phòng thay đồ'}).count(),0);
+  // Làm lại từ đầu (chỉ phiếu mẫu)
+  sample.once('dialog',d => d.accept());
+  await sample.locator('#ks-reset').click();
+  assert.equal(await sample.locator('#ks-main input:checked').count(),0,'Làm lại xoá hết câu trả lời');
   assert.deepEqual(calls,[],'Phiếu mẫu không đọc/ghi server');
   await sampleContext.close();
   assert.equal(await page.locator('.mt-tabs a[href="/khao-sat/mau"]').count(),1,'Có tab Phiếu mẫu');

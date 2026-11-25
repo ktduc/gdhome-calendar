@@ -75,3 +75,37 @@
 /* Lời nhắc của nhóm (vd nhờ thầy xem hướng bàn thờ) */
 .ks-tip { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: #fff6e5; border: 1px solid #f0d49b; color: #7a5410; font-size: 13.5px; }
 .ks-tip .ks-svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+/* Dải màu minh hoạ phong cách */
+.ks-sw { display: block; height: 7px; margin-top: 5px; border-radius: 4px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.08); }
+/* Ngày nhập trạch: ô ngày + ngày âm */
+.ks-date { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.ks-date input { padding: 9px 12px; border: 1.5px solid var(--ks-line); border-radius: 10px; background: #fbfaf8; color: inherit; font: inherit; font-size: 15px; }
+.ks-lunar { color: var(--ks-brown); font-size: 14px; }
+/* Bảng phòng ngủ: phòng chính 1 hàng, các phòng còn lại xếp cột */
+.ks-room { display: grid; gap: 8px; align-content: start; padding: 10px; border: 1px solid var(--ks-line); border-radius: 12px; background: #fbfaf8; }
+.ks-room > b { color: var(--ks-brown); font-size: 14px; }
+.ks-room select { width: 100%; min-width: 0; padding: 8px 10px; border: 1.5px solid var(--ks-line); border-radius: 10px; background: #fff; color: inherit; font: inherit; font-size: 14px; }
+.ks-room-bed { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ks-rooms { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; margin-top: 8px; }
+/* Thanh bước: 2 nút cố định bề rộng, thanh trượt ở giữa – không xê dịch khi đổi bước */
+.ks-nav { display: grid; grid-template-columns: 170px minmax(140px, 360px) 170px; justify-content: center; }
+.ks-nav .ks-btn { width: 100%; min-width: 0; padding: 0 10px; }
+.ks-steps { display: grid; gap: 2px; justify-items: center; }
+.ks-steps input { width: 100%; margin: 0; accent-color: var(--ks-brown); cursor: pointer; }
+.ks-steps input:disabled { cursor: default; }
+@media (max-width: 560px) { .ks-nav { grid-template-columns: 96px minmax(0, 1fr) 124px; gap: 10px; padding-left: 10px; padding-right: 10px; } .ks-nav .ks-btn { font-size: 14.5px; line-height: 1.2; } }
+/* Phiếu mẫu: nút làm lại */
+.ks-reset { margin-left: auto; min-height: 36px; padding: 0 12px; font-size: 13.5px; }
+/* Cột tóm tắt bên trái (màn rộng) */
+.ks-side { display: none; }
+@media (min-width: 1100px) {
+  .ks-side { display: block; position: fixed; left: 16px; top: 96px; bottom: 84px; width: calc((100vw - 760px) / 2 - 32px); max-width: 360px; overflow: auto; padding: 4px 8px 4px 0; color: var(--ks-muted); font-size: 12.5px; font-weight: 300; line-height: 1.45; }
+  .ks-preview .ks-side { top: 150px; }
+  .ks-side h3 { margin: 0 0 8px; font-size: 12px; font-weight: 500; letter-spacing: .06em; text-transform: uppercase; }
+  .ks-side a { display: block; margin: 0 0 10px; padding: 6px 8px; border-radius: 8px; color: inherit; text-decoration: none; opacity: .75; }
+  .ks-side a:hover, .ks-side a.is-on { background: rgba(255,255,255,.6); opacity: 1; }
+  .ks-side b { display: block; font-weight: 500; color: var(--ks-brown); }
+  .ks-side span { display: block; }
+}
+.ks-opt b:has(.ks-sw) { flex: 1; }
+@media (max-width: 560px) { .ks-reset { flex: none; padding: 0 8px; font-size: 12.5px; white-space: nowrap; } }

@@ -48,7 +48,7 @@
     ns_moc: '⏳', ns_uu_tien: '⭐', ns_quyet_dinh: '🤝', cuoi_ghi_chu: '📝',
     ps_tong_the: '✨', ps_rem: '🔲', kt_dien: '🔌', kt_nuoc_nong: '🔥', kt_nuoc: '🚰', kt_dan_nong: '❄️', kt_tran: '🏗️', kt_den: '💡', kt_tuong: '🧱',
     kt_mang: '🌐', sanh: '🚪', pk_ghi_chu: '📝', bep_nguoi_nau: '📏', bep_ghi_chu: '📝', pn_phan_bo: '👥', pn_con_dem: '🛏️', pn_ghi_chu: '📝',
-    wc_doi: '🔨', lv_ghe: '💺', tho_ghi_chu: '📝'};
+    wc_doi: '🔨', lv_ghe: '💺', tho_ghi_chu: '📝', pn_phong: '🛏️', ns_nhap_trach: '📅'};
   const OPT_ICON = {
     'loai_nha.chung_cu': '🏢', 'loai_nha.nha_pho': '🏘️', 'loai_nha.biet_thu': '🏡', 'loai_nha.van_phong': '💼', 'loai_nha.cua_hang': '🏪', 'loai_nha.khac': '🏗️',
     'tinh_trang.tho': '🧱', 'tinh_trang.co_ban': '🏠', 'tinh_trang.dang_o': '🛠️', 'tinh_trang.xay_moi': '🏗️',
@@ -91,15 +91,46 @@
     'kt_dien.ba_pha': '🔌', 'kt_dien.mat_troi': '☀️', 'kt_dien.du_phong': '🔌', 'kt_dien.sac_xe': '🚗', 'kt_nuoc_nong.nl_mat_troi': '☀️',
     'dieu_hoa.trung_tam': '🌀', 'kt_tran.quat_tran': '🌀', 'kt_tran.quat_dh': '🌀', 'kt_tran.thoat_mui': '💨', 'kt_den.downlight': '💡', 'kt_den.tha': '💡',
     'kt_dien.wifi': '🌐', 'kt_dien.lan': '🌐', 'kt_dien.camera': '📹', 'kt_nuoc.nl_mat_troi': '☀️', 'kt_nuoc.nong_tong': '🔥', 'kt_nuoc.binh_phong': '🚿',
-    'kt_nuoc.loc_tong': '🚰', 'wc_thiet_bi.vach_kinh': '🚿', 'lt_khac.xe_dap': '🚲', 'lt_khac.golf': '⛳', 'lt_khac.gym': '🏋️', 'ps_tong_the.robot': '🤖', 'ps_tong_the.van_go': '🌲', 'lv_ghe.cong_thai_hoc': '💺',
+    'kt_nuoc.loc_tong': '🚰', 'kt_nuoc.co_binh': '🚿', 'kt_nuoc.nong_bep': '🔥', 'ps_rem.cau_vong': '🔲', 'wc_thiet_bi.vach_kinh': '🚿', 'lt_khac.xe_dap': '🚲', 'lt_khac.golf': '⛳', 'lt_khac.gym': '🏋️', 'ps_tong_the.robot': '🤖', 'ps_tong_the.van_go': '🌲', 'lv_ghe.cong_thai_hoc': '💺',
     khong: '🚫', chua_biet: '❓', co: '✅', da_biet: '✅'
   };
   const I = emoji => window.GDHomeSurveyIcons ? GDHomeSurveyIcons.svg(emoji) : emoji;   // icon nét đơn sắc (khao-sat-icons.js)
   const optIcon = (q, o) => OPT_ICON[q.id + '.' + o.v] || OPT_ICON[o.v] || '';
 
+  // Dải màu minh hoạ cho từng phong cách (chưa có ảnh thật)
+  const STYLE_SW = {hien_dai: '#f1f0ed,#b9b6b0,#55524d,#1f1f1f', modern_farmhouse: '#f6f2ea,#c9b79c,#6b5a45,#2d2a26', indochine: '#f3e9d6,#c8a165,#2f5d50,#6b2e1f',
+    japandi: '#efe9df,#d6c4a8,#8d7b63,#3a3631', tan_co_dien: '#f7f3ec,#e3d3b5,#b89b6a,#7d6a55', toi_gian: '#ffffff,#eeeeec,#cfcdc9,#8c8a86',
+    scandinavian: '#fbfbf9,#e4ddd1,#b9c4c9,#6f7b80', wabi_sabi: '#e9e2d6,#c4b6a0,#9a8a73,#5b5246', industrial: '#d9d6d1,#8c8780,#4a4744,#a0522d',
+    luxury: '#f4efe6,#c9a55c,#3d3a36,#121212'};
+  const swatch = (q, o) => q.id === 'ps_phong_cach' && STYLE_SW[o.v] ? '<em class="ks-sw" aria-hidden="true" style="background:linear-gradient(90deg,' +
+    STYLE_SW[o.v].split(',').map((c, i) => c + ' ' + i * 25 + '% ' + (i + 1) * 25 + '%').join(',') + ')"></em>' : '';
+  const blankRoom = () => ({who: '', items: [], bed: '', mat: ''});
+  const selectHtml = (field, list, value, placeholder) => '<select data-room-f="' + field + '"><option value="">' + placeholder + '</option>' +
+    list.map(o => '<option value="' + o.v + '"' + (o.v === value ? ' selected' : '') + '>' + esc(o.l) + '</option>').join('') + '</select>';
+  // Bảng phòng ngủ: P1 (phòng chính) 1 hàng riêng, P2..n xếp cột; chọn người ở rồi mới hiện lựa chọn hợp với người đó
+  function roomsHtml(q, head) {
+    const rooms = state.answers[q.id] || [];
+    const card = i => {
+      const r = rooms[i] || blankRoom();
+      return '<div class="ks-room" data-room="' + i + '"><b>' + (i ? 'Phòng ' + (i + 1) : 'Phòng ngủ chính') + '</b>' + selectHtml('who', D.ROOM.who, r.who, 'Phòng cho ai?') +
+        (r.who ? '<div class="ks-subs">' + D.roomItems(r.who).map(o => '<label class="ks-sub"><input type="checkbox" data-room-f="items" value="' + o.v + '"' +
+          (r.items.includes(o.v) ? ' checked' : '') + '>' + esc(o.l) + '</label>').join('') + '</div>' : '') +
+        '<div class="ks-room-bed">' + selectHtml('bed', D.ROOM.beds, r.bed, 'Cỡ giường') + selectHtml('mat', D.ROOM.mats, r.mat, 'Kiểu giường') + '</div></div>';
+    };
+    const n = D.roomCount(state.answers), rest = Array.from({length: n - 1}, (_, i) => card(i + 1)).join('');
+    return '<fieldset class="ks-q ks-rooms-q' + (rooms.some(r => r.who) ? ' is-done' : '') + '" data-q="' + q.id + '"><legend class="ks-qhead">' + head + '</legend>' +
+      card(0) + (rest ? '<div class="ks-rooms">' + rest + '</div>' : '') + '</fieldset>';
+  }
+
   function questionHtml(q, n) {
     const head = '<span class="ks-num">' + n + '</span><span class="ks-qi" aria-hidden="true">' + I(Q_ICON[q.id] || '•') + '</span><span class="ks-qtext">' + esc(q.text) +
       (q.type === 'many' ? ' <span class="ks-hint">chọn nhiều</span>' : '') + '</span>';
+    if (q.type === 'rooms') return roomsHtml(q, head);
+    if (q.type === 'date') {
+      const value = state.answers[q.id] || '';
+      return '<div class="ks-q' + (value ? ' is-done' : '') + '"><label class="ks-qhead" for="q-' + q.id + '">' + head + '</label><div class="ks-date"><input type="date" id="q-' + q.id + '" data-q="' + q.id + '" value="' + esc(value) + '">' +
+        '<span class="ks-lunar">' + esc(value ? D.lunarText(value) : '') + '</span></div></div>';
+    }
     if (q.type === 'text') {
       return '<div class="ks-q"><label class="ks-qhead" for="q-' + q.id + '">' + head + '</label><textarea id="q-' + q.id + '" data-q="' + q.id + '" maxlength="1000">' + esc(state.answers[q.id] || '') + '</textarea></div>';
     }
@@ -107,10 +138,10 @@
     const opts = q.options.map(o => {
       const icon = optIcon(q, o);
       const opt = '<label class="ks-opt"><input type="' + kind + '" name="' + q.id + '" data-q="' + q.id + '" value="' + esc(o.v) + '"' +
-        (has(q.id, o.v) ? ' checked' : '') + '><span>' + (icon ? '<i aria-hidden="true">' + I(icon) + '</i>' : '') + '<b>' + esc(o.l) + '</b></span></label>';
+        (has(q.id, o.v) ? ' checked' : '') + '><span>' + (icon ? '<i aria-hidden="true">' + I(icon) + '</i>' : '') + '<b>' + esc(o.l) + swatch(q, o) + '</b></span></label>';
       // Tích nhỏ ngay dưới ô (vd Lò nướng → Âm tủ); tích vào thì ô chính tự được chọn
       const subs = q.sub?.[o.v];
-      return subs ? '<div class="ks-optbox">' + opt + '<div class="ks-subs">' + subs.map(s => '<label class="ks-sub"><input type="checkbox" data-sub="' + q.id + '.' + esc(o.v) + '" value="' + esc(s.v) + '"' +
+      return subs ? '<div class="ks-optbox">' + opt + '<div class="ks-subs">' + subs.map(s => '<label class="ks-sub"><input type="checkbox" data-sub="' + q.id + '.' + esc(o.v) + '" data-g="' + s.g + '" value="' + esc(s.v) + '"' +
         ([].concat(state.answers[q.id + '.' + o.v] ?? []).includes(s.v) ? ' checked' : '') + '>' + esc(s.l) + '</label>').join('') + '</div></div>' : opt;
     }).join('');
     const other = q.other ? '<input type="text" data-other="' + q.id + '" maxlength="300" placeholder="Khác… (ghi rõ)" value="' + esc(state.answers[q.id + '.khac'] || '') + '">' : '';
@@ -136,24 +167,56 @@
       (state.error ? '<p class="ks-notice" role="alert">' + esc(state.error) + '</p>' : '');
     const last = state.step === groups.length - 1;
     byId('ks-step').textContent = 'Bước ' + (state.step + 1) + '/' + groups.length;
+    Object.assign(byId('ks-range'), {max: groups.length, value: state.step + 1, disabled: !state.answers.loai_nha || state.busy});
+    renderSide();
     byId('ks-back').disabled = state.step === 0 || state.busy;
     const next = byId('ks-next');
     next.textContent = last ? 'Gửi cho GD HOME' : 'Tiếp tục';
     next.disabled = state.busy || (state.step === 0 && !state.answers.loai_nha);
   }
 
+  // Cột trái (màn rộng): tóm tắt các câu đã chọn, bấm để quay lại bước đó
+  function renderSide() {
+    const side = byId('ks-side');
+    if (!side) return;
+    side.innerHTML = '<h3>Đã chọn</h3>' + D.visibleGroups(state.answers).map((g, i) => {
+      const lines = g.questions.map(q => [q, D.answerText(q, state.answers)]).filter(([, t]) => t);
+      return lines.length ? '<a href="#" data-step="' + i + '"' + (i === state.step ? ' class="is-on"' : '') + '><b>' + esc(g.title) + '</b>' +
+        lines.map(([q, t]) => '<span>' + esc(q.short) + ': ' + esc(t) + '</span>').join('') + '</a>' : '';
+    }).join('');
+  }
+
   const signature = () => D.visibleQuestions(state.answers).map(q => q.id + ':' + q.options.length).join();
+  const rerender = () => { const y = scrollY; render(); scrollTo(0, y); };
+
+  function onRoom(el) {
+    const id = el.closest('[data-q]').dataset.q, i = +el.closest('[data-room]').dataset.room, field = el.dataset.roomF;
+    const rooms = Array.from({length: D.roomCount(state.answers)}, (_, k) => ({...blankRoom(), ...(state.answers[id] || [])[k]}));
+    const r = rooms[i];
+    if (field === 'items') r.items = el.checked ? [...new Set([...r.items, el.value])] : r.items.filter(v => v !== el.value);
+    else r[field] = el.value;
+    if (field === 'who') r.items = r.items.filter(v => D.roomItems(r.who).some(o => o.v === v));
+    if (rooms.some(x => x.who || x.items.length || x.bed || x.mat)) state.answers[id] = rooms; else delete state.answers[id];
+    store.write();
+    if (field === 'who') rerender(); else renderSide();
+  }
 
   function onSub(el) {
     const key = el.dataset.sub, [id, v] = key.split('.'), q = D.QUESTION_BY_ID[id];
     const list = new Set([].concat(state.answers[key] ?? []));
+    if (el.checked) {   // cùng nhóm thì chỉ 1 (vd Âm tủ / Âm tường)
+      const sibs = (q.sub[v] || []).filter(s => s.g === +el.dataset.g && s.v !== el.value).map(s => s.v);
+      sibs.forEach(s => list.delete(s));
+      el.closest('.ks-subs').querySelectorAll('input').forEach(box => { if (sibs.includes(box.value)) box.checked = false; });
+    }
     el.checked ? list.add(el.value) : list.delete(el.value);
     if (list.size) state.answers[key] = [...list]; else delete state.answers[key];
     if (el.checked && !has(id, v)) {   // tích "Âm tủ" mà chưa chọn ô chính thì chọn luôn
       state.answers[id] = q.type === 'many' ? [...new Set([].concat(state.answers[id] ?? []).concat(v))] : v;
-      const y = scrollY; render(); scrollTo(0, y);
+      rerender();
     }
     store.write();
+    renderSide();
   }
 
   function onAnswer(el) {
@@ -162,6 +225,9 @@
     if (el.type === 'checkbox') {
       const list = new Set([].concat(state.answers[id] ?? []));
       el.checked ? list.add(el.value) : list.delete(el.value);
+      // "Không" / "Chưa biết" phủ định các ô còn lại và ngược lại
+      if (el.checked) for (const v of [...list]) if (v !== el.value && (D.EXCLUSIVE.includes(v) || D.EXCLUSIVE.includes(el.value))) list.delete(v);
+      el.closest('.ks-q').querySelectorAll('input[data-q]').forEach(box => { box.checked = list.has(box.value); });
       if (list.size) state.answers[id] = [...list]; else delete state.answers[id];
     } else if (el.type === 'radio') state.answers[id] = el.value;
     else if (el.value.trim()) state.answers[id] = el.value; else delete state.answers[id];
@@ -171,7 +237,8 @@
     store.write();
     if (subGone) el.closest('.ks-q')?.querySelectorAll('[data-sub]').forEach(box => { if (!has(id, box.dataset.sub.split('.')[1])) box.checked = false; });
     el.closest('.ks-q')?.classList.toggle('is-done', state.answers[id] != null);
-    if (signature() !== before || (id === 'loai_nha')) { const y = scrollY; render(); scrollTo(0, y); }
+    if (el.type === 'date') el.nextElementSibling.textContent = el.value ? D.lunarText(el.value) : '';
+    if (signature() !== before || id === 'loai_nha' || id === 'pn_so') rerender(); else renderSide();
   }
 
   async function move(delta) {
@@ -193,7 +260,8 @@
   function bind() {
     const main = byId('ks-main');
     main.addEventListener('change', event => {
-      if (event.target.dataset.sub) onSub(event.target);
+      if (event.target.dataset.roomF) onRoom(event.target);
+      else if (event.target.dataset.sub) onSub(event.target);
       else if (event.target.dataset.q && event.target.type !== 'text') onAnswer(event.target);
     });
     main.addEventListener('input', event => {
@@ -201,12 +269,34 @@
       if (el.tagName === 'TEXTAREA') onAnswer(el);
       else if (el.dataset.other) {
         if (el.value.trim()) state.answers[el.dataset.other + '.khac'] = el.value; else delete state.answers[el.dataset.other + '.khac'];
-        store.write();
+        store.write(); renderSide();
       }
     });
     main.addEventListener('click', event => { if (event.target.id === 'ks-edit') { state.done = false; state.step = 0; render(); scrollTo(0, 0); } });
     byId('ks-back').addEventListener('click', () => move(-1));
     byId('ks-next').addEventListener('click', () => move(1));
+    const range = byId('ks-range');
+    range.addEventListener('input', () => { byId('ks-step').textContent = 'Bước ' + range.value + '/' + range.max; });
+    range.addEventListener('change', () => move(range.value - 1 - state.step));
+    // Màn rộng: cột tóm tắt bên trái
+    document.body.insertAdjacentHTML('beforeend', '<aside class="ks-side" id="ks-side" aria-label="Tóm tắt câu trả lời"></aside>');
+    byId('ks-side').addEventListener('click', event => {
+      const link = event.target.closest('[data-step]');
+      if (!link) return;
+      event.preventDefault();
+      if (state.done) state.done = false;
+      move(+link.dataset.step - state.step);
+    });
+    // Phiếu mẫu: xoá hết câu trả lời để thử lại từ đầu
+    if (preview) {
+      document.querySelector('.ks-top').insertAdjacentHTML('beforeend', '<button type="button" class="ks-btn ks-ghost ks-reset" id="ks-reset">Làm lại từ đầu</button>');
+      byId('ks-reset').addEventListener('click', () => {
+        if (!confirm('Xoá hết câu trả lời của phiếu mẫu để thử lại?')) return;
+        try { localStorage.removeItem(DRAFT); } catch { /* bỏ qua */ }
+        Object.assign(state, {answers: {}, step: 0, done: false, error: ''});
+        render(); scrollTo(0, 0);
+      });
+    }
   }
 
   async function init() {

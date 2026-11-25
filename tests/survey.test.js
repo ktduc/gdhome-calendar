@@ -16,7 +16,7 @@ test('mỗi khách thấy khoảng 40-78 câu (nhà ở), id duy nhất, mọi s
     for (const [v, c] of Object.entries(q.optIf || {})) { assert.ok(q.options.some(o => o.v === v), q.id + '.' + v); for (const x of [].concat(c)) assert.ok(D.QUESTION_BY_ID[x.q]); }
     for (const v of Object.keys(q.sub || {})) assert.ok(q.options.some(o => o.v === v) && v !== 'khac', q.id + '.' + v);
   }
-  for (const q of D.QUESTIONS) if (q.type !== 'text') assert.ok(q.options.length >= 2, q.id);
+  for (const q of D.QUESTIONS) if (['one', 'many'].includes(q.type)) assert.ok(q.options.length >= 2, q.id);
 });
 
 test('câu hỏi đổi theo loại công trình', () => {
@@ -32,11 +32,9 @@ test('câu hỏi đổi theo loại công trình', () => {
   assert.ok(office.includes('nhan_su') && !office.includes('pn_so') && !office.includes('bep_nau'));
 });
 
-test('câu phụ thuộc: phòng trẻ em, ông bà, chi tiết thờ, nhà thông minh', () => {
+test('câu phụ thuộc: bảng phòng ngủ, chi tiết thờ, nhà thông minh', () => {
   const base = {loai_nha: 'nha_pho'};
-  assert.ok(!ids(base).includes('pn_con') && !ids(base).includes('pn_ong_ba'));
-  assert.ok(ids({...base, thanh_vien: ['tre_hoc']}).includes('pn_con'));
-  assert.ok(ids({...base, thanh_vien: ['ong_ba']}).includes('pn_ong_ba'));
+  assert.ok(!ids(base).includes('pn_phong') && ids({...base, pn_so: '3'}).includes('pn_phong'));
   assert.ok(!ids(base).includes('tho_loai') && ids({...base, tho_co: 'phong_rieng'}).includes('tho_loai'));
   assert.ok(!ids({...base, tho_co: 'khong'}).includes('tho_loai'));
   assert.ok(!ids({...base, tb_muc: 'khong'}).includes('tb_loai') && ids({...base, tb_muc: 'nhieu'}).includes('tb_loai'));
@@ -73,11 +71,29 @@ test('thứ tự tổng thể → chi tiết; lựa chọn ẩn theo loại nhà
   const opts = (a, id) => D.visibleQuestions(a).find(q => q.id === id).options.map(o => o.v);
   assert.ok(!opts({loai_nha: 'chung_cu'}, 'lt_kho').includes('gam') && opts({loai_nha: 'nha_pho'}, 'lt_kho').includes('gam'), 'gầm cầu thang chỉ cho nhà phố');
   assert.ok(!opts({loai_nha: 'chung_cu'}, 'kt_dien').includes('ba_pha'));
-  assert.ok(!ids({loai_nha: 'chung_cu', thanh_vien: ['ong_ba']}).includes('pn_ong_ba'), 'chung cư không hỏi tầng cho ông bà');
+  assert.ok(!opts({loai_nha: 'chung_cu'}, 'kt_dien').includes('tu_dien') && !opts({loai_nha: 'chung_cu'}, 'kt_nuoc').includes('nong_tong'));
+  assert.ok(opts({loai_nha: 'chung_cu', tinh_trang: 'co_ban'}, 'kt_nuoc').includes('co_binh') && !opts({loai_nha: 'chung_cu', tinh_trang: 'tho'}, 'kt_nuoc').includes('co_binh'));
   const a = D.cleanAnswers({bep_thiet_bi: ['lo_nuong', 'tu_lanh_lon'], 'bep_thiet_bi.lo_nuong': ['am_tu', 'la'], 'bep_thiet_bi.tu_lanh_lon': ['am_tuong'], 'bep_thiet_bi.rua_bat': ['am_tu']});
   assert.deepEqual(a['bep_thiet_bi.lo_nuong'], ['am_tu']);
   assert.ok(!('bep_thiet_bi.rua_bat' in a), 'bỏ tích nhỏ khi ô chính chưa chọn');
   assert.equal(D.answerText(D.QUESTION_BY_ID.bep_thiet_bi, a), 'Lò nướng (Âm tủ), Tủ lạnh lớn (side-by-side) (Âm tường)');
+});
+
+test('loại trừ: "Không" và tích nhỏ cùng nhóm; ngày nhập trạch; bảng phòng ngủ', () => {
+  const a = D.cleanAnswers({thu_cung: ['khong', 'cho'], sanh: ['khong'], bep_thiet_bi: ['tu_lanh_lon', 'rua_bat'], 'bep_thiet_bi.tu_lanh_lon': ['am_tu', 'am_tuong'],
+    'bep_thiet_bi.rua_bat': ['am_tu', 'dat_cao'], ns_nhap_trach: '2027-01-15', pn_so: '2',
+    pn_phong: [{who: 'vo_chong', items: ['wic', 'ban_hoc', 'x'], bed: '1m8', mat: 'go'}, {who: 'la', items: ['wc_rieng'], bed: '9m'}, {who: 'khach'}]});
+  assert.deepEqual(a.thu_cung, ['cho']);
+  assert.deepEqual(a.sanh, ['khong']);
+  assert.deepEqual(a['bep_thiet_bi.tu_lanh_lon'], ['am_tu'], 'Âm tủ / Âm tường chỉ chọn 1');
+  assert.deepEqual(a['bep_thiet_bi.rua_bat'], ['am_tu', 'dat_cao'], 'nhóm độc lập giữ cả hai');
+  assert.equal(a.ns_nhap_trach, '2027-01-15');
+  assert.ok(!('ns_nhap_trach' in D.cleanAnswers({ns_nhap_trach: '15/01/2027'})));
+  assert.equal(D.answerText(D.QUESTION_BY_ID.ns_nhap_trach, a), '15/01/2027 (8/12 âm lịch)');
+  assert.deepEqual(a.pn_phong[0], {who: 'vo_chong', items: ['wic'], bed: '1m8', mat: 'go'}, 'bàn học không dành cho phòng vợ chồng');
+  assert.deepEqual(a.pn_phong[1], {who: '', items: [], bed: '', mat: ''});
+  assert.equal(D.answerText(D.QUESTION_BY_ID.pn_phong, a), 'P1 Vợ chồng: Phòng thay đồ, giường 1m8, Giường gỗ', 'chỉ tính số phòng đã chọn');
+  assert.ok(!('pn_phong' in D.cleanAnswers({pn_phong: 'x'})));
 });
 
 // Kho giả + response giả để thử route mà không cần mở server
