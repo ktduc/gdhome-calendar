@@ -36,7 +36,8 @@
     return {selector: selectorOf(el), tag: el.tagName.toLowerCase(), text, hint, size: Math.round(r.width) + '×' + Math.round(r.height)};
   }
   const findEl = note => { try { return note.page === page() && document.querySelector(note.selector); } catch { return null; } };
-  const ours = el => el?.closest?.('.rd-ui');
+  // Hộp thoại đang mở (vd xác nhận "Xoá góp ý") phải bấm được, không bị chế độ chọn nuốt mất
+  const ours = el => el?.closest?.('.rd-ui, dialog[open]');
 
   function ui() {
     box = document.createElement('div');

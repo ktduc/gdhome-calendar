@@ -2429,6 +2429,14 @@ cases['rd'] = async page => {
   const text = await page.evaluate(() => GDHomeRd.prompt());
   assert.match(text,/## Trang \/thong-ke[\s\S]*Ô tìm kiếm rộng hơn[\s\S]*#tk-search/);
   assert.match(text,/## Trang \/tools[\s\S]*2\. Thẻ này đổi màu[\s\S]*Mẫu trả lời khách/);
+  // Xoá hết khi đang ở chế độ chọn: hộp xác nhận bấm được (trước đây bị chặn, web đơ)
+  if (await page.locator('[data-rd=pick][aria-pressed=false]').count()) await page.locator('[data-rd=pick]').click();
+  await page.locator('[data-rd=clear]').click();
+  await page.locator('dialog.gd-ask [data-ask="cancel"]').click();
+  assert.equal(await page.locator('dialog.gd-ask[open]').count(),0,'Huỷ đóng được hộp xác nhận');
+  await page.locator('[data-rd=clear]').click();
+  await page.locator('dialog.gd-ask [data-ask="ok"]').click();
+  await page.waitForFunction(() => !JSON.parse(localStorage.getItem('gdhome_rd_notes') || '[]').length);
   await page.locator('[data-rd=exit]').click();
   assert.equal(await page.locator('.rd-panel').count(),0);
   // Phiếu mẫu: có thanh tài khoản + bật R&D để góp ý; icon là SVG đơn sắc, không còn emoji
