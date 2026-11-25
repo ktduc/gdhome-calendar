@@ -8,28 +8,41 @@
 .ks-top p { margin: 0; font-size: 13px; color: var(--ks-muted); }
 .ks-progress { position: sticky; top: 0; z-index: 5; height: 5px; background: var(--ks-soft); }
 .ks-progress i { display: block; height: 100%; width: 0; background: var(--ks-brown); transition: width .25s; }
-.ks-main { max-width: 720px; margin: 0 auto; padding: 18px 16px 110px; }
+.ks-main { max-width: 760px; margin: 0 auto; padding: 18px 16px 110px; }
 .ks-loading, .ks-error { text-align: center; color: var(--ks-muted); padding: 40px 0; }
-.ks-title { margin: 0 0 4px; font-size: 22px; color: var(--ks-brown); }
-.ks-intro { margin: 0 0 18px; color: var(--ks-muted); font-size: 14px; }
-.ks-notice { margin: 0 0 14px; padding: 10px 12px; border-radius: 10px; background: #fff; border: 1px solid var(--ks-line); font-size: 14px; color: var(--ks-brown); }
-.ks-q { margin: 0 0 22px; padding: 0; border: 0; min-width: 0; }
-.ks-q legend, .ks-q > label.ks-qt { display: block; padding: 0; margin: 0 0 8px; font-weight: 500; font-size: 16px; }
-.ks-hint { font-weight: 400; font-size: 12.5px; color: var(--ks-muted); }
-.ks-opts { display: grid; gap: 8px; }
-.ks-opt { position: relative; display: block; }
+/* Đầu nhóm: icon lớn + tên + giới thiệu */
+.ks-ghead { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.ks-gicon { flex: none; display: grid; place-items: center; width: 48px; height: 48px; border-radius: 14px; background: #fff; border: 1px solid var(--ks-line); font-size: 26px; }
+.ks-title { margin: 0; font-size: 20px; line-height: 1.25; color: var(--ks-brown); }
+.ks-intro { margin: 2px 0 0; color: var(--ks-muted); font-size: 13.5px; }
+.ks-notice { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: #fff; border: 1px solid var(--ks-line); font-size: 14px; color: var(--ks-brown); }
+/* Mỗi câu hỏi = 1 khung riêng; viền trái đổi màu khi đã trả lời */
+.ks-q { margin: 0 0 10px; padding: 12px 12px 12px; min-width: 0; border: 1px solid var(--ks-line); border-left: 4px solid var(--ks-line); border-radius: 14px; background: #fff; box-shadow: 0 1px 2px rgba(59,51,41,.04); }
+.ks-q.is-done { border-left-color: var(--ks-brown); }
+.ks-qhead { display: flex; align-items: flex-start; gap: 8px; float: left; width: 100%; padding: 0; margin: 0 0 10px; font-weight: 500; font-size: 15.5px; line-height: 1.35; }
+.ks-qhead + * { clear: both; }
+.ks-num { flex: none; display: grid; place-items: center; min-width: 22px; height: 22px; padding: 0 5px; border-radius: 11px; background: var(--ks-soft); color: var(--ks-brown); font-size: 12px; font-weight: 700; margin-top: 1px; }
+.ks-q.is-done .ks-num { background: var(--ks-brown); color: #fff; }
+.ks-qi { flex: none; font-size: 18px; line-height: 1.2; }
+.ks-qtext { min-width: 0; }
+.ks-hint { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 8px; background: var(--ks-soft); font-weight: 400; font-size: 11.5px; color: var(--ks-muted); vertical-align: 1px; }
+/* Lựa chọn: thẻ gọn, có icon, xếp lưới tự co theo bề rộng */
+.ks-opts { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.ks-opt { position: relative; display: block; min-width: 0; }
 .ks-opt input { position: absolute; opacity: 0; inset: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.ks-opt span { display: flex; align-items: center; gap: 10px; min-height: 50px; padding: 10px 14px; border: 1.5px solid var(--ks-line); border-radius: 12px; background: #fff; transition: border-color .15s, background .15s; }
-.ks-opt span::before { content: ""; flex: none; width: 20px; height: 20px; border: 2px solid var(--ks-line); border-radius: 50%; background: #fff; }
-.ks-many .ks-opt span::before { border-radius: 6px; }
-.ks-opt input:checked + span { border-color: var(--ks-brown); background: var(--ks-soft); font-weight: 500; }
-.ks-opt input:checked + span::before { border-color: var(--ks-brown); background: var(--ks-brown) radial-gradient(#fff 35%, transparent 38%); }
-.ks-many .ks-opt input:checked + span::before { background: var(--ks-brown); box-shadow: inset 0 0 0 3px #fff; }
+.ks-opt span { display: flex; align-items: center; gap: 8px; height: 100%; min-height: 42px; padding: 7px 10px; border: 1.5px solid var(--ks-line); border-radius: 10px; background: #fbfaf8; font-size: 14px; line-height: 1.3; transition: border-color .15s, background .15s; }
+.ks-opt i { flex: none; font-style: normal; font-size: 18px; line-height: 1; }
+.ks-opt b { font-weight: 400; min-width: 0; }
+.ks-opt span::after { content: ""; flex: none; margin-left: auto; width: 16px; height: 16px; border: 2px solid var(--ks-line); border-radius: 50%; background: #fff; }
+.ks-many .ks-opt span::after { border-radius: 5px; }
+.ks-opt input:checked + span { border-color: var(--ks-brown); background: var(--ks-soft); }
+.ks-opt input:checked + span b { font-weight: 500; }
+.ks-opt input:checked + span::after { border-color: var(--ks-brown); background: var(--ks-brown) radial-gradient(#fff 32%, transparent 36%); }
+.ks-many .ks-opt input:checked + span::after { background: var(--ks-brown); box-shadow: inset 0 0 0 2.5px #fff; }
 .ks-opt input:focus-visible + span { outline: 3px solid #b9a98f; outline-offset: 1px; }
-.ks-q input[type=text], .ks-q textarea { width: 100%; margin-top: 8px; padding: 12px 14px; border: 1.5px solid var(--ks-line); border-radius: 12px; background: #fff; color: inherit; font: inherit; }
-.ks-q textarea { margin-top: 0; min-height: 88px; resize: vertical; }
-.ks-q input[type=text]:focus, .ks-q textarea:focus { outline: none; border-color: var(--ks-brown); }
-.ks-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid var(--ks-line); }
+.ks-q input[type=text], .ks-q textarea { width: 100%; margin-top: 6px; padding: 10px 12px; border: 1.5px solid var(--ks-line); border-radius: 10px; background: #fbfaf8; color: inherit; font: inherit; font-size: 15px; }
+.ks-q textarea { margin-top: 0; min-height: 72px; resize: vertical; }
+.ks-q input[type=text]:focus, .ks-q textarea:focus { outline: none; border-color: var(--ks-brown); background: #fff; }.ks-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid var(--ks-line); }
 .ks-nav[hidden] { display: none; }
 .ks-stepno { color: var(--ks-muted); font-size: 13px; }
 .ks-btn { min-height: 48px; padding: 0 22px; border-radius: 12px; border: 1.5px solid var(--ks-brown); font: 500 16px Roboto, system-ui, sans-serif; cursor: pointer; }
@@ -39,4 +52,5 @@
 .ks-thanks { text-align: center; padding: 36px 8px; }
 .ks-thanks h2 { color: var(--ks-brown); margin: 8px 0; }
 .ks-thanks .ks-btn { margin-top: 14px; }
-@media (min-width: 720px) { .ks-opts.ks-grid2 { grid-template-columns: 1fr 1fr; } .ks-main { padding-top: 28px; } }
+@media (min-width: 720px) { .ks-main { padding-top: 24px; } }
+@media (max-width: 380px) { .ks-opts { grid-template-columns: 1fr; } }
