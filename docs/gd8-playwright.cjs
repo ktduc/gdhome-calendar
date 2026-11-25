@@ -2431,6 +2431,15 @@ cases['rd'] = async page => {
   assert.match(text,/## Trang \/tools[\s\S]*2\. Thẻ này đổi màu[\s\S]*Mẫu trả lời khách/);
   await page.locator('[data-rd=exit]').click();
   assert.equal(await page.locator('.rd-panel').count(),0);
+  // Phiếu mẫu: có thanh tài khoản + bật R&D để góp ý; icon là SVG đơn sắc, không còn emoji
+  await page.goto('/khao-sat/mau',{waitUntil:'domcontentloaded'});
+  await page.locator('.ks-opt svg').first().waitFor();
+  assert.equal(await page.locator('.ks-opt i').evaluateAll(list => list.filter(i => !i.querySelector('svg')).length),0,'Icon lựa chọn đều là SVG');
+  await page.locator('.shell-rd-item:not([hidden])').waitFor({state:'attached'});
+  await page.locator('.shell-user-chip').click();
+  await page.locator('.shell-rd-item').click();
+  await page.locator('.rd-panel').waitFor();
+  await page.locator('[data-rd=exit]').click();
 };
 
 cases['home'] = async page => {

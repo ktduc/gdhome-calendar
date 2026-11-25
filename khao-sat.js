@@ -13,7 +13,14 @@
   };
   // /khao-sat/mau: phiếu mẫu cho GD HOME xem thử và góp ý R&D – không đọc/ghi server
   const preview = token === 'mau';
-  if (preview) for (const src of ['/shell.js']) document.head.append(Object.assign(document.createElement('script'), {src}));
+  // Phiếu mẫu: thêm thanh trên giống các trang công cụ (tài khoản, menu R&D) để góp ý trực tiếp
+  if (preview) {
+    document.body.classList.add('ks-preview');
+    document.body.insertAdjacentHTML('afterbegin', '<header class="app-header"><div class="header-left"><a class="app-logo" href="/tools"><img class="header-logo-img" src="/gdhome-icon.png" alt="GD HOME"><span>Phiếu mẫu</span></a><details class="gd-tools-menu" data-shell-menu></details></div>' +
+      '<div class="header-right"><div class="shell-toolbar"></div><div class="shell-account"><strong id="identity"></strong></div></div></header>');
+    document.head.append(Object.assign(document.createElement('link'), {rel: 'stylesheet', href: '/shell.css'}));
+    document.head.append(Object.assign(document.createElement('script'), {src: '/shell.js'}));
+  }
   const api = async (method, body) => {
     if (preview) return method === 'GET' ? {name: 'Phiếu mẫu · xem thử (không lưu)', answers: {}} : {submittedAt: Date.now()};
     const res = await fetch('/api/survey/' + encodeURIComponent(token), {method, headers: {'Content-Type': 'application/json'}, body: body && JSON.stringify(body)});
@@ -77,10 +84,11 @@
     'ns_quyet_dinh.mot': '🙋', 'ns_quyet_dinh.vo_chong': '💑', 'ns_quyet_dinh.gia_dinh': '👨‍👩‍👧',
     khong: '🚫', chua_biet: '❓', co: '✅', da_biet: '✅'
   };
+  const I = emoji => window.GDHomeSurveyIcons ? GDHomeSurveyIcons.svg(emoji) : emoji;   // icon nét đơn sắc (khao-sat-icons.js)
   const optIcon = (q, o) => OPT_ICON[q.id + '.' + o.v] || OPT_ICON[o.v] || '';
 
   function questionHtml(q, n) {
-    const head = '<span class="ks-num">' + n + '</span><span class="ks-qi" aria-hidden="true">' + (Q_ICON[q.id] || '•') + '</span><span class="ks-qtext">' + esc(q.text) +
+    const head = '<span class="ks-num">' + n + '</span><span class="ks-qi" aria-hidden="true">' + I(Q_ICON[q.id] || '•') + '</span><span class="ks-qtext">' + esc(q.text) +
       (q.type === 'many' ? ' <span class="ks-hint">chọn nhiều</span>' : '') + '</span>';
     if (q.type === 'text') {
       return '<div class="ks-q"><label class="ks-qhead" for="q-' + q.id + '">' + head + '</label><textarea id="q-' + q.id + '" data-q="' + q.id + '" maxlength="1000">' + esc(state.answers[q.id] || '') + '</textarea></div>';
@@ -89,9 +97,9 @@
     const opts = q.options.map(o => {
       const icon = optIcon(q, o);
       return '<label class="ks-opt"><input type="' + kind + '" name="' + q.id + '" data-q="' + q.id + '" value="' + esc(o.v) + '"' +
-        (has(q.id, o.v) ? ' checked' : '') + '><span>' + (icon ? '<i aria-hidden="true">' + icon + '</i>' : '') + '<b>' + esc(o.l) + '</b></span></label>';
+        (has(q.id, o.v) ? ' checked' : '') + '><span>' + (icon ? '<i aria-hidden="true">' + I(icon) + '</i>' : '') + '<b>' + esc(o.l) + '</b></span></label>';
     }).join('');
-    const other = q.other ? '<input type="text" data-other="' + q.id + '" maxlength="300" placeholder="✏️ Khác… (ghi rõ)" value="' + esc(state.answers[q.id + '.khac'] || '') + '">' : '';
+    const other = q.other ? '<input type="text" data-other="' + q.id + '" maxlength="300" placeholder="Khác… (ghi rõ)" value="' + esc(state.answers[q.id + '.khac'] || '') + '">' : '';
     const answered = [].concat(state.answers[q.id] ?? []).length > 0;
     return '<fieldset class="ks-q ks-' + q.type + (answered ? ' is-done' : '') + '"><legend class="ks-qhead">' + head + '</legend><div class="ks-opts">' + opts + '</div>' + other + '</fieldset>';
   }
@@ -108,7 +116,7 @@
       return;
     }
     main.innerHTML = (state.step === 0 && state.submittedAt ? '<p class="ks-notice">Mình đã gửi khảo sát lúc ' + time(state.submittedAt) + '. Có thể chỉnh sửa rồi gửi lại.</p>' : '') +
-      '<header class="ks-ghead"><span class="ks-gicon" aria-hidden="true">' + (GROUP_ICON[group.id] || '📋') + '</span><div><h2 class="ks-title">' + esc(group.title) + '</h2><p class="ks-intro">' + esc(group.intro || '') + '</p></div></header>' +
+      '<header class="ks-ghead"><span class="ks-gicon" aria-hidden="true">' + I(GROUP_ICON[group.id] || '📋') + '</span><div><h2 class="ks-title">' + esc(group.title) + '</h2><p class="ks-intro">' + esc(group.intro || '') + '</p></div></header>' +
       group.questions.map((q, i) => questionHtml(q, i + 1)).join('') +
       (state.error ? '<p class="ks-notice" role="alert">' + esc(state.error) + '</p>' : '');
     const last = state.step === groups.length - 1;

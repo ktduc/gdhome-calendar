@@ -54,3 +54,12 @@
 .ks-thanks .ks-btn { margin-top: 14px; }
 @media (min-width: 720px) { .ks-main { padding-top: 24px; } }
 @media (max-width: 380px) { .ks-opts { grid-template-columns: 1fr; } }
+
+/* Icon nét đơn sắc (khao-sat-icons.js) thay emoji */
+.ks-svg { display: block; width: 1em; height: 1em; }
+.ks-gicon { color: var(--ks-brown); }
+.ks-qi { display: inline-grid; place-items: center; color: var(--ks-brown); }
+.ks-opt i { display: inline-grid; place-items: center; color: #6f6355; }
+.ks-opt input:checked + span i { color: var(--ks-brown); }
+/* Phiếu mẫu: thanh trên của GD HOME Tools */
+.ks-preview .app-header { position: sticky; top: 0; z-index: 50; }
