@@ -9,6 +9,9 @@
   const esc = value => GDHomeShell.escape(value);
   const toast = message => GDHomeShell.toast(message);
   const PALETTE = ['#7d8f69', '#7a2e2e', '#4d6188', '#8c7d6b', '#5f7f8c', '#9a6b3f', '#6b5b8c'];
+  // Bảng chọn màu hạng mục: hàng trên 9 màu nhạt, hàng dưới 9 màu đậm (lưu mã hex như cũ)
+  const SWATCHES = ['#f4b6b6', '#f7c99b', '#f6e08f', '#cbe6a2', '#a9e0c6', '#a5d8ec', '#b7c7f2', '#d3bdf0', '#f2b5d9',
+    '#c0392b', '#d9722e', '#c99a14', '#5f8f3a', '#2e8f6b', '#2f7fa8', '#3f5fbf', '#7a4fb5', '#b83a80'];
   let doc = null, version = 0, current = null, saveTimer = null;
   let queue = {jobs: [], avgMs: 45000, now: Date.now()}, queueTimer = null, clockSkew = 0;
   let activeSlot = null;
@@ -160,10 +163,10 @@
       const fresh = boards.filter(b => b.status === 'new'), ok = boards.filter(b => b.status !== 'new');
       const item = b => `<li class="${b.status === 'new' ? 'is-new' : ''} ${b.id === current ? 'is-active' : ''}" draggable="true" data-board-id="${esc(b.id)}"><button type="button" data-board="${esc(b.id)}">${esc(b.heading || b.idea || 'Bảng chưa đặt tên')}</button></li>`;
       return `<section class="cmp-cat" data-cat="${esc(cat.id)}">
-        <div class="cmp-cat-head" draggable="true" title="Kéo để đổi thứ tự hạng mục"><span class="cmp-grip" aria-hidden="true">⋮⋮</span>
-          <input type="color" value="${esc(cat.color)}" title="Màu góc hạng mục" aria-label="Màu hạng mục ${esc(cat.name)}">
+        <div class="cmp-cat-head" draggable="true" title="Kéo để đổi thứ tự · chuột phải: menu"><span class="cmp-grip" aria-hidden="true">⋮⋮</span>
+          <button type="button" class="cmp-sw" data-sw style="--c:${esc(cat.color)}" title="Màu góc hạng mục" aria-label="Màu hạng mục ${esc(cat.name)}"></button>
           <span class="cmp-cat-name" title="Nháy đúp để đổi tên">${esc(cat.name)}</span><small>${boards.length}</small>
-          ${boards.length ? '' : '<button type="button" class="cmp-cat-del" data-cat-del title="Xoá hạng mục trống">×</button>'}</div>
+          ${boards.length ? '<span></span>' : '<button type="button" class="cmp-cat-del" data-cat-del title="Xoá hạng mục trống">×</button>'}</div>
         <ul class="cmp-boards">${fresh.map(item).join('')}${fresh.length && ok.length ? '<li class="cmp-sep" aria-hidden="true"></li>' : ''}${ok.map(item).join('')}</ul>
       </section>`;
     }).join('');
@@ -223,6 +226,70 @@
       save();
     });
     tree.addEventListener('dragend', () => { drag = null; clear(); });
+  }
+
+  // ---------------------------------------------------------------- BẢNG MÀU + MENU CHUỘT PHẢI (hạng mục)
+  let pop = null;
+  const closePop = () => { pop?.remove(); pop = null; };
+  function openPop(anchor, html, onClick) {
+    closePop();
+    pop = Object.assign(document.createElement('div'), {className: 'cmp-pop', innerHTML: html});
+    pop.addEventListener('click', e => { const b = e.target.closest('button:not([disabled])'); if (b) { closePop(); onClick(b); } });
+    document.body.append(pop);
+    const r = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : {left: anchor.x, bottom: anchor.y};
+    pop.style.left = Math.max(4, Math.min(r.left, innerWidth - pop.offsetWidth - 4)) + 'px';
+    pop.style.top = Math.max(4, Math.min(r.bottom + 4, innerHeight - pop.offsetHeight - 4)) + 'px';
+  }
+  document.addEventListener('mousedown', e => { if (pop && !pop.contains(e.target)) closePop(); }, true);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closePop(); });
+  addEventListener('blur', closePop);
+  addEventListener('resize', closePop);
+  const catById = id => doc.categories.find(c => c.id === id);
+  function openSwatches(btn) {
+    const cat = catById(btn.closest('[data-cat]').dataset.cat), cur = String(cat.color).toLowerCase();
+    openPop(btn, `<div class="cmp-swatches">${SWATCHES.map(c => `<button type="button" data-c="${c}" style="--c:${c}" class="${c === cur ? 'is-cur' : ''}" title="${c}" aria-label="${c}"></button>`).join('')}</div>`, b => {
+      cat.color = b.dataset.c;
+      renderTree();
+      save();
+      renderSheet();
+    });
+  }
+  async function renameCat(cat) {
+    const name = (await GDHomeShell.prompt('Đổi tên hạng mục:', cat.name))?.trim();
+    if (!name) return;
+    cat.name = name.toUpperCase();
+    renderAll();
+    save();
+  }
+  async function addCatAfter(cat) {
+    const name = (await GDHomeShell.prompt('Tên hạng mục lớn (vd: VẬT LIỆU, CỬA, ĐIỆN NƯỚC):', '', {okText: 'Thêm'}))?.trim();
+    if (!name) return;
+    const made = categoryFor(name);
+    if (cat && made !== cat) { doc.categories = doc.categories.filter(c => c !== made); doc.categories.splice(doc.categories.indexOf(cat) + 1, 0, made); }
+    renderTree();
+    save();
+  }
+  function moveCat(cat, step) {
+    const i = doc.categories.indexOf(cat), j = i + step;
+    if (j < 0 || j >= doc.categories.length) return;
+    doc.categories.splice(i, 1);
+    doc.categories.splice(j, 0, cat);
+    renderAll();
+    save();
+  }
+  async function deleteCat(cat) {
+    if (doc.boards.some(b => b.categoryId === cat.id)) return toast('Hạng mục còn bảng: chuyển hết bảng sang hạng mục khác rồi mới xoá.');
+    if (!await GDHomeShell.confirm({title: 'Xoá hạng mục?', groups: [{items: [cat.name]}], message: 'Ctrl+Z để hoàn tác.', okText: 'Xoá', danger: true})) return;
+    doc.categories = doc.categories.filter(c => c !== cat);
+    renderAll();
+    save();
+  }
+  function openCatMenu(e, cat) {
+    const i = doc.categories.indexOf(cat), used = doc.boards.some(b => b.categoryId === cat.id);
+    const item = (a, label, off, danger) => `<button type="button" role="menuitem" data-a="${a}" ${off ? 'disabled' : ''} class="${danger ? 'is-danger' : ''}">${label}</button>`;
+    openPop({x: e.clientX, y: e.clientY - 4}, `<div class="cmp-menu" role="menu">${item('add', 'Thêm hạng mục')}${item('rename', 'Đổi tên')}${item('up', 'Lên trên', i === 0)}${item('down', 'Xuống dưới', i === doc.categories.length - 1)}${item('del', used ? 'Xoá (còn bảng)' : 'Xoá', used, true)}</div>`, b => {
+      ({add: addCatAfter, rename: renameCat, up: c => moveCat(c, -1), down: c => moveCat(c, 1), del: deleteCat})[b.dataset.a](cat);
+    });
   }
 
   // ---------------------------------------------------------------- DÀN TRANG
@@ -537,7 +604,7 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
   // Giảm số phương án: cho chọn đúng k phương án muốn bỏ (mặc định tích các phương án cuối)
   // Dựng lại toàn bộ prompt của hộp "Gửi bảng này qua AI khác" theo bảng đang mở (gọi khi mở hộp và mỗi lần sửa bảng)
   async function refreshPrompts() {
-    const dlg = byId('cmp-prompt-dlg'), b = board();
+    const dlg = byId('cmp-prompt-dlg'), b = board(), seq = ++promptSeq;
     if (!b) return;
     dlg.dataset.board = b.id;
     byId('cmp-img-all').value = allImagesPrompt(b);
@@ -545,13 +612,13 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
     byId('cmp-img-prompts').innerHTML = imagePrompts(b).map((text, i) => `<div class="cmp-img-prompt"><div><b>Cột ${i + 1}: ${esc(b.columns[i].name || '')}</b>
       <button type="button" class="gd-ask-btn" data-pr="copy-img" data-i="${i}">📋 Copy prompt ảnh</button></div><textarea readonly rows="3">${esc(text)}</textarea></div>`).join('');
     const {prompt} = await post('/api/compare/prompt', {board: b, categories: doc.categories.map(c => c.name)});
-    if (board() === b) byId('cmp-prompt-text').value = prompt;
+    if (board() === b && seq === promptSeq) byId('cmp-prompt-text').value = prompt;   // bỏ kết quả cũ về muộn
   }
-  let promptTimer = null;
-  const refreshPromptsSoon = () => {
+  let promptTimer = null, promptSeq = 0;
+  const refreshPromptsSoon = (delay = 500) => {
     if (!byId('cmp-prompt-dlg')?.open) return;
     clearTimeout(promptTimer);
-    promptTimer = setTimeout(() => refreshPrompts().catch(() => {}), 500);
+    promptTimer = setTimeout(() => refreshPrompts().catch(() => {}), delay);
   };
   function pickColumnsToRemove(b, k) {
     return new Promise(resolve => {
@@ -600,7 +667,7 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       document.querySelector('#cs-sheet [data-f="heading"]')?.focus();
       toast('Bảng trống: gõ tiêu đề, tên phương án, dán ảnh (Ctrl+V) rồi tự điền hoặc bấm ✨ AI điền bảng.');
     };
-    byId('cmp-notes').oninput = e => { const b = board(); if (b) { b.notes = e.target.value; save({typing: true}); } };
+    byId('cmp-notes').oninput = e => { const b = board(); if (b) { b.notes = e.target.value; save({typing: true}); refreshPromptsSoon(120); } };   // prompt theo kịp từng phím gõ
     byId('cmp-fill').onclick = async () => {
       const b = board(), btn = byId('cmp-fill');
       if (!b) return;
@@ -679,23 +746,12 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
         toast(done + (copied ? ' Đã copy sẵn prompt ảnh ghép – dán vào Gemini.' : ' Bấm Copy prompt ảnh ghép để lấy prompt ảnh.'));
       } catch (error) { GDHomeShell.alert(error.message); }
     };
-    byId('cmp-add-cat').onclick = async () => {
-      const name = (await GDHomeShell.prompt('Tên hạng mục lớn (vd: VẬT LIỆU, CỬA, ĐIỆN NƯỚC):', '', {okText: 'Thêm'}))?.trim();
-      if (!name) return;
-      categoryFor(name);
-      renderTree();
-      save();
-    };
+    byId('cmp-add-cat').onclick = () => addCatAfter(null);
     const tree = byId('cmp-tree');
     wireTreeDrag(tree);
     tree.onclick = e => {
-      if (e.target.closest('[data-cat-del]')) {
-        const id = e.target.closest('[data-cat]').dataset.cat;
-        doc.categories = doc.categories.filter(c => c.id !== id);
-        renderAll();
-        save();
-        return;
-      }
+      if (e.target.closest('[data-sw]')) return openSwatches(e.target.closest('[data-sw]'));
+      if (e.target.closest('[data-cat-del]')) return deleteCat(catById(e.target.closest('[data-cat]').dataset.cat));
       const btn = e.target.closest('[data-board]');
       if (!btn) return;
       current = btn.dataset.board;
@@ -704,22 +760,15 @@ No text, no labels, no numbers, no frames other than the white gutters, no water
       renderSheet();
       refreshPromptsSoon();   // hộp prompt đang mở thì chuyển theo bảng vừa chọn
     };
-    tree.addEventListener('change', e => {
-      if (e.target.type !== 'color') return;
-      const cat = doc.categories.find(c => c.id === e.target.closest('[data-cat]').dataset.cat);
-      cat.color = e.target.value;
-      save();
-      renderSheet();
+    tree.addEventListener('contextmenu', e => {
+      const head = e.target.closest('.cmp-cat-head');
+      if (!head) return;
+      e.preventDefault();
+      openCatMenu(e, catById(head.closest('[data-cat]').dataset.cat));
     });
-    tree.addEventListener('dblclick', async e => {
+    tree.addEventListener('dblclick', e => {
       const span = e.target.closest('.cmp-cat-name');
-      if (!span) return;
-      const cat = doc.categories.find(c => c.id === span.closest('[data-cat]').dataset.cat);
-      const name = (await GDHomeShell.prompt('Đổi tên hạng mục:', cat.name))?.trim();
-      if (!name) return;
-      cat.name = name.toUpperCase();
-      renderAll();
-      save();
+      if (span) renameCat(catById(span.closest('[data-cat]').dataset.cat));
     });
 
     byId('cmp-cat-select').onchange = e => { board().categoryId = e.target.value; renderAll(); save(); };

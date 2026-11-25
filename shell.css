@@ -1018,7 +1018,7 @@ body{-webkit-font-smoothing:antialiased}
 .gd-tools-menu nav :is(a,button){display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;border-radius:10px;
   text-align:center;font:500 12.5px/1.25 var(--gd-font);color:#1d1d1f;background:transparent}
 .gd-tools-menu nav :is(a,button):hover{background:rgba(0,0,0,.05)}
-.gd-tools-menu nav a[aria-current=page]{background:rgba(10,132,255,.1);color:#0a64d8}
+.gd-tools-menu nav a[aria-current=page]{background:var(--gd-sidebar-background);color:var(--gd-tone-accent,#7d2025)}
 .gd-menu-glyph{font-size:22px;line-height:1}
 @media(max-width:560px){.gd-menu-row{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .app-header:has(details[open]){z-index:1000}   /* menu đang mở nổi trên bảng Việc cần làm (z 900) */
@@ -1032,3 +1032,27 @@ html[data-tone] body{background:var(--gd-page-bg)}
 html[data-tone] :is(.app-sidebar,.material-sidebar,.shell-sidebar){background-color:var(--gd-sidebar-background)}
 .gd-tools-menu summary{color:var(--gd-tone-accent)}
 html[data-theme="dark"] .home-cover{filter:invert(1) hue-rotate(180deg)}   /* ảnh bìa giữ đúng màu khi giao diện tối */
+
+/* ===== Nút tone trên thanh trên, tone Giảm sáng, menu công cụ bật ra + làm tối nền (25/11/2026) ===== */
+.shell-tone>summary{list-style:none;display:grid;place-items:center;width:32px;height:32px;border-radius:50%;cursor:pointer}
+.shell-tone>summary::-webkit-details-marker{display:none}
+.shell-tone-dot{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18),0 0 0 2px #fff,0 0 0 3px rgba(0,0,0,.12)}
+.shell-tone-menu{right:0;left:auto;min-width:190px}
+.shell-tone-title{padding:4px 8px 6px;color:#8e8e93;font-size:11.5px;font-weight:600}
+.shell-tone-menu .hdr-menu-item{display:flex;align-items:center;gap:10px;width:100%}
+.shell-tone-swatch{width:18px;height:18px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.shell-tone-menu [aria-pressed=true]{background:rgba(10,132,255,.1);font-weight:600}
+/* Giảm sáng: tone Cát, cả trang dịu xuống (không đảo màu như Đêm) */
+html[data-tone=dim]{--gd-page-bg:#e4ded4;--gd-sidebar-background:#d9d2c6;--gd-overlay-bg:#ece6dc;--gd-dialog-bg:#ece6dc;--gd-ios-glass:rgba(232,226,216,.88);--gd-tone-accent:#6b2a2d}
+html[data-tone=dim],html[data-tone=dim] dialog{filter:brightness(.88) saturate(.92)}
+/* Menu GD HOME Tools: bật ra (phóng nhẹ) và làm tối phần còn lại của trang */
+.gd-tools-menu[open]>summary{background:var(--gd-tone-accent,#7d2025);color:#fff;border-color:transparent;box-shadow:0 4px 14px rgba(0,0,0,.18)}
+.gd-tools-menu[open]>summary::after{color:rgba(255,255,255,.75)}
+.gd-tools-menu[open]>nav{transform-origin:top left;animation:gdMenuPop .22s cubic-bezier(.2,.9,.3,1.25);box-shadow:var(--gd-overlay-shadow),0 0 0 100vmax rgba(15,12,10,.32)!important}
+@keyframes gdMenuPop{from{opacity:0;transform:scale(.92) translateY(-6px)}to{opacity:1;transform:none}}
+.gd-tools-menu nav a,.gd-tools-menu nav button{transition:background .15s,transform .15s}
+.gd-tools-menu nav a:hover,.gd-tools-menu nav button:hover{transform:translateY(-1px)}
+.gd-menu-glyph{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:var(--gd-sidebar-background,#ece6dc);color:var(--gd-tone-accent,#7d2025)}
+.gd-menu-glyph svg{width:22px;height:22px}
+.gd-tools-menu nav a[aria-current=page] .gd-menu-glyph{background:var(--gd-tone-accent,#7d2025);color:#fff}
+@media (prefers-reduced-motion:reduce){.gd-tools-menu[open]>nav{animation:none}}

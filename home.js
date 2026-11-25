@@ -1,28 +1,9 @@
 // Trang chủ GD HOME Tools: ảnh bìa (admin đổi), 2 hàng công cụ theo GDHomeShell.TOOL_ROWS, nền tự chọn (lưu trên máy)
 (() => {
   const $ = s => document.querySelector(s), esc = GDHomeShell.escape;
-  const TONE_NAME = {sand: 'Cát', mist: 'Sương', sage: 'Lá', dusk: 'Hoàng hôn', night: 'Đêm'};
-  const BGS = {
-    sand: 'linear-gradient(180deg,#f5f2ed 0%,#ece6dc 100%)',
-    mist: 'linear-gradient(180deg,#f2f4f7 0%,#e4e9f0 100%)',
-    sage: 'linear-gradient(180deg,#eef3ee 0%,#dfe9df 100%)',
-    dusk: 'linear-gradient(160deg,#e9e4f3 0%,#f6e7e4 100%)',
-    night: 'linear-gradient(180deg,#1f2430 0%,#121519 100%)'
-  };
-
   // Công cụ: 2 hàng, cùng thứ tự với menu GD HOME Tools
   $('#home-tools').innerHTML = GDHomeShell.TOOL_ROWS.map(row => '<div class="home-row">' + row.map(([href, label, glyph, note]) =>
     '<a class="home-tile" href="' + href + '"><span class="home-tile-icon">' + glyph + '</span><strong>' + esc(label) + '</strong><small>' + esc(note) + '</small></a>').join('') + '</div>').join('');
-
-  // Tone màu: đổi ở đây thì mọi trang đổi theo (GDHomeShell.setTone)
-  const bgBar = $('.home-bg');
-  bgBar.insertAdjacentHTML('beforeend', Object.entries(BGS).map(([id, css]) => '<button type="button" data-bg="' + id + '" style="background:' + css + '" title="' + TONE_NAME[id] + '" aria-label="Tone ' + TONE_NAME[id] + '"></button>').join(''));
-  const paintBg = id => bgBar.querySelectorAll('[data-bg]').forEach(b => b.setAttribute('aria-pressed', b.dataset.bg === id));
-  paintBg(GDHomeShell.getTone());
-  bgBar.onclick = event => {
-    const id = event.target.closest('[data-bg]')?.dataset.bg;
-    if (id) paintBg(GDHomeShell.setTone(id));
-  };
 
   // Ảnh bìa
   const cover = $('#home-cover'), actions = cover.querySelector('.home-cover-actions');

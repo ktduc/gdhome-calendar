@@ -46,11 +46,14 @@ window.GDHomeShell = (() => {
     });
   }
   try { applyTheme(localStorage.getItem(THEME_KEY)); } catch { applyTheme('light'); }
-  // Tone màu chung (chọn ở Trang chủ): đổi nền, thanh bên, hộp thoại, nút chính của mọi trang
-  const TONE_KEY = 'gdhome_tone', TONES = ['sand','mist','sage','dusk','night'];
+  // Tone màu chung (chọn ở nút tròn trên thanh trên): đổi nền, thanh bên, hộp thoại, nút chính của mọi trang
+  const TONE_KEY = 'gdhome_tone', TONES = ['sand','mist','sage','dusk','dim','night'];
+  const TONE_INFO = {sand:['Cát','#efe9df'],mist:['Sương','#e6ecf3'],sage:['Lá','#e3ece3'],dusk:['Hoàng hôn','#ece3f0'],dim:['Giảm sáng','#9a948c'],night:['Đêm','#1f2430']};
   function applyTone(tone) {
     tone = TONES.includes(tone) ? tone : 'sand';
-    document.documentElement.dataset.tone = tone === 'night' ? 'sand' : tone;
+    document.documentElement.dataset.tone = tone === 'night' ? 'sand' : tone;   // dim: tone Cát + giảm độ sáng (CSS)
+    document.querySelectorAll('.shell-tone-dot').forEach(dot => { dot.style.background = TONE_INFO[tone][1]; });
+    document.querySelectorAll('[data-tone-pick]').forEach(b => b.setAttribute('aria-pressed',b.dataset.tonePick === tone));
     return tone;
   }
   function setTone(tone) {
@@ -61,7 +64,29 @@ window.GDHomeShell = (() => {
   }
   const getTone = () => { try { return applyTone(localStorage.getItem(TONE_KEY) || localStorage.getItem('gdhome-home-bg')); } catch { return applyTone(); } };
   getTone();
-  window.addEventListener('storage', event => {
+  const toneMenu = () => '<details class="hdr-dropdown shell-tone" data-popup><summary class="icon-btn shell-tone-btn" title="Tone màu toàn web" aria-label="Tone màu toàn web"><span class="shell-tone-dot"></span></summary>' +
+    '<div class="hdr-dropdown-menu shell-tone-menu"><div class="shell-tone-title">Tone màu (mọi trang)</div>' +
+    TONES.map(t => '<button type="button" class="hdr-menu-item" data-tone-pick="' + t + '"><span class="shell-tone-swatch" style="background:' + TONE_INFO[t][1] + '"></span><span>' + TONE_INFO[t][0] + '</span></button>').join('') + '</div></details>';
+  document.addEventListener('click',event => {
+    const pick = event.target.closest?.('[data-tone-pick]');
+    if (!pick) return;
+    setTone(pick.dataset.tonePick);
+    pick.closest('details')?.removeAttribute('open');
+  });
+  // Icon nét đơn sắc (cùng kiểu Lucide) cho các công cụ
+  const SVG = paths => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
+  const TOOL_ICON = {
+    chart: SVG('<path d="M3 3v18h18"/><path d="M8 17v-6"/><path d="M13 17V7"/><path d="M18 17v-3"/>'),
+    chat: SVG('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
+    calendar: SVG('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h2M14 14h2M8 18h2"/>'),
+    tag: SVG('<path d="M20.6 13.4l-7.2 7.2a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>'),
+    folder: SVG('<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2z"/>'),
+    clipboard: SVG('<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M9 12h6M9 16h4"/>'),
+    compare: SVG('<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 3v18M6.5 8h3M14.5 8h3M6.5 12h3M14.5 12h3M6.5 16h3M14.5 16h3"/>'),
+    layers: SVG('<path d="M12 2l10 5-10 5L2 7z"/><path d="M2 12l10 5 10-5"/><path d="M2 17l10 5 10-5"/>'),
+    home: SVG('<path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>'),
+    gear: SVG('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9L7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1L7 17M17 7l2.1-2.1"/>')
+  };  window.addEventListener('storage', event => {
     if (event.key === THEME_KEY) applyTheme(event.newValue);
     if (event.key === TONE_KEY) applyTone(event.newValue);
   });
@@ -75,15 +100,15 @@ window.GDHomeShell = (() => {
     const link = ([href,label,glyph]) => '<a href="' + href + '"' + (here === href ? ' aria-current="page"' : '') + '><span class="gd-menu-glyph">' + glyph + '</span>' + label + '</a>';
     element.innerHTML = '<summary>GD HOME Tools</summary><nav aria-label="GD HOME Tools">' +
       TOOL_ROWS.map(row => '<div class="gd-menu-row">' + row.map(link).join('') + '</div>').join('') +
-      '<div class="gd-menu-row">' + link(['/tools','Trang chủ','⌂']) +
-      (element.dataset.shellMenu === 'public' ? '' : '<button type="button" data-open-connections><span class="gd-menu-glyph">⚙</span>Kết nối</button>') + '</div></nav>';
+      '<div class="gd-menu-row">' + link(['/tools','Trang chủ',TOOL_ICON.home]) +
+      (element.dataset.shellMenu === 'public' ? '' : '<button type="button" data-open-connections><span class="gd-menu-glyph">' + TOOL_ICON.gear + '</span>Kết nối</button>') + '</div></nav>';
   }
   // Thứ tự công cụ dùng chung cho trang chủ và menu GD HOME Tools (anh Đức chốt 25/11/2026)
   const TOOL_ROWS = [
-    [['/thong-ke','Thống kê dự án','📊','Mọi dự án một bảng: thi công, thiết kế, hạn, thanh toán.'],['/mau-tra-loi','Mẫu trả lời khách','💬','Câu nhắn mẫu, khảo sát khách trước thiết kế.'],
-      ['/','Lập tiến độ','📅','Lịch thiết kế và Timeline thi công.'],['/chot-ma','Chốt mã vật liệu','🏷','Chọn, xác nhận và đặt vật liệu.']],
-    [['/du-an','Quản lý dự án','📁','Hồ sơ dự án, HSKT và phối cảnh 3D.'],['/giao-viec','Giao việc thầu','🧰','Nhà thầu, phiếu giao việc, ghép PDF hồ sơ.'],
-      ['/so-sanh','Bảng so sánh','⚖','Soạn bảng so sánh phương án, vật liệu cho khách.'],['/du-lieu','Dữ liệu dùng chung','📚','Ảnh mẫu vật liệu theo hạng mục cho mọi dự án.']]
+    [['/thong-ke','Thống kê dự án',TOOL_ICON.chart,'Mọi dự án một bảng: thi công, thiết kế, hạn, thanh toán.'],['/mau-tra-loi','Mẫu trả lời khách',TOOL_ICON.chat,'Câu nhắn mẫu, khảo sát khách trước thiết kế.'],
+      ['/','Lập tiến độ',TOOL_ICON.calendar,'Lịch thiết kế và Timeline thi công.'],['/chot-ma','Chốt mã vật liệu',TOOL_ICON.tag,'Chọn, xác nhận và đặt vật liệu.']],
+    [['/du-an','Quản lý dự án',TOOL_ICON.folder,'Hồ sơ dự án, HSKT và phối cảnh 3D.'],['/giao-viec','Giao việc thầu',TOOL_ICON.clipboard,'Nhà thầu, phiếu giao việc, ghép PDF hồ sơ.'],
+      ['/so-sanh','Bảng so sánh',TOOL_ICON.compare,'Soạn bảng so sánh phương án, vật liệu cho khách.'],['/du-lieu','Dữ liệu dùng chung',TOOL_ICON.layers,'Ảnh mẫu vật liệu theo hạng mục cho mọi dự án.']]
   ];
 
   function dropdown(command,label,glyph,body,variant = 'outline') {
@@ -577,7 +602,7 @@ window.GDHomeShell = (() => {
     let dropdown = container.querySelector('.shell-account-dropdown');
     if (!dropdown) {
       container.innerHTML =
-        '<button type="button" class="icon-btn shell-theme-toggle" data-shell-account-action="theme" aria-label="Chuyển giao diện sáng / tối"></button>' +
+        toneMenu() +
         '<button type="button" class="btn btn-outline btn-sm shell-guest-login-btn" data-shell-account-action="login" style="display:' + (isGuest ? 'inline-flex' : 'none') + ';">Đăng nhập</button>' +
         '<details class="hdr-dropdown shell-account-dropdown" data-shell-account>' +
           '<summary class="shell-user-chip" title="' + escape(email || 'Tài khoản') + '">' +
@@ -598,6 +623,7 @@ window.GDHomeShell = (() => {
         '</details>' +
         '<strong id="identity" style="display:none;">' + escape(email) + '</strong>';
       applyTheme(document.documentElement.dataset.theme);
+      getTone();
     } else {
       const loginBtn = container.querySelector('.shell-guest-login-btn');
       if (loginBtn) loginBtn.style.display = isGuest ? 'inline-flex' : 'none';

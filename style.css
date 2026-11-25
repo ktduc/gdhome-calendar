@@ -3481,3 +3481,23 @@ body {
 .schedule-extra-note{display:block;margin-top:7px;white-space:pre-wrap;overflow-wrap:anywhere}
 .schedule-extra-note[contenteditable],.banner-prefix[contenteditable],.msp-inline-title-prefix-input[contenteditable]{border-bottom:1px dashed transparent;border-radius:4px;min-width:1ch;cursor:text}
 .schedule-extra-note[contenteditable]:focus,.banner-prefix[contenteditable]:focus,.msp-inline-title-prefix-input[contenteditable]:focus{outline:1px solid #a8b8cc;border-bottom-color:#1a73e8}
+
+/* Thanh bên: nút thao tác chỉ phủ đuôi hàng khi rê chuột (không chiếm chỗ của tên) */
+.project-owner-header, .calendar-list-item { position: relative; }
+.project-owner-header .project-owner-actions,
+.calendar-list-item .cal-item-actions {
+  position: absolute; right: 0; top: 0; bottom: 0;
+  padding: 0 6px 0 22px; display: flex; align-items: center;
+  visibility: hidden; opacity: 1;
+  background: linear-gradient(90deg, transparent, #f1f5f9 18px);
+}
+.project-owner-header:hover .project-owner-actions,
+.project-owner-header:focus-within .project-owner-actions,
+.calendar-list-item:hover .cal-item-actions,
+.calendar-list-item:focus-within .cal-item-actions,
+.calendar-list-item.active-selected .cal-item-actions { visibility: visible; }
+.project-owner-header:hover .project-owner-actions { background: linear-gradient(90deg, transparent, #e2e8f0 18px); }
+.calendar-list-item .cal-item-actions { background: linear-gradient(90deg, transparent, #ffffff 18px); }
+.calendar-list-item:hover .cal-item-actions { background: linear-gradient(90deg, transparent, #f1f3f4 18px); }
+.calendar-list-item.active-selected .cal-item-actions { background: linear-gradient(90deg, transparent, #e8f0fe 18px); }
+.project-owner-title, .cal-item-name { min-width: 0; }

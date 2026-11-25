@@ -112,6 +112,32 @@ cases['lich-active'] = async page => {
   await page.waitForFunction(() => document.querySelectorAll('.project-owner-header').length === 1);
 };
 
+cases['lich-shift'] = async page => {
+  // Shift+bấm ô giai đoạn: đặt cùng trạng thái cho cả đoạn giữa, lưu 1 lần; tên dự án dài không bị nút che
+  await page.goto('/', {waitUntil: 'domcontentloaded'});
+  await page.locator('.cal-visibility-check').nth(3).waitFor();
+  await page.evaluate(() => { window.__saves = 0; const f = saveToBackend; saveToBackend = (...a) => { window.__saves++; return f(...a); }; });
+  const boxes = page.locator('.cal-visibility-check');
+  const states = () => page.evaluate(() => [...document.querySelectorAll('.cal-visibility-check')].map(b => b.checked).slice(0,4).join());
+  await boxes.nth(0).click();
+  await boxes.nth(3).click({modifiers:['Shift']});
+  assert.equal(await states(),'false,false,false,false');
+  assert.equal(await page.evaluate(() => window.__saves),2,'Shift+bấm chỉ lưu 1 lần');
+  await boxes.nth(1).click();
+  await boxes.nth(2).click({modifiers:['Shift']});
+  assert.equal(await states(),'false,true,true,false');
+  assert.equal(await page.evaluate(() => AppState.calendars.filter(c => c.visible !== false).length),3);
+  for (const width of [1280,2560]) {
+    await page.setViewportSize({width,height:900});
+    const title = page.locator('.project-owner-title').first();
+    const header = page.locator('.project-owner-header').first();
+    const before = await title.evaluate(el => el.getBoundingClientRect().width);
+    await header.hover();
+    assert.equal(await title.evaluate(el => el.getBoundingClientRect().width),before,'Nút không chiếm chỗ tên dự án');
+    assert.ok((await title.getAttribute('title')).length > 0);
+  }
+};
+
 cases['todo'] = async page => {
   await page.goto('/');
   await page.locator('.project-owner-header').first().waitFor();
@@ -518,7 +544,7 @@ cases['so-sanh'] = async page => {
     // Header: tài khoản sát phải, có nút sáng/tối và Todo
     const right = await page.locator('.shell-account').evaluate(el => el.getBoundingClientRect().right);
     assert.ok(right > page.viewportSize().width - 40,'Ô tài khoản sát phải: '+right);
-    await page.locator('.shell-theme-toggle').waitFor();
+    await page.locator('.shell-tone summary').waitFor();
     await page.locator('#gd-todo-toggle').waitFor();
     // Vừa khổ ở mọi độ rộng
     for (const width of [1280,1440,1920,2560]) {
@@ -661,6 +687,70 @@ cases['so-sanh'] = async page => {
     assert.ok(tileColors.every(t => t.corner.some(v => v < 230)),'Đã gọt khe trắng ở mép ô');
     await page.locator('#cmp-prompt-dlg [data-pr="close"]').click();
   } finally { integrations.compareBoard = original; }
+};
+
+cases['so-sanh-ui'] = async page => {
+  // Danh mục: lưới thẳng hàng, bảng chọn màu, menu chuột phải; prompt cập nhật theo từng phím ở ô Thông tin cho AI
+  const names = () => page.locator('#cmp-tree .cmp-cat-name').allTextContents();
+  const menu = label => page.locator('.cmp-menu button',{hasText:label});
+  for (const width of [1280,1920,2560]) {
+    await page.setViewportSize({width,height:900});
+    await page.goto('/so-sanh',{waitUntil:'domcontentloaded'});
+    await page.locator('#cmp-tree .cmp-cat').first().waitFor();
+    const rows = await page.evaluate(() => [...document.querySelectorAll('#cmp-tree .cmp-cat-head')].map(h => {
+      const r = x => Math.round(h.querySelector(x).getBoundingClientRect().left);
+      return {h: Math.round(h.getBoundingClientRect().height), grip: r('.cmp-grip'), sw: r('.cmp-sw'), name: r('.cmp-cat-name')};
+    }));
+    assert.ok(rows.length >= 2 && rows.every(x => x.h === rows[0].h && x.grip === rows[0].grip && x.sw === rows[0].sw && x.name === rows[0].name),'Hàng hạng mục thẳng cột: ' + JSON.stringify(rows));
+  }
+  // Bảng chọn màu: 18 ô, đúng màu hiện tại được đánh dấu, chọn xong lưu hex
+  const head = page.locator('#cmp-tree .cmp-cat-head').first();
+  await head.locator('.cmp-sw').click();
+  assert.equal(await page.locator('.cmp-swatches button').count(),18);
+  await page.locator('.cmp-swatches button[data-c="#2f7fa8"]').click();
+  assert.equal(await page.locator('.cmp-pop').count(),0,'Chọn xong đóng bảng màu');
+  assert.equal(await head.locator('.cmp-sw').evaluate(el => getComputedStyle(el).backgroundColor),'rgb(47, 127, 168)');
+  await head.locator('.cmp-sw').click();
+  assert.equal(await page.locator('.cmp-swatches .is-cur').getAttribute('data-c'),'#2f7fa8','Đánh dấu màu hiện tại');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.cmp-pop').count(),0,'Esc đóng');
+  await page.waitForFunction(() => fetch('/api/compare').then(r => r.json()).then(d => d.categories[0].color === '#2f7fa8'));
+  // Menu chuột phải
+  const before = await names();
+  await head.click({button:'right'});
+  await menu('Thêm hạng mục').waitFor();
+  assert.ok(await menu('Lên trên').isDisabled(),'Hạng mục đầu không lên được');
+  await page.mouse.click(700,500);
+  assert.equal(await page.locator('.cmp-menu').count(),0,'Bấm ra ngoài đóng menu');
+  await head.click({button:'right'});
+  await menu('Xuống dưới').click();
+  assert.deepEqual(await names(),[before[1],before[0],...before.slice(2)]);
+  await page.locator('#cmp-tree .cmp-cat-head').nth(1).click({button:'right'});
+  await menu('Lên trên').click();
+  assert.deepEqual(await names(),before);
+  await head.click({button:'right'});
+  await menu('Đổi tên').click();
+  await page.locator('dialog.gd-ask[open] .gd-ask-input').fill('Hạng mục thử');
+  await page.locator('dialog.gd-ask[open] [data-ask="ok"]').click();
+  assert.equal((await names())[0],'HẠNG MỤC THỬ');
+  await head.click({button:'right'});
+  await menu('Thêm hạng mục').click();
+  await page.locator('dialog.gd-ask[open] .gd-ask-input').fill('Mới chèn');
+  await page.locator('dialog.gd-ask[open] [data-ask="ok"]').click();
+  assert.deepEqual((await names()).slice(0,2),['HẠNG MỤC THỬ','MỚI CHÈN'],'Thêm ngay sau hạng mục đã chọn');
+  await page.locator('#cmp-tree .cmp-cat-head').nth(1).click({button:'right'});
+  await menu('Xoá').click();
+  await page.locator('dialog.gd-ask[open] [data-ask="ok"]').click();
+  assert.equal((await names()).includes('MỚI CHÈN'),false,'Xoá hạng mục trống sau khi xác nhận');
+  // Prompt cho AI cập nhật gần như ngay khi gõ
+  await page.locator('#cmp-add-board').click();
+  await page.locator('#cmp-prompt').click();
+  await page.locator('#cmp-prompt-dlg[open]').waitFor();
+  await page.locator('#cmp-notes').click();
+  await page.keyboard.type('Inox304-abc');
+  await page.waitForFunction(() => document.getElementById('cmp-prompt-text').value.includes('Inox304-abc'),null,{timeout:1500});
+  await page.keyboard.type('xyz');
+  await page.waitForFunction(() => document.getElementById('cmp-prompt-text').value.includes('Inox304-abcxyz'),null,{timeout:1500});
 };
 
 cases['24.1'] = async page => {
@@ -2359,9 +2449,14 @@ cases['home'] = async page => {
   await page.evaluate(c => GDHomeShell.api('/api/home',{method:'POST',body:{cover:c}}),cover);
   await page.reload({waitUntil:'domcontentloaded'});
   await page.waitForFunction(() => document.querySelector('#home-cover').classList.contains('has-image'));
-  await page.locator('[data-bg=sage]').click();
+  await page.locator('.shell-tone summary').click();
+  await page.locator('[data-tone-pick=sage]').click();
   await page.reload({waitUntil:'domcontentloaded'});
-  assert.equal(await page.locator('[data-bg=sage]').getAttribute('aria-pressed'),'true','Nền nhớ trên máy');
+  assert.equal(await page.locator('[data-tone-pick=sage]').getAttribute('aria-pressed'),'true','Tone nhớ trên máy');
+  await page.locator('.gd-tools-menu summary').click();
+  assert.match(await page.locator('.gd-tools-menu nav').evaluate(n => getComputedStyle(n).boxShadow),/\d{3,}px/,'Menu mở làm tối nền');
+  assert.equal(await page.locator('.gd-tools-menu nav svg').count(),10,'Icon đơn sắc SVG');
+  await page.keyboard.press('Escape');
   // Logo ở trang khác về trang chủ
   await page.goto('/thong-ke',{waitUntil:'domcontentloaded'});
   await page.locator('tr[data-row=p1]').waitFor();
@@ -6090,6 +6185,10 @@ async function main() {
         caseSchedule.calendars.push({id:'la-c2',ownerId:'la-p2',name:'Xong',visible:true,color:'#06c'});
         caseSchedule.tasks.push({id:'la-on',calendarId:'c1',title:'Việc đang làm',startDate:'2026-11-02',endDate:'2026-11-04'},
           {id:'la-done',calendarId:'la-c2',title:'Việc đã xong',startDate:'2026-11-02',endDate:'2026-11-04'});
+      }
+      if (key === 'lich-shift') {
+        caseSchedule.calendars.push({id:'ls-2',ownerId:'p1',name:'Giai đoạn 2',visible:true,color:'#06c'},{id:'ls-3',ownerId:'p1',name:'Giai đoạn 3',visible:true,color:'#0a6'},{id:'ls-4',ownerId:'p1',name:'Giai đoạn 4',visible:true,color:'#a60'});
+        caseSchedule.projectOwners[0].name = 'Dự án có tên rất dài để kiểm tra việc nút thao tác không che mất tên hiển thị';
       }
       if (key === 'todo') caseSchedule.tasks.push({id:'todo-base',calendarId:'c1',title:'Việc mẫu',startDate:'2026-11-02',endDate:'2026-11-06'});
       if (key === 'thong-ke') {

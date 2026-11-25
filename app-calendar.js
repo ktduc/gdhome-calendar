@@ -61,6 +61,7 @@ function openDeleteScheduleProject(owner) {
   dialog.querySelector('#cancel-delete-project').onclick = () => dialog.close();
 }
 
+let _lastCalCheckId = null;
 function renderCalendarSidebar() {
   normalizeAppState();
   const container = document.getElementById('calendar-list-container');
@@ -108,6 +109,7 @@ function renderCalendarSidebar() {
     const titleSpan = document.createElement('span');
     titleSpan.className = 'project-owner-title';
     titleSpan.innerHTML = `<em>${escapeHtml(owner.name)}</em>`;
+    titleSpan.title = owner.name;
 
     const countSpan = document.createElement('span');
     countSpan.className = 'project-owner-count';
@@ -262,10 +264,25 @@ function renderCalendarSidebar() {
       checkbox.checked = cal.visible !== false;
       checkbox.style.accentColor = cal.color;
       checkbox.title = 'Ẩn / Hiện các công việc của lịch này';
+      checkbox.dataset.calId = cal.id;
       checkbox.addEventListener('click', (e) => {
         e.stopPropagation();
-        cal.visible = checkbox.checked;
-        saveToBackend();
+        // Shift+bấm: đặt cùng trạng thái cho mọi giai đoạn đang hiển thị giữa ô bấm trước và ô này (như Windows)
+        const boxes = [...container.querySelectorAll('.cal-visibility-check')].filter(b => b.offsetParent !== null);
+        const from = boxes.findIndex(b => b.dataset.calId === _lastCalCheckId);
+        const to = boxes.indexOf(checkbox);
+        if (e.shiftKey && from !== -1 && to !== -1) {
+          boxes.slice(Math.min(from, to), Math.max(from, to) + 1).forEach(b => {
+            const c = AppState.calendars.find(x => x.id === b.dataset.calId);
+            if (c) c.visible = checkbox.checked;
+          });
+          saveToBackend();
+          renderCalendarSidebar();
+        } else {
+          cal.visible = checkbox.checked;
+          saveToBackend();
+        }
+        _lastCalCheckId = cal.id;
         renderCalendar();
       });
 
@@ -277,6 +294,7 @@ function renderCalendarSidebar() {
       nameSpan.className = 'cal-item-name';
       const taskCount = AppState.tasks.filter(t => t.calendarId === cal.id).length;
       nameSpan.textContent = `${cal.name} (${taskCount})`;
+      nameSpan.title = nameSpan.textContent;
 
       leftDiv.appendChild(checkbox);
       leftDiv.appendChild(colorBox);
