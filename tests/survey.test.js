@@ -20,7 +20,7 @@ test('mỗi khách thấy khoảng 40-78 câu (nhà ở), id duy nhất, mọi s
 });
 
 test('câu hỏi đổi theo loại công trình', () => {
-  assert.deepEqual(ids({}).slice(0, 3), ['loai_nha', 'tinh_trang', 'dien_tich']);
+  assert.deepEqual(ids({}).slice(0, 4), ['loai_nha', 'tinh_trang', 'dien_tich', 'dia_chi']);
   assert.ok(!ids({}).includes('so_tang'));
   const house = ids({loai_nha: 'nha_pho'});
   assert.ok(house.includes('so_tang') && house.includes('thang_may') && house.includes('gieng_troi') && house.includes('tho_tang_tren'));
@@ -54,13 +54,15 @@ test('summarize: chỉ câu đang hiện và đã trả lời, gom theo nhóm, c
 
 test('cleanAnswers: bỏ id lạ, đáp án ngoài danh sách, cắt độ dài', () => {
   const clean = D.cleanAnswers({loai_nha: 'nha_pho', so_tang: 'xx', hack: 'y', thanh_vien: ['vo_chong', 'vo_chong', 'la'], 'thanh_vien.khac': ' x '.repeat(400),
-    'loai_nha.khac': 'không có ô khác', dien_tich: 'a'.repeat(5000), thu_cung: 'cho'});
+    'loai_nha.khac': 'không có ô khác', dia_chi: 'a'.repeat(5000), dien_tich: '85.5', thu_cung: 'cho'});
   assert.equal(clean.loai_nha, 'nha_pho');
   assert.ok(!('so_tang' in clean) && !('hack' in clean) && !('loai_nha.khac' in clean));
   assert.deepEqual(clean.thu_cung, ['cho'], 'chuỗi ở câu chọn nhiều (câu cũ đổi loại) vẫn giữ');
   assert.deepEqual(clean.thanh_vien, ['vo_chong']);
   assert.ok(clean['thanh_vien.khac'].length <= 300);
-  assert.equal(clean.dien_tich.length, 1000);
+  assert.equal(clean.dia_chi.length, 1000);
+  assert.equal(clean.dien_tich, 85.5);
+  assert.ok(!('dien_tich' in D.cleanAnswers({dien_tich: 'abc'})));
   assert.deepEqual(D.cleanAnswers('x'), {});
   assert.deepEqual(D.cleanAnswers([1]), {});
 });
@@ -161,7 +163,7 @@ test('server: giới hạn kích thước body công khai', async () => {
   const {json} = await adm('POST', '/api/surveys/link', {projectId: 'p1'});
   const url = '/api/survey/' + json.token;
   assert.equal((await pub('POST', url, {answers: {}}, 'u1', {'content-length': '999999'})).status, 413);
-  assert.equal((await pub('POST', url, {answers: {dien_tich: 'x'.repeat(100)}, pad: 'y'.repeat(70000)})).status, 413);
+  assert.equal((await pub('POST', url, {answers: {dia_chi: 'x'.repeat(100)}, pad: 'y'.repeat(70000)})).status, 413);
 });
 
 test('ảnh minh hoạ phong cách: ai cũng xem, chỉ quản trị dán / xoá, chặn ảnh lạ', async () => {

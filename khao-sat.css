@@ -143,3 +143,26 @@
 .ks-opt .ks-imgdel { right: auto; left: 4px; }
 .ks-opt:hover .ks-imgbtn { opacity: 1; }
 .ks-ohint { white-space: nowrap; }
+/* Chọn ô không in đậm (tránh chữ dài nhảy dòng) */
+.ks-opt input:checked + span b { font-weight: 400; color: var(--ks-ink); }
+/* Tích nhỏ dài: 1 dòng, cắt gọn nếu ô hẹp */
+.ks-sub { overflow: hidden; text-overflow: ellipsis; }
+/* Phong cách & màu riêng: mục đã chọn ở phần chung sáng, mục khác mờ */
+.ks-look .ks-sub { opacity: .5; }
+.ks-look .ks-sub.is-main, .ks-look .ks-sub:has(input:checked) { opacity: 1; }
+.ks-look.is-inherit .ks-sub { opacity: .5; }
+/* Bảng phòng: chia cột cân, hàng giường + ghi chú thẳng nhau giữa các phòng */
+.ks-rooms { grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
+.ks-room { display: flex; flex-direction: column; }
+.ks-room-bed { margin-top: auto; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+@media (max-width: 560px) { .ks-rooms { grid-template-columns: 1fr; } }
+/* Diện tích: thanh trượt + ô số */
+.ks-numrow { display: flex; align-items: center; gap: 12px; }
+.ks-numrow input[type=range] { flex: 1; min-width: 0; accent-color: var(--ks-brown); }
+.ks-q:not(.is-done) .ks-numrow input[type=range] { opacity: .45; }
+.ks-numrow input[type=number] { width: 110px; padding: 9px 10px; border: 1.5px solid var(--ks-line); border-radius: 10px; background: #fbfaf8; color: inherit; font: inherit; font-size: 15px; }
+.ks-numrow span { color: var(--ks-muted); }
+/* Câu có tích nhỏ: ô chính 1 hàng, tích nhỏ hàng dưới – thẳng nhau giữa các ô */
+.ks-opts:has(.ks-optbox) { row-gap: 4px; }
+.ks-optbox { grid-row: span 2; grid-template-rows: subgrid; row-gap: 4px; }
+.ks-optbox .ks-subs:empty { display: block; }

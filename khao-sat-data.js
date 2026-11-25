@@ -5,6 +5,7 @@
  * sub: {giá trị: 'a:Nhãn;b:Nhãn|c:Nhãn'} – tích nhỏ trong ô (vd Lò nướng → Âm tủ), lưu ở 'id.giá trị': ['a',…]; ';' trong cùng nhóm = chỉ chọn 1, '|' tách nhóm độc lập.
  * Lựa chọn khong / chua_biet ở câu chọn nhiều là phủ định: chọn nó thì bỏ các ô khác và ngược lại.
  * type 'date': 'YYYY-MM-DD' (kèm ngày âm khi hiện); type 'rooms': [{who, items:[…], bed, mat, pc:[…], mau:[…], note}] – mỗi phòng ngủ 1 phần tử, số phòng theo pn_so.
+ * type 'number': số (vd diện tích), thanh trượt min..max + ô nhập; unit hiện kèm.
  * type 'note': ghi chú riêng 1 không gian, kèm phong cách / màu riêng ở 'id.pc' / 'id.mau' (trống = theo phần chung).
  * Thêm: max (chọn tối đa), one: [[giá trị…]] (trong câu chọn nhiều, mỗi nhóm chỉ 1), heads: [[tiêu đề, [giá trị…]]] (chia nhóm khi hiện),
  *   hint: {giá trị: 'ghi chú nhỏ'}, note: 'gợi ý' (ô ghi chú 'id.ghi_chu'), color: true (ô tự chọn màu 'id.mau_khac' = '#rrggbb').
@@ -62,7 +63,8 @@
     {id: 'chung', title: 'Thông tin chung', intro: 'Vài câu đầu để GD HOME biết mình đang cần thiết kế gì.', questions: [
       Q('loai_nha', 'one', 'Loại công trình', 'Công trình cần thiết kế là loại nào?', 'chung_cu:Chung cư;nha_pho:Nhà phố;biet_thu:Biệt thự;van_phong:Văn phòng;cua_hang:Cửa hàng / showroom;khac:Loại khác'),
       Q('tinh_trang', 'one', 'Tình trạng hiện tại', 'Công trình đang ở tình trạng nào?', 'tho:Mới nhận bàn giao thô;co_ban:Đã hoàn thiện cơ bản, cần làm lại nội thất;dang_o:Đang ở, cần cải tạo;xay_moi:Đang xây mới / chưa có nhà'),
-      Q('dien_tich', 'text', 'Diện tích', 'Diện tích sử dụng (m²) và địa chỉ / tên dự án? (ghi ngắn)', ''),
+      Q('dien_tich', 'number', 'Diện tích', 'Diện tích sử dụng khoảng bao nhiêu?', '', {min: 20, max: 500, step: 5, unit: 'm²'}),
+      Q('dia_chi', 'text', 'Địa chỉ / dự án', 'Địa chỉ hoặc tên dự án? (ghi ngắn)', ''),
       Q('muc_dich', 'one', 'Mục đích sử dụng', 'Mình dùng công trình để làm gì?', 'o_chinh:Để ở lâu dài;nghi_duong:Nghỉ dưỡng / ở không thường xuyên;cho_thue:Cho thuê;kinh_doanh:Kinh doanh, làm việc', {showIf: RESIDENTIAL})
     ]},
     {id: 'gia_dinh', title: 'Gia đình & thói quen', intro: 'Hiểu người ở thì mới thiết kế đúng nhu cầu.', showIf: RESIDENTIAL, questions: [
@@ -183,14 +185,14 @@
       Q('tho_ghi_chu', 'text', 'Ghi chú thờ cúng', 'Ghi chú thêm về thờ cúng (hướng thầy đã xem, kích thước bàn thờ cũ, đồ thờ cần giữ…)?', '', {showIf: {q: 'tho_co', notIn: ['khong']}})
     ]},
     {id: 'luu_tru', title: 'Lưu trữ & đồ đạc', intro: 'Càng đủ thông tin, tủ thiết kế càng vừa với đồ của mình.', showIf: RESIDENTIAL, questions: [
-      Q('lt_quan_ao', 'one', 'Lượng quần áo', 'Lượng quần áo, túi xách, phụ kiện?', 'it:Vừa phải, tủ âm là đủ;nhieu:Nhiều, cần tủ lớn;rat_nhieu:Rất nhiều, nên có phòng thay đồ', {sub: {nhieu: 'vay_dai:Nhiều váy / áo dài cần treo cao', rat_nhieu: 'vay_dai:Nhiều váy / áo dài cần treo cao'}}),
+      Q('lt_quan_ao', 'one', 'Lượng quần áo', 'Lượng quần áo, túi xách, phụ kiện?', 'it:Vừa phải, tủ âm là đủ;nhieu:Nhiều, cần tủ lớn;rat_nhieu:Rất nhiều, nên có phòng thay đồ', {sub: {nhieu: 'vay_dai:Nhiều váy, áo dài', rat_nhieu: 'vay_dai:Nhiều váy, áo dài'}}),
       Q('lt_giay', 'one', 'Lượng giày dép', 'Số lượng giày dép của cả nhà?', 'it:Dưới 10 đôi;vua:10 - 30 đôi;nhieu:Trên 30 đôi / sưu tầm'),
       Q('lt_khac', 'many', 'Đồ cồng kềnh', 'Đồ cồng kềnh cần chỗ cất?', 'vali:Vali, đồ du lịch;xe_dap:Xe đạp, đồ thể thao;golf:Gậy golf;gym:Thiết bị gym tại nhà;tet:Đồ Tết, đồ cúng;tre_em:Đồ trẻ em (xe đẩy, đồ chơi);dung_cu:Dụng cụ sửa chữa;hut_bui:Máy hút bụi, robot, thang;thuc_pham:Kho thực phẩm khô, nước uống', OTHER),
       Q('lt_kho', 'one', 'Kho', 'Có cần phòng / ngăn kho riêng?', 'phong:Có, phòng kho riêng;gam:Tận dụng gầm cầu thang / hộc;khong:Không cần', {optIf: {gam: HOUSE}})
     ]},
     {id: 'thong_minh', title: 'Thiết bị thông minh', intro: 'Chọn mức nhà thông minh phù hợp ngân sách.', showIf: RESIDENTIAL, questions: [
       Q('tb_muc', 'one', 'Nhà thông minh', 'Mức độ nhà thông minh mong muốn?', 'khong:Không cần;co_ban:Cơ bản (đèn, rèm, ổ cắm);nhieu:Nhiều, điều khiển toàn nhà;chua_biet:Chưa biết, cần tư vấn'),
-      Q('tb_loai', 'many', 'Thiết bị muốn có', 'Muốn điều khiển những gì?', 'den:Đèn theo cảnh;rem:Rèm điện;khoa:Khoá vân tay / thẻ;camera:Camera an ninh;dieu_hoa:Điều hoà thông minh;am_thanh:Loa âm thanh đa vùng;cam_bien:Cảm biến (khói, rò nước, chuyển động);robot:Robot hút bụi, lau nhà', {sub: {robot: 'nuoc:Cần chờ nước cấp và thoát cho robot'}, showIf: {q: 'tb_muc', in: ['co_ban', 'nhieu', 'chua_biet']}, ...OTHER})
+      Q('tb_loai', 'many', 'Thiết bị muốn có', 'Muốn điều khiển những gì?', 'den:Đèn theo cảnh;rem:Rèm điện;khoa:Khoá vân tay / thẻ;camera:Camera an ninh;dieu_hoa:Điều hoà thông minh;am_thanh:Loa âm thanh đa vùng;cam_bien:Cảm biến (khói, rò nước, chuyển động);robot:Robot hút bụi, lau nhà', {sub: {robot: 'nuoc:Chờ cấp + thoát nước'}, showIf: {q: 'tb_muc', in: ['co_ban', 'nhieu', 'chua_biet']}, ...OTHER})
     ]},
     {id: 'ket', title: 'Ghi chú thêm', intro: 'Gần xong rồi!', questions: [
       Q('cuoi_ghi_chu', 'text', 'Sở thích, mong muốn', 'Mình THÍCH gì, mong muốn điều gì ở ngôi nhà mới?', ''),
@@ -239,6 +241,7 @@
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
     for (const q of QUESTIONS) {
       const value = raw[q.id];
+      if (q.type === 'number') { const n = Number(value); if (value !== '' && value != null && Number.isFinite(n) && n > 0 && n <= 100000) out[q.id] = Math.round(n * 10) / 10; continue; }
       if (q.type === 'date') { if (typeof value === 'string' && dateText(value)) out[q.id] = value; continue; }
       if (q.type === 'rooms') {
         const pick = (v, list) => list.some(o => o.v === v) ? v : '';
@@ -290,6 +293,7 @@
       return labels.get(v) && labels.get(v) + (subs.length ? ' (' + subs.join(', ') + ')' : '');
     };
     if (q.type === 'date') return dateText(answers[q.id]);
+    if (q.type === 'number') return answers[q.id] ? answers[q.id] + ' ' + (q.unit || '') : '';
     if (q.type === 'rooms') return (Array.isArray(answers[q.id]) ? answers[q.id] : []).slice(0, roomCount(answers)).map((r, i) => {
       const label = (list, v) => list.find(o => o.v === v)?.l;
       const bits = [...(r.items || []).map(v => label(ROOM.items, v)), r.bed && 'giường ' + label(ROOM.beds, r.bed), label(ROOM.mats, r.mat), lookText(r.pc || [], r.mau || []), clean(r.note)].filter(Boolean);
