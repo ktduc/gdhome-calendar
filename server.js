@@ -34,7 +34,7 @@ const { todoSync } = require('./todo-sync');
 const { handleCompare } = require('./compare');
 const { handleReplyTemplates } = require('./reply-templates');
 const { handleHome } = require('./home-page');
-const { handleSurveyPublic, handleSurveyAdmin } = require('./survey');
+const { handleSurveyPublic, handleSurveyAdmin, handleSurveyImages } = require('./survey');
 
 const PORT = process.env.PORT || 3000;
 const ROOT_DIR = __dirname;
@@ -690,6 +690,7 @@ async function handleApi(req, res, urlPath) {
   }
 
   if (urlPath.startsWith('/api/survey/')) return handleSurveyPublic(req,res,urlPath,{ store,readJsonBody,sendJson });
+  if (urlPath === '/api/survey-images') return handleSurveyImages(req,res,{ store,dataKey:resolveDataKey(req),admins:ADMIN_EMAILS,readJsonBody,sendJson });
   // Trang chủ: xem ảnh bìa không cần đăng nhập, chỉ admin được đổi
   if (urlPath === '/api/home') return handleHome(req,res,{ store,dataKey:resolveDataKey(req),admins:ADMIN_EMAILS,readJsonBody,sendJson });
 

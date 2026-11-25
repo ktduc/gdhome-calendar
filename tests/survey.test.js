@@ -90,8 +90,8 @@ test('loại trừ: "Không" và tích nhỏ cùng nhóm; ngày nhập trạch; 
   assert.equal(a.ns_nhap_trach, '2027-01-15');
   assert.ok(!('ns_nhap_trach' in D.cleanAnswers({ns_nhap_trach: '15/01/2027'})));
   assert.equal(D.answerText(D.QUESTION_BY_ID.ns_nhap_trach, a), '15/01/2027 (8/12 âm lịch)');
-  assert.deepEqual(a.pn_phong[0], {who: 'vo_chong', items: ['wic'], bed: '1m8', mat: 'go'}, 'bàn học không dành cho phòng vợ chồng');
-  assert.deepEqual(a.pn_phong[1], {who: '', items: [], bed: '', mat: ''});
+  assert.deepEqual(a.pn_phong[0], {who: 'vo_chong', items: ['wic'], bed: '1m8', mat: 'go', pc: [], mau: [], note: ''}, 'bàn học không dành cho phòng vợ chồng');
+  assert.deepEqual(a.pn_phong[1], {who: '', items: [], bed: '', mat: '', pc: [], mau: [], note: ''});
   assert.equal(D.answerText(D.QUESTION_BY_ID.pn_phong, a), 'P1 Vợ chồng: Phòng thay đồ, giường 1m8, Giường gỗ', 'chỉ tính số phòng đã chọn');
   assert.ok(!('pn_phong' in D.cleanAnswers({pn_phong: 'x'})));
 });
@@ -162,4 +162,38 @@ test('server: giới hạn kích thước body công khai', async () => {
   const url = '/api/survey/' + json.token;
   assert.equal((await pub('POST', url, {answers: {}}, 'u1', {'content-length': '999999'})).status, 413);
   assert.equal((await pub('POST', url, {answers: {dien_tich: 'x'.repeat(100)}, pad: 'y'.repeat(70000)})).status, 413);
+});
+
+test('ảnh minh hoạ phong cách: ai cũng xem, chỉ quản trị dán / xoá, chặn ảnh lạ', async () => {
+  const {handleSurveyImages} = require('../survey.js');
+  const data = new Map();
+  const store = {get: async key => structuredClone(data.get(key) ?? null), put: async (key, value) => { data.set(key, structuredClone(value)); }};
+  const call = async (method, body, dataKey, admins = ['admin@x.vn']) => {
+    let out;
+    try { await handleSurveyImages({method}, {}, {store, dataKey, admins, readJsonBody: async () => body, sendJson: (_r, status, json) => { out = {status, json}; }}); }
+    catch (error) { out = {status: error.status, json: {message: error.message}}; }
+    return out;
+  };
+  const img = 'data:image/jpeg;base64,AAAA';
+  assert.equal((await call('POST', {key: 'japandi', image: img}, 'khac@x.vn')).status, 403);
+  assert.equal((await call('POST', {key: 'japandi', image: img})).status, 403, 'chưa đăng nhập');
+  assert.equal((await call('POST', {key: 'la', image: img}, 'admin@x.vn')).status, 400);
+  assert.equal((await call('POST', {key: 'japandi', image: 'javascript:x'}, 'admin@x.vn')).status, 400);
+  assert.equal((await call('POST', {key: 'japandi', image: img}, 'admin@x.vn')).status, 200);
+  const view = await call('GET');
+  assert.deepEqual(view.json, {images: {japandi: img}, canEdit: false});
+  await call('POST', {key: 'japandi', image: ''}, 'admin@x.vn');
+  assert.deepEqual((await call('GET')).json.images, {});
+});
+
+test('tối đa 3 phong cách, TV chọn 1 loại, ghi chú phòng kèm phong cách / màu riêng', () => {
+  const a = D.cleanAnswers({ps_phong_cach: ['hien_dai', 'japandi', 'boho', 'rustic'], pk_tv: ['tv_treo', 'tv_di_dong', 'game'], wc_thiet_bi: ['quat_4in1', 'den_suoi'],
+    pk_ghi_chu: 'ấm', 'pk_ghi_chu.pc': ['japandi', 'chua_biet'], 'pk_ghi_chu.mau': ['xam'], 'ps_mau.mau_khac': '#AABBCC', 'ps_mau.mau_khac2': 'x'});
+  assert.deepEqual(a.ps_phong_cach, ['hien_dai', 'japandi', 'boho']);
+  assert.deepEqual(a.pk_tv, ['tv_treo', 'game']);
+  assert.deepEqual(a.wc_thiet_bi, ['quat_4in1']);
+  assert.deepEqual(a['pk_ghi_chu.pc'], ['japandi']);
+  assert.equal(D.answerText(D.QUESTION_BY_ID.pk_ghi_chu, a), 'ấm · phong cách Japandi; màu Xám');
+  assert.equal(a['ps_mau.mau_khac'], '#aabbcc');
+  assert.ok(!('ps_mau.mau_khac' in D.cleanAnswers({'ps_mau.mau_khac': 'red'})));
 });

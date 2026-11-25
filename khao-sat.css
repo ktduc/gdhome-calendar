@@ -109,3 +109,37 @@
 }
 .ks-opt b:has(.ks-sw) { flex: 1; }
 @media (max-width: 560px) { .ks-reset { flex: none; padding: 0 8px; font-size: 12.5px; white-space: nowrap; } }
+/* Tích nhỏ gọn 1 dòng */
+.ks-sub { white-space: nowrap; max-width: 100%; }
+/* Nhóm lựa chọn (dòng phong cách, loại TV…) */
+.ks-ohead { margin: 10px 0 5px; font-size: 12px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--ks-muted); }
+.ks-ohead:first-of-type { margin-top: 0; }
+.ks-opts + .ks-opts, .ks-opts + .ks-colorpick { margin-top: 6px; }
+.ks-ohint { display: block; margin-top: 2px; font-size: 11.5px; font-weight: 400; color: var(--ks-muted); }
+.ks-hint.is-warn { animation: ks-warn 1.2s; }
+@keyframes ks-warn { 0%, 60% { background: #f3c9a8; color: #7a3a10; } }
+/* Ô màu = màu thật */
+.ks-dot { flex: none; display: inline-block; width: 18px; height: 18px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(0,0,0,.15); }
+.ks-sub .ks-dot { width: 11px; height: 11px; }
+.ks-colorpick { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 14px; color: var(--ks-muted); }
+.ks-colorpick input { width: 44px; height: 30px; padding: 0; border: 1px solid var(--ks-line); border-radius: 8px; background: #fff; cursor: pointer; }
+.ks-colorpick b { font-weight: 400; color: var(--ks-ink); }
+/* Ảnh minh hoạ phong cách + nút dán ảnh (phiếu mẫu) */
+.ks-opt.has-img span { flex-wrap: wrap; }
+.ks-simg { flex: 0 0 100%; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 7px; }
+.ks-imgbtn { position: relative; z-index: 2; margin: 3px 3px 0 0; padding: 1px 7px; border: 1px dashed var(--ks-line); border-radius: 999px; background: #fff; color: var(--ks-muted); font: inherit; font-size: 11.5px; cursor: pointer; }
+.ks-imgbtn:hover { border-color: var(--ks-brown); color: var(--ks-brown); }
+/* Phong cách & màu riêng từng không gian (mặc định theo phần chung) */
+.ks-look { margin-top: 8px; border: 1px solid var(--ks-line); border-radius: 10px; background: #fff; font-size: 13px; }
+.ks-look summary { padding: 7px 10px; cursor: pointer; color: var(--ks-brown); }
+.ks-look summary span { color: var(--ks-muted); }
+.ks-look p { margin: 4px 10px 4px; font-size: 11.5px; color: var(--ks-muted); text-transform: uppercase; letter-spacing: .04em; }
+.ks-look .ks-subs { padding: 0 8px 8px; }
+.ks-look.is-inherit .ks-sub { opacity: .6; }
+.ks-room .ks-look { margin-top: 0; }
+.ks-room-note { width: 100%; padding: 7px 10px; border: 1.5px solid var(--ks-line); border-radius: 10px; background: #fff; color: inherit; font: inherit; font-size: 13.5px; }
+/* Nút ảnh nằm gọn góc trên ô phong cách; gợi ý mm không xuống dòng */
+.ks-opt .ks-imgbtn { position: absolute; top: 3px; right: 4px; margin: 0; padding: 0 6px; font-size: 10.5px; opacity: .55; }
+.ks-opt .ks-imgdel { right: auto; left: 4px; }
+.ks-opt:hover .ks-imgbtn { opacity: 1; }
+.ks-ohint { white-space: nowrap; }

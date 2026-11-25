@@ -5,7 +5,7 @@
   const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
   const token = decodeURIComponent(location.pathname.split('/').filter(Boolean).pop() || '');
   const DRAFT = 'gdhome_survey_' + token;
-  const state = {answers: {}, step: 0, done: false, submittedAt: 0, busy: false, error: ''};
+  const state = {answers: {}, step: 0, done: false, submittedAt: 0, busy: false, error: '', images: {}, armed: ''};
 
   const store = {
     read() { try { return JSON.parse(localStorage.getItem(DRAFT) || 'null'); } catch { return null; } },
@@ -101,10 +101,36 @@
   const STYLE_SW = {hien_dai: '#f1f0ed,#b9b6b0,#55524d,#1f1f1f', modern_farmhouse: '#f6f2ea,#c9b79c,#6b5a45,#2d2a26', indochine: '#f3e9d6,#c8a165,#2f5d50,#6b2e1f',
     japandi: '#efe9df,#d6c4a8,#8d7b63,#3a3631', tan_co_dien: '#f7f3ec,#e3d3b5,#b89b6a,#7d6a55', toi_gian: '#ffffff,#eeeeec,#cfcdc9,#8c8a86',
     scandinavian: '#fbfbf9,#e4ddd1,#b9c4c9,#6f7b80', wabi_sabi: '#e9e2d6,#c4b6a0,#9a8a73,#5b5246', industrial: '#d9d6d1,#8c8780,#4a4744,#a0522d',
-    luxury: '#f4efe6,#c9a55c,#3d3a36,#121212'};
+    luxury: '#f4efe6,#c9a55c,#3d3a36,#121212', rustic: '#e8dcc8,#a47b52,#6b4a2e,#3b2a1c', mid_century: '#f2e6cf,#d98e32,#2f6f6a,#5a3b25',
+    boho: '#f3e7d7,#d8a47f,#9c6b4e,#6e7b5a', dia_trung_hai: '#ffffff,#e9dfcf,#3f7cb0,#1e3f66'};
+  // Ô màu = chính màu đó
+  const COLOR = {trang_kem: '#f3ede1', go_sang: '#d9b98c', go_toi: '#5b3d2b', xam: '#9b9a97', den: '#222', xanh_la: '#5f7a52', xanh_navy: '#25365a', vang_dong: '#b8893b',
+    pastel: 'linear-gradient(135deg,#f6d6d6,#d8e6f3,#e4f0d8)', mau_dat: '#b0643f'};
+  const dot = v => COLOR[v] ? '<i class="ks-dot" aria-hidden="true" style="background:' + COLOR[v] + '"></i>' : '';
+  const list = key => [].concat(state.answers[key] ?? []);
+  const STYLES = () => D.QUESTION_BY_ID.ps_phong_cach.options.filter(o => !D.EXCLUSIVE.includes(o.v)), COLORS = () => D.QUESTION_BY_ID.ps_mau.options;
+  const lookLabel = (pc, mau) => [...pc.map(v => STYLES().find(o => o.v === v)?.l), ...mau.map(v => COLORS().find(o => o.v === v)?.l)].filter(Boolean).join(', ');
+  // Phong cách & màu riêng của 1 không gian: chưa chọn riêng thì hiện (mờ) theo phần chung, bấm vào là thành lựa chọn riêng
+  function lookHtml(pc, mau, attr) {
+    const inherit = !pc.length && !mau.length, P = inherit ? list('ps_phong_cach') : pc, M = inherit ? list('ps_mau') : mau;
+    const chips = (k, opts, sel) => opts.map(o => '<label class="ks-sub"><input type="checkbox" ' + attr(k) + ' value="' + o.v + '"' + (sel.includes(o.v) ? ' checked' : '') + '>' +
+      (k === 'mau' ? dot(o.v) : '') + esc(o.l) + '</label>').join('');
+    return '<details class="ks-look' + (inherit ? ' is-inherit' : '') + '"><summary>Phong cách & màu riêng: <span>' + esc(inherit ? 'theo phần chung' + (P.length || M.length ? ' (' + lookLabel(P, M) + ')' : '') : lookLabel(P, M)) + '</span></summary>' +
+      '<p>Phong cách</p><div class="ks-subs">' + chips('pc', STYLES(), P) + '</div><p>Màu</p><div class="ks-subs">' + chips('mau', COLORS(), M) + '</div></details>';
+  }
+  // Bật / tắt 1 phong cách hoặc màu riêng; đang theo phần chung thì chép phần chung sang trước
+  function toggleLook(own, el) {
+    const next = !own.pc.length && !own.mau.length ? {pc: list('ps_phong_cach').filter(v => STYLES().some(o => o.v === v)), mau: list('ps_mau')} : {pc: [...own.pc], mau: [...own.mau]};
+    const k = el.dataset.k || el.dataset.roomF;
+    next[k] = el.checked ? [...new Set([...next[k], el.value])] : next[k].filter(v => v !== el.value);
+    const box = el.closest('details');
+    box.classList.remove('is-inherit');
+    box.querySelector('summary span').textContent = lookLabel(next.pc, next.mau) || 'theo phần chung';
+    return next;
+  }
   const swatch = (q, o) => q.id === 'ps_phong_cach' && STYLE_SW[o.v] ? '<em class="ks-sw" aria-hidden="true" style="background:linear-gradient(90deg,' +
     STYLE_SW[o.v].split(',').map((c, i) => c + ' ' + i * 25 + '% ' + (i + 1) * 25 + '%').join(',') + ')"></em>' : '';
-  const blankRoom = () => ({who: '', items: [], bed: '', mat: ''});
+  const blankRoom = () => ({who: '', items: [], bed: '', mat: '', pc: [], mau: [], note: ''});
   const selectHtml = (field, list, value, placeholder) => '<select data-room-f="' + field + '"><option value="">' + placeholder + '</option>' +
     list.map(o => '<option value="' + o.v + '"' + (o.v === value ? ' selected' : '') + '>' + esc(o.l) + '</option>').join('') + '</select>';
   // Bảng phòng ngủ: P1 (phòng chính) 1 hàng riêng, P2..n xếp cột; chọn người ở rồi mới hiện lựa chọn hợp với người đó
@@ -113,9 +139,11 @@
     const card = i => {
       const r = rooms[i] || blankRoom();
       return '<div class="ks-room" data-room="' + i + '"><b>' + (i ? 'Phòng ' + (i + 1) : 'Phòng ngủ chính') + '</b>' + selectHtml('who', D.ROOM.who, r.who, 'Phòng cho ai?') +
+        lookHtml(r.pc || [], r.mau || [], k => 'data-room-f="' + k + '"') +
         (r.who ? '<div class="ks-subs">' + D.roomItems(r.who).map(o => '<label class="ks-sub"><input type="checkbox" data-room-f="items" value="' + o.v + '"' +
           (r.items.includes(o.v) ? ' checked' : '') + '>' + esc(o.l) + '</label>').join('') + '</div>' : '') +
-        '<div class="ks-room-bed">' + selectHtml('bed', D.ROOM.beds, r.bed, 'Cỡ giường') + selectHtml('mat', D.ROOM.mats, r.mat, 'Kiểu giường') + '</div></div>';
+        '<div class="ks-room-bed">' + selectHtml('bed', D.ROOM.beds, r.bed, 'Cỡ giường') + selectHtml('mat', D.ROOM.mats, r.mat, 'Kiểu giường') + '</div>' +
+        '<input type="text" class="ks-room-note" data-room-f="note" maxlength="300" placeholder="Ghi chú riêng phòng này" value="' + esc(r.note || '') + '"></div>';
     };
     const n = D.roomCount(state.answers), rest = Array.from({length: n - 1}, (_, i) => card(i + 1)).join('');
     return '<fieldset class="ks-q ks-rooms-q' + (rooms.some(r => r.who) ? ' is-done' : '') + '" data-q="' + q.id + '"><legend class="ks-qhead">' + head + '</legend>' +
@@ -124,29 +152,40 @@
 
   function questionHtml(q, n) {
     const head = '<span class="ks-num">' + n + '</span><span class="ks-qi" aria-hidden="true">' + I(Q_ICON[q.id] || '•') + '</span><span class="ks-qtext">' + esc(q.text) +
-      (q.type === 'many' ? ' <span class="ks-hint">chọn nhiều</span>' : '') + '</span>';
+      (q.type === 'many' ? ' <span class="ks-hint">' + (q.max ? 'chọn tối đa ' + q.max : 'chọn nhiều') + '</span>' : '') + '</span>';
     if (q.type === 'rooms') return roomsHtml(q, head);
     if (q.type === 'date') {
       const value = state.answers[q.id] || '';
       return '<div class="ks-q' + (value ? ' is-done' : '') + '"><label class="ks-qhead" for="q-' + q.id + '">' + head + '</label><div class="ks-date"><input type="date" id="q-' + q.id + '" data-q="' + q.id + '" value="' + esc(value) + '">' +
         '<span class="ks-lunar">' + esc(value ? D.lunarText(value) : '') + '</span></div></div>';
     }
-    if (q.type === 'text') {
-      return '<div class="ks-q"><label class="ks-qhead" for="q-' + q.id + '">' + head + '</label><textarea id="q-' + q.id + '" data-q="' + q.id + '" maxlength="1000">' + esc(state.answers[q.id] || '') + '</textarea></div>';
+    if (q.type === 'text' || q.type === 'note') {
+      return '<div class="ks-q"><label class="ks-qhead" for="q-' + q.id + '">' + head + '</label><textarea id="q-' + q.id + '" data-q="' + q.id + '" maxlength="1000">' + esc(state.answers[q.id] || '') + '</textarea>' +
+        (q.type === 'note' ? lookHtml(list(q.id + '.pc'), list(q.id + '.mau'), k => 'data-look="' + q.id + '" data-k="' + k + '"') : '') + '</div>';
     }
     const kind = q.type === 'many' ? 'checkbox' : 'radio';
-    const opts = q.options.map(o => {
-      const icon = optIcon(q, o);
-      const opt = '<label class="ks-opt"><input type="' + kind + '" name="' + q.id + '" data-q="' + q.id + '" value="' + esc(o.v) + '"' +
-        (has(q.id, o.v) ? ' checked' : '') + '><span>' + (icon ? '<i aria-hidden="true">' + I(icon) + '</i>' : '') + '<b>' + esc(o.l) + swatch(q, o) + '</b></span></label>';
+    const optHtml = o => {
+      const icon = optIcon(q, o), img = q.id === 'ps_phong_cach' && state.images[o.v];
+      const edit = preview && q.id === 'ps_phong_cach' && !D.EXCLUSIVE.includes(o.v) ? '<button type="button" class="ks-imgbtn" data-img="' + o.v + '" title="Chọn hoặc dán ảnh minh hoạ (Ctrl+V)">' + (img ? 'Đổi ảnh' : '+ Ảnh') + '</button>' +
+        (img ? '<button type="button" class="ks-imgbtn ks-imgdel" data-img-del="' + o.v + '" title="Xoá ảnh">✕</button>' : '') : '';
+      const opt = '<label class="ks-opt' + (img ? ' has-img' : '') + '"><input type="' + kind + '" name="' + q.id + '" data-q="' + q.id + '" value="' + esc(o.v) + '"' +
+        (has(q.id, o.v) ? ' checked' : '') + '><span>' + (img ? '<img class="ks-simg" alt="" src="' + esc(img) + '">' : '') + (q.id === 'ps_mau' && COLOR[o.v] ? dot(o.v) : icon ? '<i aria-hidden="true">' + I(icon) + '</i>' : '') +
+        '<b>' + esc(o.l) + (q.hint?.[o.v] ? '<small class="ks-ohint">' + esc(q.hint[o.v]) + '</small>' : '') + (img ? '' : swatch(q, o)) + '</b></span>' + edit + '</label>';
       // Tích nhỏ ngay dưới ô (vd Lò nướng → Âm tủ); tích vào thì ô chính tự được chọn
       const subs = q.sub?.[o.v];
       return subs ? '<div class="ks-optbox">' + opt + '<div class="ks-subs">' + subs.map(s => '<label class="ks-sub"><input type="checkbox" data-sub="' + q.id + '.' + esc(o.v) + '" data-g="' + s.g + '" value="' + esc(s.v) + '"' +
         ([].concat(state.answers[q.id + '.' + o.v] ?? []).includes(s.v) ? ' checked' : '') + '>' + esc(s.l) + '</label>').join('') + '</div></div>' : opt;
-    }).join('');
-    const other = q.other ? '<input type="text" data-other="' + q.id + '" maxlength="300" placeholder="Khác… (ghi rõ)" value="' + esc(state.answers[q.id + '.khac'] || '') + '">' : '';
+    };
+    // Chia nhóm lựa chọn (vd dòng phong cách, loại TV / thiết bị kèm); lựa chọn ngoài nhóm xếp cuối
+    const grouped = new Set((q.heads || []).flatMap(([, vs]) => vs));
+    const blocks = [...(q.heads || []).map(([title, vs]) => [title, q.options.filter(o => vs.includes(o.v))]), ['', q.options.filter(o => !grouped.has(o.v))]].filter(([, os]) => os.length);
+    const opts = blocks.map(([title, os]) => (title ? '<p class="ks-ohead">' + esc(title) + '</p>' : '') + '<div class="ks-opts">' + os.map(optHtml).join('') + '</div>').join('');
+    const extra = (key, placeholder) => '<input type="text" data-extra="' + key + '" maxlength="300" placeholder="' + placeholder + '" value="' + esc(state.answers[key] || '') + '">';
+    const color = q.color ? '<div class="ks-colorpick"><span>Màu khác (tự chọn):</span><input type="color" data-extra="' + q.id + '.mau_khac" value="' + esc(state.answers[q.id + '.mau_khac'] || '#c8b8a0') + '">' +
+      '<b>' + esc(state.answers[q.id + '.mau_khac'] || 'chưa chọn') + '</b>' + (state.answers[q.id + '.mau_khac'] ? '<button type="button" class="ks-imgbtn" data-clear="' + q.id + '.mau_khac">✕</button>' : '') + '</div>' : '';
     const answered = [].concat(state.answers[q.id] ?? []).length > 0;
-    return '<fieldset class="ks-q ks-' + q.type + (answered ? ' is-done' : '') + '"><legend class="ks-qhead">' + head + '</legend><div class="ks-opts">' + opts + '</div>' + other + '</fieldset>';
+    return '<fieldset class="ks-q ks-' + q.type + (answered ? ' is-done' : '') + '"><legend class="ks-qhead">' + head + '</legend>' + opts + color +
+      (q.other ? extra(q.id + '.khac', 'Khác… (ghi rõ)') : '') + (q.note ? extra(q.id + '.ghi_chu', esc(q.note)) : '') + '</fieldset>';
   }
 
   function render() {
@@ -194,9 +233,10 @@
     const rooms = Array.from({length: D.roomCount(state.answers)}, (_, k) => ({...blankRoom(), ...(state.answers[id] || [])[k]}));
     const r = rooms[i];
     if (field === 'items') r.items = el.checked ? [...new Set([...r.items, el.value])] : r.items.filter(v => v !== el.value);
-    else r[field] = el.value;
+    else if (field === 'pc' || field === 'mau') Object.assign(r, toggleLook(r, el));
+    else r[field] = field === 'note' ? el.value.trim() : el.value;
     if (field === 'who') r.items = r.items.filter(v => D.roomItems(r.who).some(o => o.v === v));
-    if (rooms.some(x => x.who || x.items.length || x.bed || x.mat)) state.answers[id] = rooms; else delete state.answers[id];
+    if (rooms.some(x => x.who || x.items.length || x.bed || x.mat || x.pc.length || x.mau.length || x.note)) state.answers[id] = rooms; else delete state.answers[id];
     store.write();
     if (field === 'who') rerender(); else renderSide();
   }
@@ -213,6 +253,7 @@
     if (list.size) state.answers[key] = [...list]; else delete state.answers[key];
     if (el.checked && !has(id, v)) {   // tích "Âm tủ" mà chưa chọn ô chính thì chọn luôn
       state.answers[id] = q.type === 'many' ? [...new Set([].concat(state.answers[id] ?? []).concat(v))] : v;
+      for (const ov of Object.keys(q.sub)) if (!has(id, ov)) delete state.answers[id + '.' + ov];
       rerender();
     }
     store.write();
@@ -226,7 +267,13 @@
       const list = new Set([].concat(state.answers[id] ?? []));
       el.checked ? list.add(el.value) : list.delete(el.value);
       // "Không" / "Chưa biết" phủ định các ô còn lại và ngược lại
-      if (el.checked) for (const v of [...list]) if (v !== el.value && (D.EXCLUSIVE.includes(v) || D.EXCLUSIVE.includes(el.value))) list.delete(v);
+      const q = D.QUESTION_BY_ID[id], one = (q.one || []).find(g => g.includes(el.value)) || [];
+      if (el.checked) for (const v of [...list]) if (v !== el.value && (D.EXCLUSIVE.includes(v) || D.EXCLUSIVE.includes(el.value) || one.includes(v))) list.delete(v);
+      if (q.max && list.size > q.max) {   // quá số lựa chọn tối đa: không nhận, nháy nhắc
+        list.delete(el.value);
+        const hint = el.closest('.ks-q').querySelector('.ks-hint');
+        hint?.classList.remove('is-warn'); void hint?.offsetWidth; hint?.classList.add('is-warn');
+      }
       el.closest('.ks-q').querySelectorAll('input[data-q]').forEach(box => { box.checked = list.has(box.value); });
       if (list.size) state.answers[id] = [...list]; else delete state.answers[id];
     } else if (el.type === 'radio') state.answers[id] = el.value;
@@ -257,22 +304,66 @@
     saveDraft(); render(); scrollTo(0, 0);
   }
 
+  // Ảnh minh hoạ phong cách: nén ~480px ở trình duyệt rồi lưu dùng chung (chỉ tài khoản quản trị)
+  const shrink = file => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 480 / Math.max(img.width, img.height)), c = document.createElement('canvas');
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/jpeg', .8));
+    };
+    img.onerror = () => reject(new Error('Không đọc được ảnh'));
+    img.src = URL.createObjectURL(file);
+  });
+  async function saveImage(key, image) {
+    try {
+      if (!window.GDHomeShell) throw new Error('Trang chưa tải xong, thử lại');
+      state.images = (await GDHomeShell.api('/api/survey-images', {method: 'POST', body: {key, image}})).images || {};
+      GDHomeShell.toast?.(image ? 'Đã lưu ảnh minh hoạ' : 'Đã xoá ảnh');
+    } catch (error) { alert('Chưa lưu được ảnh: ' + error.message); }
+    state.armed = ''; rerender();
+  }
+  const uploadImage = async file => { const key = state.armed; try { saveImage(key, await shrink(file)); } catch (error) { alert(error.message); } };
+  const pickImage = () => {
+    const input = Object.assign(document.createElement('input'), {type: 'file', accept: 'image/*'});
+    input.onchange = () => input.files[0] && uploadImage(input.files[0]);
+    input.click();
+  };
+
   function bind() {
     const main = byId('ks-main');
     main.addEventListener('change', event => {
       if (event.target.dataset.roomF) onRoom(event.target);
       else if (event.target.dataset.sub) onSub(event.target);
+      else if (event.target.dataset.look) {
+        const el = event.target, id = el.dataset.look, next = toggleLook({pc: list(id + '.pc'), mau: list(id + '.mau')}, el);
+        for (const k of ['pc', 'mau']) if (next[k].length) state.answers[id + '.' + k] = next[k]; else delete state.answers[id + '.' + k];
+        store.write(); renderSide();
+      } else if (event.target.type === 'color') rerender();
       else if (event.target.dataset.q && event.target.type !== 'text') onAnswer(event.target);
     });
     main.addEventListener('input', event => {
       const el = event.target;
       if (el.tagName === 'TEXTAREA') onAnswer(el);
-      else if (el.dataset.other) {
-        if (el.value.trim()) state.answers[el.dataset.other + '.khac'] = el.value; else delete state.answers[el.dataset.other + '.khac'];
+      else if (el.dataset.extra) {   // ô Khác / ghi chú / màu tự chọn
+        if (el.value.trim()) state.answers[el.dataset.extra] = el.value; else delete state.answers[el.dataset.extra];
+        if (el.type === 'color') el.nextElementSibling.textContent = el.value;
         store.write(); renderSide();
       }
     });
-    main.addEventListener('click', event => { if (event.target.id === 'ks-edit') { state.done = false; state.step = 0; render(); scrollTo(0, 0); } });
+    main.addEventListener('click', event => {
+      const t = event.target;
+      if (t.id === 'ks-edit') { state.done = false; state.step = 0; render(); scrollTo(0, 0); }
+      if (t.dataset.clear) { delete state.answers[t.dataset.clear]; store.write(); rerender(); }
+      if (t.dataset.img) { event.preventDefault(); state.armed = t.dataset.img; t.textContent = 'Ctrl+V để dán'; pickImage(); }
+      if (t.dataset.imgDel) { event.preventDefault(); saveImage(t.dataset.imgDel, ''); }
+    });
+    // Phiếu mẫu: dán ảnh (Ctrl+V) vào phong cách vừa bấm "+ Ảnh"
+    document.addEventListener('paste', event => {
+      const file = state.armed && [...(event.clipboardData?.files || [])].find(x => x.type.startsWith('image/'));
+      if (file) { event.preventDefault(); uploadImage(file); }
+    });
     byId('ks-back').addEventListener('click', () => move(-1));
     byId('ks-next').addEventListener('click', () => move(1));
     const range = byId('ks-range');
@@ -307,6 +398,7 @@
       state.answers = data.answers || {}; state.submittedAt = data.submittedAt || 0;
       const draft = store.read();
       if (draft && draft.at > (data.updatedAt || 0) && draft.answers) state.answers = draft.answers;
+      state.images = (await fetch('/api/survey-images').then(r => r.ok ? r.json() : {}).catch(() => ({}))).images || {};
       render();
     } catch (error) {
       byId('ks-main').innerHTML = '<p class="ks-error">' + esc(error.message) + '</p>';

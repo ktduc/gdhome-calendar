@@ -3,7 +3,7 @@
 //      'survey-index-v1' = {tokens:{<sha256(token)>:{k:dataKey,p:projectId}}} để tra token -> tài khoản + dự án.
 // Route công khai chỉ đọc/ghi đúng khảo sát của token; không trả dữ liệu nào khác của dự án/tài khoản.
 const crypto = require('node:crypto');
-const {cleanAnswers} = require('./khao-sat-data');
+const {cleanAnswers, QUESTION_BY_ID} = require('./khao-sat-data');
 
 const INDEX_KEY = 'survey-index-v1';
 const MAX_BODY = 64 * 1024;
@@ -102,4 +102,24 @@ async function handleSurveyAdmin(req, res, urlPath, {store, dataKey, readJsonBod
   return sendJson(res, 404, {success: false, message: 'API không tồn tại'});
 }
 
-module.exports = {handleSurveyPublic, handleSurveyAdmin, keyFor, INDEX_KEY};
+// /api/survey-images: ảnh minh hoạ phong cách dùng chung mọi phiếu (khách xem không cần đăng nhập), chỉ quản trị được dán / đổi
+const IMAGES_KEY = 'survey-images-v1';
+const IMAGE = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+const MAX_IMAGE = 400_000;   // ảnh đã nén ở trình duyệt (~300 KB)
+async function handleSurveyImages(req, res, {store, dataKey, admins, readJsonBody, sendJson}) {
+  const doc = await store.get(IMAGES_KEY) || {};
+  const canEdit = !!dataKey && (!admins.length || admins.includes(dataKey));
+  if (req.method === 'GET') return sendJson(res, 200, {images: doc.images || {}, canEdit});
+  if (req.method !== 'POST') fail(405, 'Phương thức không hỗ trợ');
+  if (!canEdit) fail(403, 'Chỉ tài khoản quản trị được đổi ảnh minh hoạ.');
+  const body = await readJsonBody(req);
+  const key = String(body?.key || ''), image = body?.image ? String(body.image) : '';
+  if (!QUESTION_BY_ID.ps_phong_cach.options.some(o => o.v === key)) fail(400, 'Phong cách không có trong phiếu.');
+  if (image && (image.length > MAX_IMAGE || !IMAGE.test(image))) fail(400, 'Ảnh không hợp lệ hoặc quá lớn.');
+  const images = {...doc.images};
+  if (image) images[key] = image; else delete images[key];
+  await store.put(IMAGES_KEY, {images, updatedAt: new Date().toISOString()});
+  return sendJson(res, 200, {images, canEdit});
+}
+
+module.exports = {handleSurveyPublic, handleSurveyAdmin, keyFor, INDEX_KEY, handleSurveyImages};
