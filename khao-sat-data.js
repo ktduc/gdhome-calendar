@@ -40,8 +40,6 @@
       Q('thanh_vien', 'many', 'Thành viên', 'Trong nhà có những ai?', 'vo_chong:Vợ chồng;tre_nho:Trẻ nhỏ dưới 6 tuổi;tre_hoc:Trẻ đi học;thanh_thieu:Thanh thiếu niên;ong_ba:Ông bà / người lớn tuổi;giup_viec:Người giúp việc ở lại;khach_o_lai:Khách / họ hàng hay ở lại', OTHER),
       Q('thu_cung', 'many', 'Thú cưng', 'Nhà có nuôi thú cưng không?', 'khong:Không nuôi;cho:Chó;meo:Mèo;chim_ca:Chim / cá / thú nhỏ', OTHER),
       Q('thoi_quen', 'many', 'Thói quen sinh hoạt', 'Cả nhà hay làm gì ở nhà?', 'nau_an:Nấu ăn hàng ngày;tiep_khach:Tiếp khách, tụ tập bạn bè;lam_viec:Làm việc tại nhà;xem_phim:Xem phim, chơi game;the_thao:Tập gym, yoga;doc_sach:Đọc sách;cay_canh:Trồng cây, chăm sưu tầm;nhac:Nhạc cụ, karaoke', OTHER),
-      Q('gio_o_nha', 'one', 'Thời gian ở nhà', 'Nhà mình thường ở nhà vào lúc nào?', 'toi:Chủ yếu buổi tối và cuối tuần;ca_ngay:Có người ở nhà cả ngày;thay_doi:Không cố định'),
-      Q('van_dong', 'one', 'Đi lại khó khăn', 'Có ai đi lại khó khăn hoặc cần lưu ý an toàn (người già, trẻ nhỏ)?', 'khong:Không;co:Có, cần lưu ý (sàn chống trơn, tay vịn, bo góc…)')
     ]},
     {id: 'phong_cach', title: 'Phong cách & màu sắc', intro: 'Định hướng chung cho cả nhà – các phòng sẽ theo hướng này, chỗ nào khác thì ghi ở từng phòng.', questions: [
       Q('ps_phong_cach', 'many', 'Phong cách ưa thích', 'Mình thích phong cách nào? (chọn tối đa 3)', 'hien_dai:Hiện đại;modern_farmhouse:Modern Farmhouse;indochine:Indochine;japandi:Japandi;tan_co_dien:Tân cổ điển;toi_gian:Tối giản (Minimalist);scandinavian:Bắc Âu (Scandinavian);wabi_sabi:Wabi-sabi;industrial:Industrial (công nghiệp);luxury:Sang trọng (Luxury);chua_biet:Chưa biết, cần tư vấn', OTHER),
@@ -56,8 +54,7 @@
     {id: 'ngan_sach', title: 'Ngân sách & thời gian', intro: 'Để GD HOME đề xuất phương án sát thực tế.', questions: [
       Q('ns_noi_that', 'one', 'Ngân sách nội thất', 'Ngân sách nội thất dự kiến (không gồm phần thô)?', 'duoi_200:Dưới 200 triệu;200_400:200 - 400 triệu;400_700:400 - 700 triệu;700_1000:700 triệu - 1 tỷ;tren_1000:Trên 1 tỷ;chua_biet:Chưa xác định, cần tư vấn'),
       Q('ns_gom', 'many', 'Hạng mục trong ngân sách', 'Ngân sách đó đã gồm những hạng mục nào?', 'thiet_ke:Thiết kế;thi_cong:Thi công hoàn thiện;noi_that_roi:Nội thất rời;den:Đèn;rem:Rèm;decor:Đồ trang trí;thiet_bi:Thiết bị bếp, điện tử', OTHER),
-      Q('ns_vao_o', 'one', 'Thời gian vào ở', 'Mong muốn vào ở sau bao lâu?', 'duoi_2:Dưới 2 tháng;3_4:3 - 4 tháng;5_6:5 - 6 tháng;tren_6:Trên 6 tháng;chua_biet:Chưa xác định'),
-      Q('ns_moc', 'text', 'Mốc thời gian', 'Có mốc cố định nào (Tết, đám cưới, sinh em bé…)?', ''),
+      Q('ns_vao_o', 'one', 'Thời gian vào ở', 'Mong muốn vào ở sau bao lâu?', 'duoi_2:Dưới 2 tháng;3_4:3 - 4 tháng;5_6:5 - 6 tháng;tren_6:Trên 6 tháng;chua_biet:Chưa xác định', OTHER),
       Q('ns_uu_tien', 'many', 'Ưu tiên', 'Điều quan trọng nhất với mình? (chọn tối đa 3)', 'ben:Bền, dùng lâu;dep:Đẹp, ấn tượng;re:Chi phí hợp lý;de_ve_sinh:Dễ vệ sinh, ít bảo trì;tien_do:Thi công nhanh;thong_minh:Tiện nghi, công nghệ;luu_tru:Nhiều chỗ chứa đồ;suc_khoe:An toàn, thân thiện sức khoẻ'),
       Q('ns_quyet_dinh', 'one', 'Người quyết định', 'Ai cùng quyết định thiết kế?', 'mot:Mình tự quyết;vo_chong:Hai vợ chồng;gia_dinh:Cả gia đình (bố mẹ, anh chị em)')
     ]},
@@ -89,24 +86,19 @@
     ]},
     // ---------------------------------------------------------------- KĨ THUẬT
     {id: 'ky_thuat', title: 'Kĩ thuật điện - nước - trần', intro: 'Chốt sớm để đặt sẵn ống chờ, đường điện, vị trí thiết bị – tránh đục sửa về sau.', showIf: RESIDENTIAL, questions: [
-      Q('kt_dien', 'many', 'Điện', 'Về điện, nhà mình có / cần gì?', 'ba_pha:Điện 3 pha (thang máy, máy lớn);mat_troi:Điện mặt trời;du_phong:Máy phát / bộ lưu điện dự phòng;sac_xe:Ổ sạc xe điện;tu_dien:Đã có vị trí tủ điện tổng;chua_biet:Chưa rõ, cần tư vấn',
+      Q('kt_dien', 'many', 'Điện - mạng', 'Về điện và mạng, nhà mình có / cần gì?', 'ba_pha:Điện 3 pha (thang máy, máy lớn);mat_troi:Điện mặt trời;du_phong:Máy phát / bộ lưu điện dự phòng;sac_xe:Ổ sạc xe điện;tu_dien:Đã có vị trí tủ điện tổng;wifi:Wifi phủ toàn nhà;lan:Ổ mạng LAN các phòng;camera:Camera an ninh;chua_biet:Chưa rõ, cần tư vấn',
         {optIf: {ba_pha: HOUSE, mat_troi: HOUSE, sac_xe: HOUSE}, ...OTHER}),
-      Q('kt_nuoc_nong', 'one', 'Nước nóng', 'Nước nóng dùng loại nào?', 'nl_mat_troi:Năng lượng mặt trời;tong:Nóng tổng (heat pump / bình lớn);cuc_bo:Bình nóng lạnh từng phòng;truc_tiep:Máy nước nóng trực tiếp;giu:Giữ bình hiện có;chua_biet:Chưa biết, cần tư vấn',
-        {optIf: {nl_mat_troi: HOUSE}}),
-      Q('kt_nuoc', 'many', 'Nước', 'Thiết bị nước cần lưu ý?', 'loc_tong:Lọc tổng đầu nguồn;be_nuoc:Bể nước ngầm / bồn mái;tang_ap:Bơm tăng áp;khong:Không có gì đặc biệt', {optIf: {be_nuoc: HOUSE}, ...OTHER}),
+      Q('kt_nuoc', 'many', 'Nước', 'Nước nóng và thiết bị nước?', 'nl_mat_troi:Nước nóng năng lượng mặt trời;nong_tong:Nóng tổng (heat pump / bình lớn);binh_phong:Bình nóng lạnh từng phòng;loc_tong:Lọc tổng đầu nguồn;be_nuoc:Bể nước ngầm / bồn mái;tang_ap:Bơm tăng áp', {optIf: {nl_mat_troi: HOUSE, be_nuoc: HOUSE}, ...OTHER}),
       Q('dieu_hoa', 'one', 'Điều hoà', 'Điều hoà dự kiến?', 'treo:Treo tường;am_tran:Âm trần nối ống gió / cassette;trung_tam:Điều hoà trung tâm (VRV);giu_hien_trang:Giữ hệ thống hiện có;chua_biet:Chưa biết, cần tư vấn',
         {optIf: {trung_tam: HOUSE}}),
       Q('kt_dan_nong', 'one', 'Dàn nóng', 'Dàn nóng điều hoà đặt ở đâu?', 'mai:Đưa lên mái;ban_cong:Ban công / logia;bql:Vị trí toà nhà quy định;chua_biet:Chưa rõ, cần tư vấn',
         {optIf: {mai: HOUSE, bql: FLAT}, showIf: {q: 'dieu_hoa', notIn: ['giu_hien_trang']}}),
       Q('kt_tran', 'many', 'Trần', 'Trần nhà mong muốn?', 'phang:Trần thạch cao phẳng;giat_cap:Trần giật cấp, có hắt sáng;lo_be_tong:Để lộ trần bê tông;quat_tran:Quạt trần;quat_dh:Quạt điều hoà đa năng;thoat_mui:Ống thoát mùi bếp đi trong trần', OTHER),
       Q('kt_den', 'many', 'Kiểu đèn', 'Kiểu đèn chiếu sáng?', 'downlight:Đèn âm trần (downlight);spot:Đèn rọi (spotlight) điểm nhấn;ray:Đèn ray nam châm;led_hat:LED hắt trần / tủ;tha:Đèn thả, đèn trang trí;chua_biet:Chưa biết, cần tư vấn'),
-      Q('kt_tuong', 'many', 'Tường', 'Tường cần làm gì?', 'xay_moi:Xây / dời tường mới;op:Ốp tường (gỗ, đá, lam);son:Chỉ sơn bả lại;giu:Giữ nguyên'),
-      Q('kt_mang', 'many', 'Mạng - camera', 'Mạng và camera?', 'wifi:Wifi phủ toàn nhà (mesh);lan:Ổ mạng LAN các phòng;camera:Camera an ninh;chua_biet:Chưa rõ, trao đổi sau')
     ]},
     // ---------------------------------------------------------------- TỪNG KHÔNG GIAN
     {id: 'khach', title: 'Sảnh & phòng khách', intro: 'Lối vào, không gian tiếp khách và sinh hoạt chung.', showIf: RESIDENTIAL, questions: [
       Q('sanh', 'many', 'Sảnh / lối vào', 'Khu lối vào cần gì?', 'tu_giay:Tủ giày (cánh thoáng, tránh mùi);ghe:Ghế ngồi đi giày (kéo ra từ tủ);guong:Gương soi toàn thân;moc:Móc treo áo, túi;khong:Không cần gì thêm', OTHER),
-      Q('pk_khach', 'one', 'Lượng khách', 'Nhà có hay tiếp khách đông không?', 'it:Ít khách;thinh_thoang:Thỉnh thoảng 6 - 10 người;nhieu:Thường xuyên đông người'),
       Q('pk_sofa', 'one', 'Kiểu sofa', 'Bộ ghế phòng khách mong muốn?', 'goc_l:Sofa góc chữ L;van:Sofa văng + ghế đơn;thap:Sofa thấp / ngồi bệt;ghe_go:Bộ bàn ghế gỗ;chua_biet:Chưa biết, cần tư vấn',
         {sub: {goc_l: 'da:Da;ni:Nỉ / vải;cung:Đệm cứng;mem:Đệm mềm', van: 'da:Da;ni:Nỉ / vải;cung:Đệm cứng;mem:Đệm mềm', thap: 'da:Da;ni:Nỉ / vải'}}),
       Q('pk_tv', 'many', 'TV / giải trí', 'Giải trí trong phòng khách?', 'tv_treo:TV treo tường;tv_frame:TV khung tranh (Frame);tv_ke:TV đặt trên kệ;may_chieu:Máy chiếu;game:Máy chơi game (PlayStation…);am_thanh:Dàn âm thanh / loa;khong:Không dùng TV'),
@@ -123,7 +115,6 @@
         {sub: {lo_nuong: AM_TU, lo_vi_song: AM_TU, loc_nuoc: AM_TU, rua_bat: 'am_tu:Âm tủ;dat_cao:Đặt cao, đỡ cúi', tu_lanh_lon: 'am_tu:Âm tủ;am_tuong:Âm tường'}, ...OTHER}),
       Q('bep_luu_tru', 'many', 'Lưu trữ bếp', 'Cần chỗ cất đồ bếp nào?', 'do_kho:Tủ đồ khô, kho thực phẩm;gia_vi:Kệ gia vị gần bếp;noi_chao:Ngăn kéo nồi chảo;bat_dia:Tủ chén bát lớn;thung_rac:Thùng rác phân loại âm tủ', OTHER),
       Q('ban_an', 'one', 'Bàn ăn', 'Bàn ăn dùng cho bao nhiêu người?', 'bon:4 người;sau:6 người;tam:8 người trở lên;mo_rong:Bàn kéo dài được;chi_bar:Chỉ ăn ở quầy bar / đảo bếp'),
-      Q('ban_an_vi_tri', 'one', 'Vị trí bàn ăn', 'Bàn ăn đặt ở đâu?', 'canh_bep:Sát khu bếp;phong_rieng:Phòng ăn riêng;canh_khach:Liền khu phòng khách'),
       NOTE('bep_ghi_chu', 'bếp')
     ]},
     {id: 'ngu', title: 'Phòng ngủ', intro: 'Không gian nghỉ ngơi cho từng thành viên.', showIf: RESIDENTIAL, questions: [
@@ -136,15 +127,14 @@
         {showIf: KIDS, sub: {giuong_tang: 'che_chan:Cần thành chắn an toàn'}, ...OTHER}),
       Q('pn_con_dem', 'one', 'Đệm giường của con', 'Kích thước đệm giường của con?', '1m:1m;1m2:1m2;1m4:1m4;1m6:1m6;chua_biet:Chưa biết, cần tư vấn', {showIf: KIDS}),
       Q('pn_ong_ba', 'one', 'Phòng ông bà', 'Phòng người lớn tuổi?', 'tang_tret:Ưu tiên tầng thấp / gần WC;co_thang:Có thể lên cầu thang;chua_biet:Chưa quyết định', {showIf: [HOUSE, ELDERLY]}),
-      Q('pn_khach', 'one', 'Phòng khách ngủ qua đêm', 'Cần phòng cho khách ngủ lại?', 'co:Có, 1 phòng riêng;da_nang:Phòng đa năng (làm việc + khách);khong:Không cần'),
+      Q('pn_khach', 'one', 'Phòng khách ngủ qua đêm', 'Cần phòng cho khách ngủ lại?', 'co:Có, 1 phòng riêng;da_nang:Phòng đa năng (làm việc + khách);khong:Không cần', {showIf: {q: 'thanh_vien', in: ['khach_o_lai']}}),
       Q('pn_rem_sang', 'one', 'Ánh sáng phòng ngủ', 'Ánh sáng và độ ồn phòng ngủ?', 'toi:Cần tối, cản sáng hoàn toàn;tu_nhien:Thích nhiều ánh sáng tự nhiên;chong_on:Cần cách âm (đường ồn, hàng xóm)'),
       NOTE('pn_ghi_chu', 'các phòng ngủ')
     ]},
     {id: 'wc', title: 'Nhà vệ sinh', intro: 'Chi tiết khu vệ sinh và tắm giặt.', showIf: RESIDENTIAL, questions: [
       Q('wc_so', 'one', 'Số WC', 'Cần bao nhiêu nhà vệ sinh?', '1:1;2:2;3:3;4:4 trở lên'),
       Q('wc_doi', 'one', 'Dời vị trí WC', 'Có dời / thêm WC so với hiện trạng không? (phải tính lại đường ống)', 'khong:Giữ nguyên vị trí;co:Có dời / thêm WC mới;chua_biet:Chưa biết, cần tư vấn'),
-      Q('wc_kho_uot', 'one', 'Phân khu khô / ướt', 'Cách ngăn khu tắm?', 'kinh:Vách kính tắm đứng;rem:Rèm / chỉ để vòi hoa sen;bon:Có bồn tắm;khong:Không cần phân tách'),
-      Q('wc_thiet_bi', 'many', 'Thiết bị WC', 'Thiết bị mong muốn?', 'bon_tam:Bồn tắm nằm;bon_cau_tt:Bồn cầu thông minh;sen_cay:Sen cây;lavabo_doi:Lavabo đôi;tu_guong:Tủ gương;quat_4in1:Quạt điều hoà 4 trong 1 (sưởi, hút, thổi, đèn);xong_hoi:Xông hơi;ban_dung:Bàn vệ sinh', OTHER),
+      Q('wc_thiet_bi', 'many', 'Thiết bị WC', 'Thiết bị mong muốn?', 'vach_kinh:Vách kính tắm đứng;bon_tam:Bồn tắm nằm;bon_cau_tt:Bồn cầu thông minh;sen_cay:Sen cây;lavabo_doi:Lavabo đôi;tu_guong:Tủ gương;quat_4in1:Quạt điều hoà 4 trong 1 (sưởi, hút, thổi, đèn);xong_hoi:Xông hơi;ban_dung:Bàn vệ sinh', OTHER),
       Q('wc_an_toan', 'one', 'An toàn', 'WC cần lưu ý an toàn (người già, trẻ nhỏ)?', 'co:Có (sàn chống trơn, tay vịn, tránh bậc);khong:Không đặc biệt', {showIf: [RESIDENTIAL, {q: 'thanh_vien', in: ['ong_ba', 'tre_nho']}]})
     ]},
     {id: 'lam_viec', title: 'Làm việc & học tập', intro: 'Góc làm việc, học bài tại nhà.', showIf: RESIDENTIAL, questions: [
@@ -163,9 +153,7 @@
     {id: 'luu_tru', title: 'Lưu trữ & đồ đạc', intro: 'Càng đủ thông tin, tủ thiết kế càng vừa với đồ của mình.', showIf: RESIDENTIAL, questions: [
       Q('lt_quan_ao', 'one', 'Lượng quần áo', 'Lượng quần áo, túi xách, phụ kiện?', 'it:Vừa phải, tủ âm là đủ;nhieu:Nhiều, cần tủ lớn;rat_nhieu:Rất nhiều, nên có phòng thay đồ', {sub: {nhieu: 'vay_dai:Nhiều váy / áo dài cần treo cao', rat_nhieu: 'vay_dai:Nhiều váy / áo dài cần treo cao'}}),
       Q('lt_giay', 'one', 'Lượng giày dép', 'Số lượng giày dép của cả nhà?', 'it:Dưới 10 đôi;vua:10 - 30 đôi;nhieu:Trên 30 đôi / sưu tầm'),
-      Q('lt_sach', 'one', 'Sách', 'Sách, tài liệu?', 'it:Ít;vua:Vài kệ;nhieu:Rất nhiều, như thư viện'),
-      Q('lt_the_thao', 'many', 'Đồ thể thao', 'Đồ thể thao, giải trí cần cất?', 'xe_dap:Xe đạp;golf:Gậy golf;vot:Vợt, bóng;cam_trai:Đồ cắm trại, du lịch;gym:Thiết bị gym tại nhà;khong:Không có', OTHER),
-      Q('lt_khac', 'many', 'Đồ cồng kềnh khác', 'Đồ cồng kềnh khác cần chỗ cất?', 'vali:Vali;tet:Đồ Tết, đồ cúng;tre_em:Đồ trẻ em (xe đẩy, đồ chơi);dung_cu:Dụng cụ sửa chữa;hut_bui:Máy hút bụi, robot, thang;thuc_pham:Kho thực phẩm khô, nước uống', OTHER),
+      Q('lt_khac', 'many', 'Đồ cồng kềnh', 'Đồ cồng kềnh cần chỗ cất?', 'vali:Vali, đồ du lịch;xe_dap:Xe đạp, đồ thể thao;golf:Gậy golf;gym:Thiết bị gym tại nhà;tet:Đồ Tết, đồ cúng;tre_em:Đồ trẻ em (xe đẩy, đồ chơi);dung_cu:Dụng cụ sửa chữa;hut_bui:Máy hút bụi, robot, thang;thuc_pham:Kho thực phẩm khô, nước uống', OTHER),
       Q('lt_kho', 'one', 'Kho', 'Có cần phòng / ngăn kho riêng?', 'phong:Có, phòng kho riêng;gam:Tận dụng gầm cầu thang / hộc;khong:Không cần', {optIf: {gam: HOUSE}})
     ]},
     {id: 'thong_minh', title: 'Thiết bị thông minh', intro: 'Chọn mức nhà thông minh phù hợp ngân sách.', showIf: RESIDENTIAL, questions: [

@@ -5,10 +5,10 @@ const {handleSurveyPublic, handleSurveyAdmin} = require('../survey.js');
 
 const ids = answers => D.visibleQuestions(answers).map(q => q.id);
 
-test('mỗi khách thấy khoảng 40-95 câu (nhà ở), id duy nhất, mọi showIf / optIf / sub trỏ tới thứ có thật', () => {
+test('mỗi khách thấy khoảng 40-78 câu (nhà ở), id duy nhất, mọi showIf / optIf / sub trỏ tới thứ có thật', () => {
   for (const loai of ['chung_cu', 'nha_pho', 'biet_thu']) {
     const n = ids({loai_nha: loai, thanh_vien: ['tre_hoc', 'ong_ba'], tho_co: 'tu_tho', tb_muc: 'nhieu', lv_ai: ['chu_nha']}).length;
-    assert.ok(n >= 40 && n <= 95, loai + ' ' + n);
+    assert.ok(n >= 40 && n <= 78, loai + ' ' + n);
   }
   assert.equal(new Set(D.QUESTIONS.map(q => q.id)).size, D.QUESTIONS.length);
   for (const x of [...D.GROUPS, ...D.QUESTIONS]) for (const c of [].concat(x.showIf || [])) assert.ok(D.QUESTION_BY_ID[c.q], c.q);

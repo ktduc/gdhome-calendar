@@ -90,7 +90,8 @@
     'sanh.tu_giay': '👟', 'sanh.ghe': '💺', 'sanh.guong': '🔲', 'sanh.moc': '👗',
     'kt_dien.ba_pha': '🔌', 'kt_dien.mat_troi': '☀️', 'kt_dien.du_phong': '🔌', 'kt_dien.sac_xe': '🚗', 'kt_nuoc_nong.nl_mat_troi': '☀️',
     'dieu_hoa.trung_tam': '🌀', 'kt_tran.quat_tran': '🌀', 'kt_tran.quat_dh': '🌀', 'kt_tran.thoat_mui': '💨', 'kt_den.downlight': '💡', 'kt_den.tha': '💡',
-    'kt_mang.wifi': '🌐', 'kt_mang.camera': '📹', 'ps_tong_the.robot': '🤖', 'ps_tong_the.van_go': '🌲', 'lv_ghe.cong_thai_hoc': '💺',
+    'kt_dien.wifi': '🌐', 'kt_dien.lan': '🌐', 'kt_dien.camera': '📹', 'kt_nuoc.nl_mat_troi': '☀️', 'kt_nuoc.nong_tong': '🔥', 'kt_nuoc.binh_phong': '🚿',
+    'kt_nuoc.loc_tong': '🚰', 'wc_thiet_bi.vach_kinh': '🚿', 'lt_khac.xe_dap': '🚲', 'lt_khac.golf': '⛳', 'lt_khac.gym': '🏋️', 'ps_tong_the.robot': '🤖', 'ps_tong_the.van_go': '🌲', 'lv_ghe.cong_thai_hoc': '💺',
     khong: '🚫', chua_biet: '❓', co: '✅', da_biet: '✅'
   };
   const I = emoji => window.GDHomeSurveyIcons ? GDHomeSurveyIcons.svg(emoji) : emoji;   // icon nét đơn sắc (khao-sat-icons.js)
