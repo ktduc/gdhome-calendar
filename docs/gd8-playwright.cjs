@@ -706,14 +706,18 @@ cases['so-sanh-ui'] = async page => {
   // Bảng chọn màu: 18 ô, đúng màu hiện tại được đánh dấu, chọn xong lưu hex
   const head = page.locator('#cmp-tree .cmp-cat-head').first();
   await head.locator('.cmp-sw').click();
-  assert.equal(await page.locator('.cmp-swatches button').count(),18);
-  await page.locator('.cmp-swatches button[data-c="#2f7fa8"]').click();
+  assert.equal(await page.locator('.cmp-swatches button').count(),20,'Bảng màu dịu mắt dùng chung 20 màu');
+  await page.locator('.cmp-swatches button[data-c="#4a86b0"]').click();
   assert.equal(await page.locator('.cmp-pop').count(),0,'Chọn xong đóng bảng màu');
-  assert.equal(await head.locator('.cmp-sw').evaluate(el => getComputedStyle(el).backgroundColor),'rgb(47, 127, 168)');
+  assert.equal(await head.locator('.cmp-sw').evaluate(el => getComputedStyle(el).backgroundColor),'rgb(74, 134, 176)');
   await head.locator('.cmp-sw').click();
-  assert.equal(await page.locator('.cmp-swatches .is-cur').getAttribute('data-c'),'#2f7fa8','Đánh dấu màu hiện tại');
+  assert.equal(await page.locator('.cmp-swatches .is-cur').getAttribute('data-c'),'#4a86b0','Đánh dấu màu hiện tại');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('.cmp-pop').count(),0,'Esc đóng');
+  // Nút tự đổi màu theo thứ tự: hạng mục 1 lấy màu đầu bảng
+  await head.locator('.cmp-sw').click();
+  await page.locator('.cmp-pop [data-auto]').click();
+  assert.equal(await head.locator('.cmp-sw').evaluate(el => getComputedStyle(el).backgroundColor),'rgb(200, 90, 90)','Tự đổi màu theo thứ tự');
   await page.waitForFunction(() => fetch('/api/compare').then(r => r.json()).then(d => d.categories[0].color === '#2f7fa8'));
   // Menu chuột phải
   const before = await names();
@@ -1817,7 +1821,8 @@ cases['name-multiline'] = async page => {
   await page.keyboard.press('Enter');
   assert.equal(await first.inputValue(),value,'Enter không chèn xuống dòng');
   assert.equal(await page.evaluate(() => document.activeElement.closest('tr')?.rowIndex > 0 && document.activeElement !== document.querySelector('tr[data-row] textarea[data-field="name"]')),true,'Enter sang dòng dưới');
-  await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
+  await page.waitForFunction(() => document.querySelector('#save-label').textContent === '✓ Đã lưu');
+  assert.equal(await page.locator('.app-header #save-label.is-inline').count(),1,'Nút Đã lưu nằm trên thanh trên như các trang khác');
   await openMaterials(page);
   assert.equal(await names.first().inputValue(),value,'Tải lại vẫn giữ xuống dòng');
 };
@@ -1833,7 +1838,7 @@ cases['9.6'] = async page => {
   const newRow = page.locator('tr[data-row]').filter({has:page.locator('textarea[data-field="name"]',{hasText:'Sơn trần'})});
   const note = newRow.locator('textarea[data-field="note"]');
   assert.equal(await note.inputValue(),'');
-  await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
+  await page.waitForFunction(() => document.querySelector('#save-label').textContent === '✓ Đã lưu');
   await openMaterials(page);
   assert.equal(await note.inputValue(),'','Ghi chú AI chỉ là gợi ý sau khi tải lại');
   await note.click();
@@ -1848,7 +1853,7 @@ cases['9.6'] = async page => {
   await notes.getByRole('button',{name:'Lưu ghi chú'}).click();
   const expected = 'Sơn 2 nước phủ; So khớp mẫu dưới ánh sáng tự nhiên; Sơn mẫu tại phòng khách';
   assert.equal(await note.inputValue(),expected);
-  await page.waitForFunction(() => document.querySelector('#save-label').textContent === 'Đã lưu');
+  await page.waitForFunction(() => document.querySelector('#save-label').textContent === '✓ Đã lưu');
   await openMaterials(page);
   assert.equal(await note.inputValue(),expected);
 };
@@ -2588,6 +2593,20 @@ cases['thong-ke'] = async page => {
   await page.locator('[data-mode=board]').click();
   await page.locator('.tk-card[data-row=p1]').dragTo(page.locator('.tk-lane[data-lane="Thi công"]'));
   await until(o => o.projects.find(p => p.id === 'p1').profile.stage === 'Thi công', 'Kéo thẻ Kanban đổi giai đoạn');
+  // Cột Kanban Thi công cùng màu phần THI CÔNG; tuỳ chỉnh thẻ: thêm SĐT, sắp xếp theo tên
+  assert.equal(await page.locator('.tk-lane[data-lane="Thi công"]').evaluate(el => el.style.getPropertyValue('--lane')),'#D06D4E','Màu cột theo màu phần');
+  await page.locator('[data-card-cfg]').click();
+  await page.locator('.tk-dialog .tk-sec-list input[value=phone]').check();
+  await page.locator('.tk-dialog [data-sort-key]').selectOption('project');
+  await page.locator('.tk-dialog').press('Escape');
+  assert.ok(await page.locator('.tk-card[data-row=p1] [data-f=phone]').count() === 1,'Thẻ hiện trường vừa tick');
+  assert.match(await page.locator('.tk-board-bar').innerText(),/Sắp xếp: Dự án/);
+  // Rê chuột vào ô ngày: hiện ngày âm
+  await page.locator('[data-mode=table]').click();
+  const dateInput = page.locator('tr[data-row=p1] input[type=date]').first();
+  await dateInput.fill('2026-02-17');
+  await dateInput.hover();
+  assert.equal(await page.locator('.gd-lunar-tip').innerText(),'Âm lịch 1/1','Ngày âm khi rê chuột (Tết 2026)');
   // Theo phần: p1 sang phần THI CÔNG; chọn cột riêng cho phần THI CÔNG
   await page.locator('[data-mode=sections]').click();
   await page.locator('.tk-sec[data-sec=tc] tr[data-row=p1]').waitFor();
@@ -2712,10 +2731,26 @@ cases['khao-sat'] = async (page,{browser}) => {
 
   await page.locator('#sv-refresh').click();
   await page.locator('#sv-status',{hasText:'Đã gửi lúc'}).waitFor();
-  const summary = await page.locator('#sv-summary').innerText();
+  const summary = await page.locator('#sv-summary').textContent();
   assert.match(summary,/Loại công trình: Nhà phố/);
   assert.match(summary,/Thang máy: Sẽ lắp thang máy/);
   assert.match(summary,/Tầng trên cùng rất nóng/);
+  // Bản dễ nhìn: thẻ theo nhóm, dòng câu hỏi | trả lời
+  assert.ok(await page.locator('#sv-summary-view .sv-card').count() > 1,'Tóm tắt chia thẻ theo nhóm');
+  assert.equal(await page.locator('#sv-summary-view dt',{hasText:'Thang máy'}).locator('xpath=following-sibling::dd[1]').innerText(),'Sẽ lắp thang máy');
+  // Phiếu mẫu: mở được, không gọi API khảo sát
+  const sampleContext = await browser.newContext({baseURL:new URL(page.url()).origin});
+  const sample = await sampleContext.newPage();
+  const calls = [];
+  sample.on('request',r => { if (r.url().includes('/api/survey/')) calls.push(r.url()); });
+  await sample.goto('/khao-sat/mau',{waitUntil:'domcontentloaded'});
+  await sample.locator('.ks-opt').first().waitFor();
+  assert.match(await sample.locator('#ks-project').innerText(),/Phiếu mẫu/);
+  await sample.locator('.ks-opt',{hasText:'Nhà phố'}).click();
+  await sample.locator('#ks-next').click();
+  assert.deepEqual(calls,[],'Phiếu mẫu không đọc/ghi server');
+  await sampleContext.close();
+  assert.equal(await page.locator('.mt-tabs a[href="/khao-sat/mau"]').count(),1,'Có tab Phiếu mẫu');
   await page.locator('#sv-copy-msg').click();
   const info = await page.evaluate(() => GDHomeShell.api('/api/surveys/p1'));
   assert.equal(info.path,new URL(link).pathname);
@@ -2723,7 +2758,7 @@ cases['khao-sat'] = async (page,{browser}) => {
   await page.locator('#sv-project').selectOption('');
   await page.locator('#sv-list button[data-id=p1][data-state=sent]').waitFor();
   await page.locator('#sv-list button[data-id=p1]').click();
-  await page.locator('#sv-summary',{hasText:'Nhà phố'}).waitFor();
+  await page.locator('#sv-summary-view',{hasText:'Nhà phố'}).waitFor();
 };
 
 async function openMaterials(page) {

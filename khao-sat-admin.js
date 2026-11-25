@@ -50,7 +50,19 @@
     byId('sv-status').dataset.state = info?.submittedAt ? 'sent' : 'pending';
     const summary = linked ? K.summarize(info.answers, project()?.name) : '';
     byId('sv-detail').hidden = !summary;
-    byId('sv-summary').textContent = summary;
+    byId('sv-summary').textContent = summary;   // bản chữ để copy
+    byId('sv-summary-view').innerHTML = summaryCards(summary);
+  }
+
+  // Bản dễ nhìn: mỗi nhóm 1 thẻ, mỗi dòng "câu hỏi | trả lời" (dựng từ chính bản chữ để luôn khớp nội dung copy)
+  function summaryCards(text) {
+    return text.split('\n\n').slice(1).map(block => {
+      const [title, ...lines] = block.split('\n');
+      return '<section class="sv-card"><h3>' + esc(title) + '</h3><dl>' + lines.map(line => {
+        const m = line.match(/^- ([^:]+): ([\s\S]*)$/);
+        return m ? '<dt>' + esc(m[1]) + '</dt><dd>' + esc(m[2]) + '</dd>' : '<dd class="sv-wide">' + esc(line) + '</dd>';
+      }).join('') + '</dl></section>';
+    }).join('');
   }
 
   async function load() {

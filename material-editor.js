@@ -234,7 +234,10 @@ function setMaterialSaveStatus(state,detail) {
   if (!label) return;
   label.hidden = !sheet || (!materialServerReady && !materialGuest);
   const savedOnDevice = materialGuest && state !== 'error';
-  GDHomeShell.saveStatus(label,savedOnDevice ? 'guest' : state,detail,state === 'saved' && !savedOnDevice ? 'Đã lưu' : undefined);
+  // Cùng chỗ, cùng kiểu với các trang khác: nằm trong thanh trên, "✓ Đã lưu"
+  const bar = byId('material-header-actions');
+  if (bar && label.nextElementSibling !== bar) { label.classList.add('is-inline'); bar.before(label); }
+  GDHomeShell.saveStatus(label,savedOnDevice ? 'guest' : state,detail);
   const undoButton = document.querySelector('#material-header-actions [data-action="undo"]');
   if (undoButton) undoButton.disabled = !before.length;
 }

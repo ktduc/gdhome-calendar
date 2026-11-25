@@ -1056,3 +1056,6 @@ html[data-tone=dim],html[data-tone=dim] dialog{filter:brightness(.88) saturate(.
 .gd-menu-glyph svg{width:22px;height:22px}
 .gd-tools-menu nav a[aria-current=page] .gd-menu-glyph{background:var(--gd-tone-accent,#7d2025);color:#fff}
 @media (prefers-reduced-motion:reduce){.gd-tools-menu[open]>nav{animation:none}}
+
+/* Ngày âm nhỏ dưới ô ngày khi rê chuột (shell.js) */
+.gd-lunar-tip{position:fixed;z-index:10001;padding:1px 6px;border-radius:6px;background:rgba(40,34,28,.86);color:#fff;font:500 11px/1.5 Roboto,sans-serif;pointer-events:none;white-space:nowrap}

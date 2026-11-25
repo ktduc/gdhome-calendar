@@ -136,7 +136,13 @@ tr:hover .tk-links { display: flex; }
 
 /* Kanban */
 .tk-board { display: flex; gap: 12px; align-items: flex-start; padding: 12px; min-height: 300px; }
-.tk-lane { flex: 0 0 280px; display: grid; gap: 8px; padding: 10px; border-radius: 12px; background: #f4f1ec; }
+.tk-lane { flex: 0 0 280px; display: grid; gap: 8px; padding: 10px; border-radius: 12px; background: #f4f1ec; border-top: 4px solid var(--lane, #8a8378); background: color-mix(in srgb, var(--lane, #8a8378) 9%, #f7f4ef); }
+.tk-lane h3 { color: var(--lane, #5a4e41) !important; }
+.tk-board-bar { display: flex; align-items: center; gap: 10px; padding: 10px 12px 0; }
+.tk-card-f { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 6px; min-height: 24px; }
+.tk-card-f > small { font-size: 11px; color: #8a7f72; overflow: hidden; text-overflow: ellipsis; white-space: nowrap !important; }
+.tk-card-f > *, .tk-card-f input { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.tk-card-f input:not([type=checkbox]) { width: 100%; }
 .tk-lane h3 { margin: 0 0 2px; font-size: 13px; color: #5a4e41; }
 .tk-lane h3 small { color: #8a7f72; font-weight: 400; }
 .tk-card { display: grid; gap: 4px; padding: 10px; border: 1px solid #e2dcd2; border-radius: 10px; background: #fff; cursor: grab; }

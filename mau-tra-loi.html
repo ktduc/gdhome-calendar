@@ -37,6 +37,7 @@
     <div class="mt-tabs" role="tablist">
       <button type="button" data-tab="mau" class="is-on">Mẫu trả lời</button>
       <button type="button" data-tab="khao-sat">Khảo sát khách</button>
+      <a class="mt-tab-link" href="/khao-sat/mau" target="_blank" rel="noopener" title="Mở phiếu khảo sát khách ở chế độ xem thử để góp ý (không lưu)">Phiếu mẫu ↗</a>
     </div>
     <div class="mt-bar">
       <div class="mt-seg" id="mt-kh" role="group" aria-label="Cách gọi khách">
@@ -73,7 +74,8 @@
       </div>
       <div class="sv-detail" id="sv-detail" hidden>
         <h2>Tóm tắt nhu cầu</h2>
-        <pre class="mt-preview" id="sv-summary"></pre>
+        <div class="sv-cards" id="sv-summary-view"></div>
+        <pre class="mt-preview" id="sv-summary" hidden></pre>
         <button type="button" class="btn btn-primary" id="sv-copy-summary">Copy tóm tắt nhu cầu</button>
       </div>
     </section>

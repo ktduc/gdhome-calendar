@@ -10,13 +10,18 @@
   const STAGES = ['Thi công', 'TC xong chưa QT', 'Thiết kế', 'TK xong chưa QT', 'Hoàn thành', 'Tạm dừng'];
   // Các phần của bảng (cùng 1 dữ liệu, lọc theo Giai đoạn); thứ tự ưu tiên từ trên xuống
   const SECTIONS = [
-    {id: 'tc', label: 'THI CÔNG', stages: ['Thi công'], color: '#b45309'},
-    {id: 'tk', label: 'THIẾT KẾ', stages: ['Thiết kế'], color: '#1d4ed8'},
-    {id: 'tcqt', label: 'TC XONG CHƯA QT', stages: ['TC xong chưa QT'], color: '#b91c1c'},
-    {id: 'tkqt', label: 'TK XONG CHƯA QT', stages: ['TK xong chưa QT'], color: '#7c3aed'},
-    {id: 'khac', label: 'CHỜ · KHÁC', stages: null, color: '#0f766e'},   // giai đoạn tự đặt (vd "Chưa kí", "Đã gửi layout - chờ")
-    {id: 'xong', label: 'ĐÃ QT · TẠM DỪNG', stages: ['Hoàn thành', 'Tạm dừng'], color: '#6b7280', collapsed: true},
+    // màu lấy từ bảng màu dịu mắt dùng chung (GDHomeShell.SOFT_COLORS = default_soft của Lịch)
+    {id: 'tc', label: 'THI CÔNG', stages: ['Thi công'], color: '#D06D4E'},
+    {id: 'tk', label: 'THIẾT KẾ', stages: ['Thiết kế'], color: '#4A86B0'},
+    {id: 'tcqt', label: 'TC XONG CHƯA QT', stages: ['TC xong chưa QT'], color: '#C85A5A'},
+    {id: 'tkqt', label: 'TK XONG CHƯA QT', stages: ['TK xong chưa QT'], color: '#825D9E'},
+    {id: 'khac', label: 'CHỜ · KHÁC', stages: null, color: '#478982'},   // giai đoạn tự đặt (vd "Chưa kí", "Đã gửi layout - chờ")
+    {id: 'xong', label: 'ĐÃ QT · TẠM DỪNG', stages: ['Hoàn thành', 'Tạm dừng'], color: '#526071', collapsed: true},
   ];
+  const SOFT = ['#C85A5A', '#D06D4E', '#D9884E', '#C9A24D', '#528C62', '#478982', '#4A86B0', '#5B68A6', '#825D9E', '#B05574'];
+  const stageColor = stage => (SECTIONS.find(s => s.stages?.includes(stage)) || SECTIONS.find(s => !s.stages)).color;
+  // Kanban: thẻ hiện những trường nào (anh tự chọn), mặc định như trước
+  const CARD_DEFAULT = ['address', 'deadline', 'deadlineLabel', 'designer3d', 'designerHskt'];
   const STATUS3D = ['Chưa làm', 'Đang triển khai', 'Chờ phản hồi', 'Xong lần 1', 'Xong lần 2', 'Xong lần 3', 'Đang chỉnh sửa', 'Đã chốt'];
   const STATUS_HSKT = ['Chưa làm', 'Đang triển khai', 'Đã gửi', 'Đang chỉnh sửa', 'Đã chốt'];
   const MATERIALS = ['Chưa làm', 'Đang làm', 'Xong'];
@@ -269,17 +274,37 @@
     const field = ['stage', 'status3d', 'statusHskt'].includes(prefs.group) ? prefs.group : 'stage';
     const col = colOf(field);
     const lanes = optionsOf(col).map(o => o.name);
+    const fields = (prefs.cardFields || CARD_DEFAULT).map(colOf).filter(Boolean);
     const card = p => `<article class="tk-card ${rowClass(p)}" draggable="true" data-row="${esc(p.id)}">
       <a href="/du-an?project=${encodeURIComponent(p.id)}"><strong>${esc(p.name)}</strong></a>
-      <small>${esc(p.profile.address || '')}</small>
-      <div>${cell(p, colOf('deadline'))} ${cell(p, colOf('deadlineLabel'))}</div>
-      <small>${esc([val(p, 'designer3d'), val(p, 'designerHskt')].filter(Boolean).join(' · '))}</small></article>`;
+      ${fields.map(c => `<div class="tk-card-f" title="${esc(c.label)}"><small>${esc(c.label)}</small>${cell(p, c)}</div>`).join('')}</article>`;
+    const sort = prefs.sort || {key: 'deadline', dir: 1};
     byId('tk-wrap').className = 'tk-wrap';
-    byId('tk-wrap').innerHTML = `<div class="tk-board" data-field="${field}">` + ['', ...lanes].map(lane => {
+    byId('tk-wrap').innerHTML = `<div class="tk-board-bar"><button type="button" class="btn btn-outline btn-sm" data-card-cfg>⚙ Tuỳ chỉnh thẻ</button>
+      <span class="tk-muted">Sắp xếp: ${esc(colOf(sort.key)?.label || sort.key)} ${sort.dir > 0 ? '▲' : '▼'}</span></div>` +
+      `<div class="tk-board" data-field="${field}">` + ['', ...lanes].map((lane, i) => {
       const items = list.filter(p => (val(p, field) ? canon(col, val(p, field)) : '') === lane);
       if (!lane && !items.length) return '';
-      return `<section class="tk-lane" data-lane="${esc(lane)}"><h3>${esc(lane || '(trống)')} <small>${items.length}</small></h3>${items.map(card).join('')}</section>`;
+      // Màu cột: Giai đoạn theo màu phần (chế độ Theo phần), trường khác lần lượt theo bảng màu dịu mắt
+      const color = !lane ? '#8a8378' : field === 'stage' ? stageColor(lane) : SOFT[(i - 1) % SOFT.length];
+      return `<section class="tk-lane" data-lane="${esc(lane)}" style="--lane:${color}"><h3>${esc(lane || '(trống)')} <small>${items.length}</small></h3>${items.map(card).join('')}</section>`;
     }).join('') + '</div>';
+  }
+  // Tuỳ chỉnh thẻ Kanban: tick trường hiện trên thẻ + sắp xếp thẻ (dùng chung sắp xếp với bảng)
+  function openCardCfg() {
+    const on = new Set(prefs.cardFields || CARD_DEFAULT), sort = prefs.sort || {key: 'deadline', dir: 1};
+    const dialog = openDialog('Tuỳ chỉnh thẻ Kanban', `<p class="tk-muted">Tick trường muốn hiện trên thẻ. Lưu trên máy này.</p>
+      <div class="tk-sec-list">${ALL.slice(1).map(col => `<label><input type="checkbox" value="${col.key}" ${on.has(col.key) ? 'checked' : ''}> ${esc(col.label)}</label>`).join('')}</div>
+      <p><label>Sắp xếp thẻ theo <select data-sort-key>${ALL.map(col => `<option value="${col.key}" ${col.key === sort.key ? 'selected' : ''}>${esc(col.label)}</option>`).join('')}</select></label>
+      <select data-sort-dir><option value="1" ${sort.dir > 0 ? 'selected' : ''}>Tăng dần ▲</option><option value="-1" ${sort.dir < 0 ? 'selected' : ''}>Giảm dần ▼</option></select>
+      <button type="button" class="btn btn-outline btn-sm" data-card-reset>Về mặc định</button></p>`, false);
+    const save = () => {
+      prefs.cardFields = [...dialog.querySelectorAll('.tk-sec-list input:checked')].map(c => c.value);
+      prefs.sort = {key: dialog.querySelector('[data-sort-key]').value, dir: Number(dialog.querySelector('[data-sort-dir]').value)};
+      remember(); render();
+    };
+    dialog.addEventListener('change', save);
+    dialog.addEventListener('click', e => { if (e.target.matches('[data-card-reset]')) { delete prefs.cardFields; remember(); render(); dialog.close(); } });
   }
   // Menu Cột: bật/tắt, đổi tên, xoá cột riêng, thêm thuộc tính mới
   function renderColsMenu() {
@@ -912,6 +937,7 @@
       if (toggle) { prefs.collapsed = prefs.collapsed.includes(toggle) ? prefs.collapsed.filter(x => x !== toggle) : [...prefs.collapsed, toggle]; remember(); render(); }
       const secCols = e.target.closest('[data-sec-cols]')?.dataset.secCols;
       if (secCols) openSectionCols(secCols);
+      if (e.target.closest('[data-card-cfg]')) openCardCfg();
       const tags = e.target.closest('.tk-tags');
       if (tags) openTagPicker(tags);
       const more = e.target.closest('[data-more]')?.dataset.more;

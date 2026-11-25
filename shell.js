@@ -505,7 +505,7 @@ window.GDHomeShell = (() => {
     document.head.append(script);
   }
   setTimeout(() => {
-    if (/^\/(khao-sat|duyet)\//.test(location.pathname)) return;   // trang công khai cho khách
+    if (/^\/(khao-sat|duyet)\//.test(location.pathname) && location.pathname !== '/khao-sat/mau') return;   // trang công khai cho khách (trừ phiếu mẫu)
     api('/api/home').then(data => {
       if (!data.canEdit) return;
       document.querySelectorAll('.shell-rd-item').forEach(item => { item.hidden = false; });
@@ -522,6 +522,27 @@ window.GDHomeShell = (() => {
     logo.style.cursor = 'pointer';
     logo.onclick = () => { location.href = '/tools'; };
     logo.onkeydown = event => { if (event.key === 'Enter') location.href = '/tools'; };
+  });
+  // Rê chuột vào ô ngày (input type=date) ở mọi trang: hiện ngày âm nhỏ ngay bên dưới
+  const lunarOf = value => {
+    try {
+      const parts = new Intl.DateTimeFormat('vi-VN-u-ca-chinese',{day:'numeric',month:'numeric'}).formatToParts(new Date(value + 'T12:00:00'));
+      const get = type => parts.find(p => p.type === type)?.value;
+      return get('day') ? 'Âm lịch ' + get('day') + '/' + get('month') : '';
+    } catch { return ''; }
+  };
+  let lunarTip = null;
+  document.addEventListener('mouseover',event => {
+    const input = event.target.closest?.('input[type=date]');
+    if (!input || !input.value) { lunarTip?.remove(); lunarTip = null; return; }
+    const text = lunarOf(input.value);
+    if (!text) return;
+    lunarTip ||= Object.assign(document.createElement('div'),{className:'gd-lunar-tip'});
+    lunarTip.textContent = text;
+    document.body.append(lunarTip);
+    const r = input.getBoundingClientRect();
+    lunarTip.style.left = Math.round(r.left) + 'px';
+    lunarTip.style.top = Math.round(r.bottom + 2) + 'px';
   });
   // GĐ18B.2: Đồng bộ kênh BroadcastChannel('gdhome-assets') sang GDHomeAssets (để tab Chốt mã tự cập nhật khi Quản lý dự án thêm/xoá/đổi thứ tự ảnh)
   try {
@@ -873,5 +894,8 @@ window.GDHomeShell = (() => {
     else start();
   }
 
-  return { TOOL_ROWS,TONES,getTone,setTone,escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,api,authHeaders:getShellAuthHeaders,takePastedFiles,clipboardFiles,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
+  // Bảng màu dịu mắt dùng chung (= "default_soft" của Lịch, app-core.js): 2 hàng × 10
+  const SOFT_COLORS = ['#C85A5A','#D06D4E','#D9884E','#C9A24D','#528C62','#478982','#4A86B0','#5B68A6','#825D9E','#B05574',
+    '#9E4747','#A8643B','#B3863E','#658546','#3E756F','#3E6E91','#465E9C','#5D5499','#734C96','#526071'];
+  return { SOFT_COLORS,TOOL_ROWS,TONES,getTone,setTone,escape,icon,icons,googleSignIn,loginCard,menu,dropdown,closeMenus,toast,saveStatus,dialog,ask,confirm:confirmBox,alert:alertBox,prompt:promptBox,aiNotice,lightbox,initHubJobTracker,checkHubActiveJob,hubJobBody,hubJobRetryAction,api,authHeaders:getShellAuthHeaders,takePastedFiles,clipboardFiles,initSidebarToggle,toggleSidebar,layout,renderAccount,account:renderAccount };
 })();

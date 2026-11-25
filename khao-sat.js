@@ -11,7 +11,11 @@
     read() { try { return JSON.parse(localStorage.getItem(DRAFT) || 'null'); } catch { return null; } },
     write() { try { localStorage.setItem(DRAFT, JSON.stringify({at: Date.now(), answers: state.answers})); } catch { /* không có localStorage thì bỏ qua */ } }
   };
+  // /khao-sat/mau: phiếu mẫu cho GD HOME xem thử và góp ý R&D – không đọc/ghi server
+  const preview = token === 'mau';
+  if (preview) for (const src of ['/shell.js']) document.head.append(Object.assign(document.createElement('script'), {src}));
   const api = async (method, body) => {
+    if (preview) return method === 'GET' ? {name: 'Phiếu mẫu · xem thử (không lưu)', answers: {}} : {submittedAt: Date.now()};
     const res = await fetch('/api/survey/' + encodeURIComponent(token), {method, headers: {'Content-Type': 'application/json'}, body: body && JSON.stringify(body)});
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(data.message || 'Không kết nối được máy chủ');

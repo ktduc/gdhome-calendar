@@ -23,7 +23,9 @@ body.is-sidebar-collapsed .cmp-sidebar { display: none; }
 .cmp-cat-head small { color: #94a3b8; font-weight: 500; text-align: right; }
 .cmp-sw { width: 18px; height: 18px; padding: 0; border: 1px solid rgba(0, 0, 0, .18); border-radius: 5px; background: var(--c); cursor: pointer; }
 .cmp-pop { position: fixed; z-index: 200; padding: 8px; border: 1px solid #d8d2c8; border-radius: 10px; background: #fff; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
-.cmp-swatches { display: grid; grid-template-columns: repeat(9, 22px); gap: 6px; }
+.cmp-swatches { display: grid; grid-template-columns: repeat(10, 22px); gap: 6px; }
+.cmp-auto-color { display: block; width: 100%; margin-top: 8px; padding: 6px 8px; border: 1px solid var(--gd-ios-line, #d8d2c8); border-radius: 8px; background: transparent; font: inherit; font-size: 12px; cursor: pointer; text-align: left; }
+.cmp-auto-color:hover { background: rgba(0, 0, 0, .05); }
 .cmp-swatches button { position: relative; width: 22px; height: 22px; padding: 0; border: 1px solid rgba(0, 0, 0, .15); border-radius: 6px; background: var(--c); cursor: pointer; }
 .cmp-swatches button:hover { transform: scale(1.12); }
 .cmp-swatches button.is-cur { outline: 2px solid #1e293b; outline-offset: 1px; }

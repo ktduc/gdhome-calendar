@@ -68,3 +68,14 @@
 .sv-list small { color: #8a7f72; font-weight: 400; }
 .sv-list [data-state=sent] small { color: #2f7d4f; }
 .sv-list[hidden] { display: none; }
+
+/* Tab mở phiếu mẫu + tóm tắt nhu cầu dạng thẻ (mỗi nhóm 1 thẻ, chia cột theo bề ngang) */
+.mt-tab-link { display: inline-flex; align-items: center; height: 34px; padding: 0 16px; margin-left: 6px; border: 1px dashed #c9bfb1; border-radius: 8px; color: #5a4e41; font: 500 13px Roboto, sans-serif; text-decoration: none; }
+.mt-tab-link:hover { background: #fff; border-style: solid; }
+.sv-cards { columns: 340px 3; column-gap: 12px; margin-bottom: 12px; }
+.sv-card { break-inside: avoid; margin: 0 0 12px; padding: 10px 14px 12px; border: 1px solid #e3ddd3; border-radius: 12px; background: #fff; }
+.sv-card h3 { margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1px solid #eee7dc; font: 700 12px Roboto, sans-serif; letter-spacing: .04em; color: var(--gd-tone-accent, #7d2025); }
+.sv-card dl { display: grid; grid-template-columns: minmax(90px, 38%) 1fr; gap: 5px 10px; margin: 0; font: 13px/1.45 Roboto, sans-serif; }
+.sv-card dt { color: #7a6e60; }
+.sv-card dd { margin: 0; color: #2b241c; font-weight: 500; }
+.sv-card .sv-wide { grid-column: 1 / -1; }

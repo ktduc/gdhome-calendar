@@ -8,10 +8,8 @@
   const byId = id => document.getElementById(id);
   const esc = value => GDHomeShell.escape(value);
   const toast = message => GDHomeShell.toast(message);
-  const PALETTE = ['#7d8f69', '#7a2e2e', '#4d6188', '#8c7d6b', '#5f7f8c', '#9a6b3f', '#6b5b8c'];
-  // Bảng chọn màu hạng mục: hàng trên 9 màu nhạt, hàng dưới 9 màu đậm (lưu mã hex như cũ)
-  const SWATCHES = ['#f4b6b6', '#f7c99b', '#f6e08f', '#cbe6a2', '#a9e0c6', '#a5d8ec', '#b7c7f2', '#d3bdf0', '#f2b5d9',
-    '#c0392b', '#d9722e', '#c99a14', '#5f8f3a', '#2e8f6b', '#2f7fa8', '#3f5fbf', '#7a4fb5', '#b83a80'];
+  // Bảng màu dịu mắt dùng chung với Lịch (shell.js); hạng mục mới lấy màu kế tiếp theo thứ tự
+  const PALETTE = GDHomeShell.SOFT_COLORS.map(c => c.toLowerCase()), SWATCHES = PALETTE;
   let doc = null, version = 0, current = null, saveTimer = null;
   let queue = {jobs: [], avgMs: 45000, now: Date.now()}, queueTimer = null, clockSkew = 0;
   let activeSlot = null;
@@ -247,8 +245,10 @@
   const catById = id => doc.categories.find(c => c.id === id);
   function openSwatches(btn) {
     const cat = catById(btn.closest('[data-cat]').dataset.cat), cur = String(cat.color).toLowerCase();
-    openPop(btn, `<div class="cmp-swatches">${SWATCHES.map(c => `<button type="button" data-c="${c}" style="--c:${c}" class="${c === cur ? 'is-cur' : ''}" title="${c}" aria-label="${c}"></button>`).join('')}</div>`, b => {
-      cat.color = b.dataset.c;
+    openPop(btn, `<div class="cmp-swatches">${SWATCHES.map(c => `<button type="button" data-c="${c}" style="--c:${c}" class="${c === cur ? 'is-cur' : ''}" title="${c}" aria-label="${c}"></button>`).join('')}</div>
+      <button type="button" class="cmp-auto-color" data-auto>↻ Tự đổi màu mọi hạng mục theo thứ tự</button>`, b => {
+      if (b.dataset.auto !== undefined) doc.categories.forEach((c, i) => { c.color = PALETTE[i % PALETTE.length]; });
+      else cat.color = b.dataset.c;
       renderTree();
       save();
       renderSheet();

@@ -164,7 +164,7 @@ body>main.material-main{max-width:none;padding:0 10px}.material-main #notice:emp
 
 .material-header,.material-header *{box-sizing:border-box}
 .material-header .app-logo{text-decoration:none}
-.material-header #identity,.material-header #save-label{font-size:11px;white-space:nowrap}
+.material-header #identity{font-size:11px;white-space:nowrap}
 #material-header-actions{display:flex;align-items:center;gap:6px}
 .material-header summary.btn{list-style:none}
 .material-header summary.btn::-webkit-details-marker{display:none}
