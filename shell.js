@@ -470,6 +470,25 @@ window.GDHomeShell = (() => {
     button.closest('details')?.removeAttribute('open');
     location.href = '/du-lieu';
   });
+  // Chế độ R&D (chỉ tài khoản admin): chọn thành phần giao diện, ghi góp ý, copy thành prompt
+  const RD_KEY = 'gdhome_rd_on';
+  function loadRd() {
+    if (window.GDHomeRd) return window.GDHomeRd.start();
+    const script = document.createElement('script');
+    script.src = '/rd-mode.js';
+    script.onload = () => window.GDHomeRd?.start();
+    document.head.append(script);
+  }
+  setTimeout(() => {
+    if (/^\/(khao-sat|duyet)\//.test(location.pathname)) return;   // trang công khai cho khách
+    api('/api/home').then(data => {
+      if (!data.canEdit) return;
+      document.querySelectorAll('.shell-rd-item').forEach(item => { item.hidden = false; });
+      new MutationObserver(() => document.querySelectorAll('.shell-rd-item[hidden]').forEach(item => { item.hidden = false; })).observe(document.querySelector('.shell-account') || document.body,{childList:true,subtree:true});
+      let on; try { on = localStorage.getItem(RD_KEY) === '1'; } catch {}
+      if (on) loadRd();
+    }).catch(() => {});
+  },0);
   // Bấm logo ở mọi trang về Trang chủ
   document.querySelectorAll('.app-logo').forEach(logo => {
     if (logo.tagName === 'A') { logo.href = '/tools'; return; }
@@ -572,6 +591,7 @@ window.GDHomeShell = (() => {
               : '') +
             '<button type="button" class="hdr-menu-item" data-shell-account-action="connections"><i data-lucide="settings">⚙</i><span>Kết nối</span></button>' +
             '<button type="button" class="hdr-menu-item" data-shell-account-action="backup"><i data-lucide="hard-drive">💾</i><span>Sao lưu</span></button>' +
+            '<button type="button" class="hdr-menu-item shell-rd-item" data-shell-account-action="rd" hidden><span>🧪</span><span>Chế độ R&amp;D – góp ý giao diện</span></button>' +
             '<hr style="margin:4px 0;border:none;border-top:1px solid var(--gd-overlay-border,#d8d2c8);">' +
             '<button type="button" class="hdr-menu-item" data-shell-account-action="logout" style="color:var(--gd-danger,#d93025);"><i data-lucide="log-out">🚪</i><span>Đăng xuất</span></button>' +
           '</div>' +
@@ -603,6 +623,10 @@ window.GDHomeShell = (() => {
           try { localStorage.setItem(THEME_KEY,next); } catch {}
           applyTheme(next);
           return;
+        }
+        if (action === 'rd') {
+          try { localStorage.setItem(RD_KEY,'1'); } catch {}
+          return loadRd();
         }
         if (action === 'connections') {
           if (window.GDHomeConnections) window.GDHomeConnections.open();

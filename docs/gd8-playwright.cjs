@@ -2304,6 +2304,40 @@ cases['12.7'] = async page => {
 function viewPosition(page) {
   return page.locator('.sheet-scroll').evaluate(el => ({top:el.scrollTop,left:el.scrollLeft,page:window.scrollY}));
 }
+cases['rd'] = async page => {
+  // Chế độ R&D (admin): bật từ menu tài khoản, chọn thành phần -> góp ý, ghim số, gom nhiều trang, copy prompt
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/thong-ke',{waitUntil:'domcontentloaded'});
+  await page.locator('tr[data-row=p1]').waitFor();
+  await page.locator('.shell-rd-item:not([hidden])').waitFor({state:'attached'});
+  await page.locator('.shell-user-chip').click();
+  await page.locator('.shell-rd-item').click();
+  await page.locator('.rd-panel').waitFor();
+  // Đang chọn: bấm vào ô tìm kiếm không làm gì trên trang, chỉ mở hộp góp ý
+  await page.locator('#tk-search').click();
+  await page.locator('.rd-pop textarea').fill('Ô tìm kiếm rộng hơn');
+  await page.locator('.rd-pop .rd-ok').click();
+  await page.locator('.rd-pin').waitFor();
+  // Tắt chọn -> dùng giao diện bình thường
+  await page.locator('[data-rd=pick]').click();
+  await page.locator('#tk-search').fill('abc');
+  assert.equal(await page.locator('#tk-search').inputValue(),'abc');
+  // Sang trang khác vẫn còn chế độ + góp ý
+  await page.goto('/tools',{waitUntil:'domcontentloaded'});
+  await page.locator('.rd-panel').waitFor();
+  await page.locator('.home-tile').nth(1).locator('strong').click();
+  await page.locator('.rd-pop [data-act=up]').click();
+  assert.match(await page.locator('.rd-target').innerText(),/a\.home-tile:nth-of-type\(2\)/,'Khối cha = thẻ thứ 2, có số thứ tự');
+  await page.locator('.rd-pop textarea').fill('Thẻ này đổi màu');
+  await page.locator('.rd-pop textarea').press('Control+Enter');
+  assert.equal(new URL(page.url()).pathname,'/tools','Bấm khi đang chọn không chuyển trang');
+  const text = await page.evaluate(() => GDHomeRd.prompt());
+  assert.match(text,/## Trang \/thong-ke[\s\S]*Ô tìm kiếm rộng hơn[\s\S]*#tk-search/);
+  assert.match(text,/## Trang \/tools[\s\S]*2\. Thẻ này đổi màu[\s\S]*Mẫu trả lời khách/);
+  await page.locator('[data-rd=exit]').click();
+  assert.equal(await page.locator('.rd-panel').count(),0);
+};
+
 cases['home'] = async page => {
   // Trang chủ: 2 hàng công cụ đúng thứ tự, menu cùng thứ tự, logo về trang chủ, ảnh bìa, đổi nền; /du-lieu là trang riêng; gộp dự án
   const order = ['/thong-ke','/mau-tra-loi','/','/chot-ma','/du-an','/giao-viec','/so-sanh','/du-lieu'];
