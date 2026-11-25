@@ -166,3 +166,6 @@
 .ks-opts:has(.ks-optbox) { row-gap: 4px; }
 .ks-optbox { grid-row: span 2; grid-template-rows: subgrid; row-gap: 4px; }
 .ks-optbox .ks-subs:empty { display: block; }
+/* Câu chờ câu trên trả lời: mờ, chưa bấm được */
+.ks-q.is-wait { opacity: .45; }
+.ks-q.is-wait .ks-qtext::after { content: " (chọn câu trên trước)"; font-size: 12px; color: var(--ks-muted); }

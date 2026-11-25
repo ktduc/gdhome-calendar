@@ -40,8 +40,9 @@
     renderList();
     byId('sv-create').textContent = linked ? 'Làm mới' : 'Tạo link khảo sát';
     byId('sv-box').hidden = !linked;
+    byId('sv-temp-wrap').hidden = !!state.id;
     if (!state.id) {
-      byId('sv-status').textContent = state.surveys.length ? 'Khách đã có câu trả lời (' + state.surveys.length + '):' : 'Chưa có khách nào điền khảo sát. Chọn dự án để tạo link.';
+      byId('sv-status').textContent = state.surveys.length ? 'Khách đã có câu trả lời (' + state.surveys.length + '):' : 'Chưa có khách nào điền khảo sát. Chọn dự án (hoặc gõ tên tạm) để tạo link.';
       byId('sv-detail').hidden = true; return;
     }
     byId('sv-link').value = fullLink();
@@ -78,12 +79,30 @@
   }
 
   async function create() {
-    if (!state.id) return S.toast('Chọn dự án trước.');
+    if (!state.id && !(await createTemp())) return;
     if (state.info?.token) return load();
     try {
       state.info = await S.api('/api/surveys/link', {method: 'POST', body: {projectId: state.id, name: project()?.name || ''}});
       render(); S.toast('Đã tạo link khảo sát');
     } catch (error) { S.toast('Không tạo được link: ' + error.message); }
+  }
+
+  // Chưa có dự án: tạo dự án tạm ở giai đoạn "Dự án tạm" -> Thống kê xếp vào phần CHỜ · KHÁC
+  async function createTemp() {
+    const name = byId('sv-temp').value.trim();
+    if (!name) { S.toast('Chọn dự án hoặc gõ tên tạm.'); byId('sv-temp').focus(); return false; }
+    const same = state.projects.find(x => x.name.trim().toLocaleLowerCase() === name.toLocaleLowerCase());
+    if (same) { state.id = byId('sv-project').value = same.id; byId('sv-temp').value = ''; return true; }   // trùng tên: dùng dự án có sẵn, không đổi giai đoạn
+    try {
+      const {project: p} = await S.api('/api/project-hub/project', {method: 'POST', body: {create: true, profile: {project: name, stage: 'Dự án tạm'}}});
+      if (!state.projects.some(x => x.id === p.id)) {
+        state.projects.push({id: p.id, name: p.name});
+        byId('sv-project').insertAdjacentHTML('beforeend', '<option value="' + esc(p.id) + '">' + esc(p.name) + '</option>');
+      }
+      state.id = byId('sv-project').value = p.id;
+      byId('sv-temp').value = '';
+      return true;
+    } catch (error) { S.toast('Không tạo được dự án tạm: ' + error.message); return false; }
   }
 
   function setTab(tab) {

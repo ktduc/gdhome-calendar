@@ -50,7 +50,7 @@
     {key: 'contractor', label: 'Thầu thi công', type: 'people'},
     {key: 'checkDo', label: 'Check đồ', type: 'check'},
     {key: 'area', label: 'Diện tích m²', type: 'number', sum: true},
-    {key: 'designPrice', label: 'Đơn giá TK', type: 'money'},
+    {key: 'designPrice', label: 'Đơn giá TK', type: 'select', money: true},   // sổ ra chọn + màu; hợp đồng ghi số vào đây
     {key: 'designValue', label: 'Giá trị HĐTK', type: 'money', sum: true, auto: p => designValueAuto(p)},
     {key: 'constructionValue', label: 'Giá trị thi công ƯT', type: 'money', sum: true},
     {key: 'payments', label: 'Thanh toán', type: 'payments', readonly: true},
@@ -107,7 +107,8 @@
   }
   function designValueAuto(p) {
     const {area, designPrice, vat} = p.profile;
-    return area && designPrice ? String(Math.round(num(area) * num(designPrice) * (1 + (Number(vat) || 0) / 100))) : '';
+    const price = Number(String(designPrice || '').replace(/\D/g, ''));   // "350.000" hay "350000" đều là 350 nghìn
+    return area && price ? String(Math.round(num(area) * price * (1 + (Number(vat) || 0) / 100))) : '';
   }
   const colOf = key => ALL.find(col => col.key === key);
   function val(p, key) {
@@ -245,12 +246,23 @@
     const dialog = openDialog('Cột hiện · ' + sec.label, `<p class="tk-muted">Chỉ áp dụng cho phần ${esc(sec.label)}. Tên, thứ tự, độ rộng cột dùng chung mọi phần.</p>
       <p><button type="button" class="btn btn-outline btn-sm" data-all="1">Hiện hết</button> <button type="button" class="btn btn-outline btn-sm" data-all="0">Ẩn hết</button>
       <button type="button" class="btn btn-outline btn-sm" data-shared>Theo menu Cột chung</button></p>
-      <div class="tk-sec-list">${ALL.slice(1).map(col => `<label><input type="checkbox" value="${col.key}" ${shown.has(col.key) ? 'checked' : ''}> ${esc(col.label)}</label>`).join('')}</div>`, false);
+      <div class="tk-sec-list">${ALL.slice(1).map(col => `<label><input type="checkbox" value="${col.key}" ${shown.has(col.key) ? 'checked' : ''}> ${esc(col.label)}</label>`).join('')}</div>
+      ${addColForm()}`, false);
     const save = () => {
       schema.sections = {...schema.sections, [id]: {hidden: [...dialog.querySelectorAll('.tk-sec-list input:not(:checked)')].map(c => c.value)}};
       saveSchema();
     };
-    dialog.addEventListener('change', save);
+    dialog.addEventListener('change', e => { if (e.target.name === 'type') e.target.form.elements.options.hidden = e.target.value !== 'select'; else if (!e.target.closest('.tk-col-add')) save(); });
+    dialog.addEventListener('submit', e => {   // cột mới hiện luôn trong phần này
+      if (!e.target.matches('.tk-col-add')) return;   // nút × đóng hộp cũng là form
+      e.preventDefault();
+      const f = e.target.elements, label = f.label.value.trim().slice(0, 60);
+      if (!label) return;
+      addCustom(label, f.type.value, f.type.value === 'select' ? f.options.value.split(',').map(x => x.trim()).filter(Boolean) : []);
+      if (schema.sections?.[id]) save(); else saveSchema();
+      dialog.close(); openSectionCols(id);
+      toast(`Đã thêm cột "${label}".`);
+    });
     dialog.addEventListener('click', e => {
       if (e.target.dataset.all) { dialog.querySelectorAll('.tk-sec-list input').forEach(c => { c.checked = e.target.dataset.all === '1'; }); save(); }
       if (e.target.matches('[data-shared]')) { const {[id]: _, ...rest} = schema.sections; schema.sections = rest; saveSchema(); dialog.close(); }
@@ -273,7 +285,8 @@
   function renderBoard(list) {
     const field = ['stage', 'status3d', 'statusHskt'].includes(prefs.group) ? prefs.group : 'stage';
     const col = colOf(field);
-    const lanes = optionsOf(col).map(o => o.name);
+    const hiddenLanes = prefs.hiddenLanes?.[field] || [];
+    const lanes = optionsOf(col).map(o => o.name).filter(name => !hiddenLanes.includes(name));
     const fields = (prefs.cardFields || CARD_DEFAULT).map(colOf).filter(Boolean);
     const card = p => `<article class="tk-card ${rowClass(p)}" draggable="true" data-row="${esc(p.id)}">
       <a href="/du-an?project=${encodeURIComponent(p.id)}"><strong>${esc(p.name)}</strong></a>
@@ -284,7 +297,7 @@
       <span class="tk-muted">Sắp xếp: ${esc(colOf(sort.key)?.label || sort.key)} ${sort.dir > 0 ? '▲' : '▼'}</span></div>` +
       `<div class="tk-board" data-field="${field}">` + ['', ...lanes].map((lane, i) => {
       const items = list.filter(p => (val(p, field) ? canon(col, val(p, field)) : '') === lane);
-      if (!lane && !items.length) return '';
+      if (!lane && (!items.length || hiddenLanes.includes(''))) return '';
       // Màu cột: Giai đoạn theo màu phần (chế độ Theo phần), trường khác lần lượt theo bảng màu dịu mắt
       const color = !lane ? '#8a8378' : field === 'stage' ? stageColor(lane) : SOFT[(i - 1) % SOFT.length];
       return `<section class="tk-lane" data-lane="${esc(lane)}" style="--lane:${color}"><h3>${esc(lane || '(trống)')} <small>${items.length}</small></h3>${items.map(card).join('')}</section>`;
@@ -293,18 +306,22 @@
   // Tuỳ chỉnh thẻ Kanban: tick trường hiện trên thẻ + sắp xếp thẻ (dùng chung sắp xếp với bảng)
   function openCardCfg() {
     const on = new Set(prefs.cardFields || CARD_DEFAULT), sort = prefs.sort || {key: 'deadline', dir: 1};
+    const field = ['stage', 'status3d', 'statusHskt'].includes(prefs.group) ? prefs.group : 'stage', hiddenLanes = prefs.hiddenLanes?.[field] || [];
     const dialog = openDialog('Tuỳ chỉnh thẻ Kanban', `<p class="tk-muted">Tick trường muốn hiện trên thẻ. Lưu trên máy này.</p>
       <div class="tk-sec-list">${ALL.slice(1).map(col => `<label><input type="checkbox" value="${col.key}" ${on.has(col.key) ? 'checked' : ''}> ${esc(col.label)}</label>`).join('')}</div>
+      <p class="tk-muted">Cột hiện trên bảng (theo ${esc(colOf(field).label)})</p>
+      <div class="tk-sec-list" data-lanes>${['', ...optionsOf(colOf(field)).map(o => o.name)].map(name => `<label><input type="checkbox" data-lane value="${esc(name)}" ${hiddenLanes.includes(name) ? '' : 'checked'}> ${esc(name || '(trống)')}</label>`).join('')}</div>
       <p><label>Sắp xếp thẻ theo <select data-sort-key>${ALL.map(col => `<option value="${col.key}" ${col.key === sort.key ? 'selected' : ''}>${esc(col.label)}</option>`).join('')}</select></label>
       <select data-sort-dir><option value="1" ${sort.dir > 0 ? 'selected' : ''}>Tăng dần ▲</option><option value="-1" ${sort.dir < 0 ? 'selected' : ''}>Giảm dần ▼</option></select>
       <button type="button" class="btn btn-outline btn-sm" data-card-reset>Về mặc định</button></p>`, false);
     const save = () => {
-      prefs.cardFields = [...dialog.querySelectorAll('.tk-sec-list input:checked')].map(c => c.value);
+      prefs.cardFields = [...dialog.querySelectorAll('.tk-sec-list:not([data-lanes]) input:checked')].map(c => c.value);
+      prefs.hiddenLanes = {...prefs.hiddenLanes, [field]: [...dialog.querySelectorAll('[data-lane]:not(:checked)')].map(c => c.value)};
       prefs.sort = {key: dialog.querySelector('[data-sort-key]').value, dir: Number(dialog.querySelector('[data-sort-dir]').value)};
       remember(); render();
     };
     dialog.addEventListener('change', save);
-    dialog.addEventListener('click', e => { if (e.target.matches('[data-card-reset]')) { delete prefs.cardFields; remember(); render(); dialog.close(); } });
+    dialog.addEventListener('click', e => { if (e.target.matches('[data-card-reset]')) { delete prefs.cardFields; delete prefs.hiddenLanes; remember(); render(); dialog.close(); } });
   }
   // Menu Cột: bật/tắt, đổi tên, xoá cột riêng, thêm thuộc tính mới
   function renderColsMenu() {
@@ -313,12 +330,13 @@
       ALL.slice(1).map(col => `<div class="tk-col-row"><input type="checkbox" data-show="${col.key}" ${col.hidden ? '' : 'checked'} aria-label="Hiện cột ${esc(col.label)}">` +
         `<input class="tk-col-label" data-rename="${col.key}" value="${esc(col.label)}" placeholder="${esc(col.baseLabel)}" aria-label="Tên cột">` +
         (col.custom ? `<small class="tk-muted">${typeName(col.type)}</small><button type="button" class="tk-x" data-del-col="${col.key}" aria-label="Xoá cột ${esc(col.label)}">×</button>` : '') + '</div>').join('') +
-      `<form class="tk-col-add"><b>+ Thêm thuộc tính</b><input name="label" placeholder="Tên cột, vd: Hướng nhà" required>
-        <select name="type">${CUSTOM_TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
-        <input name="options" placeholder="Các lựa chọn, cách nhau bằng dấu phẩy" hidden><button class="btn btn-primary btn-sm">Thêm cột</button></form>` +
+      addColForm() +
       '<button type="button" class="btn btn-outline btn-sm" data-sync-values title="Gộp các giá trị viết khác nhau (hoa/thường, dấu cách) về cùng 1 lựa chọn">⟳ Đồng bộ giá trị trùng</button>' +
       '<button type="button" class="btn btn-outline btn-sm" data-reset-cols>↺ Thứ tự, độ rộng, tên về mặc định</button>';
   }
+  const addColForm = () => `<form class="tk-col-add"><b>+ Thêm thuộc tính</b><input name="label" placeholder="Tên cột, vd: Hướng nhà" required>
+        <select name="type" aria-label="Kiểu thuộc tính">${CUSTOM_TYPES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+        <input name="options" placeholder="Các lựa chọn, cách nhau bằng dấu phẩy" hidden><button class="btn btn-primary btn-sm">Thêm cột</button></form>`;
   const newColId = () => 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   function addCustom(label, type, options = []) {
     const id = newColId();
@@ -427,7 +445,8 @@
     return list;
   }
   const canon = (col, v) => optionsOf(col).find(o => norm(o.name) === norm(v))?.name || v;
-  const chip = (col, name) => `<span class="tk-tag c-${optionsOf(col).find(o => o.name === name)?.color || hashColor(name)}">${esc(name)}</span>`;
+  const optLabel = (col, name) => col?.money && /^\d+$/.test(name) ? fmtMoney(name) : name;   // cột tiền dạng chọn: hiện 350.000
+  const chip = (col, name) => `<span class="tk-tag c-${optionsOf(col).find(o => o.name === name)?.color || hashColor(name)}">${esc(optLabel(col, name))}</span>`;
   function storeOptions(col, list) {
     schema.options = {...schema.options, [col.key]: list.map(o => ({name: o.name, color: o.color}))};
     optCache.delete(col.key);
@@ -497,7 +516,7 @@
       const q = norm(query), shown = opts.filter(o => !q || norm(o.name).includes(q));
       pop.innerHTML = `<div class="tk-pop-head">${selected.map(v => `<span class="tk-tag c-${opts.find(o => o.name === v)?.color || hashColor(v)}">${esc(v)}<button type="button" data-unpick="${esc(v)}" aria-label="Bỏ ${esc(v)}">×</button></span>`).join('')}
         <input data-q value="${esc(query)}" placeholder="${multi ? 'Tìm hoặc thêm người…' : 'Tìm hoặc thêm lựa chọn…'}" aria-label="Tìm lựa chọn"></div>
-        <div class="tk-pop-list"><small>${multi ? 'Chọn một hoặc nhiều' : 'Chọn một'} · ⋯ để đổi tên, màu</small>${shown.map(o => `<div class="tk-opt" data-pick="${esc(o.name)}"><span class="tk-check">${selected.includes(o.name) ? '✓' : ''}</span><span class="tk-tag c-${o.color}">${esc(o.name)}</span><button type="button" class="tk-edit" data-edit="${esc(o.name)}" aria-label="Sửa ${esc(o.name)}">⋯</button></div>`).join('')}
+        <div class="tk-pop-list"><small>${multi ? 'Chọn một hoặc nhiều' : 'Chọn một'} · ⋯ để đổi tên, màu</small>${shown.map(o => `<div class="tk-opt" data-pick="${esc(o.name)}"><span class="tk-check">${selected.includes(o.name) ? '✓' : ''}</span><span class="tk-tag c-${o.color}">${esc(optLabel(col, o.name))}</span><button type="button" class="tk-edit" data-edit="${esc(o.name)}" aria-label="Sửa ${esc(o.name)}">⋯</button></div>`).join('')}
         ${query.trim() && !opts.some(o => norm(o.name) === q) ? `<div class="tk-opt" data-create><span class="tk-check">+</span>Tạo <span class="tk-tag c-${hashColor(query)}">${esc(query.trim())}</span></div>` : ''}
         ${!multi && selected.length ? '<div class="tk-opt" data-clear><span class="tk-check">×</span>Để trống (dùng giá trị tự)</div>' : ''}</div>`;
       const input = pop.querySelector('[data-q]');

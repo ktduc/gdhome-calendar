@@ -35,9 +35,9 @@
   // Bảng phòng ngủ: chọn phòng cho ai → các lựa chọn của phòng đó
   const ROOM = {
     who: parseOptions('vo_chong:Vợ chồng;con_trai:Con trai;con_gai:Con gái;hai_con:2 con ở chung;em_be:Em bé;ong_ba:Ông bà;khach:Khách;giup_viec:Giúp việc;da_nang:Đa năng / làm việc'),
-    items: parseOptions('wc_rieng:WC riêng;wic:Phòng thay đồ;trang_diem:Bàn trang điểm;lam_viec:Góc làm việc;ban_hoc:Bàn học;giuong_tang:Giường tầng;goc_choi:Góc chơi, tủ đồ chơi;' +
+    items: parseOptions('wc_rieng:WC riêng;wic:Phòng thay đồ;trang_diem:Bàn trang điểm;lam_viec:Góc làm việc;ban_hoc:Bàn học;giuong_tang_hoc:Giường tầng thang hộc;giuong_tang_khi:Giường tầng thang khỉ;goc_choi:Góc chơi, tủ đồ chơi;' +
       'tv:TV;ban_cong:Cửa ra ban công;gan_wc:Gần WC, chống trơn;sofa_giuong:Sofa giường;co_hoc:Giường có hộc chứa đồ'),
-    itemFor: {wic: ['vo_chong'], trang_diem: ['vo_chong', 'con_gai'], lam_viec: ['vo_chong', 'khach', 'da_nang'], ban_hoc: ['con_trai', 'con_gai', 'hai_con'], giuong_tang: ['hai_con'],
+    itemFor: {wic: ['vo_chong'], trang_diem: ['vo_chong', 'con_gai'], lam_viec: ['vo_chong', 'khach', 'da_nang'], ban_hoc: ['con_trai', 'con_gai', 'hai_con'], giuong_tang_hoc: ['hai_con'], giuong_tang_khi: ['hai_con'],
       goc_choi: ['con_trai', 'con_gai', 'hai_con', 'em_be'], tv: ['vo_chong', 'ong_ba', 'khach'], ban_cong: ['vo_chong'], gan_wc: ['ong_ba'], sofa_giuong: ['da_nang']},
     beds: parseOptions('1m:1m;1m2:1m2;1m4:1m4;1m6:1m6;1m8:1m8;2m:2m trở lên'),
     mats: parseOptions('go:Giường gỗ;da:Bọc da;ni:Bọc nỉ')
@@ -79,7 +79,7 @@
         'indochine:Indochine;industrial:Industrial (công nghiệp);rustic:Rustic (mộc mạc);mid_century:Mid-century Modern;boho:Boho;dia_trung_hai:Địa Trung Hải;chua_biet:Chưa biết, cần tư vấn',
         {max: 3, note: 'Nếu chọn nhiều phong cách: phong cách nào cho khu vực nào?', heads: [['Hiện đại · tối giản', ['hien_dai', 'luxury', 'toi_gian', 'japandi']],
           ['Mộc · ấm · cổ điển', ['modern_farmhouse', 'scandinavian', 'tan_co_dien', 'wabi_sabi']], ['Cá tính · vùng miền', ['indochine', 'industrial', 'rustic', 'mid_century', 'boho', 'dia_trung_hai']]], ...OTHER}),
-      Q('ps_mau', 'many', 'Màu yêu thích', 'Màu sắc chủ đạo yêu thích?', 'trang_kem:Trắng, kem;go_sang:Gỗ sáng;go_toi:Gỗ tối (óc chó);xam:Xám;den:Đen;xanh_la:Xanh lá, xanh rêu;xanh_navy:Xanh navy;vang_dong:Vàng đồng;pastel:Pastel nhẹ;mau_dat:Màu đất', {color: true, ...OTHER}),
+      Q('ps_mau', 'many', 'Màu yêu thích', 'Màu sắc chủ đạo yêu thích?', 'trang_kem:Trắng, kem;pastel:Pastel nhẹ;vang_dong:Vàng đồng;go_sang:Gỗ sáng;mau_dat:Màu đất;go_toi:Gỗ tối (óc chó);xanh_la:Xanh lá, xanh rêu;xanh_navy:Xanh navy;xam:Xám;den:Đen', {color: true, ...OTHER}),
       Q('ps_vat_lieu', 'many', 'Vật liệu', 'Vật liệu muốn thấy trong nhà?', 'go_tn:Gỗ tự nhiên;da:Đá, đá nung;kim_loai:Kim loại;kinh:Kính;vai:Vải, boucle;da_that:Da;may_tre:Mây tre, cói;gach_bong:Gạch bông;giay_dan_tuong:Giấy dán tường;be_tong:Bê tông, xi măng', OTHER),
       Q('ps_tong_the', 'many', 'Lựa chọn chung cả nhà', 'Một số lựa chọn ảnh hưởng tới hình thức cả nhà?', 'canh_tron:Cánh tủ trơn, tay nắm âm / ẩn;tay_nam:Cánh tủ có tay nắm trang trí;van_go:Ưu tiên vân gỗ ở chỗ hay chạm;canh_son:Cánh tủ sơn màu;it_vat_lieu:Ít loại vật liệu, gọn và dễ phối', OTHER),
       Q('ps_anh_sang', 'one', 'Ánh sáng đèn', 'Ánh sáng đèn mong muốn?', 'trang:Trắng sáng, rõ ràng;vang:Vàng ấm, thư giãn;ket_hop:Kết hợp theo từng khu'),
@@ -92,7 +92,7 @@
       Q('ns_vao_o', 'one', 'Thời gian vào ở', 'Mong muốn vào ở sau bao lâu?', 'duoi_2:Dưới 2 tháng;3_4:3 - 4 tháng;5_6:5 - 6 tháng;tren_6:Trên 6 tháng;chua_biet:Chưa xác định', OTHER),
       Q('ns_nhap_trach', 'date', 'Ngày nhập trạch', 'Ngày dự kiến nhập trạch (nếu đã xem ngày)?', ''),
       Q('ns_uu_tien', 'many', 'Ưu tiên', 'Điều quan trọng nhất với mình? (chọn tối đa 3)', 'ben:Bền, dùng lâu;dep:Đẹp, ấn tượng;re:Chi phí hợp lý;de_ve_sinh:Dễ vệ sinh, ít bảo trì;tien_do:Thi công nhanh;thong_minh:Tiện nghi, công nghệ;luu_tru:Nhiều chỗ chứa đồ;suc_khoe:An toàn, thân thiện sức khoẻ', {max: 3}),
-      Q('ns_quyet_dinh', 'one', 'Người quyết định', 'Ai cùng quyết định thiết kế?', 'mot:Mình tự quyết;vo_chong:Hai vợ chồng;gia_dinh:Cả gia đình (bố mẹ, anh chị em)')
+      Q('ns_quyet_dinh', 'one', 'Người quyết định', 'Ai cùng quyết định thiết kế? (nên có 1 người đại diện trao đổi với GD HOME)', 'mot:Mình tự quyết;vo_chong:Hai vợ chồng;gia_dinh:Cả gia đình (bố mẹ, anh chị em)')
     ]},
     // ---------------------------------------------------------------- ĐẶC THÙ CÔNG TRÌNH
     {id: 'nha_pho', title: 'Nhà phố / biệt thự', intro: 'Những điểm đặc thù của nhà nhiều tầng.', showIf: HOUSE, questions: [
@@ -181,7 +181,7 @@
       Q('tho_co', 'one', 'Bàn thờ', 'Nhà có cần bàn thờ không?', 'phong_rieng:Phòng thờ riêng;tu_tho:Bàn thờ đặt sàn, dưới làm tủ thờ;treo:Bàn thờ treo tường;khong:Không cần',
         {sub: {treo: 'huong:Có chỗ để hương|chan_khoi:Có tấm chắn khói'}}),
       Q('tho_loai', 'many', 'Thờ gì', 'Thờ những gì?', 'gia_tien:Gia tiên;phat:Phật;than_tai:Thần tài - Thổ địa;khac:Khác', {showIf: {q: 'tho_co', notIn: ['khong']}, ...OTHER}),
-      Q('tho_vi_tri', 'one', 'Vị trí', 'Vị trí đặt bàn thờ trong căn hộ?', 'phong_khach:Phòng khách;phong_ngu:Trong phòng ngủ;canh_bep:Gần bếp / hành lang;chua_biet:Chưa biết, cần tư vấn', {showIf: [FLAT, {q: 'tho_co', notIn: ['khong']}]}),
+      Q('tho_vi_tri', 'one', 'Vị trí', 'Vị trí đặt bàn thờ trong căn hộ?', 'phong_khach:Phòng khách;canh_bep:Gần bếp / hành lang;chua_biet:Chưa biết, cần tư vấn', {showIf: [FLAT, {q: 'tho_co', notIn: ['khong', 'phong_rieng']}]}),
       Q('tho_ghi_chu', 'text', 'Ghi chú thờ cúng', 'Ghi chú thêm về thờ cúng (hướng thầy đã xem, kích thước bàn thờ cũ, đồ thờ cần giữ…)?', '', {showIf: {q: 'tho_co', notIn: ['khong']}})
     ]},
     {id: 'luu_tru', title: 'Lưu trữ & đồ đạc', intro: 'Càng đủ thông tin, tủ thiết kế càng vừa với đồ của mình.', showIf: RESIDENTIAL, questions: [

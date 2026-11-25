@@ -65,12 +65,14 @@ function sidebarSection(key,title,content) {
   return '<details class="sb-collapsible sidebar-section" data-sidebar="' + key + '"' + (sidebarOpen.get(key) !== false ? ' open' : '') +
     '><summary class="sb-head">' + title + '</summary><div class="material-sidebar-body">' + content + '</div></details>';
 }
+// Chỉ dự án đang thiết kế / thi công (giai đoạn trống thì như Thống kê: có ngày ký thi công là Thi công, không thì Thiết kế)
+const activeStage = profile => ['Thiết kế','Thi công'].includes(profile?.stage || (profile?.constructionSignedAt ? 'Thi công' : 'Thiết kế'));
 function projectSidebar() {
   const project = materials.projects.find(p => p.id === sheet.projectId);
   const meta = sheet.meta || {};
   return sidebarSection('project','📁 Dự án & khách hàng',
     '<label class="side-field">Dự án Tiến độ<select id="editor-project">' + option(sheet.projectId,project?.name || meta.project || 'Dự án đã lưu',sheet.projectId) +
-    materials.projects.filter(p => p.id !== sheet.projectId).map(p => option(p.id,p.name,sheet.projectId)).join('') + '</select></label>' +
+    materials.projects.filter(p => p.id !== sheet.projectId && activeStage(materials.profiles?.[p.id])).map(p => option(p.id,p.name,sheet.projectId)).join('') + '</select></label>' +
     '<label class="side-field">Bảng chốt mã<select id="editor-sheet">' +
     (!sheet.id ? '<option value="">Bảng mới</option>' : '') + materials.sheets.filter(s => s.projectId === sheet.projectId)
       .map(s => option(s.id,s.id === sheet.id ? sheet.title : s.title,sheet.id)).join('') + '</select></label>' +

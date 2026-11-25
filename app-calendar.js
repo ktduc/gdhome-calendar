@@ -62,6 +62,17 @@ function openDeleteScheduleProject(owner) {
 }
 
 let _lastCalCheckId = null;
+// Shift+bấm ô dự án hoặc ô giai đoạn: đặt cùng trạng thái cho mọi ô đang hiện giữa ô bấm trước và ô này (như Windows)
+function applyShiftRange(container, box, checked) {
+  const boxes = [...container.querySelectorAll('[data-range-key]')].filter(b => b.offsetParent !== null);
+  const from = boxes.findIndex(b => b.dataset.rangeKey === _lastCalCheckId), to = boxes.indexOf(box);
+  if (from === -1 || to === -1) return false;
+  boxes.slice(Math.min(from, to), Math.max(from, to) + 1).forEach(b => {
+    const [kind, id] = b.dataset.rangeKey.split(':');
+    AppState.calendars.filter(c => kind === 'cal' ? c.id === id : c.ownerId === id).forEach(c => { c.visible = checked; });
+  });
+  return true;
+}
 function renderCalendarSidebar() {
   normalizeAppState();
   const container = document.getElementById('calendar-list-container');
@@ -93,10 +104,12 @@ function renderCalendarSidebar() {
     ownerCheck.checked = ownerCalendars.length > 0 && ownerCalendars.some(c => c.visible !== false);
     ownerCheck.style.cssText = 'width:13px; height:13px; accent-color:#b91c1c; cursor:pointer; flex-shrink:0;';
     ownerCheck.title = `Bật / Tắt toàn bộ các giai đoạn của dự án "${owner.name}"`;
+    ownerCheck.dataset.rangeKey = 'owner:' + owner.id;
     ownerCheck.addEventListener('click', (e) => {
       e.stopPropagation();
       const targetVis = ownerCheck.checked;
-      ownerCalendars.forEach(c => { c.visible = targetVis; });
+      if (!(e.shiftKey && applyShiftRange(container, ownerCheck, targetVis))) ownerCalendars.forEach(c => { c.visible = targetVis; });
+      _lastCalCheckId = ownerCheck.dataset.rangeKey;
       saveToBackend();
       renderCalendarSidebar();
       renderCalendar();
@@ -265,24 +278,18 @@ function renderCalendarSidebar() {
       checkbox.style.accentColor = cal.color;
       checkbox.title = 'Ẩn / Hiện các công việc của lịch này';
       checkbox.dataset.calId = cal.id;
+      checkbox.dataset.rangeKey = 'cal:' + cal.id;
       checkbox.addEventListener('click', (e) => {
         e.stopPropagation();
         // Shift+bấm: đặt cùng trạng thái cho mọi giai đoạn đang hiển thị giữa ô bấm trước và ô này (như Windows)
-        const boxes = [...container.querySelectorAll('.cal-visibility-check')].filter(b => b.offsetParent !== null);
-        const from = boxes.findIndex(b => b.dataset.calId === _lastCalCheckId);
-        const to = boxes.indexOf(checkbox);
-        if (e.shiftKey && from !== -1 && to !== -1) {
-          boxes.slice(Math.min(from, to), Math.max(from, to) + 1).forEach(b => {
-            const c = AppState.calendars.find(x => x.id === b.dataset.calId);
-            if (c) c.visible = checkbox.checked;
-          });
+        if (e.shiftKey && applyShiftRange(container, checkbox, checkbox.checked)) {
           saveToBackend();
           renderCalendarSidebar();
         } else {
           cal.visible = checkbox.checked;
           saveToBackend();
         }
-        _lastCalCheckId = cal.id;
+        _lastCalCheckId = checkbox.dataset.rangeKey;
         renderCalendar();
       });
 

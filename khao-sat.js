@@ -126,7 +126,9 @@
   // Bật / tắt 1 mục; chọn mục ngoài phần chung thì thêm luôn vào phần chung (phong cách tối đa 3)
   function toggleLook(own, el) {
     const k = el.dataset.k || el.dataset.roomF, cur = effective(own, k), v = el.value;
-    const next = el.checked ? [...new Set([...cur, v])] : cur.filter(x => x !== v);
+    const single = !!el.dataset.roomF;   // từng phòng: phong cách 1, màu 1
+    if (single && el.checked) el.closest('.ks-subs').querySelectorAll('input').forEach(box => { if (box !== el) box.checked = false; });
+    const next = el.checked ? (single ? [v] : [...new Set([...cur, v])]) : cur.filter(x => x !== v);
     if (el.checked && !globalOf(k).includes(v) && (k !== 'pc' || globalOf('pc').length < 3)) {
       state.answers[GLOBAL[k]] = [...list(GLOBAL[k]).filter(x => !D.EXCLUSIVE.includes(x)), v];
       el.parentElement.classList.add('is-main');
@@ -201,6 +203,14 @@
       (q.other ? extra(q.id + '.khac', 'Khác… (ghi rõ)') : '') + (q.note && list(q.id).length >= 2 ? extra(q.id + '.ghi_chu', esc(q.note)) : '') + '</fieldset>';
   }
 
+  // Câu phụ thuộc câu phía trên chưa trả lời: vẫn hiện (mờ, chưa bấm được) để khách biết còn câu đó
+  function groupQuestions(group) {
+    const shown = new Map(group.questions.map(q => [q.id, q]));
+    const opens = (q, p) => D.QUESTION_BY_ID[p].options.some(o => D.visibleQuestions({...state.answers, [p]: D.QUESTION_BY_ID[p].type === 'many' ? [o.v] : o.v}).some(x => x.id === q.id));
+    return D.GROUPS.find(g => g.id === group.id).questions.map(q => shown.get(q.id) ||
+      ([].concat(q.showIf || []).some(c => shown.has(c.q) && state.answers[c.q] == null && opens(q, c.q)) ? {...q, wait: true} : null)).filter(Boolean);
+  }
+
   function render() {
     const groups = D.visibleGroups(state.answers);
     state.step = Math.min(state.step, groups.length - 1);
@@ -215,7 +225,7 @@
     main.innerHTML = (state.step === 0 && state.submittedAt ? '<p class="ks-notice">Mình đã gửi khảo sát lúc ' + time(state.submittedAt) + '. Có thể chỉnh sửa rồi gửi lại.</p>' : '') +
       '<header class="ks-ghead"><span class="ks-gicon" aria-hidden="true">' + I(GROUP_ICON[group.id] || '📋') + '</span><div><h2 class="ks-title">' + esc(group.title) + '</h2><p class="ks-intro">' + esc(group.intro || '') + '</p></div></header>' +
       (group.note ? '<p class="ks-tip">' + I('⚠️') + '<span>' + esc(group.note) + '</span></p>' : '') +
-      group.questions.map((q, i) => questionHtml(q, i + 1)).join('') +
+      groupQuestions(group).map((q, i) => q.wait ? questionHtml(q, i + 1).replace('class="ks-q', 'inert class="ks-q is-wait') : questionHtml(q, i + 1)).join('') +
       (state.error ? '<p class="ks-notice" role="alert">' + esc(state.error) + '</p>' : '');
     const last = state.step === groups.length - 1;
     byId('ks-step').textContent = 'Bước ' + (state.step + 1) + '/' + groups.length;
@@ -236,6 +246,10 @@
       return lines.length ? '<a href="#" data-step="' + i + '"' + (i === state.step ? ' class="is-on"' : '') + '><b>' + esc(g.title) + '</b>' +
         lines.map(([q, t]) => '<span>' + esc(q.short) + ': ' + esc(t) + '</span>').join('') + '</a>' : '';
     }).join('');
+    // Cột dài hơn màn hình: tự cuộn để thấy nhóm đang làm
+    const on = side.querySelector('.is-on');
+    if (on && on.offsetTop + on.offsetHeight > side.scrollTop + side.clientHeight) side.scrollTop = on.offsetTop + on.offsetHeight - side.clientHeight;
+    else if (on && on.offsetTop < side.scrollTop) side.scrollTop = on.offsetTop;
   }
 
   const signature = () => D.visibleQuestions(state.answers).map(q => q.id + ':' + q.options.length).join();

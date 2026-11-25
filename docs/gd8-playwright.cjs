@@ -127,6 +127,13 @@ cases['lich-shift'] = async page => {
   await boxes.nth(2).click({modifiers:['Shift']});
   assert.equal(await states(),'false,true,true,false');
   assert.equal(await page.evaluate(() => AppState.calendars.filter(c => c.visible !== false).length),3);
+  // Shift+bấm ô dự án: tắt cả dải dự án
+  await page.evaluate(() => { AppState.projectOwners.push({id:'p2',name:'Dự án Shift'}); AppState.calendars.push({id:'cal-p2',ownerId:'p2',name:'GIAI ĐOẠN 1',visible:true,color:'#cc0000'}); renderCalendarSidebar(); });
+  const owners = page.locator('[data-range-key^="owner:"]');
+  assert.equal(await owners.count(),2);
+  await owners.first().click();
+  await owners.last().click({modifiers:['Shift']});
+  assert.equal(await page.evaluate(() => AppState.calendars.filter(c => c.visible !== false).length),0,'Shift+bấm ô dự án tắt cả dải');
   for (const width of [1280,2560]) {
     await page.setViewportSize({width,height:900});
     const title = page.locator('.project-owner-title').first();
@@ -2609,7 +2616,7 @@ cases['thong-ke'] = async page => {
   await fresh.waitFor();
   assert.equal(await fresh.locator('[data-f=signedAt]').inputValue(),'2026-11-05');
   assert.equal(await fresh.locator('[data-f=status3d]').innerText(),'Xong lần 1');
-  assert.equal(await fresh.locator('[data-f=designPrice]').inputValue(),'250.000');
+  assert.equal(await fresh.locator('[data-f=designPrice]').innerText(),'250.000','Đơn giá TK dạng chọn vẫn hiện số tiền');
   const loai = (await overview()).tableSchema.custom.find(c => c.label === 'LOẠI NHÀ');
   assert.equal(await page.evaluate(() => GDHomeThongKe.csvValue('stage', 'XONG THIẾT KẾ')), 'TK xong chưa QT', 'Trạng thái Notion XONG THIẾT KẾ vào phần TK xong chưa QT');
   assert.ok(loai, 'Cột Notion lạ thành cột riêng');
@@ -2629,6 +2636,12 @@ cases['thong-ke'] = async page => {
   await page.locator('.tk-dialog').press('Escape');
   assert.ok(await page.locator('.tk-card[data-row=p1] [data-f=phone]').count() === 1,'Thẻ hiện trường vừa tick');
   assert.match(await page.locator('.tk-board-bar').innerText(),/Sắp xếp: Dự án/);
+  // Tuỳ chỉnh thẻ: ẩn cột Kanban Tạm dừng
+  await page.locator('[data-card-cfg]').click();
+  await page.locator('.tk-dialog [data-lane][value="Tạm dừng"]').uncheck();
+  await page.locator('.tk-dialog').press('Escape');
+  assert.equal(await page.locator('.tk-lane[data-lane="Tạm dừng"]').count(),0,'Ẩn cột Kanban');
+  assert.equal(await page.locator('.tk-lane[data-lane="Thi công"]').count(),1);
   // Rê chuột vào ô ngày: hiện ngày âm
   await page.locator('[data-mode=table]').click();
   const dateInput = page.locator('tr[data-row=p1] input[type=date]').first();
@@ -2643,6 +2656,15 @@ cases['thong-ke'] = async page => {
   await page.locator('.tk-dialog').press('Escape');
   await until(o => o.tableSchema.sections?.tc?.hidden?.includes('address'), 'Lưu cột hiện riêng phần THI CÔNG');
   assert.equal(await page.locator('.tk-sec[data-sec=tc] th[data-sort=address]').count(),0);
+  // ⚙ của phần: thêm thuộc tính mới kiểu Ngày, hiện luôn trong phần
+  await page.locator('[data-sec-cols=tc]').click();
+  await page.locator('.tk-dialog .tk-col-add [name=label]').fill('Ngày bàn giao');
+  await page.locator('.tk-dialog .tk-col-add [name=type]').selectOption('date');
+  await page.locator('.tk-dialog .tk-col-add button').click();
+  await until(o => o.tableSchema.custom.some(c => c.label === 'Ngày bàn giao' && c.type === 'date'), 'Thêm cột từ ⚙ của phần');
+  await page.locator('.tk-dialog').press('Escape');
+  assert.equal(await page.locator('.tk-sec[data-sec=tc] th', {hasText: 'Ngày bàn giao'}).count(),1,'Cột mới hiện trong phần');
+  assert.equal(await page.locator('.tk-sec.is-collapsed .tk-sec-side').first().evaluate(el => getComputedStyle(el).backgroundImage.startsWith('linear-gradient')),true,'Thanh thu gọn 2 tông');
   assert.equal(await page.locator('.tk-sec[data-sec=tk] th[data-sort=address]').count(),1,'Phần khác vẫn hiện cột');
   assert.deepEqual(await page.$$eval('.tk-sec', ss => ss.slice(0, 2).map(s => s.dataset.sec)), ['tc', 'tk'], 'Thiết kế ngay dưới Thi công');
   // Xoá dự án: ⋯ ở ô Dự án, gõ đúng tên
@@ -2723,8 +2745,15 @@ cases['khao-sat'] = async (page,{browser}) => {
   await page.goto('/mau-tra-loi',{waitUntil:'domcontentloaded'});
   await page.locator('.mt-tabs [data-tab=khao-sat]').click();
   await page.locator('#sv-project option[value=p1]').waitFor({state:'attached'});
+  // Không chọn dự án: gõ tên tạm -> tạo dự án tạm (giai đoạn "Dự án tạm") + link
+  await page.locator('#sv-temp').fill('Khách tạm GĐ8');
+  await page.locator('#sv-create').click();
+  await page.waitForFunction(() => /\/khao-sat\/[\w-]{20,}$/.test(document.getElementById('sv-link').value));
+  const tempId = await page.locator('#sv-project').inputValue();
+  assert.match(tempId,/^owner_/,'Tạo dự án tạm');
+  assert.equal(await page.locator('#sv-temp-wrap').isHidden(),true);
   await page.locator('#sv-project').selectOption('p1');
-  assert.match(await page.locator('#sv-status').innerText(),/Chưa tạo link/);
+  await page.waitForFunction(() => /Chưa tạo link/.test(document.getElementById('sv-status').textContent));
   await page.locator('#sv-create').click();
   await page.waitForFunction(() => /\/khao-sat\/[\w-]{20,}$/.test(document.getElementById('sv-link').value));
   const link = await page.locator('#sv-link').inputValue();
