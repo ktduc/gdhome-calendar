@@ -2764,7 +2764,16 @@ cases['khao-sat'] = async (page,{browser}) => {
   await sample.locator('.ks-opt').first().waitFor();
   assert.match(await sample.locator('#ks-project').innerText(),/Phiếu mẫu/);
   await sample.locator('.ks-opt',{hasText:'Nhà phố'}).click();
-  await sample.locator('#ks-next').click();
+  // Nút Quay lại / Tiếp tục ở giữa màn hình
+  const navMid = await sample.evaluate(() => { const a = document.getElementById('ks-back').getBoundingClientRect(), b = document.getElementById('ks-next').getBoundingClientRect(); return Math.abs((a.left + b.right) / 2 - innerWidth / 2); });
+  assert.ok(navMid < 20,'Hai nút điều hướng ở giữa: lệch ' + navMid);
+  // Tổng thể trước kĩ thuật; tích "Âm tủ" dưới Lò nướng thì Lò nướng tự được chọn
+  const titles = [];
+  for (let i = 0; i < 20 && (await sample.locator('.ks-title').innerText()) !== 'Bếp & phòng ăn'; i++) { titles.push(await sample.locator('.ks-title').innerText()); await sample.locator('#ks-next').click(); }
+  assert.ok(titles.indexOf('Phong cách & màu sắc') < titles.indexOf('Kĩ thuật điện - nước - trần'),titles.join(' > '));
+  const oven = sample.locator('.ks-optbox',{has:sample.locator('.ks-opt',{hasText:'Lò nướng'})});
+  await oven.locator('.ks-sub',{hasText:'Âm tủ'}).click();
+  assert.equal(await oven.locator('.ks-opt input').isChecked(),true,'Tích Âm tủ thì chọn luôn Lò nướng');
   assert.deepEqual(calls,[],'Phiếu mẫu không đọc/ghi server');
   await sampleContext.close();
   assert.equal(await page.locator('.mt-tabs a[href="/khao-sat/mau"]').count(),1,'Có tab Phiếu mẫu');

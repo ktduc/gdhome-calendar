@@ -5,13 +5,17 @@ const {handleSurveyPublic, handleSurveyAdmin} = require('../survey.js');
 
 const ids = answers => D.visibleQuestions(answers).map(q => q.id);
 
-test('mỗi khách thấy khoảng 40-72 câu (nhà ở), id duy nhất, mọi showIf trỏ tới câu có thật', () => {
+test('mỗi khách thấy khoảng 40-95 câu (nhà ở), id duy nhất, mọi showIf / optIf / sub trỏ tới thứ có thật', () => {
   for (const loai of ['chung_cu', 'nha_pho', 'biet_thu']) {
     const n = ids({loai_nha: loai, thanh_vien: ['tre_hoc', 'ong_ba'], tho_co: 'tu_tho', tb_muc: 'nhieu', lv_ai: ['chu_nha']}).length;
-    assert.ok(n >= 40 && n <= 72, loai + ' ' + n);
+    assert.ok(n >= 40 && n <= 95, loai + ' ' + n);
   }
   assert.equal(new Set(D.QUESTIONS.map(q => q.id)).size, D.QUESTIONS.length);
   for (const x of [...D.GROUPS, ...D.QUESTIONS]) for (const c of [].concat(x.showIf || [])) assert.ok(D.QUESTION_BY_ID[c.q], c.q);
+  for (const q of D.QUESTIONS) {
+    for (const [v, c] of Object.entries(q.optIf || {})) { assert.ok(q.options.some(o => o.v === v), q.id + '.' + v); for (const x of [].concat(c)) assert.ok(D.QUESTION_BY_ID[x.q]); }
+    for (const v of Object.keys(q.sub || {})) assert.ok(q.options.some(o => o.v === v) && v !== 'khac', q.id + '.' + v);
+  }
   for (const q of D.QUESTIONS) if (q.type !== 'text') assert.ok(q.options.length >= 2, q.id);
 });
 
@@ -54,12 +58,26 @@ test('cleanAnswers: bỏ id lạ, đáp án ngoài danh sách, cắt độ dài'
   const clean = D.cleanAnswers({loai_nha: 'nha_pho', so_tang: 'xx', hack: 'y', thanh_vien: ['vo_chong', 'vo_chong', 'la'], 'thanh_vien.khac': ' x '.repeat(400),
     'loai_nha.khac': 'không có ô khác', dien_tich: 'a'.repeat(5000), thu_cung: 'cho'});
   assert.equal(clean.loai_nha, 'nha_pho');
-  assert.ok(!('so_tang' in clean) && !('hack' in clean) && !('loai_nha.khac' in clean) && !('thu_cung' in clean));
+  assert.ok(!('so_tang' in clean) && !('hack' in clean) && !('loai_nha.khac' in clean));
+  assert.deepEqual(clean.thu_cung, ['cho'], 'chuỗi ở câu chọn nhiều (câu cũ đổi loại) vẫn giữ');
   assert.deepEqual(clean.thanh_vien, ['vo_chong']);
   assert.ok(clean['thanh_vien.khac'].length <= 300);
   assert.equal(clean.dien_tich.length, 1000);
   assert.deepEqual(D.cleanAnswers('x'), {});
   assert.deepEqual(D.cleanAnswers([1]), {});
+});
+
+test('thứ tự tổng thể → chi tiết; lựa chọn ẩn theo loại nhà; tích nhỏ trong ô', () => {
+  const order = D.visibleGroups({loai_nha: 'nha_pho'}).map(g => g.id);
+  assert.ok(order.indexOf('phong_cach') < order.indexOf('ky_thuat') && order.indexOf('ky_thuat') < order.indexOf('khach'), order.join());
+  const opts = (a, id) => D.visibleQuestions(a).find(q => q.id === id).options.map(o => o.v);
+  assert.ok(!opts({loai_nha: 'chung_cu'}, 'lt_kho').includes('gam') && opts({loai_nha: 'nha_pho'}, 'lt_kho').includes('gam'), 'gầm cầu thang chỉ cho nhà phố');
+  assert.ok(!opts({loai_nha: 'chung_cu'}, 'kt_dien').includes('ba_pha'));
+  assert.ok(!ids({loai_nha: 'chung_cu', thanh_vien: ['ong_ba']}).includes('pn_ong_ba'), 'chung cư không hỏi tầng cho ông bà');
+  const a = D.cleanAnswers({bep_thiet_bi: ['lo_nuong', 'tu_lanh_lon'], 'bep_thiet_bi.lo_nuong': ['am_tu', 'la'], 'bep_thiet_bi.tu_lanh_lon': ['am_tuong'], 'bep_thiet_bi.rua_bat': ['am_tu']});
+  assert.deepEqual(a['bep_thiet_bi.lo_nuong'], ['am_tu']);
+  assert.ok(!('bep_thiet_bi.rua_bat' in a), 'bỏ tích nhỏ khi ô chính chưa chọn');
+  assert.equal(D.answerText(D.QUESTION_BY_ID.bep_thiet_bi, a), 'Lò nướng (Âm tủ), Tủ lạnh lớn (side-by-side) (Âm tường)');
 });
 
 // Kho giả + response giả để thử route mà không cần mở server

@@ -45,7 +45,10 @@
     wc_thiet_bi: '🛁', wc_thong_gio: '💨', wc_an_toan: '⚠️', lv_ai: '💻', lv_kieu: '💺', lv_thiet_bi: '🖨️', tho_co: '🕯️', tho_loai: '🙏', tho_vi_tri: '📍',
     lt_quan_ao: '👗', lt_giay: '👟', lt_sach: '📚', lt_the_thao: '🚲', lt_khac: '🧳', lt_kho: '📦', tb_muc: '📱', tb_loai: '🤖', ps_phong_cach: '🎨',
     ps_mau: '🎨', ps_vat_lieu: '🌲', ps_anh_sang: '💡', ps_tham_khao: '🖼️', ps_khong_thich: '🙅', ns_noi_that: '💰', ns_gom: '🧾', ns_vao_o: '📅',
-    ns_moc: '⏳', ns_uu_tien: '⭐', ns_quyet_dinh: '🤝', cuoi_ghi_chu: '📝'};
+    ns_moc: '⏳', ns_uu_tien: '⭐', ns_quyet_dinh: '🤝', cuoi_ghi_chu: '📝',
+    ps_tong_the: '✨', ps_rem: '🔲', kt_dien: '🔌', kt_nuoc_nong: '🔥', kt_nuoc: '🚰', kt_dan_nong: '❄️', kt_tran: '🏗️', kt_den: '💡', kt_tuong: '🧱',
+    kt_mang: '🌐', sanh: '🚪', pk_ghi_chu: '📝', bep_nguoi_nau: '📏', bep_ghi_chu: '📝', pn_phan_bo: '👥', pn_con_dem: '🛏️', pn_ghi_chu: '📝',
+    wc_doi: '🔨', lv_ghe: '💺', tho_ghi_chu: '📝'};
   const OPT_ICON = {
     'loai_nha.chung_cu': '🏢', 'loai_nha.nha_pho': '🏘️', 'loai_nha.biet_thu': '🏡', 'loai_nha.van_phong': '💼', 'loai_nha.cua_hang': '🏪', 'loai_nha.khac': '🏗️',
     'tinh_trang.tho': '🧱', 'tinh_trang.co_ban': '🏠', 'tinh_trang.dang_o': '🛠️', 'tinh_trang.xay_moi': '🏗️',
@@ -82,6 +85,12 @@
     'ps_anh_sang.trang': '⚪', 'ps_anh_sang.vang': '🟡', 'ps_anh_sang.ket_hop': '🌗',
     'ns_uu_tien.ben': '🛡️', 'ns_uu_tien.dep': '✨', 'ns_uu_tien.re': '💸', 'ns_uu_tien.de_ve_sinh': '🧽', 'ns_uu_tien.tien_do': '⏱️', 'ns_uu_tien.thong_minh': '📱', 'ns_uu_tien.luu_tru': '🗄️', 'ns_uu_tien.suc_khoe': '🌱',
     'ns_quyet_dinh.mot': '🙋', 'ns_quyet_dinh.vo_chong': '💑', 'ns_quyet_dinh.gia_dinh': '👨‍👩‍👧',
+    'pk_tv.tv_frame': '🖼️', 'pk_tv.game': '🎬', 'pk_tv.am_thanh': '🔊', 'pk_tv.khong': '🚫', 'lv_thiet_bi.laptop': '💻',
+    'wc_thiet_bi.quat_4in1': '🌀', 'ps_vat_lieu.da_that': '🛋️', 'ps_vat_lieu.gach_bong': '🔲', 'ps_vat_lieu.giay_dan_tuong': '🖼️',
+    'sanh.tu_giay': '👟', 'sanh.ghe': '💺', 'sanh.guong': '🔲', 'sanh.moc': '👗',
+    'kt_dien.ba_pha': '🔌', 'kt_dien.mat_troi': '☀️', 'kt_dien.du_phong': '🔌', 'kt_dien.sac_xe': '🚗', 'kt_nuoc_nong.nl_mat_troi': '☀️',
+    'dieu_hoa.trung_tam': '🌀', 'kt_tran.quat_tran': '🌀', 'kt_tran.quat_dh': '🌀', 'kt_tran.thoat_mui': '💨', 'kt_den.downlight': '💡', 'kt_den.tha': '💡',
+    'kt_mang.wifi': '🌐', 'kt_mang.camera': '📹', 'ps_tong_the.robot': '🤖', 'ps_tong_the.van_go': '🌲', 'lv_ghe.cong_thai_hoc': '💺',
     khong: '🚫', chua_biet: '❓', co: '✅', da_biet: '✅'
   };
   const I = emoji => window.GDHomeSurveyIcons ? GDHomeSurveyIcons.svg(emoji) : emoji;   // icon nét đơn sắc (khao-sat-icons.js)
@@ -96,8 +105,12 @@
     const kind = q.type === 'many' ? 'checkbox' : 'radio';
     const opts = q.options.map(o => {
       const icon = optIcon(q, o);
-      return '<label class="ks-opt"><input type="' + kind + '" name="' + q.id + '" data-q="' + q.id + '" value="' + esc(o.v) + '"' +
+      const opt = '<label class="ks-opt"><input type="' + kind + '" name="' + q.id + '" data-q="' + q.id + '" value="' + esc(o.v) + '"' +
         (has(q.id, o.v) ? ' checked' : '') + '><span>' + (icon ? '<i aria-hidden="true">' + I(icon) + '</i>' : '') + '<b>' + esc(o.l) + '</b></span></label>';
+      // Tích nhỏ ngay dưới ô (vd Lò nướng → Âm tủ); tích vào thì ô chính tự được chọn
+      const subs = q.sub?.[o.v];
+      return subs ? '<div class="ks-optbox">' + opt + '<div class="ks-subs">' + subs.map(s => '<label class="ks-sub"><input type="checkbox" data-sub="' + q.id + '.' + esc(o.v) + '" value="' + esc(s.v) + '"' +
+        ([].concat(state.answers[q.id + '.' + o.v] ?? []).includes(s.v) ? ' checked' : '') + '>' + esc(s.l) + '</label>').join('') + '</div></div>' : opt;
     }).join('');
     const other = q.other ? '<input type="text" data-other="' + q.id + '" maxlength="300" placeholder="Khác… (ghi rõ)" value="' + esc(state.answers[q.id + '.khac'] || '') + '">' : '';
     const answered = [].concat(state.answers[q.id] ?? []).length > 0;
@@ -117,6 +130,7 @@
     }
     main.innerHTML = (state.step === 0 && state.submittedAt ? '<p class="ks-notice">Mình đã gửi khảo sát lúc ' + time(state.submittedAt) + '. Có thể chỉnh sửa rồi gửi lại.</p>' : '') +
       '<header class="ks-ghead"><span class="ks-gicon" aria-hidden="true">' + I(GROUP_ICON[group.id] || '📋') + '</span><div><h2 class="ks-title">' + esc(group.title) + '</h2><p class="ks-intro">' + esc(group.intro || '') + '</p></div></header>' +
+      (group.note ? '<p class="ks-tip">' + I('⚠️') + '<span>' + esc(group.note) + '</span></p>' : '') +
       group.questions.map((q, i) => questionHtml(q, i + 1)).join('') +
       (state.error ? '<p class="ks-notice" role="alert">' + esc(state.error) + '</p>' : '');
     const last = state.step === groups.length - 1;
@@ -127,7 +141,19 @@
     next.disabled = state.busy || (state.step === 0 && !state.answers.loai_nha);
   }
 
-  const signature = () => D.visibleQuestions(state.answers).map(q => q.id).join();
+  const signature = () => D.visibleQuestions(state.answers).map(q => q.id + ':' + q.options.length).join();
+
+  function onSub(el) {
+    const key = el.dataset.sub, [id, v] = key.split('.'), q = D.QUESTION_BY_ID[id];
+    const list = new Set([].concat(state.answers[key] ?? []));
+    el.checked ? list.add(el.value) : list.delete(el.value);
+    if (list.size) state.answers[key] = [...list]; else delete state.answers[key];
+    if (el.checked && !has(id, v)) {   // tích "Âm tủ" mà chưa chọn ô chính thì chọn luôn
+      state.answers[id] = q.type === 'many' ? [...new Set([].concat(state.answers[id] ?? []).concat(v))] : v;
+      const y = scrollY; render(); scrollTo(0, y);
+    }
+    store.write();
+  }
 
   function onAnswer(el) {
     const before = signature();
@@ -138,7 +164,11 @@
       if (list.size) state.answers[id] = [...list]; else delete state.answers[id];
     } else if (el.type === 'radio') state.answers[id] = el.value;
     else if (el.value.trim()) state.answers[id] = el.value; else delete state.answers[id];
+    // Bỏ chọn ô chính thì bỏ luôn tích nhỏ của nó
+    let subGone = false;
+    for (const v of Object.keys(D.QUESTION_BY_ID[id]?.sub || {})) if (!has(id, v) && state.answers[id + '.' + v]) { delete state.answers[id + '.' + v]; subGone = true; }
     store.write();
+    if (subGone) el.closest('.ks-q')?.querySelectorAll('[data-sub]').forEach(box => { if (!has(id, box.dataset.sub.split('.')[1])) box.checked = false; });
     el.closest('.ks-q')?.classList.toggle('is-done', state.answers[id] != null);
     if (signature() !== before || (id === 'loai_nha')) { const y = scrollY; render(); scrollTo(0, y); }
   }
@@ -161,7 +191,10 @@
 
   function bind() {
     const main = byId('ks-main');
-    main.addEventListener('change', event => { if (event.target.dataset.q && event.target.type !== 'text') onAnswer(event.target); });
+    main.addEventListener('change', event => {
+      if (event.target.dataset.sub) onSub(event.target);
+      else if (event.target.dataset.q && event.target.type !== 'text') onAnswer(event.target);
+    });
     main.addEventListener('input', event => {
       const el = event.target;
       if (el.tagName === 'TEXTAREA') onAnswer(el);

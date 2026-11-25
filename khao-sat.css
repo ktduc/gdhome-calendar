@@ -42,7 +42,7 @@
 .ks-opt input:focus-visible + span { outline: 3px solid #b9a98f; outline-offset: 1px; }
 .ks-q input[type=text], .ks-q textarea { width: 100%; margin-top: 6px; padding: 10px 12px; border: 1.5px solid var(--ks-line); border-radius: 10px; background: #fbfaf8; color: inherit; font: inherit; font-size: 15px; }
 .ks-q textarea { margin-top: 0; min-height: 72px; resize: vertical; }
-.ks-q input[type=text]:focus, .ks-q textarea:focus { outline: none; border-color: var(--ks-brown); background: #fff; }.ks-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid var(--ks-line); }
+.ks-q input[type=text]:focus, .ks-q textarea:focus { outline: none; border-color: var(--ks-brown); background: #fff; }.ks-nav { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; justify-content: center; gap: 18px; padding: 10px 16px calc(10px + env(safe-area-inset-bottom)); background: rgba(255,255,255,.96); border-top: 1px solid var(--ks-line); }
 .ks-nav[hidden] { display: none; }
 .ks-stepno { color: var(--ks-muted); font-size: 13px; }
 .ks-btn { min-height: 48px; padding: 0 22px; border-radius: 12px; border: 1.5px solid var(--ks-brown); font: 500 16px Roboto, system-ui, sans-serif; cursor: pointer; }
@@ -63,3 +63,15 @@
 .ks-opt input:checked + span i { color: var(--ks-brown); }
 /* Phiếu mẫu: thanh trên của GD HOME Tools */
 .ks-preview .app-header { position: sticky; top: 0; z-index: 50; }
+/* Quay lại / Tiếp tục ở giữa, rộng bằng nhau để bấm nhanh */
+.ks-nav .ks-btn { min-width: 150px; }
+.ks-stepno { min-width: 70px; text-align: center; }
+/* Tích nhỏ trong ô lựa chọn (vd Lò nướng → Âm tủ) */
+.ks-optbox { display: grid; grid-template-rows: 1fr auto; gap: 4px; }
+.ks-subs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 4px; }
+.ks-sub { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px 2px 4px; border: 1px dashed var(--ks-line); border-radius: 999px; font-size: 12px; color: var(--ks-muted); cursor: pointer; }
+.ks-sub input { margin: 0; accent-color: var(--ks-brown); }
+.ks-sub:has(input:checked) { border-style: solid; border-color: var(--ks-brown); color: var(--ks-ink); background: var(--ks-soft); }
+/* Lời nhắc của nhóm (vd nhờ thầy xem hướng bàn thờ) */
+.ks-tip { display: flex; gap: 8px; align-items: flex-start; margin: 0 0 10px; padding: 10px 12px; border-radius: 10px; background: #fff6e5; border: 1px solid #f0d49b; color: #7a5410; font-size: 13.5px; }
+.ks-tip .ks-svg { flex: none; width: 18px; height: 18px; margin-top: 1px; }
