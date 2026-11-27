@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/shell.css">
   <link rel="stylesheet" href="/ve-hien-trang.css">
   <script src="/shell.js" defer></script>
+  <script src="/image-compression.js" defer></script>
   <script src="/ve-hien-trang-core.js" defer></script>
   <script src="/ve-hien-trang.js" defer></script>
 </head>
@@ -85,6 +86,8 @@
       <button type="button" data-tool="dim" title="Đo thêm kích thước (M)">↔ Đo</button>
       <button type="button" data-tool="note" title="Ghi chú chữ (T)">T Ghi chú</button>
       <button type="button" data-tool="arrow" title="Mũi tên chỉ dẫn">↗ Mũi tên</button>
+      <button type="button" data-tool="photo" title="Ảnh hiện trường">📷 Ảnh</button>
+      <input type="file" accept="image/*" capture="environment" id="vh-photo-input" hidden>
       <span class="vh-sep"></span>
       <button type="button" data-act="lock" id="vh-lock" title="Khoá phương ngang / dọc (L)">⊥ Khoá phương</button>
       <button type="button" data-act="fit" title="Vừa màn hình (F)">⤢ Vừa màn hình</button>
@@ -137,6 +140,19 @@
       <label class="vh-check"><input type="checkbox" name="devDims"> Ghi kích thước tới tim thiết bị</label>
       <label class="vh-check"><input type="checkbox" name="grid"> Hiện lưới</label>
       <div class="vh-form-btns"><button value="cancel" class="btn btn-outline">Đóng</button><button value="ok" class="btn btn-primary">Lưu</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="vh-dialog vh-photo-dlg" id="vh-photo-dlg">
+    <form method="dialog" id="vh-photo-form">
+      <h2 id="vh-photo-title">Ảnh hiện trường</h2>
+      <div class="vh-photo-wrap"><img id="vh-photo-img" alt="Ảnh hiện trường"></div>
+      <label>Ghi chú ảnh<textarea id="vh-photo-note" rows="2" placeholder="Ghi chú vị trí, hiện trạng…"></textarea></label>
+      <div class="vh-form-btns">
+        <button type="button" class="btn btn-outline" id="vh-photo-replace">📷 Đổi ảnh</button>
+        <button type="button" class="btn btn-outline vh-danger-btn" id="vh-photo-del">🗑 Xoá</button>
+        <button value="ok" class="btn btn-primary">Đóng</button>
+      </div>
     </form>
   </dialog>
 </body>

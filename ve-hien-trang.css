@@ -88,6 +88,11 @@
 .vh-dialog { border: 1px solid var(--gd-dialog-border); border-radius: 12px; background: var(--gd-dialog-bg); width: min(92vw, 520px); padding: 16px; }
 .vh-dialog form { display: grid; gap: 10px; }
 .vh-dialog h2 { margin: 0; font-size: 18px; }
+.vh-dialog textarea { box-sizing: border-box; font: inherit; font-size: 14px; padding: 7px 9px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; color: inherit; min-width: 0; }
+.vh-photo-dlg { width: min(94vw, 680px); }
+.vh-photo-wrap { background: #0f172a; border-radius: 10px; overflow: hidden; display: grid; place-items: center; min-height: 200px; max-height: 58vh; }
+.vh-photo-wrap img { max-width: 100%; max-height: 58vh; object-fit: contain; display: block; }
+.vh-danger-btn { color: #b91c1c !important; border-color: #fecaca !important; }
 
 @media (max-width: 640px) {
   .vh-home-actions { grid-template-columns: 1fr; }

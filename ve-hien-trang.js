@@ -6,7 +6,22 @@
   const svg = $('vh-svg'), world = $('vh-world'), drawLayer = $('vh-draw'), over = $('vh-over'), pop = $('vh-pop');
   const S = {id: '', plan: null, view: {x: 0, y: 0, k: 0.12}, mode: 'plan', tool: 'select', lock: true, sel: null, draft: null, devType: 'o_cam',
     ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false,
-    hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null, arrowDraft: null};
+    hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null, arrowDraft: null, pendingPhoto: null};
+  const assetUrls = new Map();
+  async function assetBlobUrl(name) {
+    if (!name) return '';
+    if (assetUrls.has(name)) return assetUrls.get(name);
+    const res = await fetch('/api/materials/assets/' + encodeURIComponent(name), {headers: Shell.authHeaders()});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const url = URL.createObjectURL(await res.blob());
+    assetUrls.set(name, url);
+    return url;
+  }
+  async function uploadImageAsset(file) {
+    const {full} = await window.GDHomeImages.compress(file);
+    const res = await window.GDHomeImages.uploadAsset(full, Shell.authHeaders);
+    return typeof res === 'string' ? res : res?.name;
+  }
   const floor = () => S.plan.floors[S.plan.active] || S.plan.floors[0];
   const notesList = () => (floor().notes ||= []);
   const arrowsList = () => (floor().arrows ||= []);
@@ -250,6 +265,7 @@
       if (sel.kind === 'cl') { const cl = (floor().ceilLines || []).find(c => c.id === sel.id); if (cl) out.push({t: 'poly', pts: cl.pts, close: !!cl.closed, fill: 'none', stroke: '#2563eb', w: 3, dash: '8 5'}); }
       if (sel.kind === 'note') { const nt = notesList().find(n => n.id === sel.id); if (nt) out.push({t: 'circle', c: [nt.x, nt.y], r: px(8), stroke: '#2563eb', w: 2.5, fill: '#fff'}); }
       if (sel.kind === 'ar') { const ar = arrowsList().find(a => a.id === sel.id); if (ar) out.push({t: 'poly', pts: ar.pts, close: false, fill: 'none', stroke: '#2563eb', w: 3, dash: '6 4'}); }
+      if (sel.kind === 'ph') { const ph = (floor().photos || []).find(p => p.id === sel.id); if (ph) out.push({t: 'circle', c: [ph.x, ph.y], r: (S.plan.font || 150) * 1.6, stroke: '#2563eb', w: 2.5, dash: '5 4'}); }
       if ((sel.kind === 'seg' || sel.kind === 'room') && room) room.pts.forEach((p, j) => out.push({t: 'poly', pts: [[p[0] - px(6), p[1] - px(6)], [p[0] + px(6), p[1] - px(6)], [p[0] + px(6), p[1] + px(6)], [p[0] - px(6), p[1] + px(6)]], close: true, fill: '#fff', stroke: '#2563eb', w: 2, hit: 'vtx:' + room.id + ':' + j}));
       if (sel.kind === 'room' && room && !room.closed) [room.pts[0], room.pts[room.pts.length - 1]].forEach(p => out.push({t: 'circle', c: p, r: px(9), stroke: '#dc2626', w: 2.5}));
     }
@@ -295,7 +311,8 @@
     column: 'Chạm chỗ đặt cột vuông 200 (gần tường thì tự ăn vào tường)',
     dim: 'Chạm điểm đầu, điểm cuối (tự bắt góc tường) rồi chạm chỗ đặt đường kích thước',
     note: 'Chạm lên bản vẽ để đặt khung ghi chú nhiều dòng',
-    arrow: 'Bấm lần lượt điểm đầu mũi tên → điểm gập → điểm chân rồi nhập chữ'
+    arrow: 'Bấm lần lượt điểm đầu mũi tên → điểm gập → điểm chân rồi nhập chữ',
+    photo: 'Chạm lên bản vẽ vị trí chụp để đặt ghim và chọn / chụp ảnh hiện trường'
   };
   function syncModeUI() {
     const ceil = S.mode === 'ceil';
@@ -330,7 +347,7 @@
     S.tool = tool; S.dimDraft = null; S.arrowDraft = null;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('is-on', b.dataset.tool === tool));
     svg.classList.toggle('is-draw', tool === 'draw' || tool === 'ceil-line');
-    svg.classList.toggle('is-place', ['device', 'column', 'dim', 'note', 'arrow'].includes(tool));
+    svg.classList.toggle('is-place', ['device', 'column', 'dim', 'note', 'arrow', 'photo'].includes(tool));
     $('vh-devices').hidden = S.mode === 'ceil' || tool !== 'device';
     $('vh-ceil-devices').hidden = S.mode !== 'ceil';
     renderCeilSub();
@@ -637,6 +654,7 @@
     if (hit.kind === 'cl') return (floor().ceilLines || []).find(c => c.id === hit.a);
     if (hit.kind === 'note') return notesList().find(n => n.id === hit.a);
     if (hit.kind === 'ar') return arrowsList().find(a => a.id === hit.a);
+    if (hit.kind === 'ph') return (floor().photos || []).find(p => p.id === hit.a);
     if (hit.kind === 'sched') return floor()[hit.a === 'ceil' ? 'schedCeilOff' : 'schedPlanOff'] || [0, 0];
     if (!room) return null;
     if (hit.kind === 'op') return room.openings.find(o => o.id === hit.b);
@@ -676,6 +694,9 @@
     } else if (d.hit.kind === 'ar') {
       const ar = arrowsList().find(a => a.id === d.hit.a);
       if (ar) ar.pts = base.pts.map(p => [C.round(p[0] + delta[0], s), C.round(p[1] + delta[1], s)]);
+    } else if (d.hit.kind === 'ph') {
+      const ph = (floor().photos || []).find(p => p.id === d.hit.a);
+      if (ph) { ph.x = C.round(base.x + delta[0], s); ph.y = C.round(base.y + delta[1], s); }
     } else if (d.hit.kind === 'sched') {
       floor()[d.hit.a === 'ceil' ? 'schedCeilOff' : 'schedPlanOff'] = [C.round(base[0] + delta[0], s), C.round(base[1] + delta[1], s)];
     } else if (d.hit.kind === 'fdim') {
@@ -731,8 +752,60 @@
       const pts = [...S.arrowDraft.pts, p], mode = S.mode;
       S.arrowDraft = null; renderOverlay();
       finishArrow(pts, mode);
+    } else if (S.tool === 'photo') {
+      const s = S.plan.snap || 10;
+      S.pendingPhoto = {x: C.round(w[0], s), y: C.round(w[1], s)};
+      $('vh-photo-input').click();
     }
   }
+  $('vh-photo-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    const pend = S.pendingPhoto;
+    S.pendingPhoto = null;
+    if (!file || !pend) return;
+    Shell.toast('Đang nén và tải ảnh hiện trường…');
+    try {
+      const name = await uploadImageAsset(file);
+      if (pend.replaceId) {
+        commit(() => { const ph = (floor().photos || []).find(p => p.id === pend.replaceId); if (ph) ph.name = name; });
+        openPhotoDialog(pend.replaceId);
+      } else {
+        const id = C.uid();
+        setTool('select');
+        commit(() => { (floor().photos ||= []).push({id, x: pend.x, y: pend.y, name, note: ''}); S.sel = {kind: 'ph', id}; });
+        openPhotoDialog(id);
+      }
+      Shell.toast('Đã lưu ảnh hiện trường.');
+    } catch (error) { Shell.toast('Không tải được ảnh: ' + error.message); }
+  });
+  async function openPhotoDialog(id) {
+    const list = floor().photos || [], idx = list.findIndex(p => p.id === id), ph = list[idx];
+    if (!ph) return;
+    const dlg = $('vh-photo-dlg'), img = $('vh-photo-img');
+    dlg.dataset.phId = id;
+    $('vh-photo-title').textContent = 'Ảnh hiện trường #' + (idx + 1);
+    $('vh-photo-note').value = ph.note || '';
+    img.removeAttribute('src');
+    if (!dlg.open) dlg.showModal();
+    try { img.src = await assetBlobUrl(ph.name); }
+    catch (error) { Shell.toast('Không tải được ảnh: ' + error.message); }
+  }
+  $('vh-photo-note').addEventListener('change', e => {
+    const id = $('vh-photo-dlg').dataset.phId, ph = (floor().photos || []).find(p => p.id === id);
+    if (ph) commit(() => { ph.note = e.target.value.slice(0, 500); });
+  });
+  $('vh-photo-replace').addEventListener('click', () => {
+    const id = $('vh-photo-dlg').dataset.phId;
+    if (!id) return;
+    S.pendingPhoto = {replaceId: id};
+    $('vh-photo-input').click();
+  });
+  $('vh-photo-del').addEventListener('click', () => {
+    const id = $('vh-photo-dlg').dataset.phId;
+    $('vh-photo-dlg').close();
+    if (id) { S.sel = {kind: 'ph', id}; deleteSel(); }
+  });
   async function finishArrow(pts, mode) {
     const text = await Shell.ask({title: 'Chữ mũi tên', input: {value: '', placeholder: 'Nhập nội dung chú thích…'}});
     if (text === null) return;
@@ -769,6 +842,7 @@
     else S.sel = {kind: hit.kind, id: hit.a};
     renderAll();
     if (hit.kind === 'seg') pop.querySelector('[data-f=len]')?.select();
+    if (hit.kind === 'ph') openPhotoDialog(hit.a);
   }
   const field = (label, f, value, attrs = '') => `<label>${label}<input data-f="${f}" value="${esc(value)}" ${attrs}></label>`;
   const num = (label, f, value) => `<label>${label}<div class="vh-step"><button type="button" data-step="${f}:-10">−</button><input data-f="${f}" type="number" inputmode="numeric" value="${Math.round(value)}"><button type="button" data-step="${f}:10">+</button></div></label>`;
@@ -969,6 +1043,7 @@
       else if (sel.kind === 'cl') floor().ceilLines = (floor().ceilLines || []).filter(c => c.id !== sel.id);
       else if (sel.kind === 'note') { const list = notesList(), k = list.findIndex(n => n.id === sel.id); if (k >= 0) list.splice(k, 1); }
       else if (sel.kind === 'ar') { const list = arrowsList(), k = list.findIndex(a => a.id === sel.id); if (k >= 0) list.splice(k, 1); }
+      else if (sel.kind === 'ph') floor().photos = (floor().photos || []).filter(p => p.id !== sel.id);
       S.sel = null;
     });
   }
