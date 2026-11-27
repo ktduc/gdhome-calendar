@@ -65,50 +65,75 @@
       <div class="vh-top-right">
         <button type="button" class="vh-ib" data-act="undo" title="Hoàn tác (Ctrl+Z)" aria-label="Hoàn tác">↶</button>
         <button type="button" class="vh-ib" data-act="redo" title="Làm lại (Ctrl+Y)" aria-label="Làm lại">↷</button>
-        <details class="vh-export"><summary class="btn btn-outline btn-sm">Xuất ▾</summary>
+        <details class="vh-export"><summary class="btn btn-outline btn-sm" title="Xuất / nhập">⇅<span class="vh-lbl"> Xuất ▾</span></summary>
           <div class="vh-menu vh-menu-right">
-            <button type="button" data-act="dxf">DXF (AutoCAD, mm 1:1) – tầng đang xem</button>
-            <button type="button" data-act="png">Ảnh PNG – tầng đang xem</button>
-            <button type="button" data-act="json">Sao lưu JSON – cả bản vẽ</button>
+            <button type="button" data-act="export">Xuất bản vẽ… (PDF, DXF, PNG/JPG, JSON)</button>
+            <hr>
+            <button type="button" data-act="bg-import">Nhập nền… (ảnh, PDF, DXF)</button>
+            <button type="button" data-act="bg-edit">Chỉnh nền hiện trạng</button>
           </div>
         </details>
+        <input type="file" accept="image/*,.pdf,application/pdf,.dxf" id="vh-bg-input" hidden>
         <button type="button" class="vh-ib" data-act="settings" title="Cài đặt" aria-label="Cài đặt">⚙</button>
       </div>
     </div>
     <div class="vh-tools" role="toolbar" aria-label="Công cụ">
-      <button type="button" data-act="ceil" id="vh-ceil" title="Chế độ Mặt bằng / Trần">⊞ Trần</button>
+      <button type="button" data-act="ceil" id="vh-ceil" title="Chế độ Mặt bằng / Trần">Trần</button>
       <span class="vh-sep"></span>
-      <button type="button" data-tool="select" title="Chọn / dời (V)">↖ Chọn</button>
-      <button type="button" data-tool="draw" title="Vẽ chu vi phòng (P)">✎ Vẽ</button>
-      <button type="button" data-tool="ceil-line" id="vh-tool-ceilline" title="Vẽ đường giật cấp / hắt LED" hidden>⬒ Giật cấp</button>
-      <button type="button" data-tool="device" title="Thả thiết bị (D)">⊕ Thiết bị</button>
-      <button type="button" data-tool="column" title="Đặt cột vuông 200 (C)">▣ Cột</button>
-      <button type="button" data-tool="dim" title="Đo thêm kích thước (M)">↔ Đo</button>
-      <button type="button" data-tool="note" title="Ghi chú chữ (T)">T Ghi chú</button>
-      <button type="button" data-tool="arrow" title="Mũi tên chỉ dẫn">↗ Mũi tên</button>
-      <button type="button" data-tool="photo" title="Ảnh hiện trường">📷 Ảnh</button>
+      <button type="button" data-tool="select" title="Chọn / dời (V)">↖<span class="vh-lbl"> Chọn</span></button>
+      <button type="button" data-tool="draw" title="Bút vẽ chu vi phòng (P)">✎<span class="vh-lbl"> Vẽ</span></button>
+      <button type="button" data-tool="ceil-line" id="vh-tool-ceilline" title="Vẽ đường giật cấp / hắt LED" hidden>⬒<span class="vh-lbl"> Giật cấp</span></button>
+      <button type="button" data-tool="device" title="Thả thiết bị (D)">⊕<span class="vh-lbl"> Thiết bị</span></button>
+      <button type="button" data-tool="column" title="Đặt cột vuông 200 (C)">▣<span class="vh-lbl"> Cột</span></button>
+      <button type="button" data-tool="dim" title="Đo thêm kích thước – Dim (M)">↔<span class="vh-lbl"> Đo</span></button>
+      <button type="button" data-tool="note" title="Ghi chú chữ (T)">T<span class="vh-lbl"> Ghi chú</span></button>
+      <button type="button" data-tool="arrow" title="Mũi tên chỉ dẫn">↗<span class="vh-lbl"> Mũi tên</span></button>
+      <button type="button" data-tool="photo" title="Máy ảnh – ảnh hiện trường">📷<span class="vh-lbl"> Ảnh</span></button>
       <input type="file" accept="image/*" capture="environment" id="vh-photo-input" hidden>
       <span class="vh-sep"></span>
-      <button type="button" data-act="lock" id="vh-lock" title="Khoá phương ngang / dọc (L)">⊥ Khoá phương</button>
-      <button type="button" data-act="fit" title="Vừa màn hình (F)">⤢ Vừa màn hình</button>
-      <button type="button" data-act="quick-room" title="Thêm phòng chữ nhật có cửa rồi co kéo cho khớp">+ Phòng chữ nhật</button>
+      <button type="button" data-act="quick-room" title="Thêm phòng chữ nhật có cửa rồi co kéo cho khớp">+<span class="vh-lbl"> Phòng chữ nhật</span></button>
     </div>
     <div class="vh-devices" id="vh-devices" hidden></div>
     <div class="vh-devices" id="vh-ceil-devices" hidden></div>
     <div class="vh-devices vh-subbar" id="vh-ceil-sub" hidden></div>
+    <div class="vh-devices vh-subbar" id="vh-bg-bar" hidden>
+      <b>Nền</b>
+      <button type="button" data-bg="scale" title="Chạm 2 điểm rồi nhập số đo thật">📏 Đặt tỷ lệ</button>
+      <button type="button" data-bg="move">✥ Dời</button>
+      <label>Độ mờ <input type="range" min="0.1" max="1" step="0.05" data-bg="opacity"></label>
+      <button type="button" data-bg="hide">🙈 Ẩn</button>
+      <button type="button" data-bg="del" class="vh-danger-btn">🗑 Xoá</button>
+      <button type="button" data-bg="close" title="Đóng thanh nền">✕</button>
+    </div>
     <div class="vh-stage" id="vh-stage">
       <svg id="vh-svg" xmlns="http://www.w3.org/2000/svg" aria-label="Bản vẽ mặt bằng">
         <defs>
           <pattern id="vh-grid-minor" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M100 0H0V100" fill="none" stroke="#dbe3ec" stroke-width="1" vector-effect="non-scaling-stroke"/></pattern>
           <pattern id="vh-grid-major" width="1000" height="1000" patternUnits="userSpaceOnUse"><rect width="1000" height="1000" fill="url(#vh-grid-minor)"/><path d="M1000 0H0V1000" fill="none" stroke="#b9c6d6" stroke-width="1" vector-effect="non-scaling-stroke"/></pattern>
         </defs>
-        <g id="vh-world"><rect id="vh-grid" fill="url(#vh-grid-major)"/><g id="vh-draw"></g><g id="vh-over"></g></g>
+        <g id="vh-world"><rect id="vh-grid" fill="url(#vh-grid-major)"/><g id="vh-bg" pointer-events="none"></g><g id="vh-draw"></g><g id="vh-over"></g></g>
       </svg>
+      <div class="vh-elev-bar" id="vh-elev-bar" hidden>
+        <b id="vh-elev-title"></b>
+        <button type="button" data-elev="prev" title="Đoạn trước" aria-label="Đoạn trước">‹</button>
+        <button type="button" data-elev="next" title="Đoạn sau" aria-label="Đoạn sau">›</button>
+        <button type="button" data-elev="png" title="Xuất ảnh PNG mặt đứng">Ảnh</button>
+        <button type="button" data-elev="dxf" title="Xuất DXF mặt đứng">DXF</button>
+        <button type="button" data-elev="close" title="Về mặt bằng (Esc)" aria-label="Đóng mặt đứng">✕</button>
+      </div>
+      <div class="vh-fab" id="vh-fab" hidden>
+        <button type="button" data-fab="del" title="Xoá" aria-label="Xoá">✕</button>
+        <button type="button" data-fab="props" title="Thuộc tính" aria-label="Thuộc tính">☰</button>
+        <button type="button" data-fab="elev" title="Mặt đứng" aria-label="Mặt đứng">▥</button>
+        <button type="button" data-fab="move" title="Kéo để di chuyển" aria-label="Di chuyển">✥</button>
+      </div>
       <div class="vh-pop" id="vh-pop" hidden></div>
       <p class="vh-hint" id="vh-hint"></p>
     </div>
     <div class="vh-cmd">
-      <button type="button" class="vh-ib vh-ib-wide" data-act="multi" id="vh-multi" title="Chọn nhiều (kéo khung hoặc bấm chọn, Shift+Click)">⬚ Chọn nhiều</button>
+      <button type="button" class="vh-ib" data-act="lock" id="vh-lock" title="Khoá phương ngang / dọc (L)" aria-label="Khoá phương">⊥</button>
+      <button type="button" class="vh-ib" data-act="fit" title="Vừa màn hình (F)" aria-label="Vừa màn hình">⤢</button>
+      <button type="button" class="vh-ib vh-ib-wide" data-act="multi" id="vh-multi" title="Chọn nhiều (kéo khung hoặc bấm chọn, Shift+Click)">⬚<span class="vh-lbl"> Chọn nhiều</span></button>
       <button type="button" class="vh-ib" data-act="mic" id="vh-mic" title="Đọc kích thước bằng giọng nói" aria-label="Micro">🎤</button>
       <input id="vh-cmd" type="text" autocomplete="off" placeholder="gõ / đọc: dọc 3500 · ngang 1200 cửa sổ · khép kín" aria-label="Ô lệnh">
       <div class="vh-draw-btns" id="vh-draw-btns" hidden>
@@ -141,6 +166,31 @@
       <label class="vh-check"><input type="checkbox" name="devDims"> Ghi kích thước tới tim thiết bị</label>
       <label class="vh-check"><input type="checkbox" name="grid"> Hiện lưới</label>
       <div class="vh-form-btns"><button value="cancel" class="btn btn-outline">Đóng</button><button value="ok" class="btn btn-primary">Lưu</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="vh-dialog vh-sheet" id="vh-export-dlg">
+    <form method="dialog" id="vh-export-form">
+      <h2>Xuất bản vẽ</h2>
+      <div class="vh-row2" id="vh-export-scope">
+        <label>Nội dung<select name="mode"><option value="plan">Mặt bằng</option><option value="ceil">Trần</option></select></label>
+        <label>Phạm vi<select name="scope"><option value="floor">Cả tầng</option><option value="room">Phòng đang chọn</option></select></label>
+        <label class="vh-check"><input type="checkbox" name="schedule"> Bảng kê thiết bị</label>
+      </div>
+      <label class="vh-check"><input type="checkbox" name="dims" checked> Kích thước</label>
+      <label>Định dạng<select name="fmt">
+        <option value="pdf">PDF – in khổ ngang, có khung tên</option>
+        <option value="dxf">DXF – AutoCAD (mm 1:1)</option>
+        <option value="png">Ảnh PNG</option>
+        <option value="jpg">Ảnh JPG</option>
+        <option value="json">Sao lưu JSON – cả bản vẽ</option>
+      </select></label>
+      <div class="vh-row2" data-for="pdf dxf">
+        <label data-for="pdf">Khổ giấy<select name="paper"><option value="A4">A4 ngang</option><option value="A3">A3 ngang</option></select></label>
+        <label>Tỷ lệ (cỡ chữ 2,5 mm khi in)<select name="scale"><option value="0">Tự vừa khổ</option><option value="20">1:20</option><option value="50">1:50</option><option value="100">1:100</option></select></label>
+      </div>
+      <label class="vh-check" data-for="pdf"><input type="checkbox" name="photos" checked> Thêm trang ảnh hiện trường (số trùng số ghim)</label>
+      <div class="vh-form-btns"><button value="cancel" class="btn btn-outline">Đóng</button><button value="ok" class="btn btn-primary">Xuất</button></div>
     </form>
   </dialog>
 

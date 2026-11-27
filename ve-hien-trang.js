@@ -6,7 +6,7 @@
   const svg = $('vh-svg'), world = $('vh-world'), drawLayer = $('vh-draw'), over = $('vh-over'), pop = $('vh-pop');
   const S = {id: '', plan: null, view: {x: 0, y: 0, k: 0.12}, mode: 'plan', tool: 'select', lock: true, sel: null, draft: null, devType: 'o_cam',
     ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false, lenMode: 'square', multi: false, multiSel: [], boxDraft: null,
-    hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null, arrowDraft: null, pendingPhoto: null};
+    hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null, arrowDraft: null, pendingPhoto: null, elev: null, bgBar: false, bgPts: null, popHide: false};
   const assetUrls = new Map();
   async function assetBlobUrl(name) {
     if (!name) return '';
@@ -23,8 +23,12 @@
     return typeof res === 'string' ? res : res?.name;
   }
   const floor = () => S.plan.floors[S.plan.active] || S.plan.floors[0];
-  const notesList = () => (floor().notes ||= []);
-  const arrowsList = () => (floor().arrows ||= []);
+  // ở mặt đứng: ghi chú / mũi tên nằm trong room.elev[i]
+  const elevData = () => { const r = roomById(S.elev.roomId); r.elev ||= {}; return (r.elev[S.elev.i] ||= {}); };
+  const notesList = () => S.elev ? (elevData().notes ||= []) : (floor().notes ||= []);
+  const arrowsList = () => S.elev ? (elevData().arrows ||= []) : (floor().arrows ||= []);
+  const ceilUI = () => S.mode === 'ceil' && !S.elev;
+  const ELEV_TOOLS = ['select', 'device', 'note', 'arrow'];
   const roomById = id => floor().rooms.find(r => r.id === id);
   const fmt = n => Math.round(n).toLocaleString('vi-VN').replace(/\./g, '');
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -99,7 +103,7 @@
     startEditor(id, plan || local.plan, !!local?.dirty);
   }
   function startEditor(id, plan, dirty = false) {
-    S.id = id; S.plan = normalize(plan); S.mode = 'plan'; S.multi = false; S.multiSel = []; S.hist = []; S.fut = []; S.sel = null; S.draft = null; S.dirty = false;
+    S.id = id; S.plan = normalize(plan); S.mode = 'plan'; S.multi = false; S.multiSel = []; S.hist = []; S.fut = []; S.sel = null; S.draft = null; S.dirty = false; S.elev = null; S.bgBar = false;
     $('vh-multi')?.classList.remove('is-on');
     $('vh-home').hidden = true; $('vh-editor').hidden = false;
     history.replaceState(null, '', '/ve-hien-trang?plan=' + encodeURIComponent(id));
@@ -200,15 +204,18 @@
     g.setAttribute('width', r.width / S.view.k + 2000); g.setAttribute('height', r.height / S.view.k + 2000);
     g.style.display = S.plan?.grid === false ? 'none' : '';
     $('vh-grid-minor').firstElementChild.style.opacity = S.view.k < 0.06 ? 0 : 1;
-    if (S.sel) placePop();
+    placeFab();
   }
   const renderOpts = () => ({mode: S.mode, sel: S.sel ? (S.sel.kind === 'ci' ? 'ci:' + S.sel.id : S.sel.kind === 'cl' ? 'cl:' + S.sel.id : null) : null});
+  const viewPrims = () => S.elev ? C.elevPrimitives(S.plan, roomById(S.elev.roomId), S.elev.i) : C.floorPrimitives(S.plan, floor(), renderOpts());
   function fit() {
-    const b = C.bounds(C.floorPrimitives(S.plan, floor(), renderOpts()));
+    const b = C.bounds(viewPrims());
     const r = svg.getBoundingClientRect();
     if (!b || !r.width) { S.view = {x: r.width / 2, y: r.height / 2, k: 0.1}; return applyView(); }
-    const pad = 40, k = Math.min((r.width - pad * 2) / Math.max(b.x1 - b.x0, 1000), (r.height - pad * 2) / Math.max(b.y1 - b.y0, 1000), 0.6);
-    S.view = {k, x: (r.width - (b.x1 - b.x0) * k) / 2 - b.x0 * k, y: (r.height - (b.y1 - b.y0) * k) / 2 - b.y0 * k};
+    // máy tính: chừa bên phải cho bảng thuộc tính; mặt đứng: chừa trên cho thanh tiêu đề
+    const pad = 40, padR = r.width > 640 ? 330 : pad, padT = S.elev ? 60 : pad, aw = r.width - pad - padR, ah = r.height - pad - padT;
+    const k = Math.min(aw / Math.max(b.x1 - b.x0, 1000), ah / Math.max(b.y1 - b.y0, 1000), 0.6);
+    S.view = {k, x: pad + (aw - (b.x1 - b.x0) * k) / 2 - b.x0 * k, y: padT + (ah - (b.y1 - b.y0) * k) / 2 - b.y0 * k};
     applyView();
   }
   function zoomAt(cx, cy, factor) {
@@ -238,10 +245,15 @@
   }
   function renderAll() {
     if (!S.plan) return;
-    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor(), renderOpts()).map(primSvg).join('');
+    if (S.elev && !roomById(S.elev.roomId)) { S.elev = null; syncModeUI(); }   // phòng bị xoá / hoàn tác
+    drawLayer.innerHTML = viewPrims().map(primSvg).join('');
     $('vh-name').textContent = S.plan.name || 'Bản vẽ';
     const selRoom = S.sel?.room && roomById(S.sel.room);
     $('vh-floor-label').textContent = floor().name + (S.mode === 'ceil' ? ' · Trần' : '') + (selRoom ? ' · ' + selRoom.name : '') + ' ▾';
+    const er = S.elev && roomById(S.elev.roomId);
+    $('vh-elev-bar').hidden = !er;
+    if (er) $('vh-elev-title').textContent = 'Mặt đứng · ' + er.name + ' · đoạn ' + (S.elev.i + 1) + '/' + C.segCount(er);
+    renderBg();
     document.querySelector('[data-act=undo]').disabled = !S.hist.length && !S.draft?.pts.length;
     document.querySelector('[data-act=redo]').disabled = !S.fut.length;
     renderOverlay(); applyView(); renderPop();
@@ -249,7 +261,12 @@
   function renderOverlay() {
     const out = [], k = S.view.k, px = v => v / k;
     const sel = S.sel;
-    if (sel) {
+    if (sel && S.elev) {
+      const room = sel.room && roomById(sel.room), dev = sel.kind === 'dev' && room?.devices.find(o => o.id === sel.id);
+      if (dev) { const fr = C.elevFrame(room, S.elev.i); out.push({t: 'circle', c: [fr.u(dev.at), -(dev.h ?? 0) - 43], r: px(22), stroke: '#2563eb', w: 2.5}); }
+      if (sel.kind === 'note') { const nt = notesList().find(n => n.id === sel.id); if (nt) out.push({t: 'circle', c: [nt.x, nt.y], r: px(8), stroke: '#2563eb', w: 2.5, fill: '#fff'}); }
+      if (sel.kind === 'ar') { const ar = arrowsList().find(a => a.id === sel.id); if (ar) out.push({t: 'poly', pts: ar.pts, close: false, fill: 'none', stroke: '#2563eb', w: 3, dash: '6 4'}); }
+    } else if (sel) {
       const room = sel.room && roomById(sel.room);
       if (sel.kind === 'seg' && room) { const [a, b] = C.segEnds(room, sel.i); out.push({t: 'line', a, b, stroke: '#2563eb', w: 5}); }
       if (sel.kind === 'room' && room) out.push({t: 'poly', pts: room.pts, close: room.closed, fill: 'rgba(37,99,235,.08)', stroke: '#2563eb', w: 2, dash: '8 5'});
@@ -310,8 +327,10 @@
       out.push({t: 'circle', c: pts[0], r: px(5), fill: '#b91c1c', stroke: '#b91c1c', w: 1});
       if (pts.length > 1) out.push({t: 'poly', pts, close: false, fill: 'none', stroke: '#b91c1c', w: 1.8, dash: '6 4'});
     }
+    if (S.bgPts?.length) { const pts = [...S.bgPts, ...(S.cursor && S.bgPts.length < 2 ? [S.cursor] : [])]; out.push({t: 'poly', pts, close: false, fill: 'none', stroke: '#c2410c', w: 2, dash: '6 4'}); pts.forEach(c => out.push({t: 'circle', c, r: px(6), stroke: '#c2410c', w: 2, fill: '#fff'})); }
     if (S.sketch?.length > 1) out.push({t: 'poly', pts: S.sketch, close: false, stroke: '#dc2626', w: 2});
     over.innerHTML = out.map(primSvg).join('');
+    placeFab();
   }
   const dimOffset = (a, b, c) => { const d = C.unit(C.sub(b, a)); return C.dot(C.sub(c, a), [d[1], -d[0]]); };
   const KIND_LABEL = {window: 'cửa sổ', door: 'cửa đi', open: 'lối đi', partition: 'vách'};
@@ -326,11 +345,14 @@
     dim: 'Chạm điểm đầu, điểm cuối (tự bắt góc tường) rồi chạm chỗ đặt đường kích thước',
     note: 'Chạm lên bản vẽ để đặt khung ghi chú nhiều dòng',
     arrow: 'Bấm lần lượt điểm đầu mũi tên → điểm gập → điểm chân rồi nhập chữ',
-    photo: 'Chạm lên bản vẽ vị trí chụp để đặt ghim và chọn / chụp ảnh hiện trường'
+    photo: 'Chạm lên bản vẽ vị trí chụp để đặt ghim và chọn / chụp ảnh hiện trường',
+    'bg-scale': 'Chạm 2 điểm trên nền có số đo đã biết rồi nhập số mm thật',
+    'bg-move': 'Kéo để dời nền hiện trạng'
   };
   function syncModeUI() {
-    const ceil = S.mode === 'ceil';
-    $('vh-ceil').classList.toggle('is-on', ceil);
+    const ceil = ceilUI();
+    $('vh-editor').classList.toggle('is-elev', !!S.elev);
+    $('vh-ceil').classList.toggle('is-on', S.mode === 'ceil');
     $('vh-tool-ceilline').hidden = !ceil;
     $('vh-devices').hidden = ceil || S.tool !== 'device';
     $('vh-ceil-devices').hidden = !ceil;
@@ -338,7 +360,7 @@
   }
   function renderCeilSub() {
     const sub = $('vh-ceil-sub');
-    if (S.mode !== 'ceil') { sub.hidden = true; return; }
+    if (!ceilUI()) { sub.hidden = true; return; }
     if (S.tool === 'device') {
       const spec = C.CEIL[S.ceilType] || C.CEIL.downlight;
       if (!spec.sizes.some(sz => String(sz) === String(S.ceilSize))) S.ceilSize = spec.def;
@@ -357,13 +379,14 @@
     syncModeUI(); setTool(S.tool); renderAll();
   }
   function setTool(tool) {
+    if (S.elev && !ELEV_TOOLS.includes(tool)) return;
     if (S.draft && S.tool !== tool) finishDraft(false);
-    S.tool = tool; S.dimDraft = null; S.arrowDraft = null;
+    S.tool = tool; S.dimDraft = null; S.arrowDraft = null; S.bgPts = null;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('is-on', b.dataset.tool === tool));
     svg.classList.toggle('is-draw', tool === 'draw' || tool === 'ceil-line');
-    svg.classList.toggle('is-place', ['device', 'column', 'dim', 'note', 'arrow', 'photo'].includes(tool));
-    $('vh-devices').hidden = S.mode === 'ceil' || tool !== 'device';
-    $('vh-ceil-devices').hidden = S.mode !== 'ceil';
+    svg.classList.toggle('is-place', ['device', 'column', 'dim', 'note', 'arrow', 'photo', 'bg-scale', 'bg-move'].includes(tool));
+    $('vh-devices').hidden = ceilUI() || tool !== 'device';
+    $('vh-ceil-devices').hidden = !ceilUI();
     renderCeilSub();
     $('vh-draw-btns').hidden = tool !== 'draw' && tool !== 'ceil-line';
     $('vh-draw-btns').querySelectorAll('[data-cmd="vách"],[data-cmd="cửa sổ"],[data-cmd="cửa đi"],[data-cmd="lối đi"]').forEach(b => { b.hidden = tool === 'ceil-line'; });
@@ -594,7 +617,7 @@
   // ================= Chuột / cảm ứng =================
   const ptrs = new Map();
   let drag = null;
-  const parseHit = el => { const h = el?.closest?.('[data-hit]')?.dataset.hit; if (!h) return null; const [kind, a, b] = h.split(':'); return {kind, a, b}; };
+  const parseHit = el => { const h = el?.closest?.('[data-hit]')?.dataset.hit; if (!h) return null; const [kind, a, b] = h.split(':'); return kind === 'wall' ? null : {kind, a, b}; };
   const normMulti = hit => {
     if (!hit || hit.kind === 'sched') return null;
     if (['room', 'seg', 'vtx', 'op', 'dev'].includes(hit.kind)) return {kind: 'room', id: hit.a};
@@ -607,6 +630,7 @@
     else S.multiSel.push(it);
   }
   function toggleMultiMode(force) {
+    if (S.elev && force !== false) return Shell.toast('Chọn nhiều chỉ dùng ở mặt bằng.');
     S.multi = force != null ? force : !S.multi;
     if (S.multi) {
       if (S.tool !== 'select') setTool('select');
@@ -650,7 +674,7 @@
       else if (m.kind === 'ar') { const ar = arrowsList().find(x => x.id === m.id), ba = (bf.arrows || []).find(x => x.id === m.id); if (ar && ba) ar.pts = ba.pts.map(p => [p[0] + dx, p[1] + dy]); }
       else if (m.kind === 'ph') { const ph = (floor().photos || []).find(x => x.id === m.id), bp = (bf.photos || []).find(x => x.id === m.id); if (ph && bp) { ph.x = bp.x + dx; ph.y = bp.y + dy; } }
     }
-    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor(), renderOpts()).map(primSvg).join('');
+    drawLayer.innerHTML = viewPrims().map(primSvg).join('');
     renderOverlay();
   }
   function deleteMulti() {
@@ -680,7 +704,7 @@
         const it = normMulti(hit);
         if (it) {
           if (S.sel) { const cur = S.sel.room ? {kind: 'room', id: S.sel.room} : S.sel.id ? {kind: S.sel.kind, id: S.sel.id} : null; if (cur && !inMulti(cur)) S.multiSel.push(cur); S.sel = null; }
-          toggleMultiItem(it); popAt = [e.clientX, e.clientY]; renderAll();
+          toggleMultiItem(it); renderAll();
         }
         return;
       }
@@ -698,6 +722,7 @@
       return;
     }
     if (S.tool === 'draw' || S.tool === 'ceil-line') { drag = {type: 'draw', ...start, path: [w]}; return; }
+    if (S.tool === 'bg-move' && floor().bg) { drag = {type: 'bgmove', ...start, snapshot: JSON.stringify(S.plan), base: [floor().bg.x || 0, floor().bg.y || 0]}; return; }
     drag = {type: 'place', ...start};
   });
   svg.addEventListener('pointermove', e => {
@@ -719,6 +744,8 @@
     if (drag?.type === 'box') { S.boxDraft = [drag.w, w]; renderOverlay(); return; }
     if (drag?.type === 'multi' && drag.moved) { dragMulti(drag, w); return; }
     if (drag?.type === 'obj' && drag.moved) { dragObj(drag, w); return; }
+    if (drag?.type === 'bgmove' && drag.moved) { const bg = floor().bg, s = S.plan.snap || 10; bg.x = C.round(drag.base[0] + w[0] - drag.w[0], s); bg.y = C.round(drag.base[1] + w[1] - drag.w[1], s); renderBg(); return; }
+    if (S.tool === 'bg-scale' && S.bgPts) { renderOverlay(); return; }
     if (S.tool === 'draw' || S.tool === 'ceil-line') {
       if (S.tool === 'draw' && drag?.type === 'draw' && !S.draft && drag.moved) { drag.path.push(w); S.sketch = drag.path; renderOverlay(); return; }
       if (S.draft) { S.draft.cursor = draftCursor(w); renderOverlay(); }
@@ -738,12 +765,12 @@
     if (d.type === 'pan') { if (!d.moved && d.clear) { S.sel = null; S.multiSel = []; renderAll(); } return; }
     if (d.type === 'box') {
       S.boxDraft = null;
-      if (d.moved) { popAt = [e.clientX, e.clientY]; boxSelect(d.w, w); S.sel = null; }
+      if (d.moved) { boxSelect(d.w, w); S.sel = null; }
       else S.multiSel = [];
       renderAll(); return;
     }
     if (d.type === 'multi-pick') {
-      if (!d.moved) { popAt = [e.clientX, e.clientY]; S.sel = null; toggleMultiItem(normMulti(d.hit)); renderAll(); }
+      if (!d.moved) { S.sel = null; toggleMultiItem(normMulti(d.hit)); renderAll(); }
       return;
     }
     if (d.type === 'multi') {
@@ -754,9 +781,10 @@
     }
     if (d.type === 'obj') {
       if (d.moved) { if (d.changed) { S.hist.push(d.snapshot); S.fut = []; markDirty(); } renderAll(); }
-      else { S.multiSel = []; select(d.hit, e); }
+      else if (!d.fab) { S.multiSel = []; select(d.hit, e); }
       return;
     }
+    if (d.type === 'bgmove') { if (d.moved) { S.hist.push(d.snapshot); S.fut = []; markDirty(); renderAll(); } return; }
     if (d.type === 'draw') {
       if (S.tool === 'draw' && !S.draft && d.moved && d.path.length > 4) {   // nét phác một lèo
         S.sketch = null;
@@ -802,7 +830,15 @@
     if (!base) return;
     const room = roomById(d.hit.a);
     d.changed = true;
-    if (d.hit.kind === 'room' && room) room.pts = base.pts.map(p => [C.round(p[0] + delta[0], s), C.round(p[1] + delta[1], s)].map((v, k) => v - C.round(base.pts[0][k], s) + base.pts[0][k]));
+    const fr = S.elev && room ? C.elevFrame(room, S.elev.i) : null, du = fr ? (fr.flip ? -delta[0] : delta[0]) : 0;
+    if (fr && d.hit.kind === 'dev') {   // mặt đứng: dời ngang = at, dời dọc = cao độ
+      const dev = room.devices.find(o => o.id === d.hit.b);
+      dev.at = Math.max(0, Math.min(fr.L, C.round(base.at + du, s)));
+      dev.h = Math.max(0, C.round((base.h ?? C.DEVICES[base.type]?.h ?? 0) - delta[1], s));
+    } else if (fr && d.hit.kind === 'op') {
+      const op = room.openings.find(o => o.id === d.hit.b);
+      op.at = Math.max(0, Math.min(fr.L - op.w, C.round(base.at + du, s))); op.full = false;
+    } else if (d.hit.kind === 'room' && room) room.pts = base.pts.map(p => [C.round(p[0] + delta[0], s), C.round(p[1] + delta[1], s)].map((v, k) => v - C.round(base.pts[0][k], s) + base.pts[0][k]));
     else if (d.hit.kind === 'seg' && room) {   // kéo tường: dời song song (co / giãn phòng)
       const i = Number(d.hit.b), n = C.normal({...base, pts: base.pts}, i), dn = C.round(C.dot(delta, n), s), j = (i + 1) % base.pts.length;
       room.pts = base.pts.map((p, k) => k === i || k === j ? C.add(p, C.mul(n, dn)) : p);
@@ -839,14 +875,22 @@
       const dim = floor().dims.find(c => c.id === d.hit.a);
       dim.off = dimOffset(dim.a, dim.b, w);
     }
-    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor(), renderOpts()).map(primSvg).join('');
+    drawLayer.innerHTML = viewPrims().map(primSvg).join('');
     renderOverlay();
   }
 
   // ================= Đặt thiết bị / cột / đo =================
   function place(w) {
+    if (S.tool === 'bg-scale') return bgScalePick(w);
+    if (S.tool === 'device' && S.elev) {   // mặt đứng: x -> at (theo chiều nhìn), y -> cao độ
+      const room = roomById(S.elev.roomId), fr = C.elevFrame(room, S.elev.i), s = S.plan.snap || 10, id = C.uid();
+      const x = Math.max(0, Math.min(fr.L, w[0])), at = C.round(fr.flip ? fr.L - x : x, s), h = Math.max(0, C.round(-w[1], s));
+      commit(() => { room.devices.push({id, type: S.devType, seg: S.elev.i, at, h}); S.sel = {kind: 'dev', room: room.id, id}; });
+      if (matchMedia('(pointer: coarse)').matches) setTool('select');
+      return;
+    }
     if (S.tool === 'device') {
-      if (S.mode === 'ceil') {
+      if (ceilUI()) {
         const s = S.plan.snap || 10, x = C.round(w[0], s), y = C.round(w[1], s);
         const spec = C.CEIL[S.ceilType] || C.CEIL.downlight, size = S.ceilSize ?? spec.def, id = C.uid();
         commit(() => { (floor().ceilItems ||= []).push({id, type: S.ceilType, x, y, size, rot: 0, dim: false}); S.sel = {kind: 'ci', id}; });
@@ -871,8 +915,6 @@
       renderOverlay();
     } else if (S.tool === 'note') {
       const s = S.plan.snap || 10, x = C.round(w[0], s), y = C.round(w[1], s), font = S.plan.font || 150, id = C.uid();
-      const sp = toScreen([x, y]), sr = svg.getBoundingClientRect();
-      popAt = [sr.left + sp[0], sr.top + sp[1]];
       setTool('select');
       commit(() => {
         notesList().push({id, x, y, w: font * 16, text: '', title: 'GHI CHÚ', showTitle: true, color: '#b91c1c', size: font, bold: false, list: 'none', frame: true, mode: S.mode});
@@ -969,9 +1011,7 @@
   }
 
   // ================= Chọn + bảng sửa nhanh =================
-  let popAt = null;
-  function select(hit, e) {
-    popAt = [e.clientX, e.clientY];
+  function select(hit) {
     if (hit.kind === 'seg') S.sel = {kind: 'seg', room: hit.a, i: Number(hit.b)};
     else if (hit.kind === 'room' || hit.kind === 'vtx') S.sel = {kind: 'room', room: hit.a};
     else if (hit.kind === 'op' || hit.kind === 'dev') S.sel = {kind: hit.kind, room: hit.a, id: hit.b};
@@ -988,24 +1028,29 @@
       pop.innerHTML = head('Đã chọn ' + S.multiSel.length + ' đối tượng') +
         '<p class="vh-muted">Kéo bất kỳ đối tượng nào trong nhóm để dời cả nhóm, hoặc bấm Delete để xoá.</p>' +
         `<div class="vh-btns"><button type="button" data-pop="clearMulti">Bỏ chọn</button><button type="button" class="vh-danger" data-pop="delMulti">🗑 Xoá (${S.multiSel.length})</button></div>`;
-      pop.hidden = false; placePop(); return;
+      pop.hidden = false; return;
     }
     const sel = S.sel, room = sel?.room && roomById(sel.room);
     if (!sel || S.tool !== 'select') { pop.hidden = true; return; }
     let html = '';
     if (sel.kind === 'seg' && room) {
       const info = C.segInfo(S.plan, room, sel.i);
-      html = head('Đoạn tường · ' + room.name) + num('Chiều dài', 'len', C.segLen(room, sel.i)) +
+      const kb = (k, label) => `<button type="button" data-pop="segk:${k}" class="${info.k === k ? 'is-on' : ''}">${label}</button>`;
+      html = head('Đoạn tường · ' + room.name) +
+        `<div class="vh-segnav"><button type="button" data-pop="segPrev" aria-label="Đoạn trước">‹</button><b>Đoạn ${sel.i + 1}/${C.segCount(room)}</b><button type="button" data-pop="segNext" aria-label="Đoạn sau">›</button></div>` +
+        num('Chiều dài', 'len', C.segLen(room, sel.i)) +
         `<label>Kiểu đổi dài<select data-f="lenmode"><option value="square">Giữ vuông</option><option value="shift">Dời cả phần sau</option><option value="end">Chỉ dời điểm cuối</option></select></label>` +
         (info.k !== 'open' ? num('Dày', 'thick', info.t) : '') +
-        `<label>Loại<select data-f="segk"><option value="wall">Tường</option><option value="partition">Vách mỏng</option><option value="open">Lối đi (không tường)</option></select></label>` +
-        '<div class="vh-btns"><button type="button" data-pop="door">+ Cửa đi</button><button type="button" data-pop="window">+ Cửa sổ</button><button type="button" data-pop="open">+ Ô mở</button><button type="button" data-pop="room">Cả phòng</button></div>';
+        '<div class="vh-btns vh-kinds">' + kb('wall', 'Tường') + kb('partition', 'Vách') + kb('open', 'Lối đi') +
+        '<button type="button" data-pop="door">+ Cửa</button><button type="button" data-pop="window">+ Cửa sổ</button><button type="button" data-pop="open">+ Ô mở</button></div>' +
+        '<div class="vh-btns"><button type="button" data-pop="elev">▥ Mặt đứng</button><button type="button" data-pop="room">Cả phòng</button></div>';
     } else if (sel.kind === 'op' && room) {
       const op = room.openings.find(o => o.id === sel.id);
       if (!op) { S.sel = null; pop.hidden = true; return; }
       html = head({door: 'Cửa đi', window: 'Cửa sổ', open: 'Ô mở'}[op.type]) + num('Rộng', 'opw', op.w) + num('Cách đầu tường', 'opat', op.at) +
         `<label>Loại<select data-f="optype"><option value="door">Cửa đi</option><option value="window">Cửa sổ</option><option value="open">Ô mở</option></select></label>` +
-        (op.type === 'door' ? `<label>Cánh<select data-f="leaves"><option value="1">1 cánh</option><option value="2">2 cánh</option></select></label>` : '') +
+        (op.type === 'door' ? `<label>Cánh<select data-f="leaves"><option value="1">1 cánh</option><option value="2">2 cánh</option></select></label>` + num('Cao cửa', 'oph', op.h ?? 2100) : '') +
+        (op.type === 'window' ? num('Cao bậu', 'opsill', op.sill ?? 900) + num('Cao cửa sổ', 'ophw', op.hw ?? 1400) : '') +
         '<div class="vh-btns">' + (op.type === 'door' ? '<button type="button" data-pop="flip" title="Lần lượt 4 kiểu mở">⇆ Đổi chiều mở</button>' : '') + '<button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
     } else if (sel.kind === 'dev' && room) {
       const dev = room.devices.find(o => o.id === sel.id);
@@ -1073,20 +1118,25 @@
         '<div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
     } else { pop.hidden = true; return; }
     pop.innerHTML = html;
-    if (sel.kind === 'seg') { pop.querySelector('[data-f=segk]').value = C.segInfo(S.plan, room, sel.i).k; pop.querySelector('[data-f=lenmode]').value = S.lenMode || 'square'; }
+    if (sel.kind === 'seg') pop.querySelector('[data-f=lenmode]').value = S.lenMode || 'square';
     if (sel.kind === 'op') { const op = room.openings.find(o => o.id === sel.id); pop.querySelector('[data-f=optype]').value = op.type; const lv = pop.querySelector('[data-f=leaves]'); if (lv) lv.value = op.leaves === 2 ? '2' : '1'; }
     if (sel.kind === 'dev') pop.querySelector('[data-f=devtype]').value = room.devices.find(o => o.id === sel.id).type;
     if (sel.kind === 'ci') { const it = (floor().ceilItems || []).find(c => c.id === sel.id); pop.querySelector('[data-f=citype]').value = it.type; pop.querySelector('[data-f=cisize]').value = String(it.size ?? C.CEIL[it.type]?.def); }
     if (sel.kind === 'note') { const nt = notesList().find(n => n.id === sel.id); pop.querySelector('[data-f=nlist]').value = nt.list || 'none'; }
-    pop.hidden = false;
-    placePop();
+    pop.hidden = !!(S.popHide && matchMedia('(max-width: 640px)').matches);
   }
-  function placePop() {
-    if (pop.hidden) return;
-    const r = $('vh-stage').getBoundingClientRect(), pw = pop.offsetWidth, ph = pop.offsetHeight;
-    const [x, y] = popAt || [r.left + r.width - pw - 20, r.top + 20];
-    pop.style.left = Math.max(8, Math.min(r.width - pw - 8, x - r.left + 16)) + 'px';
-    pop.style.top = Math.max(8, Math.min(r.height - ph - 8, y - r.top + 16)) + 'px';
+  // Nút tròn nổi quanh đối tượng đang chọn (CSS chỉ hiện ở điện thoại); bảng thuộc tính là bảng bên / bottom sheet nên không cần đặt vị trí
+  function placeFab() {
+    const fab = $('vh-fab'), sel = S.sel;
+    if (!sel || S.tool !== 'select' || S.multiSel.length || drag?.type === 'obj') { fab.hidden = true; return; }
+    const b = over.getBoundingClientRect(), r = $('vh-stage').getBoundingClientRect();
+    if (!b.width && !b.height) { fab.hidden = true; return; }
+    fab.hidden = false;
+    fab.querySelector('[data-fab=elev]').hidden = sel.kind !== 'seg';
+    fab.querySelector('[data-fab=props]').classList.toggle('is-on', !S.popHide);
+    const fw = fab.offsetWidth, fh = fab.offsetHeight;
+    fab.style.left = Math.max(4, Math.min(r.width - fw - 4, b.left - r.left + b.width / 2 - fw / 2)) + 'px';
+    fab.style.top = Math.max(4, Math.min(r.height - fh - 4, b.top - r.top - fh - 10)) + 'px';
   }
   function applyField(f, raw) {
     if (f === 'lenmode') { S.lenMode = raw; return; }
@@ -1103,6 +1153,9 @@
         case 'opat': op.at = Math.max(0, Math.min(C.segLen(room, op.seg) - op.w, v)); op.full = false; break;
         case 'optype': op.type = raw; break;
         case 'leaves': op.leaves = Number(raw); break;
+        case 'oph': if (v > 0) op.h = Math.round(v); break;
+        case 'opsill': if (v >= 0) op.sill = Math.round(v); break;
+        case 'ophw': if (v > 0) op.hw = Math.round(v); break;
         case 'devtype': dev.type = raw; dev.h = C.DEVICES[raw].h; break;
         case 'devh': dev.h = v; break;
         case 'devat': dev.at = Math.max(0, Math.min(C.segLen(room, dev.seg), v)); break;
@@ -1154,6 +1207,9 @@
     else if (act === 'delMulti') deleteMulti();
     else if (['door', 'window', 'open'].includes(act)) addOpening(act);
     else if (act === 'room') { S.sel = {kind: 'room', room: sel.room}; renderAll(); }
+    else if (act.startsWith('segk:')) commit(() => { room.segs[sel.i] = {...room.segs[sel.i], k: act.slice(5)}; });
+    else if (act === 'segPrev' || act === 'segNext') { const n = C.segCount(room); S.sel = {...sel, i: (sel.i + (act === 'segNext' ? 1 : n - 1)) % n}; renderAll(); }
+    else if (act === 'elev') openElev(sel.room, sel.i);
     else if (act === 'flip') commit(() => { const op = room.openings.find(o => o.id === sel.id), k = ['l:in', 'r:in', 'r:out', 'l:out'], n = k[(k.indexOf((op.hinge || 'l') + ':' + (op.swing || 'in')) + 1) % 4].split(':'); op.hinge = n[0]; op.swing = n[1]; });
     else if (act === 'devflip') commit(() => { const dev = room.devices.find(o => o.id === sel.id); dev.flip = !dev.flip; });
     else if (act === 'copyL' || act === 'copyR') {
@@ -1222,13 +1278,136 @@
     }
   });
 
+  // ================= Mặt đứng =================
+  function openElev(roomId, i) {
+    if (S.draft) finishDraft(false);
+    S.elev = {roomId, i}; S.sel = null; S.multi = false; S.multiSel = []; $('vh-multi').classList.remove('is-on');
+    setTool('select'); syncModeUI(); renderAll(); fit();
+  }
+  function closeElev() { S.elev = null; S.sel = null; syncModeUI(); setTool('select'); renderAll(); fit(); }
+  $('vh-elev-bar').addEventListener('click', e => {
+    const act = e.target.closest('[data-elev]')?.dataset.elev, room = S.elev && roomById(S.elev.roomId);
+    if (!act || !room) return;
+    if (act === 'close') closeElev();
+    else if (act === 'prev' || act === 'next') { const n = C.segCount(room); S.elev.i = (S.elev.i + (act === 'next' ? 1 : n - 1)) % n; S.sel = null; renderAll(); fit(); }
+    else if (act === 'png') exportPng();
+    else if (act === 'dxf') exportDxf();
+  });
+
+  // ================= Nền hiện trạng =================
+  let bgKey = '';
+  function renderBg() {
+    const g = $('vh-bg'), bg = !S.elev && floor().bg;
+    $('vh-bg-bar').hidden = !(S.bgBar && bg);
+    if (bg) { $('vh-bg-bar').querySelector('[data-bg=hide]').textContent = bg.hidden ? '👁 Hiện' : '🙈 Ẩn'; $('vh-bg-bar').querySelector('[data-bg=opacity]').value = bg.opacity ?? .5; }
+    const k = bg?.mmPerUnit || 1, url = bg && bg.kind !== 'dxf' ? assetUrls.get(bg.name) : '';
+    const key = !bg || bg.hidden ? '' : [bg.kind, bg.name, bg.x, bg.y, k, bg.opacity, bg.segs?.length, url].join('|');
+    if (key === bgKey) return;
+    bgKey = key;
+    if (!key) { g.innerHTML = ''; return; }
+    const n = v => Math.round(v * 10) / 10, x = bg.x || 0, y = bg.y || 0, op = bg.opacity ?? .5;
+    if (bg.kind === 'dxf') {
+      const sg = bg.segs || [], d = [];
+      for (let j = 0; j + 3 < sg.length; j += 4) d.push('M' + n(x + sg[j] * k) + ' ' + n(y + sg[j + 1] * k) + 'L' + n(x + sg[j + 2] * k) + ' ' + n(y + sg[j + 3] * k));
+      g.innerHTML = `<path d="${d.join('')}" fill="none" stroke="#475569" stroke-width="1" vector-effect="non-scaling-stroke" opacity="${op}"/>`;
+    } else if (url) g.innerHTML = `<image href="${url}" x="${n(x)}" y="${n(y)}" width="${n(bg.w * k)}" height="${n(bg.h * k)}" opacity="${op}" preserveAspectRatio="none"/>`;
+    else { g.innerHTML = ''; bgKey = ''; assetBlobUrl(bg.name).then(() => renderBg(), err => Shell.toast('Không tải được nền: ' + err.message)); }
+  }
+  async function loadPdfJs() {
+    if (!window.pdfjsLib) await new Promise((ok, fail) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+      sc.onload = ok; sc.onerror = () => fail(new Error('Không tải được pdf.js'));
+      document.head.append(sc);
+    });
+    pdfjsLib.GlobalWorkerOptions.workerSrc ||= 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    return pdfjsLib;
+  }
+  async function pdfPageBlob(file) {
+    const lib = await loadPdfJs(), pdf = await lib.getDocument({data: new Uint8Array(await file.arrayBuffer())}).promise;
+    let no = 1;
+    if (pdf.numPages > 1) {
+      const ans = await Shell.ask({title: 'Chọn trang PDF', message: 'File có ' + pdf.numPages + ' trang. Lấy trang số mấy làm nền?', input: {value: '1'}});
+      if (ans === null) return null;
+      no = Math.max(1, Math.min(pdf.numPages, parseInt(ans, 10) || 1));
+    }
+    const page = await pdf.getPage(no), v1 = page.getViewport({scale: 1}), vp = page.getViewport({scale: Math.min(4, 3000 / Math.max(v1.width, v1.height))});
+    const c = document.createElement('canvas');
+    c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({canvasContext: ctx, viewport: vp}).promise;
+    return new Promise((ok, fail) => c.toBlob(bl => bl ? ok(bl) : fail(new Error('Không dựng được trang PDF')), 'image/webp', 0.85));
+  }
+  $('vh-bg-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      let bg;
+      if (/\.dxf$/i.test(file.name)) {
+        const r = C.parseDxf(await file.text());
+        if (!r.count) throw new Error('DXF không có nét nào đọc được.');
+        bg = {kind: 'dxf', name: file.name, segs: r.segs, x: 0, y: 0, mmPerUnit: r.mmPerUnit, opacity: .6, hidden: false};
+        if (r.count < r.total) Shell.toast('DXF nhiều nét, chỉ lấy ' + r.count + '/' + r.total + ' nét dài nhất.');
+      } else {
+        Shell.toast('Đang xử lý và tải nền lên…');
+        const isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+        const blob = isPdf ? await pdfPageBlob(file) : file;
+        if (!blob) return;
+        const bm = await createImageBitmap(blob), w = bm.width, h = bm.height;
+        bm.close?.();
+        const name = await uploadImageAsset(blob);
+        // tỷ lệ tạm: ảnh rộng 10 m, rồi dùng "Đặt tỷ lệ" để khớp số đo thật
+        bg = {kind: isPdf ? 'pdf' : 'img', name, w, h, x: 0, y: 0, mmPerUnit: 10000 / w, opacity: .5, hidden: false};
+      }
+      commit(() => { floor().bg = bg; });
+      S.bgBar = true; renderBg(); fit();
+      Shell.toast('Đã nhập nền. Bấm "📏 Đặt tỷ lệ" để khớp số đo thật.');
+    } catch (error) { Shell.toast('Không nhập được nền: ' + error.message); }
+  });
+  async function bgScalePick(w) {
+    S.bgPts = [...(S.bgPts || []), w];
+    renderOverlay();
+    if (S.bgPts.length < 2) return;
+    const [p, q] = S.bgPts, cur = C.len(C.sub(q, p));
+    S.bgPts = null; renderOverlay();
+    if (cur < 1) return;
+    const ans = await Shell.ask({title: 'Đặt tỷ lệ nền', message: 'Đoạn vừa chọn đang dài ' + fmt(cur) + ' mm. Số đo thật là bao nhiêu mm?', input: {value: String(Math.round(cur))}});
+    const real = Number(String(ans || '').replace(/[^\d.]/g, ''));
+    if (!(real > 0)) return;
+    const r = real / cur, bg = floor().bg;
+    commit(() => { bg.mmPerUnit *= r; bg.x = p[0] + ((bg.x || 0) - p[0]) * r; bg.y = p[1] + ((bg.y || 0) - p[1]) * r; });
+    setTool('select');
+  }
+  $('vh-bg-bar').addEventListener('click', e => {
+    const act = e.target.closest('button[data-bg]')?.dataset.bg, bg = floor().bg;
+    if (!act || !bg) return;
+    if (act === 'scale' || act === 'move') setTool('bg-' + act);
+    else if (act === 'hide') commit(() => { bg.hidden = !bg.hidden; });
+    else if (act === 'del') { commit(() => { delete floor().bg; }); S.bgBar = false; setTool('select'); }
+    else if (act === 'close') { S.bgBar = false; setTool('select'); renderBg(); }
+  });
+  $('vh-bg-bar').addEventListener('input', e => { if (e.target.dataset.bg === 'opacity' && floor().bg) { floor().bg.opacity = Number(e.target.value); renderBg(); } });
+  $('vh-bg-bar').addEventListener('change', e => { if (e.target.dataset.bg === 'opacity') markDirty(); });
+
   // ================= Xuất =================
-  function exportPng() {
-    const prims = C.floorPrimitives(S.plan, floor(), {roomFill: '#fff'}).filter(p => p.layer !== 'HIT');
+  // o: {mode, only, dims, schedule, font} – mặc định theo màn đang xem
+  function exportPrims(o = {}) {
+    if (S.elev) return C.elevPrimitives(S.plan, roomById(S.elev.roomId), S.elev.i, {font: o.font});
+    return C.floorPrimitives(S.plan, floor(), {mode: o.mode || S.mode, only: o.only, dims: o.dims, schedule: o.schedule, font: o.font, roomFill: '#fff'});
+  }
+  function exportTitle(o = {}) {
+    if (S.elev) { const r = roomById(S.elev.roomId); return 'Mặt đứng ' + r.name + ' - đoạn ' + (S.elev.i + 1); }
+    const only = o.only && roomById(o.only[0]);
+    return floor().name + ((o.mode || S.mode) === 'ceil' ? ' - Trần' : '') + (only ? ' - ' + only.name : '');
+  }
+  function exportPng(o = {}, type = 'png') {
+    const prims = exportPrims(o).filter(p => p.layer !== 'HIT');
     const b = C.bounds(prims);
-    if (!b) return Shell.toast('Tầng này chưa có gì để xuất.');
+    if (!b) return Shell.toast('Chưa có gì để xuất.');
     const pad = 600, W = b.x1 - b.x0 + pad * 2, H = b.y1 - b.y0 + pad * 2 + 700, scale = Math.min(4000 / W, 4000 / H, 0.6);
-    const title = `<text x="${b.x0 - pad + 200}" y="${b.y1 + pad + 350}" font-size="260" font-weight="700" fill="#111">${esc(S.plan.name)} – ${esc(floor().name)}</text>` +
+    const title = `<text x="${b.x0 - pad + 200}" y="${b.y1 + pad + 350}" font-size="260" font-weight="700" fill="#111">${esc(S.plan.name)} – ${esc(exportTitle(o))}</text>` +
       `<text x="${b.x0 - pad + 200}" y="${b.y1 + pad + 650}" font-size="180" fill="#555">${esc([S.plan.address, S.plan.surveyor && 'Khảo sát: ' + S.plan.surveyor, new Date().toLocaleDateString('vi-VN'), 'Đơn vị: mm'].filter(Boolean).join(' · '))}</text>`;
     // nét non-scaling-stroke tính theo px ảnh -> đổi sang mm cho đúng độ dày khi in
     const body = prims.map(p => primSvg({...p, w: (p.w || 1) * 1.6 / scale})).join('').replace(/ vector-effect="non-scaling-stroke"/g, '');
@@ -1238,19 +1417,112 @@
       const c = document.createElement('canvas');
       c.width = Math.round(W * scale); c.height = Math.round(H * scale);
       c.getContext('2d').drawImage(img, 0, 0);
-      c.toBlob(blob => download(`${S.plan.name} - ${floor().name}.png`, blob), 'image/png');
+      c.toBlob(blob => download(`${S.plan.name} - ${exportTitle(o)}.${type}`, blob), type === 'jpg' ? 'image/jpeg' : 'image/png', 0.92);
     };
     img.onerror = () => Shell.toast('Không dựng được ảnh.');
     img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(src);
   }
-  function exportDxf() {
-    const prims = C.floorPrimitives(S.plan, floor());
+  function exportDxf(o = {}) {
+    const prims = exportPrims(o);
     const b = C.bounds(prims);
-    if (!b) return Shell.toast('Tầng này chưa có gì để xuất.');
-    prims.push({t: 'text', p: [b.x0 + 2000, b.y1 + 900], s: S.plan.name + ' - ' + floor().name, size: 250, layer: 'CHU'});
-    if (S.plan.address) prims.push({t: 'text', p: [b.x0 + 2000, b.y1 + 1300], s: S.plan.address, size: 180, layer: 'CHU'});
-    download(`${S.plan.name} - ${floor().name}.dxf`, new Blob([C.toDxf(prims)], {type: 'application/dxf'}));
+    if (!b) return Shell.toast('Chưa có gì để xuất.');
+    const font = o.font || S.plan.font || 150;
+    prims.push({t: 'text', p: [b.x0 + 2000, b.y1 + font * 6], s: S.plan.name + ' - ' + exportTitle(o), size: font * 1.6, layer: 'CHU'});
+    if (S.plan.address) prims.push({t: 'text', p: [b.x0 + 2000, b.y1 + font * 8.5], s: S.plan.address, size: font * 1.2, layer: 'CHU'});
+    download(`${S.plan.name} - ${exportTitle(o)}.dxf`, new Blob([C.toDxf(prims)], {type: 'application/dxf'}));
   }
+  const SCALES = [20, 25, 50, 75, 100, 125, 150, 200, 250, 300, 400, 500, 1000];
+  // PDF = cửa sổ in của trình duyệt (khổ ngang, SVG theo mm, khung tên, trang ảnh hiện trường)
+  async function exportPdf(o = {}) {
+    const prims = exportPrims(o).filter(p => p.layer !== 'HIT'), b = C.bounds(prims);
+    if (!b) return Shell.toast('Chưa có gì để xuất.');
+    const [pw, ph] = o.paper === 'A3' ? [420, 297] : [297, 210], m = 10, tb = 18, aw = pw - 2 * m, ah = ph - 2 * m - tb - 4;
+    const pad = 300, W = b.x1 - b.x0 + pad * 2, H = b.y1 - b.y0 + pad * 2, need = Math.max(W / aw, H / ah);
+    const scale = o.scale || SCALES.find(v => v >= need) || Math.ceil(need / 100) * 100;
+    if (o.scale && need > o.scale) Shell.toast('Tỷ lệ 1:' + o.scale + ' không vừa khổ ' + (o.paper || 'A4') + ', phần ngoài sẽ bị cắt. Chọn "Tự vừa khổ" nếu cần.');
+    const body = prims.map(p => primSvg({...p, w: (p.w || 1) * 0.18 * scale})).join('').replace(/ vector-effect="non-scaling-stroke"/g, '');
+    const drawing = `<svg xmlns="http://www.w3.org/2000/svg" width="${W / scale}mm" height="${H / scale}mm" viewBox="${b.x0 - pad} ${b.y0 - pad} ${W} ${H}"><style>text{font-family:Roboto,Arial,sans-serif}</style>${body}</svg>`;
+    const cell = (k, v) => `<td><small>${k}</small><b>${esc(v || '–')}</b></td>`;
+    const titleBlock = `<table class="tb"><tr><td class="brand">GD HOME</td>${cell('Tên bản vẽ', S.plan.name)}${cell('Địa chỉ', S.plan.address)}${cell('Người đo', S.plan.surveyor)}${cell('Ngày', new Date().toLocaleDateString('vi-VN'))}${cell('Tỷ lệ', '1:' + scale)}${cell(S.elev ? 'Mặt đứng' : 'Tầng', exportTitle(o))}</tr></table>`;
+    let photos = '';
+    const list = !S.elev && o.photos !== false ? (floor().photos || []) : [];
+    for (let k = 0; k < list.length; k++) {
+      let url = '';
+      try { url = await assetBlobUrl(list[k].name); } catch { /* ảnh lỗi: vẫn in trang có số */ }
+      photos += `<section class="pg ph"><h2>Ảnh hiện trường #${k + 1}</h2>${url ? `<img src="${url}">` : '<p>(không tải được ảnh)</p>'}<p>${esc(list[k].note || '')}</p>${titleBlock}</section>`;
+    }
+    const html = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(S.plan.name)}</title><style>
+@page{size:${o.paper === 'A3' ? 'A3' : 'A4'} landscape;margin:${m}mm}
+*{box-sizing:border-box}body{margin:0;font-family:Roboto,Arial,sans-serif;color:#111}
+.pg{width:${aw}mm;height:${ph - 2 * m}mm;display:flex;flex-direction:column;page-break-after:always;break-after:page;overflow:hidden}
+.pg:last-child{page-break-after:auto;break-after:auto}
+.dw{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;overflow:hidden;border:0.3mm solid #111}
+.tb{width:100%;height:${tb}mm;margin-top:4mm;border-collapse:collapse;table-layout:fixed;font-size:8pt}
+.tb td{border:0.3mm solid #111;padding:1mm 2mm;vertical-align:top;overflow:hidden}.tb small{display:block;color:#555;font-size:6.5pt}
+.tb .brand{width:28mm;font-size:13pt;font-weight:700;vertical-align:middle;text-align:center}
+.ph h2{margin:0 0 2mm;font-size:12pt}.ph img{flex:1;min-height:0;object-fit:contain;width:100%}.ph p{margin:2mm 0 0;font-size:9pt}
+</style></head><body><section class="pg"><div class="dw">${drawing}</div>${titleBlock}</section>${photos}</body></html>`;
+    window.GDPlanPage.lastPrint = html;
+    if (window.GDPlanPage.noPrint) return html;
+    const fr = document.createElement('iframe');
+    fr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0';
+    document.body.append(fr);
+    const doc = fr.contentDocument;
+    doc.open(); doc.write(html); doc.close();
+    await Promise.all([...doc.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+    fr.contentWindow.focus(); fr.contentWindow.print();
+    setTimeout(() => fr.remove(), 60000);
+    return html;
+  }
+  const expForm = $('vh-export-form').elements;
+  function syncExportForm() {
+    const fmtv = expForm.fmt.value;
+    $('vh-export-form').querySelectorAll('[data-for]').forEach(el => { el.hidden = !el.dataset.for.split(' ').includes(fmtv); });
+  }
+  function openExport() {
+    expForm.mode.value = S.mode;
+    const selRoom = S.sel?.room && roomById(S.sel.room), opt = expForm.scope.querySelector('[value=room]');
+    opt.disabled = !selRoom;
+    opt.textContent = selRoom ? 'Phòng đang chọn: ' + selRoom.name : 'Phòng đang chọn (chưa chọn)';
+    expForm.scope.value = selRoom ? 'room' : 'floor';
+    expForm.schedule.checked = !!floor()[S.mode === 'ceil' ? 'schedCeil' : 'schedPlan'];
+    $('vh-export-scope').hidden = !!S.elev;
+    syncExportForm();
+    $('vh-export-dlg').showModal();
+  }
+  $('vh-export-form').addEventListener('change', syncExportForm);
+  $('vh-export-dlg').addEventListener('close', () => {
+    if ($('vh-export-dlg').returnValue !== 'ok') return;
+    const f = expForm, scale = Number(f.scale.value) || 0, mode = f.mode.value, key = mode === 'ceil' ? 'schedCeil' : 'schedPlan';
+    if (!S.elev && !!floor()[key] !== f.schedule.checked) commit(() => { floor()[key] = f.schedule.checked; });   // bảng kê lưu theo tầng, hiện cả trên màn vẽ
+    const o = {mode, only: f.scope.value === 'room' && S.sel?.room ? [S.sel.room] : undefined, dims: f.dims.checked, schedule: f.schedule.checked,
+      font: scale ? 2.5 * scale : undefined, scale, paper: f.paper.value, photos: f.photos.checked};
+    const fmtv = f.fmt.value;
+    if (fmtv === 'dxf') exportDxf(o);
+    else if (fmtv === 'png' || fmtv === 'jpg') exportPng(o, fmtv);
+    else if (fmtv === 'pdf') exportPdf(o);
+    else download(S.plan.name + '.json', new Blob([JSON.stringify(S.plan, null, 1)], {type: 'application/json'}));
+  });
+
+  // ================= Nút tròn nổi (điện thoại) =================
+  const selHit = sel => sel.kind === 'seg' || sel.kind === 'room' ? {kind: 'room', a: sel.room} : sel.room ? {kind: sel.kind, a: sel.room, b: sel.id} : {kind: sel.kind, a: sel.id};
+  $('vh-fab').addEventListener('click', e => {
+    const act = e.target.closest('[data-fab]')?.dataset.fab;
+    if (!act || !S.sel) return;
+    if (act === 'del') deleteSel();
+    else if (act === 'props') { S.popHide = !S.popHide; renderPop(); placeFab(); }
+    else if (act === 'elev' && S.sel.kind === 'seg') openElev(S.sel.room, S.sel.i);
+  });
+  $('vh-fab').querySelector('[data-fab=move]').addEventListener('pointerdown', e => {
+    if (!S.sel) return;
+    e.preventDefault();
+    const hit = selHit(S.sel), base = currentObj(hit);
+    if (!base) return;
+    svg.setPointerCapture(e.pointerId);
+    ptrs.set(e.pointerId, [e.clientX, e.clientY]);
+    drag = {type: 'obj', fab: true, hit, x: e.clientX, y: e.clientY, w: toWorld(e.clientX, e.clientY), moved: false, touch: true, snapshot: JSON.stringify(S.plan), base: JSON.parse(JSON.stringify(base))};
+    $('vh-fab').hidden = true;
+  });
 
   // ================= Cài đặt =================
   function openSettings() {
@@ -1287,6 +1559,9 @@
     else if (act === 'settings') openSettings();
     else if (act === 'dxf') exportDxf();
     else if (act === 'png') exportPng();
+    else if (act === 'export') openExport();
+    else if (act === 'bg-import') $('vh-bg-input').click();
+    else if (act === 'bg-edit') { if (!floor().bg) return Shell.toast('Tầng này chưa có nền. Chọn "Nhập nền…" trước.'); S.bgBar = true; renderBg(); }
     else if (act === 'json') download(S.plan.name + '.json', new Blob([JSON.stringify(S.plan, null, 1)], {type: 'application/json'}));
     else if (act === 'mic') mic(!rec);
     else if (act === 'multi') toggleMultiMode();
@@ -1312,6 +1587,7 @@
     if (S.draft && (/^[0-9]$/.test(e.key))) { cmd.focus(); return; }   // gõ số thẳng vào ô lệnh
     if (e.key === 'Enter' && S.draft) { finishDraft(true); return; }
     if (e.key === 'Backspace' && S.draft) { e.preventDefault(); draftUndo(); return; }
+    if (e.key === 'Escape' && S.elev && !S.sel && !S.draft && !S.arrowDraft) { closeElev(); return; }
     if (e.key === 'Escape') { if (S.draft) finishDraft(false); else if (S.dimDraft || S.arrowDraft || S.boxDraft) { S.dimDraft = null; S.arrowDraft = null; S.boxDraft = null; renderOverlay(); } else { S.sel = null; S.multi = false; S.multiSel = []; $('vh-multi')?.classList.remove('is-on'); setTool('select'); renderAll(); } return; }
     if (e.key === 'Enter' && S.arrowDraft?.pts.length >= 2) { const pts = S.arrowDraft.pts.slice(), mode = S.mode; S.arrowDraft = null; renderOverlay(); finishArrow(pts, mode); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.multiSel.length) { e.preventDefault(); deleteMulti(); return; }
@@ -1328,5 +1604,5 @@
     const id = new URLSearchParams(location.search).get('plan');
     if (id && /^[\w-]{6,60}$/.test(id)) openPlan(id); else showHome();
   })();
-  window.GDPlanPage = {state: S, runCommand, fit, exportDxf, renderAll};
+  window.GDPlanPage = {state: S, runCommand, fit, exportDxf, exportPdf, exportPng, openElev, closeElev, renderAll};
 })();

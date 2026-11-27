@@ -2936,6 +2936,87 @@ cases['ve-hien-trang'] = async (page,{browser}) => {
     await page.setViewportSize({width,height:1000});
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth) <= width);
   }
+  // ----- Đợt 2–3: Trần, ghi chú, lệnh phòng, mặt đứng, nền DXF, xuất, chọn nhiều, điện thoại 375 -----
+  await page.setViewportSize({width:1440,height:900});
+  await page.evaluate(() => GDPlanPage.fit());
+  const fl = () => page.evaluate(() => { const S = GDPlanPage.state; return JSON.parse(JSON.stringify({f:S.plan.floors[S.plan.active], elev:S.elev, multi:S.multiSel.length})); });
+  const sb = await page.locator('#vh-svg').boundingBox();
+  // Trần: chọn downlight, chạm giữa phòng P1
+  await page.locator('#vh-ceil').click();
+  await page.locator('[data-cdev=downlight]').click();
+  const rb = await page.locator(`#vh-draw [data-hit="room:${p1}"]`).first().boundingBox();
+  await page.mouse.click(rb.x + rb.width / 2,rb.y + rb.height / 2);
+  let g = await fl();
+  assert.equal(g.f.ceilItems.filter(c => c.type === 'downlight').length,1,'Đặt downlight ở Trần');
+  await page.locator('#vh-ceil').click();
+  // Ghi chú
+  await page.locator('[data-tool=note]').click();
+  await page.mouse.click(sb.x + 90,sb.y + 90);
+  await page.locator('#vh-pop [data-f=ntext]').fill('Tường nứt chân');
+  await page.locator('#vh-pop [data-f=ntext]').dispatchEvent('change');
+  g = await fl();
+  assert.ok(g.f.notes.some(n => n.text === 'Tường nứt chân' && n.mode === 'plan'),'Ghi chú');
+  // Lệnh vẽ một phòng
+  await page.fill('#vh-cmd','vẽ một phòng 3 mét 5 nhân 4 mét, cửa đi phía trước');
+  await page.press('#vh-cmd','Enter');
+  g = await fl();
+  const nr = g.f.rooms[g.f.rooms.length - 1], xs = nr.pts.map(q => q[0]), ys = nr.pts.map(q => q[1]);
+  assert.equal(Math.max(...xs) - Math.min(...xs),3500); assert.equal(Math.max(...ys) - Math.min(...ys),4000);
+  assert.ok(nr.openings.some(o => o.type === 'door'),'Phòng có cửa đi');
+  // Mặt đứng: chọn đoạn tường -> ▥ Mặt đứng -> đặt ổ cắm -> chuyển đoạn -> đóng
+  await page.locator(`#vh-draw polygon[data-hit="seg:${nr.id}:0"]`).click({force:true});
+  await page.locator('#vh-pop [data-pop=elev]').click();
+  await page.locator('#vh-elev-bar').waitFor();
+  assert.match(await page.locator('#vh-elev-title').textContent(),/Mặt đứng · .* đoạn 1\/4/);
+  await page.locator('[data-tool=device]').click();
+  await page.locator('[data-dev=o_cam]').click();
+  await page.mouse.click(sb.x + sb.width / 2,sb.y + sb.height / 2);
+  g = await fl();
+  const ed = g.f.rooms.find(r => r.id === nr.id).devices.find(d => d.seg === 0 && d.type === 'o_cam');
+  assert.ok(ed && ed.h > 0 && ed.at >= 0,'Đặt ổ cắm ở mặt đứng');
+  await page.locator('[data-elev=next]').click();
+  assert.equal((await fl()).elev.i,1);
+  await page.locator('[data-elev=close]').click();
+  assert.equal((await fl()).elev,null);
+  // Nhập nền DXF (file mẫu từ toDxf của lõi)
+  const dxfText = await page.evaluate(() => GDPlanCore.toDxf(GDPlanCore.floorPrimitives(GDPlanCore.newPlan(),{rooms:[GDPlanCore.rectRoom(0,0,5000,4000,'N')],columns:[],dims:[]})));
+  await page.setInputFiles('#vh-bg-input',{name:'nen.dxf',mimeType:'application/dxf',buffer:Buffer.from(dxfText)});
+  await page.waitForFunction(() => { const S = GDPlanPage.state; return S.plan.floors[S.plan.active].bg?.kind === 'dxf'; });
+  assert.ok(await page.locator('#vh-bg path').count(),'Vẽ nền DXF');
+  assert.ok(await page.locator('#vh-bg-bar').isVisible());
+  await page.locator('[data-bg=close]').click();
+  // Xuất: hộp thoại -> DXF; PDF có khung tên GD HOME
+  await page.locator('.vh-export summary').click();
+  await page.locator('[data-act=export]').click();
+  await page.locator('#vh-export-form [name=fmt]').selectOption('dxf');
+  await page.locator('#vh-export-form [name=scale]').selectOption('50');
+  const [dl2] = await Promise.all([page.waitForEvent('download'),page.locator('#vh-export-form [value=ok]').click()]);
+  assert.match(dl2.suggestedFilename(),/\.dxf$/);
+  const pdf = await page.evaluate(async () => { GDPlanPage.noPrint = true; return GDPlanPage.exportPdf({paper:'A3'}); });
+  assert.match(pdf,/GD HOME/); assert.match(pdf,/A3 landscape/); assert.match(pdf,/Tỷ lệ/);
+  // Chọn nhiều: kéo khung cả màn -> Delete -> hoàn tác
+  await page.evaluate(() => GDPlanPage.fit());
+  await page.locator('#vh-multi').click();
+  await page.mouse.move(sb.x + 4,sb.y + 4); await page.mouse.down();
+  await page.mouse.move(sb.x + sb.width - 4,sb.y + sb.height - 4,{steps:6}); await page.mouse.up();
+  g = await fl();
+  assert.ok(g.multi >= 5,'Kéo khung chọn nhiều: ' + g.multi);
+  await page.keyboard.press('Delete');
+  assert.equal((await fl()).f.rooms.length,0,'Xoá cả nhóm');
+  await page.keyboard.press('Control+z');
+  assert.equal((await fl()).f.rooms.length,nr && g.f.rooms.length,'Hoàn tác xoá nhóm');
+  await page.waitForFunction(() => document.getElementById('save-status').dataset.saveState === 'saved',null,{timeout:10000});
+  // Điện thoại 375: không tràn ngang, chọn tường hiện nút tròn nổi
+  const m2 = await browser.newPage({baseURL:new URL(page.url()).origin,viewport:{width:375,height:812},hasTouch:true,isMobile:true});
+  await m2.goto('/ve-hien-trang?plan=' + s.id,{waitUntil:'domcontentloaded'});
+  await m2.locator('#vh-draw [data-hit^="seg:"]').first().waitFor({state:'attached'});
+  assert.ok(await m2.evaluate(() => document.documentElement.scrollWidth) <= 375,'375 px không tràn ngang');
+  await m2.locator(`#vh-draw polygon[data-hit="seg:${p1}:1"]`).click({force:true});
+  await m2.locator('#vh-fab').waitFor();
+  assert.ok(await m2.locator("#vh-fab [data-fab=elev]").isVisible(),"Nút ▥ mặt đứng cho tường " + await m2.evaluate(() => JSON.stringify(GDPlanPage.state.sel)));
+  assert.ok(await m2.evaluate(() => document.documentElement.scrollWidth) <= 375);
+  await shot(m2,'vh-mobile-375.png');
+  await m2.close();
 };
 
 cases['15.1'] = async page => {

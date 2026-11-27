@@ -36,7 +36,7 @@
 .vh-ib:hover { background: #f1f5f9; }
 .vh-ib:disabled { opacity: .35; cursor: default; }
 .vh-ib.is-on { background: #dbeafe; color: #1d4ed8; }
-.vh-ib-wide { width: auto; padding: 0 10px; font-size: 13px; border: 1px solid #d1d5db; white-space: nowrap; }
+.vh-ib-wide { display: inline-flex; align-items: center; width: auto; padding: 0 10px; font-size: 13px; border: 1px solid #d1d5db; white-space: nowrap; }
 .vh-ib-wide.is-on { border-color: #1d4ed8; background: #1d4ed8; color: #fff; }
 .vh-export { position: relative; }
 .vh-export summary { list-style: none; }
@@ -70,7 +70,7 @@
 #vh-svg.is-draw [data-hit], #vh-svg.is-place [data-hit] { cursor: crosshair; }
 .vh-hint { position: absolute; left: 10px; bottom: 6px; margin: 0; font-size: 12px; color: #64748b; background: rgba(255, 255, 255, .85); padding: 3px 8px; border-radius: 6px; pointer-events: none; max-width: calc(100% - 20px); }
 
-.vh-pop { position: absolute; z-index: 20; width: 290px; background: #fff; border: 1px solid #d1d5db; border-radius: 12px; box-shadow: var(--gd-overlay-shadow); padding: 10px; display: grid; gap: 8px; font-size: 13px; }
+.vh-pop { position: absolute; z-index: 20; top: 10px; right: 10px; width: 300px; max-height: calc(100% - 50px); overflow: auto; box-sizing: border-box; background: #fff; border: 1px solid #d1d5db; border-radius: 12px; box-shadow: var(--gd-overlay-shadow); padding: 10px; display: grid; gap: 8px; font-size: 13px; }
 .vh-pop h3 { margin: 0; font-size: 14px; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
 .vh-pop label { display: grid; grid-template-columns: 110px minmax(0, 1fr); align-items: center; gap: 6px; color: #475569; }
 .vh-pop .vh-step { display: grid; grid-template-columns: 34px minmax(0, 1fr) 34px; gap: 4px; }
@@ -79,6 +79,25 @@
 .vh-pop button.vh-danger { color: #b91c1c; border-color: #fecaca; }
 .vh-pop button.vh-x { border: 0; font-size: 18px; padding: 0 4px; }
 .vh-pop .vh-muted { margin: 0; }
+.vh-pop button.is-on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.vh-segnav { display: grid; grid-template-columns: 40px 1fr 40px; align-items: center; text-align: center; gap: 4px; }
+.vh-editor.is-elev .vh-pop { top: 56px; }
+
+/* mặt đứng: chỉ còn Chọn / Thiết bị / Ghi chú / Mũi tên */
+.vh-editor.is-elev .vh-tools > :not([data-tool=select], [data-tool=device], [data-tool=note], [data-tool=arrow]),
+.vh-editor.is-elev :is(#vh-multi, #vh-ceil-devices, #vh-ceil-sub, #vh-bg-bar) { display: none !important; }
+.vh-elev-bar { position: absolute; z-index: 21; top: 8px; left: 8px; right: 8px; display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  background: #fff7ed; border: 1px solid #fdba74; border-radius: 10px; padding: 5px 8px; font-size: 13px; box-shadow: var(--gd-overlay-shadow); }
+.vh-elev-bar b { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #9a3412; }
+.vh-elev-bar button { font: inherit; padding: 4px 10px; border: 1px solid #fdba74; border-radius: 7px; background: #fff; cursor: pointer; }
+
+/* nút tròn nổi quanh đối tượng – chỉ điện thoại */
+.vh-fab { position: absolute; z-index: 19; display: none; gap: 8px; }
+.vh-fab button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid #93c5fd; background: #fff; color: #1d4ed8; font-size: 17px; box-shadow: 0 2px 8px rgba(0,0,0,.18); cursor: pointer; touch-action: none; }
+.vh-fab [data-fab=del] { color: #b91c1c; border-color: #fecaca; }
+.vh-fab button.is-on { background: #dbeafe; }
+
+.vh-sheet { width: min(94vw, 560px); }
 
 .vh-cmd { display: flex; align-items: center; gap: 6px; padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid #e5e7eb; flex-wrap: wrap; }
 #vh-cmd { flex: 1 1 260px; min-width: 0; font: inherit; font-size: 15px; padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 10px; }
@@ -98,10 +117,17 @@
 
 @media (max-width: 640px) {
   .vh-home-actions { grid-template-columns: 1fr; }
-  .vh-tools button { padding: 6px 8px; }
-  .vh-tools [data-act=quick-room], .vh-tools [data-act=fit] { font-size: 0; }
-  .vh-tools [data-act=quick-room]::before { content: "+ Phòng"; font-size: 13px; }
-  .vh-tools [data-act=fit]::before { content: "⤢"; font-size: 13px; }
-  .vh-pop { left: 8px !important; right: 8px; bottom: 8px; top: auto !important; width: auto; max-height: 55%; overflow: auto; }
+  .vh-lbl { display: none; }
+  .vh-tools { flex-wrap: nowrap; overflow-x: auto; }
+  .vh-tools button { padding: 6px 10px; font-size: 15px; min-width: 38px; }
+  .vh-top { padding: 4px 6px; gap: 4px; }
+  .vh-top .vh-ib { width: 32px; height: 32px; }
+  .vh-cmd { gap: 4px; padding-left: 6px; padding-right: 6px; }
+  .vh-cmd .vh-ib { width: 34px; height: 34px; }
+  #vh-cmd { flex-basis: 150px; }
+  .vh-pop { left: 0 !important; right: 0; bottom: 0; top: auto !important; width: auto; max-height: 55%; border-radius: 14px 14px 0 0; }
+  .vh-editor.is-elev .vh-pop { top: auto !important; }
+  .vh-fab { display: flex; }
+  .vh-sheet { width: 100vw; max-width: 100vw; margin: auto 0 0; border-radius: 14px 14px 0 0; box-sizing: border-box; max-height: 85dvh; }
 }
 @media (max-width: 640px) { .vh-hint { display: none; } }
