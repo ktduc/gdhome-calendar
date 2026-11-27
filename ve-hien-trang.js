@@ -5,7 +5,7 @@
   const esc = v => Shell.escape(String(v ?? ''));
   const svg = $('vh-svg'), world = $('vh-world'), drawLayer = $('vh-draw'), over = $('vh-over'), pop = $('vh-pop');
   const S = {id: '', plan: null, view: {x: 0, y: 0, k: 0.12}, mode: 'plan', tool: 'select', lock: true, sel: null, draft: null, devType: 'o_cam',
-    ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false, multi: false, multiSel: [], boxDraft: null,
+    ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false, lenMode: 'square', multi: false, multiSel: [], boxDraft: null,
     hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null, arrowDraft: null, pendingPhoto: null};
   const assetUrls = new Map();
   async function assetBlobUrl(name) {
@@ -996,9 +996,9 @@
     if (sel.kind === 'seg' && room) {
       const info = C.segInfo(S.plan, room, sel.i);
       html = head('Đoạn tường · ' + room.name) + num('Chiều dài', 'len', C.segLen(room, sel.i)) +
+        `<label>Kiểu đổi dài<select data-f="lenmode"><option value="square">Giữ vuông</option><option value="shift">Dời cả phần sau</option><option value="end">Chỉ dời điểm cuối</option></select></label>` +
         (info.k !== 'open' ? num('Dày', 'thick', info.t) : '') +
         `<label>Loại<select data-f="segk"><option value="wall">Tường</option><option value="partition">Vách mỏng</option><option value="open">Lối đi (không tường)</option></select></label>` +
-        '<p class="vh-muted">Gõ số đo thật rồi Enter: tường phía cuối đoạn dời theo, phòng giữ vuông.</p>' +
         '<div class="vh-btns"><button type="button" data-pop="door">+ Cửa đi</button><button type="button" data-pop="window">+ Cửa sổ</button><button type="button" data-pop="open">+ Ô mở</button><button type="button" data-pop="room">Cả phòng</button></div>';
     } else if (sel.kind === 'op' && room) {
       const op = room.openings.find(o => o.id === sel.id);
@@ -1073,7 +1073,7 @@
         '<div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
     } else { pop.hidden = true; return; }
     pop.innerHTML = html;
-    if (sel.kind === 'seg') pop.querySelector('[data-f=segk]').value = C.segInfo(S.plan, room, sel.i).k;
+    if (sel.kind === 'seg') { pop.querySelector('[data-f=segk]').value = C.segInfo(S.plan, room, sel.i).k; pop.querySelector('[data-f=lenmode]').value = S.lenMode || 'square'; }
     if (sel.kind === 'op') { const op = room.openings.find(o => o.id === sel.id); pop.querySelector('[data-f=optype]').value = op.type; const lv = pop.querySelector('[data-f=leaves]'); if (lv) lv.value = op.leaves === 2 ? '2' : '1'; }
     if (sel.kind === 'dev') pop.querySelector('[data-f=devtype]').value = room.devices.find(o => o.id === sel.id).type;
     if (sel.kind === 'ci') { const it = (floor().ceilItems || []).find(c => c.id === sel.id); pop.querySelector('[data-f=citype]').value = it.type; pop.querySelector('[data-f=cisize]').value = String(it.size ?? C.CEIL[it.type]?.def); }
@@ -1089,13 +1089,14 @@
     pop.style.top = Math.max(8, Math.min(r.height - ph - 8, y - r.top + 16)) + 'px';
   }
   function applyField(f, raw) {
+    if (f === 'lenmode') { S.lenMode = raw; return; }
     const sel = S.sel, room = sel?.room && roomById(sel.room), v = Number(raw);
     const op = room?.openings.find(o => o.id === sel.id), dev = room?.devices.find(o => o.id === sel.id), col = floor().columns.find(c => c.id === sel?.id);
     const ci = (floor().ceilItems || []).find(c => c.id === sel?.id), cl = (floor().ceilLines || []).find(c => c.id === sel?.id);
     const nt = notesList().find(n => n.id === sel?.id), ar = arrowsList().find(a => a.id === sel?.id);
     commit(() => {
       switch (f) {
-        case 'len': if (v > 0) C.setSegLength(room, sel.i, v); break;
+        case 'len': if (v > 0) C.setSegLength(room, sel.i, v, S.lenMode || 'square'); break;
         case 'thick': if (v > 0) { room.segs[sel.i] = {...room.segs[sel.i], t: v}; } break;
         case 'segk': room.segs[sel.i] = {...room.segs[sel.i], k: raw}; break;
         case 'opw': if (v > 0) { op.w = Math.min(v, C.segLen(room, op.seg)); op.full = false; op.at = Math.min(op.at, C.segLen(room, op.seg) - op.w); } break;
