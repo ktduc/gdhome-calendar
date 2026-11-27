@@ -96,3 +96,34 @@ test('vẽ hiện trạng: API lưu / danh sách / đọc / xoá theo tài kho�
   assert.equal((await call('GET', '/api/site-plans')).json.plans.length, 0);
   assert.equal((await call('GET', '/api/site-plans/abc123')).status, 404);
 });
+
+test('đợt 2–3: trần, ghi chú, bảng kê, mô tả phòng, mặt đứng, đọc DXF', () => {
+  const C = require('../ve-hien-trang-core.js');
+  const p = C.samplePlan(), f = p.floors[0];
+  f.ceilItems = [{id: 'a', type: 'downlight', x: 1000, y: 1000, size: 90, dim: true}, {id: 'b', type: 'downlight', x: 2000, y: 1000, size: 90}];
+  f.ceilLines = [{id: 'l', pts: [[300, 300], [2900, 300]], level: 3000}];
+  f.notes = [{id: 'n', x: 0, y: -2000, text: 'Nứt chân tường'}];
+  f.schedCeil = true;
+  const ceil = C.floorPrimitives(p, f, {mode: 'ceil'});
+  assert.ok(ceil.some(q => q.hit === 'ci:a') && ceil.some(q => q.hit === 'cl:l'));
+  assert.ok(!ceil.some(q => q.layer === 'THIETBI'), 'trần không vẽ ổ cắm');
+  assert.ok(ceil.some(q => q.t === 'text' && q.s === '1000' && q.hit === 'ci:a'), 'dim downlight tới tường');
+  assert.ok(ceil.some(q => q.hit === 'sched:ceil' && q.s === '2'), 'bảng kê đếm 2 downlight');
+  assert.ok(!ceil.some(q => q.hit === 'note:n'), 'ghi chú mặt bằng không hiện ở trần');
+  assert.ok(C.floorPrimitives(p, f).some(q => q.hit === 'note:n'));
+  const d = C.parseRoomDescription('vẽ một phòng 3 mét 5 nhân 4 mét, cửa đi phía trước rộng 900 cách 300, cửa sổ bên phải 1200, cột góc trên trái');
+  assert.deepEqual([d.w, d.h], [3500, 4000]);
+  const {room, columns} = C.roomFromDescription(d);
+  assert.equal(room.openings.length, 2);
+  assert.equal(room.openings[0].seg, 2);
+  assert.equal(room.openings[0].at, 3500 - 300 - 900);
+  assert.equal(columns.length, 1);
+  const ev = C.elevPrimitives(p, f.rooms[0], 1);
+  assert.ok(ev.some(q => q.t === 'text' && q.s === '3300'), 'chiều cao tường');
+  const parsed = C.parseDxf(C.toDxf(C.floorPrimitives(p, f)));
+  assert.ok(parsed.count > 50 && Math.abs(parsed.mmPerUnit - 1) < 1e-9);
+  const r = C.rectRoom(0, 0, 3000, 4000);
+  C.setSegLength(r, 0, 3500, 'end');
+  assert.deepEqual(r.pts[1], [3500, 0]);
+  assert.deepEqual(r.pts[2], [3000, 4000]);
+});
