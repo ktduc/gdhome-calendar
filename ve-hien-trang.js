@@ -6,8 +6,10 @@
   const svg = $('vh-svg'), world = $('vh-world'), drawLayer = $('vh-draw'), over = $('vh-over'), pop = $('vh-pop');
   const S = {id: '', plan: null, view: {x: 0, y: 0, k: 0.12}, mode: 'plan', tool: 'select', lock: true, sel: null, draft: null, devType: 'o_cam',
     ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false,
-    hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null};
+    hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null, arrowDraft: null};
   const floor = () => S.plan.floors[S.plan.active] || S.plan.floors[0];
+  const notesList = () => (floor().notes ||= []);
+  const arrowsList = () => (floor().arrows ||= []);
   const roomById = id => floor().rooms.find(r => r.id === id);
   const fmt = n => Math.round(n).toLocaleString('vi-VN').replace(/\./g, '');
   const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
@@ -246,6 +248,8 @@
       if (sel.kind === 'col') { const col = floor().columns.find(c => c.id === sel.id); if (col) out.push({t: 'circle', c: [col.x, col.y], r: Math.max(col.w, col.h) * .75, stroke: '#2563eb', w: 2, dash: '5 4'}); }
       if (sel.kind === 'ci') { const it = (floor().ceilItems || []).find(c => c.id === sel.id); if (it) { const [w, h] = C.sizeWH(it.size ?? C.CEIL[it.type]?.def); out.push({t: 'circle', c: [it.x, it.y], r: Math.max(w, h) / 2 + px(8), stroke: '#2563eb', w: 2, dash: '5 4'}); } }
       if (sel.kind === 'cl') { const cl = (floor().ceilLines || []).find(c => c.id === sel.id); if (cl) out.push({t: 'poly', pts: cl.pts, close: !!cl.closed, fill: 'none', stroke: '#2563eb', w: 3, dash: '8 5'}); }
+      if (sel.kind === 'note') { const nt = notesList().find(n => n.id === sel.id); if (nt) out.push({t: 'circle', c: [nt.x, nt.y], r: px(8), stroke: '#2563eb', w: 2.5, fill: '#fff'}); }
+      if (sel.kind === 'ar') { const ar = arrowsList().find(a => a.id === sel.id); if (ar) out.push({t: 'poly', pts: ar.pts, close: false, fill: 'none', stroke: '#2563eb', w: 3, dash: '6 4'}); }
       if ((sel.kind === 'seg' || sel.kind === 'room') && room) room.pts.forEach((p, j) => out.push({t: 'poly', pts: [[p[0] - px(6), p[1] - px(6)], [p[0] + px(6), p[1] - px(6)], [p[0] + px(6), p[1] + px(6)], [p[0] - px(6), p[1] + px(6)]], close: true, fill: '#fff', stroke: '#2563eb', w: 2, hit: 'vtx:' + room.id + ':' + j}));
       if (sel.kind === 'room' && room && !room.closed) [room.pts[0], room.pts[room.pts.length - 1]].forEach(p => out.push({t: 'circle', c: p, r: px(9), stroke: '#dc2626', w: 2.5}));
     }
@@ -271,6 +275,11 @@
       if (!b) out.push({t: 'line', a, b: c, stroke: '#2f8a3c', w: 1.5, dash: '5 4'});
       else out.push(...C.dimLine(a, b, dimOffset(a, b, c), fmt(C.len(C.sub(b, a))), S.plan.font || 150));
     }
+    if (S.arrowDraft?.pts.length) {
+      const pts = [...S.arrowDraft.pts, ...(S.cursor ? [S.cursor] : [])];
+      out.push({t: 'circle', c: pts[0], r: px(5), fill: '#b91c1c', stroke: '#b91c1c', w: 1});
+      if (pts.length > 1) out.push({t: 'poly', pts, close: false, fill: 'none', stroke: '#b91c1c', w: 1.8, dash: '6 4'});
+    }
     if (S.sketch?.length > 1) out.push({t: 'poly', pts: S.sketch, close: false, stroke: '#dc2626', w: 2});
     over.innerHTML = out.map(primSvg).join('');
   }
@@ -284,7 +293,9 @@
     'ceil-line': 'Chạm đặt các điểm đường giật cấp / hắt LED · gõ số kích thước · Enter trống = khép kín · Esc = kết thúc nét hở',
     device: 'Chọn loại thiết bị rồi chạm bản vẽ để đặt',
     column: 'Chạm chỗ đặt cột vuông 200 (gần tường thì tự ăn vào tường)',
-    dim: 'Chạm điểm đầu, điểm cuối (tự bắt góc tường) rồi chạm chỗ đặt đường kích thước'
+    dim: 'Chạm điểm đầu, điểm cuối (tự bắt góc tường) rồi chạm chỗ đặt đường kích thước',
+    note: 'Chạm lên bản vẽ để đặt khung ghi chú nhiều dòng',
+    arrow: 'Bấm lần lượt điểm đầu mũi tên → điểm gập → điểm chân rồi nhập chữ'
   };
   function syncModeUI() {
     const ceil = S.mode === 'ceil';
@@ -316,10 +327,10 @@
   }
   function setTool(tool) {
     if (S.draft && S.tool !== tool) finishDraft(false);
-    S.tool = tool; S.dimDraft = null;
+    S.tool = tool; S.dimDraft = null; S.arrowDraft = null;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('is-on', b.dataset.tool === tool));
     svg.classList.toggle('is-draw', tool === 'draw' || tool === 'ceil-line');
-    svg.classList.toggle('is-place', ['device', 'column', 'dim'].includes(tool));
+    svg.classList.toggle('is-place', ['device', 'column', 'dim', 'note', 'arrow'].includes(tool));
     $('vh-devices').hidden = S.mode === 'ceil' || tool !== 'device';
     $('vh-ceil-devices').hidden = S.mode !== 'ceil';
     renderCeilSub();
@@ -577,6 +588,7 @@
       return;
     }
     if (S.tool === 'dim' && S.dimDraft) { S.cursor = S.dimDraft.b ? w : snapPt(w); renderOverlay(); }
+    if (S.tool === 'arrow' && S.arrowDraft) { S.cursor = snapPt(w); renderOverlay(); }
   });
   const endPtr = e => {
     ptrs.delete(e.pointerId);
@@ -623,6 +635,8 @@
     if (hit.kind === 'fdim') return floor().dims.find(c => c.id === hit.a);
     if (hit.kind === 'ci') return (floor().ceilItems || []).find(c => c.id === hit.a);
     if (hit.kind === 'cl') return (floor().ceilLines || []).find(c => c.id === hit.a);
+    if (hit.kind === 'note') return notesList().find(n => n.id === hit.a);
+    if (hit.kind === 'ar') return arrowsList().find(a => a.id === hit.a);
     if (hit.kind === 'sched') return floor()[hit.a === 'ceil' ? 'schedCeilOff' : 'schedPlanOff'] || [0, 0];
     if (!room) return null;
     if (hit.kind === 'op') return room.openings.find(o => o.id === hit.b);
@@ -656,6 +670,12 @@
     } else if (d.hit.kind === 'cl') {
       const cl = (floor().ceilLines || []).find(c => c.id === d.hit.a);
       if (cl) cl.pts = base.pts.map(p => [C.round(p[0] + delta[0], s), C.round(p[1] + delta[1], s)]);
+    } else if (d.hit.kind === 'note') {
+      const nt = notesList().find(n => n.id === d.hit.a);
+      if (nt) { nt.x = C.round(base.x + delta[0], s); nt.y = C.round(base.y + delta[1], s); }
+    } else if (d.hit.kind === 'ar') {
+      const ar = arrowsList().find(a => a.id === d.hit.a);
+      if (ar) ar.pts = base.pts.map(p => [C.round(p[0] + delta[0], s), C.round(p[1] + delta[1], s)]);
     } else if (d.hit.kind === 'sched') {
       floor()[d.hit.a === 'ceil' ? 'schedCeilOff' : 'schedPlanOff'] = [C.round(base[0] + delta[0], s), C.round(base[1] + delta[1], s)];
     } else if (d.hit.kind === 'fdim') {
@@ -692,7 +712,36 @@
         commit(() => floor().dims.push({id: C.uid(), a, b, off: dimOffset(a, b, w), mode: S.mode}));
       }
       renderOverlay();
+    } else if (S.tool === 'note') {
+      const s = S.plan.snap || 10, x = C.round(w[0], s), y = C.round(w[1], s), font = S.plan.font || 150, id = C.uid();
+      const sp = toScreen([x, y]), sr = svg.getBoundingClientRect();
+      popAt = [sr.left + sp[0], sr.top + sp[1]];
+      setTool('select');
+      commit(() => {
+        notesList().push({id, x, y, w: font * 16, text: '', title: 'GHI CHÚ', showTitle: true, color: '#b91c1c', size: font, bold: false, list: 'none', frame: true, mode: S.mode});
+        S.sel = {kind: 'note', id};
+      });
+      pop.querySelector('[data-f=ntext]')?.focus();
+    } else if (S.tool === 'arrow') {
+      const p = snapPt(w);
+      if (!S.arrowDraft) { S.arrowDraft = {pts: [p]}; renderOverlay(); return; }
+      const prev = S.arrowDraft.pts[S.arrowDraft.pts.length - 1];
+      if (C.len(C.sub(p, prev)) < 1) return;
+      if (S.arrowDraft.pts.length < 2) { S.arrowDraft.pts.push(p); renderOverlay(); return; }
+      const pts = [...S.arrowDraft.pts, p], mode = S.mode;
+      S.arrowDraft = null; renderOverlay();
+      finishArrow(pts, mode);
     }
+  }
+  async function finishArrow(pts, mode) {
+    const text = await Shell.ask({title: 'Chữ mũi tên', input: {value: '', placeholder: 'Nhập nội dung chú thích…'}});
+    if (text === null) return;
+    const id = C.uid();
+    setTool('select');
+    commit(() => {
+      arrowsList().push({id, pts, text: text.trim(), color: '#b91c1c', mode});
+      S.sel = {kind: 'ar', id};
+    });
   }
   function addColumn(w) {
     const s = S.plan.snap || 10, size = 200, id = C.uid();
@@ -783,12 +832,36 @@
         '<div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
     } else if (sel.kind === 'fdim') {
       html = head('Kích thước đo thêm') + '<p class="vh-muted">Kéo để dời đường kích thước.</p><div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
+    } else if (sel.kind === 'note') {
+      const nt = notesList().find(n => n.id === sel.id);
+      if (!nt) { S.sel = null; pop.hidden = true; return; }
+      const font = S.plan.font || 150;
+      html = head('Ghi chú') +
+        `<label>Nội dung<textarea data-f="ntext" rows="3" placeholder="Nhập ghi chú nhiều dòng…">${esc(nt.text || '')}</textarea></label>` +
+        `<label class="vh-check"><input type="checkbox" data-f="nshowtitle" ${nt.showTitle !== false ? 'checked' : ''}> Hiện tiêu đề</label>` +
+        (nt.showTitle !== false ? field('Tiêu đề', 'ntitle', nt.title || 'GHI CHÚ') : '') +
+        `<label>Màu chữ<input type="color" data-f="ncolor" value="${esc(nt.color || '#b91c1c')}"></label>` +
+        num('Cỡ chữ', 'nsize', nt.size || font) +
+        num('Độ rộng', 'nw', nt.w || (nt.size || font) * 16) +
+        `<label>Danh sách<select data-f="nlist"><option value="none">Không</option><option value="dot">• Chấm đầu dòng</option><option value="num">1. Đánh số</option></select></label>` +
+        `<label class="vh-check"><input type="checkbox" data-f="nbold" ${nt.bold ? 'checked' : ''}> Chữ đậm</label>` +
+        `<label class="vh-check"><input type="checkbox" data-f="nframe" ${nt.frame !== false ? 'checked' : ''}> Đóng khung</label>` +
+        '<div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
+    } else if (sel.kind === 'ar') {
+      const ar = arrowsList().find(a => a.id === sel.id);
+      if (!ar) { S.sel = null; pop.hidden = true; return; }
+      html = head('Mũi tên') +
+        `<label>Chữ<textarea data-f="artext" rows="2">${esc(ar.text || '')}</textarea></label>` +
+        `<label>Màu<input type="color" data-f="arcolor" value="${esc(ar.color || '#b91c1c')}"></label>` +
+        num('Cỡ chữ', 'arsize', ar.size || S.plan.font || 150) +
+        '<div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
     } else { pop.hidden = true; return; }
     pop.innerHTML = html;
     if (sel.kind === 'seg') pop.querySelector('[data-f=segk]').value = C.segInfo(S.plan, room, sel.i).k;
     if (sel.kind === 'op') { const op = room.openings.find(o => o.id === sel.id); pop.querySelector('[data-f=optype]').value = op.type; const lv = pop.querySelector('[data-f=leaves]'); if (lv) lv.value = op.leaves === 2 ? '2' : '1'; }
     if (sel.kind === 'dev') pop.querySelector('[data-f=devtype]').value = room.devices.find(o => o.id === sel.id).type;
     if (sel.kind === 'ci') { const it = (floor().ceilItems || []).find(c => c.id === sel.id); pop.querySelector('[data-f=citype]').value = it.type; pop.querySelector('[data-f=cisize]').value = String(it.size ?? C.CEIL[it.type]?.def); }
+    if (sel.kind === 'note') { const nt = notesList().find(n => n.id === sel.id); pop.querySelector('[data-f=nlist]').value = nt.list || 'none'; }
     pop.hidden = false;
     placePop();
   }
@@ -803,6 +876,7 @@
     const sel = S.sel, room = sel?.room && roomById(sel.room), v = Number(raw);
     const op = room?.openings.find(o => o.id === sel.id), dev = room?.devices.find(o => o.id === sel.id), col = floor().columns.find(c => c.id === sel?.id);
     const ci = (floor().ceilItems || []).find(c => c.id === sel?.id), cl = (floor().ceilLines || []).find(c => c.id === sel?.id);
+    const nt = notesList().find(n => n.id === sel?.id), ar = arrowsList().find(a => a.id === sel?.id);
     commit(() => {
       switch (f) {
         case 'len': if (v > 0) C.setSegLength(room, sel.i, v); break;
@@ -832,6 +906,18 @@
         case 'cllevel': if (cl) cl.level = Math.max(0, Math.round(v) || 0); break;
         case 'clled': if (cl) cl.led = !!raw; break;
         case 'clclosed': if (cl) cl.closed = !!raw; break;
+        case 'ntext': if (nt) nt.text = String(raw).slice(0, 2000); break;
+        case 'ntitle': if (nt) nt.title = String(raw).trim().slice(0, 80) || 'GHI CHÚ'; break;
+        case 'nshowtitle': if (nt) nt.showTitle = !!raw; break;
+        case 'ncolor': if (nt) nt.color = raw; break;
+        case 'nsize': if (nt && v > 20) nt.size = Math.round(v); break;
+        case 'nw': if (nt && v >= 200) nt.w = Math.round(v); break;
+        case 'nlist': if (nt) nt.list = raw; break;
+        case 'nbold': if (nt) nt.bold = !!raw; break;
+        case 'nframe': if (nt) nt.frame = !!raw; break;
+        case 'artext': if (ar) ar.text = String(raw).slice(0, 500); break;
+        case 'arcolor': if (ar) ar.color = raw; break;
+        case 'arsize': if (ar && v > 20) ar.size = Math.round(v); break;
       }
     });
   }
@@ -881,6 +967,8 @@
       else if (sel.kind === 'fdim') floor().dims = floor().dims.filter(c => c.id !== sel.id);
       else if (sel.kind === 'ci') floor().ceilItems = (floor().ceilItems || []).filter(c => c.id !== sel.id);
       else if (sel.kind === 'cl') floor().ceilLines = (floor().ceilLines || []).filter(c => c.id !== sel.id);
+      else if (sel.kind === 'note') { const list = notesList(), k = list.findIndex(n => n.id === sel.id); if (k >= 0) list.splice(k, 1); }
+      else if (sel.kind === 'ar') { const list = arrowsList(), k = list.findIndex(a => a.id === sel.id); if (k >= 0) list.splice(k, 1); }
       S.sel = null;
     });
   }
@@ -1003,9 +1091,10 @@
     if (S.draft && (/^[0-9]$/.test(e.key))) { cmd.focus(); return; }   // gõ số thẳng vào ô lệnh
     if (e.key === 'Enter' && S.draft) { finishDraft(true); return; }
     if (e.key === 'Backspace' && S.draft) { e.preventDefault(); draftUndo(); return; }
-    if (e.key === 'Escape') { if (S.draft) finishDraft(false); else if (S.dimDraft) { S.dimDraft = null; renderOverlay(); } else { S.sel = null; setTool('select'); renderAll(); } return; }
+    if (e.key === 'Escape') { if (S.draft) finishDraft(false); else if (S.dimDraft || S.arrowDraft) { S.dimDraft = null; S.arrowDraft = null; renderOverlay(); } else { S.sel = null; setTool('select'); renderAll(); } return; }
+    if (e.key === 'Enter' && S.arrowDraft?.pts.length >= 2) { const pts = S.arrowDraft.pts.slice(), mode = S.mode; S.arrowDraft = null; renderOverlay(); finishArrow(pts, mode); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) { e.preventDefault(); deleteSel(); return; }
-    const tools = {v: 'select', p: 'draw', d: 'device', c: 'column', m: 'dim'};
+    const tools = {v: 'select', p: 'draw', d: 'device', c: 'column', m: 'dim', t: 'note'};
     if (tools[key]) setTool(tools[key]);
     else if (key === 'f') fit();
     else if (key === 'l') { S.lock = !S.lock; $('vh-lock').classList.toggle('is-on', S.lock); }
