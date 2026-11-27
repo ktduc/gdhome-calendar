@@ -4,7 +4,8 @@
   const $ = id => document.getElementById(id);
   const esc = v => Shell.escape(String(v ?? ''));
   const svg = $('vh-svg'), world = $('vh-world'), drawLayer = $('vh-draw'), over = $('vh-over'), pop = $('vh-pop');
-  const S = {id: '', plan: null, view: {x: 0, y: 0, k: 0.12}, tool: 'select', lock: true, sel: null, draft: null, devType: 'o_cam',
+  const S = {id: '', plan: null, view: {x: 0, y: 0, k: 0.12}, mode: 'plan', tool: 'select', lock: true, sel: null, draft: null, devType: 'o_cam',
+    ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false,
     hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null};
   const floor = () => S.plan.floors[S.plan.active] || S.plan.floors[0];
   const roomById = id => floor().rooms.find(r => r.id === id);
@@ -81,15 +82,20 @@
     startEditor(id, plan || local.plan, !!local?.dirty);
   }
   function startEditor(id, plan, dirty = false) {
-    S.id = id; S.plan = normalize(plan); S.hist = []; S.fut = []; S.sel = null; S.draft = null; S.dirty = false;
+    S.id = id; S.plan = normalize(plan); S.mode = 'plan'; S.hist = []; S.fut = []; S.sel = null; S.draft = null; S.dirty = false;
     $('vh-home').hidden = true; $('vh-editor').hidden = false;
     history.replaceState(null, '', '/ve-hien-trang?plan=' + encodeURIComponent(id));
-    setTool('select'); renderAll(); fit();
+    syncModeUI(); setTool('select'); renderAll(); fit();
     if (dirty) markDirty(); else Shell.saveStatus($('save-status'), 'saved');
   }
   function normalize(plan) {
     const p = {...C.newPlan(), ...plan};
-    p.floors = (p.floors?.length ? p.floors : C.newPlan().floors).map(f => ({id: f.id || C.uid(), name: f.name || 'Tầng', rooms: (f.rooms || []).map(r => ({segs: [], openings: [], devices: [], ...r})), columns: f.columns || [], dims: f.dims || []}));
+    p.floors = (p.floors?.length ? p.floors : C.newPlan().floors).map(f => ({
+      ceilItems: [], ceilLines: [], notes: [], arrows: [], photos: [], ...f,
+      id: f.id || C.uid(), name: f.name || 'Tầng',
+      rooms: (f.rooms || []).map(r => ({segs: [], openings: [], devices: [], ...r})),
+      columns: f.columns || [], dims: f.dims || []
+    }));
     if (!p.floors[p.active]) p.active = 0;
     return p;
   }
@@ -178,8 +184,9 @@
     $('vh-grid-minor').firstElementChild.style.opacity = S.view.k < 0.06 ? 0 : 1;
     if (S.sel) placePop();
   }
+  const renderOpts = () => ({mode: S.mode, sel: S.sel ? (S.sel.kind === 'ci' ? 'ci:' + S.sel.id : S.sel.kind === 'cl' ? 'cl:' + S.sel.id : null) : null});
   function fit() {
-    const b = C.bounds(C.floorPrimitives(S.plan, floor()));
+    const b = C.bounds(C.floorPrimitives(S.plan, floor(), renderOpts()));
     const r = svg.getBoundingClientRect();
     if (!b || !r.width) { S.view = {x: r.width / 2, y: r.height / 2, k: 0.1}; return applyView(); }
     const pad = 40, k = Math.min((r.width - pad * 2) / Math.max(b.x1 - b.x0, 1000), (r.height - pad * 2) / Math.max(b.y1 - b.y0, 1000), 0.6);
@@ -207,16 +214,16 @@
         const s = [p.c[0] + p.r * Math.cos(p.a0), p.c[1] + p.r * Math.sin(p.a0)], e = [p.c[0] + p.r * Math.cos(p.a1), p.c[1] + p.r * Math.sin(p.a1)];
         return `<path d="M${n(s[0])} ${n(s[1])}A${n(p.r)} ${n(p.r)} 0 ${Math.abs(p.a1 - p.a0) > Math.PI ? 1 : 0} ${p.a1 > p.a0 ? 1 : 0} ${n(e[0])} ${n(e[1])}" fill="none"${st}${hit}/>`;
       }
-      case 'text': return `<text x="${n(p.p[0])}" y="${n(p.p[1])}" font-size="${n(p.size)}" text-anchor="middle" dominant-baseline="middle" fill="${p.fill || '#111'}"${p.weight ? ` font-weight="${p.weight}"` : ''}${p.rot ? ` transform="rotate(${n(p.rot)} ${n(p.p[0])} ${n(p.p[1])})"` : ''}${hit}>${esc(p.s)}</text>`;
+      case 'text': return `<text x="${n(p.p[0])}" y="${n(p.p[1])}" font-size="${n(p.size)}" text-anchor="${p.anchor || 'middle'}" dominant-baseline="middle" fill="${p.fill || '#111'}"${p.weight ? ` font-weight="${p.weight}"` : ''}${p.rot ? ` transform="rotate(${n(p.rot)} ${n(p.p[0])} ${n(p.p[1])})"` : ''}${hit}>${esc(p.s)}</text>`;
       default: return '';
     }
   }
   function renderAll() {
     if (!S.plan) return;
-    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor()).map(primSvg).join('');
+    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor(), renderOpts()).map(primSvg).join('');
     $('vh-name').textContent = S.plan.name || 'Bản vẽ';
     const selRoom = S.sel?.room && roomById(S.sel.room);
-    $('vh-floor-label').textContent = floor().name + (selRoom ? ' · ' + selRoom.name : '') + ' ▾';
+    $('vh-floor-label').textContent = floor().name + (S.mode === 'ceil' ? ' · Trần' : '') + (selRoom ? ' · ' + selRoom.name : '') + ' ▾';
     document.querySelector('[data-act=undo]').disabled = !S.hist.length && !S.draft?.pts.length;
     document.querySelector('[data-act=redo]').disabled = !S.fut.length;
     renderOverlay(); applyView(); renderPop();
@@ -237,6 +244,8 @@
         if (dev) { const [a, b] = C.segEnds(room, dev.seg), d = C.unit(C.sub(b, a)); out.push({t: 'circle', c: C.add(a, C.mul(d, dev.at)), r: px(16), stroke: '#2563eb', w: 2.5}); }
       }
       if (sel.kind === 'col') { const col = floor().columns.find(c => c.id === sel.id); if (col) out.push({t: 'circle', c: [col.x, col.y], r: Math.max(col.w, col.h) * .75, stroke: '#2563eb', w: 2, dash: '5 4'}); }
+      if (sel.kind === 'ci') { const it = (floor().ceilItems || []).find(c => c.id === sel.id); if (it) { const [w, h] = C.sizeWH(it.size ?? C.CEIL[it.type]?.def); out.push({t: 'circle', c: [it.x, it.y], r: Math.max(w, h) / 2 + px(8), stroke: '#2563eb', w: 2, dash: '5 4'}); } }
+      if (sel.kind === 'cl') { const cl = (floor().ceilLines || []).find(c => c.id === sel.id); if (cl) out.push({t: 'poly', pts: cl.pts, close: !!cl.closed, fill: 'none', stroke: '#2563eb', w: 3, dash: '8 5'}); }
       if ((sel.kind === 'seg' || sel.kind === 'room') && room) room.pts.forEach((p, j) => out.push({t: 'poly', pts: [[p[0] - px(6), p[1] - px(6)], [p[0] + px(6), p[1] - px(6)], [p[0] + px(6), p[1] + px(6)], [p[0] - px(6), p[1] + px(6)]], close: true, fill: '#fff', stroke: '#2563eb', w: 2, hit: 'vtx:' + room.id + ':' + j}));
       if (sel.kind === 'room' && room && !room.closed) [room.pts[0], room.pts[room.pts.length - 1]].forEach(p => out.push({t: 'circle', c: p, r: px(9), stroke: '#dc2626', w: 2.5}));
     }
@@ -272,19 +281,51 @@
   const HINTS = {
     select: 'Chạm tường / cửa / thiết bị để sửa · kéo tường để co giãn, kéo phòng để dời · kéo chỗ trống để xem chỗ khác · lăn chuột để phóng to',
     draw: 'Chạm đặt điểm đầu rồi gõ / đọc số (dọc 3500, ngang 1200 cửa sổ…) hoặc chạm điểm tiếp · phím mũi tên khoá hướng · Enter trống = khép kín · Esc = kết thúc · hoặc kéo 1 nét phác quanh phòng',
-    device: 'Chọn loại thiết bị rồi chạm sát tường để đặt',
+    'ceil-line': 'Chạm đặt các điểm đường giật cấp / hắt LED · gõ số kích thước · Enter trống = khép kín · Esc = kết thúc nét hở',
+    device: 'Chọn loại thiết bị rồi chạm bản vẽ để đặt',
     column: 'Chạm chỗ đặt cột vuông 200 (gần tường thì tự ăn vào tường)',
     dim: 'Chạm điểm đầu, điểm cuối (tự bắt góc tường) rồi chạm chỗ đặt đường kích thước'
   };
+  function syncModeUI() {
+    const ceil = S.mode === 'ceil';
+    $('vh-ceil').classList.toggle('is-on', ceil);
+    $('vh-tool-ceilline').hidden = !ceil;
+    $('vh-devices').hidden = ceil || S.tool !== 'device';
+    $('vh-ceil-devices').hidden = !ceil;
+    renderCeilSub();
+  }
+  function renderCeilSub() {
+    const sub = $('vh-ceil-sub');
+    if (S.mode !== 'ceil') { sub.hidden = true; return; }
+    if (S.tool === 'device') {
+      const spec = C.CEIL[S.ceilType] || C.CEIL.downlight;
+      if (!spec.sizes.some(sz => String(sz) === String(S.ceilSize))) S.ceilSize = spec.def;
+      sub.innerHTML = spec.sizes.map(sz => `<button type="button" data-csize="${esc(sz)}" class="${String(sz) === String(S.ceilSize) ? 'is-on' : ''}">${esc(C.sizeText(S.ceilType, sz))}</button>`).join('');
+      sub.hidden = false;
+    } else if (S.tool === 'ceil-line') {
+      sub.innerHTML = `<label>Cao độ + (mm) <input type="number" id="vh-cl-level" step="50" value="${S.ceilLevel || 2700}"></label>` +
+        `<label class="vh-check"><input type="checkbox" id="vh-cl-led" ${S.ceilLed ? 'checked' : ''}> LED hắt</label>`;
+      sub.hidden = false;
+    } else sub.hidden = true;
+  }
+  function setMode(mode) {
+    if (S.draft) finishDraft(false);
+    S.mode = mode; S.sel = null;
+    if (mode !== 'ceil' && S.tool === 'ceil-line') S.tool = 'select';
+    syncModeUI(); setTool(S.tool); renderAll();
+  }
   function setTool(tool) {
-    if (S.draft && tool !== 'draw') finishDraft(false);
+    if (S.draft && S.tool !== tool) finishDraft(false);
     S.tool = tool; S.dimDraft = null;
     document.querySelectorAll('[data-tool]').forEach(b => b.classList.toggle('is-on', b.dataset.tool === tool));
-    svg.classList.toggle('is-draw', tool === 'draw');
+    svg.classList.toggle('is-draw', tool === 'draw' || tool === 'ceil-line');
     svg.classList.toggle('is-place', ['device', 'column', 'dim'].includes(tool));
-    $('vh-devices').hidden = tool !== 'device';
-    $('vh-draw-btns').hidden = tool !== 'draw';
-    $('vh-hint').textContent = HINTS[tool];
+    $('vh-devices').hidden = S.mode === 'ceil' || tool !== 'device';
+    $('vh-ceil-devices').hidden = S.mode !== 'ceil';
+    renderCeilSub();
+    $('vh-draw-btns').hidden = tool !== 'draw' && tool !== 'ceil-line';
+    $('vh-draw-btns').querySelectorAll('[data-cmd="vách"],[data-cmd="cửa sổ"],[data-cmd="cửa đi"],[data-cmd="lối đi"]').forEach(b => { b.hidden = tool === 'ceil-line'; });
+    $('vh-hint').textContent = HINTS[tool] || '';
     if (tool !== 'select') { S.sel = null; renderPop(); }
     renderOverlay();
   }
@@ -296,6 +337,26 @@
     document.querySelectorAll('[data-dev]').forEach(x => x.classList.toggle('is-on', x === b));
   });
   document.querySelector(`[data-dev=${S.devType}]`).classList.add('is-on');
+  $('vh-ceil-devices').innerHTML = Object.entries(C.CEIL).map(([k, d]) => `<button type="button" data-cdev="${k}" class="${k === S.ceilType ? 'is-on' : ''}">${esc(d.label)}</button>`).join('');
+  $('vh-ceil-devices').addEventListener('click', e => {
+    const b = e.target.closest('[data-cdev]');
+    if (!b) return;
+    S.ceilType = b.dataset.cdev;
+    S.ceilSize = C.CEIL[S.ceilType]?.def;
+    document.querySelectorAll('[data-cdev]').forEach(x => x.classList.toggle('is-on', x === b));
+    setTool('device');
+  });
+  $('vh-ceil-sub').addEventListener('click', e => {
+    const b = e.target.closest('[data-csize]');
+    if (!b) return;
+    const raw = b.dataset.csize;
+    S.ceilSize = /^\d+$/.test(raw) ? Number(raw) : raw;
+    renderCeilSub();
+  });
+  $('vh-ceil-sub').addEventListener('change', e => {
+    if (e.target.id === 'vh-cl-level') S.ceilLevel = Number(e.target.value) || 0;
+    if (e.target.id === 'vh-cl-led') S.ceilLed = e.target.checked;
+  });
 
   // ================= Vẽ chu vi =================
   function snapPt(p, exceptDraft) {
@@ -321,8 +382,8 @@
     }
     return snapPt(raw);
   }
-  function startDraft(p) {
-    S.draft = {pts: [p], kinds: [], lastV: null, lastH: null, dir: null, cursor: null, nextKind: null, arrow: null};
+  function startDraft(p, ceilLine = S.tool === 'ceil-line') {
+    S.draft = {pts: [p], kinds: [], lastV: null, lastH: null, dir: null, cursor: null, nextKind: null, arrow: null, ceilLine};
     renderAll();
   }
   function draftAdd(p, kind) {
@@ -351,9 +412,18 @@
     if (close && pts.length > 2 && C.len(C.sub(pts[pts.length - 1], pts[0])) < 1) { pts.pop(); kinds.splice(-1, 1, kinds[kinds.length - 1]); }
     if (pts.length < 2 || (close && pts.length < 3)) { renderAll(); return; }
     const closed = close && pts.length > 2;
+    if (d.ceilLine) {
+      const id = C.uid();
+      commit(() => {
+        (floor().ceilLines ||= []).push({id, pts, closed, level: S.ceilLevel || 2700, led: !!S.ceilLed});
+        S.sel = {kind: 'cl', id};
+      });
+      setTool('select');
+      return;
+    }
     const keep = d.keep;
     commit(() => {
-      const room = {id: keep?.id || C.uid(), name: keep?.name || 'P' + (floor().rooms.length + 1), closed, ceil: keep?.ceil || 0, note: keep?.note || '',
+      const room = {id: keep?.id || C.uid(), name: keep?.name || 'P' + (floor().rooms.length + 1), closed, ceil: keep?.ceil || 0, gyps: keep?.gyps || 0, skirt: keep?.skirt || 0, note: keep?.note || '',
         pts, segs: [], openings: (keep?.openings || []).filter(o => !o.full), devices: keep?.devices || []};
       kinds.forEach((k, i) => {
         if (k === 'partition') room.segs[i] = {k: 'partition'};
@@ -400,7 +470,7 @@
     if (!acts.length) { Shell.toast('Chưa hiểu lệnh "' + text + '". VD: dọc 3500 · ngang 1200 cửa sổ · khép kín'); return false; }
     for (const a of acts) {
       if (a.type === 'seg') {
-        if (S.tool !== 'draw') setTool('draw');
+        if (S.tool !== 'draw' && S.tool !== 'ceil-line') setTool('draw');
         if (!S.draft) startDraft(freeSpot());
         const d = S.draft;
         if (a.len == null) { d.arrow = C.stepVector(a.dir, null, d.lastV, d.lastH); continue; }
@@ -481,7 +551,7 @@
       drag = {type: 'obj', hit, ...start, snapshot: JSON.stringify(S.plan), base: JSON.parse(JSON.stringify(currentObj(hit)))};
       return;
     }
-    if (S.tool === 'draw') { drag = {type: 'draw', ...start, path: [w]}; return; }
+    if (S.tool === 'draw' || S.tool === 'ceil-line') { drag = {type: 'draw', ...start, path: [w]}; return; }
     drag = {type: 'place', ...start};
   });
   svg.addEventListener('pointermove', e => {
@@ -501,8 +571,8 @@
       svg.classList.add('is-pan'); applyView(); return;
     }
     if (drag?.type === 'obj' && drag.moved) { dragObj(drag, w); return; }
-    if (S.tool === 'draw') {
-      if (drag?.type === 'draw' && !S.draft && drag.moved) { drag.path.push(w); S.sketch = drag.path; renderOverlay(); return; }
+    if (S.tool === 'draw' || S.tool === 'ceil-line') {
+      if (S.tool === 'draw' && drag?.type === 'draw' && !S.draft && drag.moved) { drag.path.push(w); S.sketch = drag.path; renderOverlay(); return; }
       if (S.draft) { S.draft.cursor = draftCursor(w); renderOverlay(); }
       return;
     }
@@ -523,7 +593,7 @@
       return;
     }
     if (d.type === 'draw') {
-      if (!S.draft && d.moved && d.path.length > 4) {   // nét phác một lèo
+      if (S.tool === 'draw' && !S.draft && d.moved && d.path.length > 4) {   // nét phác một lèo
         S.sketch = null;
         const r = C.simplifySketch(d.path, 10 / S.view.k);
         if (!r) { renderOverlay(); return; }
@@ -551,6 +621,9 @@
     const room = roomById(hit.a);
     if (hit.kind === 'col') return floor().columns.find(c => c.id === hit.a);
     if (hit.kind === 'fdim') return floor().dims.find(c => c.id === hit.a);
+    if (hit.kind === 'ci') return (floor().ceilItems || []).find(c => c.id === hit.a);
+    if (hit.kind === 'cl') return (floor().ceilLines || []).find(c => c.id === hit.a);
+    if (hit.kind === 'sched') return floor()[hit.a === 'ceil' ? 'schedCeilOff' : 'schedPlanOff'] || [0, 0];
     if (!room) return null;
     if (hit.kind === 'op') return room.openings.find(o => o.id === hit.b);
     if (hit.kind === 'dev') return room.devices.find(o => o.id === hit.b);
@@ -577,17 +650,32 @@
     } else if (d.hit.kind === 'col') {
       const col = floor().columns.find(c => c.id === d.hit.a);
       col.x = C.round(base.x + delta[0], s); col.y = C.round(base.y + delta[1], s);
+    } else if (d.hit.kind === 'ci') {
+      const it = (floor().ceilItems || []).find(c => c.id === d.hit.a);
+      if (it) { it.x = C.round(base.x + delta[0], s); it.y = C.round(base.y + delta[1], s); }
+    } else if (d.hit.kind === 'cl') {
+      const cl = (floor().ceilLines || []).find(c => c.id === d.hit.a);
+      if (cl) cl.pts = base.pts.map(p => [C.round(p[0] + delta[0], s), C.round(p[1] + delta[1], s)]);
+    } else if (d.hit.kind === 'sched') {
+      floor()[d.hit.a === 'ceil' ? 'schedCeilOff' : 'schedPlanOff'] = [C.round(base[0] + delta[0], s), C.round(base[1] + delta[1], s)];
     } else if (d.hit.kind === 'fdim') {
       const dim = floor().dims.find(c => c.id === d.hit.a);
       dim.off = dimOffset(dim.a, dim.b, w);
     }
-    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor()).map(primSvg).join('');
+    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor(), renderOpts()).map(primSvg).join('');
     renderOverlay();
   }
 
   // ================= Đặt thiết bị / cột / đo =================
   function place(w) {
     if (S.tool === 'device') {
+      if (S.mode === 'ceil') {
+        const s = S.plan.snap || 10, x = C.round(w[0], s), y = C.round(w[1], s);
+        const spec = C.CEIL[S.ceilType] || C.CEIL.downlight, size = S.ceilSize ?? spec.def, id = C.uid();
+        commit(() => { (floor().ceilItems ||= []).push({id, type: S.ceilType, x, y, size, rot: 0, dim: false}); S.sel = {kind: 'ci', id}; });
+        if (matchMedia('(pointer: coarse)').matches) setTool('select');
+        return;
+      }
       const near = C.nearestSeg(floor(), w, (room, i) => C.segInfo(S.plan, room, i).k !== 'open');
       if (!near || near.dist > 700) return Shell.toast('Chạm sát tường để đặt thiết bị.');
       const spec = C.DEVICES[S.devType], id = C.uid();
@@ -601,7 +689,7 @@
       else {
         const {a, b} = S.dimDraft;
         S.dimDraft = null;
-        commit(() => floor().dims.push({id: C.uid(), a, b, off: dimOffset(a, b, w)}));
+        commit(() => floor().dims.push({id: C.uid(), a, b, off: dimOffset(a, b, w), mode: S.mode}));
       }
       renderOverlay();
     }
@@ -664,10 +752,29 @@
         '<div class="vh-btns"><button type="button" data-pop="copyL">⧉ Copy trái</button><button type="button" data-pop="copyR">⧉ Copy phải</button><button type="button" data-pop="devflip">⇆ Lật</button><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
     } else if (sel.kind === 'room' && room) {
       html = head('Phòng') + field('Tên phòng', 'rname', room.name) + field('Cao độ trần (mm)', 'ceil', room.ceil || '', 'type="number" inputmode="numeric" placeholder="VD 3300"') +
+        field('Trần thạch cao +', 'gyps', room.gyps || '', 'type="number" inputmode="numeric" placeholder="VD 2750"') +
+        field('Len (mm)', 'skirt', room.skirt || '', 'type="number" inputmode="numeric" placeholder="VD 80"') +
         `<label>Ghi chú<textarea data-f="note" rows="2">${esc(room.note || '')}</textarea></label>` +
         `<p class="vh-muted">${room.closed ? 'Diện tích ' + (C.area(room) / 1e6).toFixed(2).replace('.', ',') + ' m² · ' : 'Nét hở · '}chu vi ${fmt(C.perimeter(room))} mm · ${room.pts.length} góc</p>` +
         '<div class="vh-btns">' + (room.closed ? '' : '<button type="button" data-pop="continue">✎ Vẽ tiếp</button><button type="button" data-pop="closeRoom">⬚ Khép kín</button>') +
         '<button type="button" data-pop="dup">⧉ Nhân bản</button><button type="button" data-pop="toFloor">Chuyển tầng…</button><button type="button" class="vh-danger" data-pop="del">🗑 Xoá phòng</button></div>';
+    } else if (sel.kind === 'ci') {
+      const it = (floor().ceilItems || []).find(c => c.id === sel.id);
+      if (!it) { S.sel = null; pop.hidden = true; return; }
+      const spec = C.CEIL[it.type] || {};
+      html = head(spec.label || 'Thiết bị trần') +
+        `<label>Loại<select data-f="citype">${Object.entries(C.CEIL).map(([k, d]) => `<option value="${k}">${esc(d.label)}</option>`).join('')}</select></label>` +
+        `<label>Cỡ<select data-f="cisize">${(spec.sizes || []).map(sz => `<option value="${esc(sz)}">${esc(C.sizeText(it.type, sz))}</option>`).join('')}</select></label>` +
+        num('Xoay (độ)', 'cirot', it.rot || 0) +
+        `<label class="vh-check"><input type="checkbox" data-f="cidim" ${it.dim ? 'checked' : ''}> Luôn hiện dim</label>` +
+        '<div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
+    } else if (sel.kind === 'cl') {
+      const cl = (floor().ceilLines || []).find(c => c.id === sel.id);
+      if (!cl) { S.sel = null; pop.hidden = true; return; }
+      html = head('Giật cấp trần') + num('Cao độ (+mm)', 'cllevel', cl.level || 0) +
+        `<label class="vh-check"><input type="checkbox" data-f="clled" ${cl.led ? 'checked' : ''}> LED hắt</label>` +
+        `<label class="vh-check"><input type="checkbox" data-f="clclosed" ${cl.closed ? 'checked' : ''}> Khép kín</label>` +
+        '<div class="vh-btns"><button type="button" class="vh-danger" data-pop="del">🗑 Xoá</button></div>';
     } else if (sel.kind === 'col') {
       const col = floor().columns.find(c => c.id === sel.id);
       if (!col) { S.sel = null; pop.hidden = true; return; }
@@ -681,6 +788,7 @@
     if (sel.kind === 'seg') pop.querySelector('[data-f=segk]').value = C.segInfo(S.plan, room, sel.i).k;
     if (sel.kind === 'op') { const op = room.openings.find(o => o.id === sel.id); pop.querySelector('[data-f=optype]').value = op.type; const lv = pop.querySelector('[data-f=leaves]'); if (lv) lv.value = op.leaves === 2 ? '2' : '1'; }
     if (sel.kind === 'dev') pop.querySelector('[data-f=devtype]').value = room.devices.find(o => o.id === sel.id).type;
+    if (sel.kind === 'ci') { const it = (floor().ceilItems || []).find(c => c.id === sel.id); pop.querySelector('[data-f=citype]').value = it.type; pop.querySelector('[data-f=cisize]').value = String(it.size ?? C.CEIL[it.type]?.def); }
     pop.hidden = false;
     placePop();
   }
@@ -694,6 +802,7 @@
   function applyField(f, raw) {
     const sel = S.sel, room = sel?.room && roomById(sel.room), v = Number(raw);
     const op = room?.openings.find(o => o.id === sel.id), dev = room?.devices.find(o => o.id === sel.id), col = floor().columns.find(c => c.id === sel?.id);
+    const ci = (floor().ceilItems || []).find(c => c.id === sel?.id), cl = (floor().ceilLines || []).find(c => c.id === sel?.id);
     commit(() => {
       switch (f) {
         case 'len': if (v > 0) C.setSegLength(room, sel.i, v); break;
@@ -709,11 +818,20 @@
         case 'devw': if (v > 0) dev.w = v; break;
         case 'rname': room.name = raw.trim().slice(0, 60) || room.name; break;
         case 'ceil': room.ceil = v > 0 ? Math.round(v) : 0; break;
+        case 'gyps': room.gyps = v > 0 ? Math.round(v) : 0; break;
+        case 'skirt': room.skirt = v > 0 ? Math.round(v) : 0; break;
         case 'note': room.note = raw.slice(0, 500); break;
         case 'colw': if (v > 0) col.w = v; break;
         case 'colh': if (v > 0) col.h = v; break;
         case 'colr': col.rot = v || 0; break;
         case 'colround': col.round = raw; break;
+        case 'citype': if (ci) { ci.type = raw; ci.size = C.CEIL[raw]?.def; } break;
+        case 'cisize': if (ci) ci.size = /^\d+$/.test(String(raw)) ? Number(raw) : raw; break;
+        case 'cirot': if (ci) ci.rot = v || 0; break;
+        case 'cidim': if (ci) ci.dim = !!raw; break;
+        case 'cllevel': if (cl) cl.level = Math.max(0, Math.round(v) || 0); break;
+        case 'clled': if (cl) cl.led = !!raw; break;
+        case 'clclosed': if (cl) cl.closed = !!raw; break;
       }
     });
   }
@@ -761,6 +879,8 @@
       else if (sel.kind === 'room' || sel.kind === 'seg') floor().rooms = floor().rooms.filter(r => r.id !== room.id);
       else if (sel.kind === 'col') floor().columns = floor().columns.filter(c => c.id !== sel.id);
       else if (sel.kind === 'fdim') floor().dims = floor().dims.filter(c => c.id !== sel.id);
+      else if (sel.kind === 'ci') floor().ceilItems = (floor().ceilItems || []).filter(c => c.id !== sel.id);
+      else if (sel.kind === 'cl') floor().ceilLines = (floor().ceilLines || []).filter(c => c.id !== sel.id);
       S.sel = null;
     });
   }
@@ -780,7 +900,7 @@
       S.plan.active = Number(b.dataset.floor); S.sel = b.dataset.room ? {kind: 'room', room: b.dataset.room} : null; S.draft = null;
       $('vh-floor').open = false; renderAll(); fit(); markDirty();
     } else if (b.matches('[data-floor-add]')) {
-      commit(() => { S.plan.floors.push({id: C.uid(), name: 'Tầng ' + (S.plan.floors.length + 1), rooms: [], columns: [], dims: []}); S.plan.active = S.plan.floors.length - 1; S.sel = null; });
+      commit(() => { S.plan.floors.push({id: C.uid(), name: 'Tầng ' + (S.plan.floors.length + 1), rooms: [], columns: [], dims: [], ceilItems: [], ceilLines: [], notes: [], arrows: [], photos: []}); S.plan.active = S.plan.floors.length - 1; S.sel = null; });
       $('vh-floor').open = false; fit();
     } else if (b.dataset.floorRename != null) {
       const f = S.plan.floors[Number(b.dataset.floorRename)], name = await Shell.ask({title: 'Đổi tên tầng', input: {value: f.name}});
@@ -851,6 +971,7 @@
     if (!act) return;
     e.target.closest('details')?.removeAttribute('open');
     if (act === 'home') showHome();
+    else if (act === 'ceil') setMode(S.mode === 'ceil' ? 'plan' : 'ceil');
     else if (act === 'undo') undo();
     else if (act === 'redo') redo();
     else if (act === 'fit') fit();

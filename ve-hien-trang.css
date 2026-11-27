@@ -51,9 +51,13 @@
 .vh-tools button, .vh-devices button, .vh-draw-btns button {
   font: inherit; font-size: 13px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; cursor: pointer; color: #1f2937; white-space: nowrap; }
 .vh-tools button.is-on, .vh-devices button.is-on { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+.vh-tools #vh-ceil.is-on { background: #c2410c; border-color: #c2410c; color: #fff; }
 .vh-tools #vh-lock.is-on { background: #dbeafe; color: #1d4ed8; border-color: #93c5fd; }
 .vh-sep { width: 1px; background: #e5e7eb; margin: 0 4px; }
-.vh-devices { display: flex; gap: 4px; padding: 6px 10px; overflow-x: auto; border-bottom: 1px solid #e5e7eb; background: #fafafa; }
+.vh-devices { display: flex; align-items: center; gap: 4px; padding: 6px 10px; overflow-x: auto; border-bottom: 1px solid #e5e7eb; background: #fafafa; }
+.vh-subbar { background: #fff7ed; font-size: 13px; }
+.vh-subbar label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; color: #475569; margin-right: 6px; }
+.vh-subbar input[type=number] { width: 84px; font: inherit; font-size: 13px; padding: 4px 7px; border: 1px solid #cbd5e1; border-radius: 6px; }
 
 .vh-stage { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #fbfcfe; }
 #vh-svg { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; user-select: none; -webkit-user-select: none; cursor: default; }

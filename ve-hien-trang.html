@@ -75,9 +75,12 @@
       </div>
     </div>
     <div class="vh-tools" role="toolbar" aria-label="Công cụ">
+      <button type="button" data-act="ceil" id="vh-ceil" title="Chế độ Mặt bằng / Trần">⊞ Trần</button>
+      <span class="vh-sep"></span>
       <button type="button" data-tool="select" title="Chọn / dời (V)">↖ Chọn</button>
       <button type="button" data-tool="draw" title="Vẽ chu vi phòng (P)">✎ Vẽ</button>
-      <button type="button" data-tool="device" title="Thả thiết bị sát tường (D)">⊕ Thiết bị</button>
+      <button type="button" data-tool="ceil-line" id="vh-tool-ceilline" title="Vẽ đường giật cấp / hắt LED" hidden>⬒ Giật cấp</button>
+      <button type="button" data-tool="device" title="Thả thiết bị (D)">⊕ Thiết bị</button>
       <button type="button" data-tool="column" title="Đặt cột vuông 200 (C)">▣ Cột</button>
       <button type="button" data-tool="dim" title="Đo thêm kích thước (M)">↔ Đo</button>
       <span class="vh-sep"></span>
@@ -86,6 +89,8 @@
       <button type="button" data-act="quick-room" title="Thêm phòng chữ nhật có cửa rồi co kéo cho khớp">+ Phòng chữ nhật</button>
     </div>
     <div class="vh-devices" id="vh-devices" hidden></div>
+    <div class="vh-devices" id="vh-ceil-devices" hidden></div>
+    <div class="vh-devices vh-subbar" id="vh-ceil-sub" hidden></div>
     <div class="vh-stage" id="vh-stage">
       <svg id="vh-svg" xmlns="http://www.w3.org/2000/svg" aria-label="Bản vẽ mặt bằng">
         <defs>
