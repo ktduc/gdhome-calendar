@@ -508,6 +508,20 @@
 
   // ================= Ô lệnh / giọng nói =================
   function runCommand(text) {
+    if (/(?:^|[\s,;])(phòng|phong)(?:$|[\s,;])/i.test(String(text || '').normalize('NFC'))) {
+      const desc = C.parseRoomDescription(text);
+      if (desc) {
+        setTool('select');
+        const [x, y] = freeSpot(), {room, columns} = C.roomFromDescription(desc, x, y, 'P' + (floor().rooms.length + 1));
+        commit(() => {
+          floor().rooms.push(room);
+          if (columns?.length) (floor().columns ||= []).push(...columns);
+          S.sel = {kind: 'room', room: room.id};
+        });
+        fit();
+        return true;
+      }
+    }
     const acts = C.parseCommand(text);
     if (!acts.length) { Shell.toast('Chưa hiểu lệnh "' + text + '". VD: dọc 3500 · ngang 1200 cửa sổ · khép kín'); return false; }
     for (const a of acts) {
