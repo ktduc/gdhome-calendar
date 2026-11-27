@@ -76,6 +76,7 @@ window.GDHomeShell = (() => {
   // Icon nét đơn sắc (cùng kiểu Lucide) cho các công cụ
   const SVG = paths => '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + paths + '</svg>';
   const TOOL_ICON = {
+    plan: SVG('<path d="M3 3h18v18H3z"/><path d="M3 12h7v9M14 3v8h7"/>'),
     chart: SVG('<path d="M3 3v18h18"/><path d="M8 17v-6"/><path d="M13 17V7"/><path d="M18 17v-3"/>'),
     chat: SVG('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/>'),
     calendar: SVG('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h2M14 14h2M8 18h2"/>'),
@@ -108,7 +109,8 @@ window.GDHomeShell = (() => {
     [['/thong-ke','Thống kê dự án',TOOL_ICON.chart,'Mọi dự án một bảng: thi công, thiết kế, hạn, thanh toán.'],['/mau-tra-loi','Mẫu trả lời khách',TOOL_ICON.chat,'Câu nhắn mẫu, khảo sát khách trước thiết kế.'],
       ['/','Lập tiến độ',TOOL_ICON.calendar,'Lịch thiết kế và Timeline thi công.'],['/chot-ma','Chốt mã vật liệu',TOOL_ICON.tag,'Chọn, xác nhận và đặt vật liệu.']],
     [['/du-an','Quản lý dự án',TOOL_ICON.folder,'Hồ sơ dự án, HSKT và phối cảnh 3D.'],['/giao-viec','Giao việc thầu',TOOL_ICON.clipboard,'Nhà thầu, phiếu giao việc, ghép PDF hồ sơ.'],
-      ['/so-sanh','Bảng so sánh',TOOL_ICON.compare,'Soạn bảng so sánh phương án, vật liệu cho khách.'],['/du-lieu','Dữ liệu dùng chung',TOOL_ICON.layers,'Ảnh mẫu vật liệu theo hạng mục cho mọi dự án.']]
+      ['/so-sanh','Bảng so sánh',TOOL_ICON.compare,'Soạn bảng so sánh phương án, vật liệu cho khách.'],['/du-lieu','Dữ liệu dùng chung',TOOL_ICON.layers,'Ảnh mẫu vật liệu theo hạng mục cho mọi dự án.']],
+    [['/ve-hien-trang','Vẽ hiện trạng',TOOL_ICON.plan,'Khảo sát đo vẽ mặt bằng hiện trạng, xuất DXF.']]
   ];
 
   function dropdown(command,label,glyph,body,variant = 'outline') {

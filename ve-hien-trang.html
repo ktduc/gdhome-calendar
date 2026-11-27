@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Vẽ hiện trạng · GD HOME</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shell.css">
+  <link rel="stylesheet" href="/ve-hien-trang.css">
+  <script src="/shell.js" defer></script>
+  <script src="/ve-hien-trang-core.js" defer></script>
+  <script src="/ve-hien-trang.js" defer></script>
+</head>
+<body class="vh-body">
+  <header class="app-header">
+    <div class="header-left">
+      <a class="app-logo" href="/ve-hien-trang">
+        <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
+        <span>Vẽ hiện trạng</span>
+      </a>
+      <details class="gd-tools-menu" data-shell-menu></details>
+    </div>
+    <div class="header-right">
+      <div class="shell-toolbar">
+        <span id="save-status" class="save-status is-inline is-saved" role="status">✓ Đã lưu</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Danh sách bản vẽ -->
+  <main class="vh-home" id="vh-home">
+    <div class="vh-home-actions">
+      <button type="button" class="btn btn-primary" data-home="new">+ Bản vẽ mới</button>
+      <button type="button" class="btn btn-outline" data-home="sample">Mở bản vẽ mẫu</button>
+      <label class="btn btn-outline">Khôi phục từ JSON<input type="file" accept=".json,application/json" id="vh-restore" hidden></label>
+    </div>
+    <form class="vh-card vh-new" id="vh-new" hidden>
+      <h2>Tạo bản vẽ mới</h2>
+      <label>Tên bản vẽ *<input name="name" required maxlength="120" placeholder="VD: Nhà anh Minh – Cầu Giấy"></label>
+      <label>Gắn dự án<select name="projectId"><option value="">- Không gắn -</option></select></label>
+      <label>Địa chỉ công trình<input name="address" maxlength="200"></label>
+      <label>Người khảo sát<input name="surveyor" maxlength="80"></label>
+      <div class="vh-row2">
+        <label>Tường dày mặc định (mm)<input name="wall" type="number" min="50" max="600" step="10" value="140"></label>
+        <label>Bước bắt điểm (mm)<input name="snap" type="number" min="1" max="500" step="1" value="10"></label>
+      </div>
+      <div class="vh-form-btns"><button type="button" class="btn btn-outline" data-home="cancel">Huỷ</button><button class="btn btn-primary">Tạo và bắt đầu vẽ</button></div>
+    </form>
+    <h2 class="vh-h">Bản vẽ của bạn</h2>
+    <p class="vh-muted">Lưu trên tài khoản GD HOME (mất mạng vẫn vẽ được, có mạng tự lưu lên). Nên tải JSON sao lưu định kỳ.</p>
+    <ul class="vh-list" id="vh-list"><li class="vh-muted">Đang tải…</li></ul>
+  </main>
+
+  <!-- Màn vẽ -->
+  <section class="vh-editor" id="vh-editor" hidden>
+    <div class="vh-top">
+      <button type="button" class="vh-ib" data-act="home" title="Về danh sách bản vẽ" aria-label="Về danh sách">⌂</button>
+      <div class="vh-title">
+        <button type="button" class="vh-name" id="vh-name" title="Bấm để đổi tên bản vẽ"></button>
+        <details class="vh-floor" id="vh-floor"><summary id="vh-floor-label"></summary><div class="vh-menu" id="vh-floor-menu"></div></details>
+      </div>
+      <div class="vh-top-right">
+        <button type="button" class="vh-ib" data-act="undo" title="Hoàn tác (Ctrl+Z)" aria-label="Hoàn tác">↶</button>
+        <button type="button" class="vh-ib" data-act="redo" title="Làm lại (Ctrl+Y)" aria-label="Làm lại">↷</button>
+        <details class="vh-export"><summary class="btn btn-outline btn-sm">Xuất ▾</summary>
+          <div class="vh-menu vh-menu-right">
+            <button type="button" data-act="dxf">DXF (AutoCAD, mm 1:1) – tầng đang xem</button>
+            <button type="button" data-act="png">Ảnh PNG – tầng đang xem</button>
+            <button type="button" data-act="json">Sao lưu JSON – cả bản vẽ</button>
+          </div>
+        </details>
+        <button type="button" class="vh-ib" data-act="settings" title="Cài đặt" aria-label="Cài đặt">⚙</button>
+      </div>
+    </div>
+    <div class="vh-tools" role="toolbar" aria-label="Công cụ">
+      <button type="button" data-tool="select" title="Chọn / dời (V)">↖ Chọn</button>
+      <button type="button" data-tool="draw" title="Vẽ chu vi phòng (P)">✎ Vẽ</button>
+      <button type="button" data-tool="device" title="Thả thiết bị sát tường (D)">⊕ Thiết bị</button>
+      <button type="button" data-tool="column" title="Đặt cột vuông 200 (C)">▣ Cột</button>
+      <button type="button" data-tool="dim" title="Đo thêm kích thước (M)">↔ Đo</button>
+      <span class="vh-sep"></span>
+      <button type="button" data-act="lock" id="vh-lock" title="Khoá phương ngang / dọc (L)">⊥ Khoá phương</button>
+      <button type="button" data-act="fit" title="Vừa màn hình (F)">⤢ Vừa màn hình</button>
+      <button type="button" data-act="quick-room" title="Thêm phòng chữ nhật có cửa rồi co kéo cho khớp">+ Phòng chữ nhật</button>
+    </div>
+    <div class="vh-devices" id="vh-devices" hidden></div>
+    <div class="vh-stage" id="vh-stage">
+      <svg id="vh-svg" xmlns="http://www.w3.org/2000/svg" aria-label="Bản vẽ mặt bằng">
+        <defs>
+          <pattern id="vh-grid-minor" width="100" height="100" patternUnits="userSpaceOnUse"><path d="M100 0H0V100" fill="none" stroke="#dbe3ec" stroke-width="1" vector-effect="non-scaling-stroke"/></pattern>
+          <pattern id="vh-grid-major" width="1000" height="1000" patternUnits="userSpaceOnUse"><rect width="1000" height="1000" fill="url(#vh-grid-minor)"/><path d="M1000 0H0V1000" fill="none" stroke="#b9c6d6" stroke-width="1" vector-effect="non-scaling-stroke"/></pattern>
+        </defs>
+        <g id="vh-world"><rect id="vh-grid" fill="url(#vh-grid-major)"/><g id="vh-draw"></g><g id="vh-over"></g></g>
+      </svg>
+      <div class="vh-pop" id="vh-pop" hidden></div>
+      <p class="vh-hint" id="vh-hint"></p>
+    </div>
+    <div class="vh-cmd">
+      <button type="button" class="vh-ib" data-act="mic" id="vh-mic" title="Đọc kích thước bằng giọng nói" aria-label="Micro">🎤</button>
+      <input id="vh-cmd" type="text" autocomplete="off" placeholder="gõ / đọc: dọc 3500 · ngang 1200 cửa sổ · khép kín" aria-label="Ô lệnh">
+      <div class="vh-draw-btns" id="vh-draw-btns" hidden>
+        <button type="button" data-cmd="kết thúc" title="Kết thúc nét (Esc)">✓ Kết thúc</button>
+        <button type="button" data-cmd="khép kín" title="Khép kín về điểm đầu (Enter khi ô trống)">⬚ Khép kín</button>
+        <button type="button" data-cmd="hoàn tác" title="Xoá đoạn vừa vẽ (Backspace)">⌫ Xoá đoạn</button>
+        <button type="button" data-cmd="gợi ý" title="Vẽ đoạn còn thiếu rồi khép kín">Gợi ý</button>
+        <button type="button" data-cmd="vách" title="Đoạn tiếp theo là vách mỏng">Vách</button>
+        <button type="button" data-cmd="cửa sổ" title="Đổi đoạn vừa vẽ thành cửa sổ">Cửa sổ</button>
+        <button type="button" data-cmd="cửa đi" title="Đổi đoạn vừa vẽ thành cửa đi">Cửa đi</button>
+        <button type="button" data-cmd="lối đi" title="Đổi đoạn vừa vẽ thành lối đi (không tường)">Lối đi</button>
+      </div>
+    </div>
+  </section>
+
+  <dialog class="vh-dialog" id="vh-settings">
+    <form method="dialog" id="vh-settings-form">
+      <h2>Cài đặt bản vẽ</h2>
+      <label>Tên bản vẽ<input name="name" maxlength="120"></label>
+      <label>Gắn dự án<select name="projectId"><option value="">- Không gắn -</option></select></label>
+      <label>Địa chỉ<input name="address" maxlength="200"></label>
+      <label>Người khảo sát<input name="surveyor" maxlength="80"></label>
+      <div class="vh-row2">
+        <label>Tường dày mặc định<input name="wall" type="number" min="50" max="600" step="10"></label>
+        <label>Vách mỏng<input name="partition" type="number" min="30" max="300" step="10"></label>
+        <label>Bước bắt điểm<input name="snap" type="number" min="1" max="500"></label>
+        <label>Cỡ chữ (mm)<input name="font" type="number" min="50" max="500" step="10"></label>
+      </div>
+      <label class="vh-check"><input type="checkbox" name="showDims"> Hiện kích thước tường</label>
+      <label class="vh-check"><input type="checkbox" name="devDims"> Ghi kích thước tới tim thiết bị</label>
+      <label class="vh-check"><input type="checkbox" name="grid"> Hiện lưới</label>
+      <div class="vh-form-btns"><button value="cancel" class="btn btn-outline">Đóng</button><button value="ok" class="btn btn-primary">Lưu</button></div>
+    </form>
+  </dialog>
+</body>
+</html>

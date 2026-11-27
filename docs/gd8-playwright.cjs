@@ -2459,18 +2459,18 @@ cases['rd'] = async page => {
 
 cases['home'] = async page => {
   // Trang chủ: 2 hàng công cụ đúng thứ tự, menu cùng thứ tự, logo về trang chủ, ảnh bìa, đổi nền; /du-lieu là trang riêng; gộp dự án
-  const order = ['/thong-ke','/mau-tra-loi','/','/chot-ma','/du-an','/giao-viec','/so-sanh','/du-lieu'];
+  const order = ['/thong-ke','/mau-tra-loi','/','/chot-ma','/du-an','/giao-viec','/so-sanh','/du-lieu','/ve-hien-trang'];
   for (const width of [1280,1440,1920,2560]) {
     await page.setViewportSize({width,height:900});
     await page.goto('/tools',{waitUntil:'domcontentloaded'});
     await page.locator('.home-tile').first().waitFor();
-    assert.deepEqual(await page.$$eval('.home-row', rows => rows.map(r => r.querySelectorAll('.home-tile').length)),[4,4]);
+    assert.deepEqual(await page.$$eval('.home-row', rows => rows.map(r => r.querySelectorAll('.home-tile').length)),[4,4,1]);
     assert.deepEqual(await page.$$eval('.home-tile', a => a.map(x => x.getAttribute('href'))),order);
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),'Không tràn ngang ở ' + width);
   }
   assert.equal(await page.locator('#projects').count(),0,'Bỏ danh sách Dự án của tôi');
   await page.locator('.gd-tools-menu summary').click();
-  assert.deepEqual((await page.$$eval('.gd-tools-menu nav a', a => a.map(x => x.getAttribute('href')))).slice(0,8),order);
+  assert.deepEqual((await page.$$eval('.gd-tools-menu nav a', a => a.map(x => x.getAttribute('href')))).slice(0,9),order);
   await page.keyboard.press('Escape');
   // Ảnh bìa (chế độ không đăng nhập = 1 tài khoản, được sửa)
   await page.locator('.home-cover-actions:not([hidden])').waitFor();
@@ -2484,7 +2484,7 @@ cases['home'] = async page => {
   assert.equal(await page.locator('[data-tone-pick=sage]').getAttribute('aria-pressed'),'true','Tone nhớ trên máy');
   await page.locator('.gd-tools-menu summary').click();
   assert.match(await page.locator('.gd-tools-menu nav').evaluate(n => getComputedStyle(n).boxShadow),/\d{3,}px/,'Menu mở làm tối nền');
-  assert.equal(await page.locator('.gd-tools-menu nav svg').count(),10,'Icon đơn sắc SVG');
+  assert.equal(await page.locator('.gd-tools-menu nav svg').count(),11,'Icon đơn sắc SVG');
   await page.keyboard.press('Escape');
   // Logo ở trang khác về trang chủ
   await page.goto('/thong-ke',{waitUntil:'domcontentloaded'});
@@ -2861,6 +2861,82 @@ async function openMaterials(page) {
   if (await listButton.isVisible()) await listButton.click();
   await page.locator('[data-row="g1-r1"]').waitFor();
 }
+
+cases['ve-hien-trang'] = async (page,{browser}) => {
+  // Vẽ hiện trạng: mở bản vẽ mẫu, vẽ phòng bằng ô lệnh, sửa số tường, đặt thiết bị / cửa, hoàn tác, tự lưu, xuất DXF, màn điện thoại
+  const shots = process.env.GD8_SHOTS, shot = (p,name) => shots && p.screenshot({path:path.join(shots,name)});
+  await page.setViewportSize({width:1440,height:900});
+  await page.goto('/ve-hien-trang',{waitUntil:'domcontentloaded'});
+  await page.locator('[data-home=sample]').click();
+  await page.locator('#vh-draw [data-hit^="seg:"]').first().waitFor({state:'attached'});
+  await shot(page,'vh-sample.png');
+  const state = () => page.evaluate(() => { const S = GDPlanPage.state, f = S.plan.floors[S.plan.active]; return {rooms:f.rooms, cols:f.columns, hist:S.hist.length, id:S.id}; });
+  // Vẽ bằng lệnh: dọc lên 3000, ngang phải 4000, xuống 1200 là cửa sổ, 1800, gợi ý -> khép kín
+  await page.locator('[data-tool=draw]').click();
+  for (const c of ['dọc 3000','ngang 4000','xuống 1200 cửa sổ','1800','gợi ý']) { await page.fill('#vh-cmd',c); await page.press('#vh-cmd','Enter'); }
+  let s = await state();
+  const drawn = s.rooms[s.rooms.length - 1];
+  assert.equal(drawn.closed,true,'Gợi ý khép kín phòng');
+  assert.equal(drawn.pts.length,5,'4 đoạn + đoạn cửa sổ');
+  assert.equal(drawn.openings[0].type,'window');
+  assert.equal(drawn.openings[0].w,1200);
+  // Sửa chiều dài tường: chạm tường đầu của phòng P1 -> ô số
+  await page.locator('[data-tool=select]').click();
+  const p1 = s.rooms[0].id;
+  await page.locator(`#vh-draw polygon[data-hit="seg:${p1}:0"]`).click({force:true});
+  await page.locator('#vh-pop [data-f=len]').fill('3500');
+  await page.locator('#vh-pop [data-f=len]').press('Enter');
+  s = await state();
+  assert.deepEqual(s.rooms[0].pts[1],[3500,0],'Tường dài 3500, tường đối diện giãn theo');
+  assert.deepEqual(s.rooms[0].pts[2],[3500,3600]);
+  // + Cửa đi trên đoạn tường đang chọn
+  await page.locator('#vh-pop [data-f=len]').waitFor();
+  await page.locator('#vh-pop [data-pop=door]').click();
+  s = await state();
+  assert.equal(s.rooms[0].openings.filter(o => o.seg === 0 && o.type === 'door').length,1);
+  // Thiết bị: chạm sát tường
+  await page.locator('[data-tool=device]').click();
+  await page.locator('[data-dev=dieu_hoa]').click();
+  const box = await page.locator(`#vh-draw polygon[data-hit="seg:${p1}:1"]`).boundingBox();
+  await page.mouse.click(box.x + box.width / 2,box.y + box.height / 2);
+  s = await state();
+  assert.ok(s.rooms[0].devices.some(d => d.type === 'dieu_hoa' && d.seg === 1 && d.h === 2300),'Đặt điều hoà sát tường');
+  // Hoàn tác thiết bị vừa đặt
+  const before = s.rooms[0].devices.length;
+  await page.keyboard.press('Control+z');
+  assert.equal((await state()).rooms[0].devices.length,before - 1,'Hoàn tác');
+  await shot(page,'vh-edit.png');
+  // Tự lưu lên tài khoản
+  await page.waitForFunction(() => document.getElementById('save-status').dataset.saveState === 'saved',null,{timeout:10000});
+  const saved = await page.evaluate(() => GDHomeShell.api('/api/site-plans'));
+  assert.equal(saved.plans.length,1);
+  assert.equal(saved.plans[0].rooms,5,'4 phòng mẫu + 1 phòng vẽ');
+  // Xuất DXF
+  const [dl] = await Promise.all([page.waitForEvent('download'),page.evaluate(() => GDPlanPage.exportDxf())]);
+  assert.match(dl.suggestedFilename(),/Tầng 1.dxf$/);
+  const dxf = await page.evaluate(() => GDPlanCore.toDxf(GDPlanCore.floorPrimitives(GDPlanPage.state.plan,GDPlanPage.state.plan.floors[0])));
+  assert.match(dxf,/AC1009/); assert.match(dxf,/\r\nTUONG\r\n/);
+  // Kéo 1 nét phác quanh phòng -> phòng vuông
+  await page.locator('[data-tool=draw]').click();
+  const r = await page.locator('#vh-svg').boundingBox(), ox = r.x + 60, oy = r.y + r.height - 200;
+  await page.mouse.move(ox,oy); await page.mouse.down();
+  for (const [x,y] of [[120,2],[120,120],[0,118],[2,4]]) await page.mouse.move(ox + x,oy + y,{steps:8});
+  await page.mouse.up();
+  s = await state();
+  assert.equal(s.rooms.length,5,'Nét phác thành phòng mới');
+  assert.equal(s.rooms[4].closed,true);
+  // Mở lại từ danh sách + màn điện thoại không tràn ngang
+  const m = await browser.newPage({baseURL:new URL(page.url()).origin,viewport:{width:390,height:844},hasTouch:true,isMobile:true});
+  await m.goto('/ve-hien-trang?plan=' + s.id,{waitUntil:'domcontentloaded'});
+  await m.locator('#vh-draw [data-hit^="seg:"]').first().waitFor({state:'attached'});
+  assert.ok(await m.evaluate(() => document.documentElement.scrollWidth) <= 390,'Điện thoại không tràn ngang');
+  await shot(m,'vh-mobile.png');
+  await m.close();
+  for (const width of [1280,2560]) {
+    await page.setViewportSize({width,height:1000});
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth) <= width);
+  }
+};
 
 cases['15.1'] = async page => {
   // Menu thả xuống tự đóng khi bấm ra ngoài hoặc Esc; hộp thoại đóng khi bấm nền tối.
