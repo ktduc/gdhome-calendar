@@ -5,7 +5,7 @@
   const esc = v => Shell.escape(String(v ?? ''));
   const svg = $('vh-svg'), world = $('vh-world'), drawLayer = $('vh-draw'), over = $('vh-over'), pop = $('vh-pop');
   const S = {id: '', plan: null, view: {x: 0, y: 0, k: 0.12}, mode: 'plan', tool: 'select', lock: true, sel: null, draft: null, devType: 'o_cam',
-    ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false,
+    ceilType: 'downlight', ceilSize: 90, ceilLevel: 2700, ceilLed: false, multi: false, multiSel: [], boxDraft: null,
     hist: [], fut: [], dirty: false, saveTimer: 0, projects: [], cursor: null, dimDraft: null, arrowDraft: null, pendingPhoto: null};
   const assetUrls = new Map();
   async function assetBlobUrl(name) {
@@ -99,7 +99,8 @@
     startEditor(id, plan || local.plan, !!local?.dirty);
   }
   function startEditor(id, plan, dirty = false) {
-    S.id = id; S.plan = normalize(plan); S.mode = 'plan'; S.hist = []; S.fut = []; S.sel = null; S.draft = null; S.dirty = false;
+    S.id = id; S.plan = normalize(plan); S.mode = 'plan'; S.multi = false; S.multiSel = []; S.hist = []; S.fut = []; S.sel = null; S.draft = null; S.dirty = false;
+    $('vh-multi')?.classList.remove('is-on');
     $('vh-home').hidden = true; $('vh-editor').hidden = false;
     history.replaceState(null, '', '/ve-hien-trang?plan=' + encodeURIComponent(id));
     syncModeUI(); setTool('select'); renderAll(); fit();
@@ -181,11 +182,11 @@
   function undo() {
     if (S.draft) { draftUndo(); return; }
     if (!S.hist.length) return;
-    S.fut.push(JSON.stringify(S.plan)); S.plan = JSON.parse(S.hist.pop()); S.sel = null; renderAll(); markDirty();
+    S.fut.push(JSON.stringify(S.plan)); S.plan = JSON.parse(S.hist.pop()); S.sel = null; S.multiSel = []; renderAll(); markDirty();
   }
   function redo() {
     if (!S.fut.length) return;
-    S.hist.push(JSON.stringify(S.plan)); S.plan = JSON.parse(S.fut.pop()); S.sel = null; renderAll(); markDirty();
+    S.hist.push(JSON.stringify(S.plan)); S.plan = JSON.parse(S.fut.pop()); S.sel = null; S.multiSel = []; renderAll(); markDirty();
   }
 
   // ================= Khung nhìn =================
@@ -268,6 +269,19 @@
       if (sel.kind === 'ph') { const ph = (floor().photos || []).find(p => p.id === sel.id); if (ph) out.push({t: 'circle', c: [ph.x, ph.y], r: (S.plan.font || 150) * 1.6, stroke: '#2563eb', w: 2.5, dash: '5 4'}); }
       if ((sel.kind === 'seg' || sel.kind === 'room') && room) room.pts.forEach((p, j) => out.push({t: 'poly', pts: [[p[0] - px(6), p[1] - px(6)], [p[0] + px(6), p[1] - px(6)], [p[0] + px(6), p[1] + px(6)], [p[0] - px(6), p[1] + px(6)]], close: true, fill: '#fff', stroke: '#2563eb', w: 2, hit: 'vtx:' + room.id + ':' + j}));
       if (sel.kind === 'room' && room && !room.closed) [room.pts[0], room.pts[room.pts.length - 1]].forEach(p => out.push({t: 'circle', c: p, r: px(9), stroke: '#dc2626', w: 2.5}));
+    }
+    for (const m of S.multiSel) {
+      if (m.kind === 'room') { const r = roomById(m.id); if (r) out.push({t: 'poly', pts: r.pts, close: r.closed, fill: 'rgba(37,99,235,.10)', stroke: '#2563eb', w: 2.5, dash: '8 5'}); }
+      else if (m.kind === 'col') { const c = floor().columns.find(x => x.id === m.id); if (c) out.push({t: 'circle', c: [c.x, c.y], r: Math.max(c.w, c.h) * .75, stroke: '#2563eb', w: 2.5, dash: '5 4'}); }
+      else if (m.kind === 'ci') { const it = (floor().ceilItems || []).find(x => x.id === m.id); if (it) { const [w, h] = C.sizeWH(it.size ?? C.CEIL[it.type]?.def); out.push({t: 'circle', c: [it.x, it.y], r: Math.max(w, h) / 2 + px(8), stroke: '#2563eb', w: 2.5, dash: '5 4'}); } }
+      else if (m.kind === 'cl') { const cl = (floor().ceilLines || []).find(x => x.id === m.id); if (cl) out.push({t: 'poly', pts: cl.pts, close: !!cl.closed, fill: 'none', stroke: '#2563eb', w: 3, dash: '6 4'}); }
+      else if (m.kind === 'note') { const nt = notesList().find(x => x.id === m.id); if (nt) out.push({t: 'circle', c: [nt.x, nt.y], r: px(9), stroke: '#2563eb', w: 2.5, fill: 'rgba(37,99,235,.15)'}); }
+      else if (m.kind === 'ar') { const ar = arrowsList().find(x => x.id === m.id); if (ar) out.push({t: 'poly', pts: ar.pts, close: false, fill: 'none', stroke: '#2563eb', w: 3, dash: '6 4'}); }
+      else if (m.kind === 'ph') { const ph = (floor().photos || []).find(x => x.id === m.id); if (ph) out.push({t: 'circle', c: [ph.x, ph.y], r: (S.plan.font || 150) * 1.7, stroke: '#2563eb', w: 2.5, dash: '5 4'}); }
+    }
+    if (S.boxDraft) {
+      const [[ax, ay], [bx, by]] = S.boxDraft;
+      out.push({t: 'poly', pts: [[ax, ay], [bx, ay], [bx, by], [ax, by]], close: true, fill: 'rgba(37,99,235,.08)', stroke: '#2563eb', w: 1.5, dash: '6 4'});
     }
     const d = S.draft;
     if (d?.pts.length) {
@@ -354,7 +368,7 @@
     $('vh-draw-btns').hidden = tool !== 'draw' && tool !== 'ceil-line';
     $('vh-draw-btns').querySelectorAll('[data-cmd="vách"],[data-cmd="cửa sổ"],[data-cmd="cửa đi"],[data-cmd="lối đi"]').forEach(b => { b.hidden = tool === 'ceil-line'; });
     $('vh-hint').textContent = HINTS[tool] || '';
-    if (tool !== 'select') { S.sel = null; renderPop(); }
+    if (tool !== 'select') { S.sel = null; S.multi = false; S.multiSel = []; $('vh-multi')?.classList.remove('is-on'); renderPop(); }
     renderOverlay();
   }
   $('vh-devices').innerHTML = Object.entries(C.DEVICES).map(([k, d]) => `<button type="button" data-dev="${k}">${esc(d.label)}</button>`).join('');
@@ -567,15 +581,105 @@
   const ptrs = new Map();
   let drag = null;
   const parseHit = el => { const h = el?.closest?.('[data-hit]')?.dataset.hit; if (!h) return null; const [kind, a, b] = h.split(':'); return {kind, a, b}; };
+  const normMulti = hit => {
+    if (!hit || hit.kind === 'sched') return null;
+    if (['room', 'seg', 'vtx', 'op', 'dev'].includes(hit.kind)) return {kind: 'room', id: hit.a};
+    return {kind: hit.kind, id: hit.a};
+  };
+  const inMulti = it => it && S.multiSel.some(m => m.kind === it.kind && m.id === it.id);
+  function toggleMultiItem(it) {
+    if (!it) return;
+    if (inMulti(it)) S.multiSel = S.multiSel.filter(m => !(m.kind === it.kind && m.id === it.id));
+    else S.multiSel.push(it);
+  }
+  function toggleMultiMode(force) {
+    S.multi = force != null ? force : !S.multi;
+    if (S.multi) {
+      if (S.tool !== 'select') setTool('select');
+      if (S.sel) {
+        const cur = S.sel.room ? {kind: 'room', id: S.sel.room} : S.sel.id ? {kind: S.sel.kind, id: S.sel.id} : null;
+        if (cur && !inMulti(cur)) S.multiSel.push(cur);
+        S.sel = null;
+      }
+    } else S.multiSel = [];
+    $('vh-multi')?.classList.toggle('is-on', S.multi);
+    renderAll();
+  }
+  function boxSelect(a, b) {
+    const x0 = Math.min(a[0], b[0]), x1 = Math.max(a[0], b[0]), y0 = Math.min(a[1], b[1]), y1 = Math.max(a[1], b[1]);
+    const addIt = it => { if (!inMulti(it)) S.multiSel.push(it); };
+    for (const r of floor().rooms) {
+      if (!r.pts.length) continue;
+      const xs = r.pts.map(p => p[0]), ys = r.pts.map(p => p[1]);
+      if (Math.max(...xs) >= x0 && Math.min(...xs) <= x1 && Math.max(...ys) >= y0 && Math.min(...ys) <= y1) addIt({kind: 'room', id: r.id});
+    }
+    for (const c of floor().columns || []) if (c.x >= x0 && c.x <= x1 && c.y >= y0 && c.y <= y1) addIt({kind: 'col', id: c.id});
+    if (S.mode === 'ceil') {
+      for (const it of floor().ceilItems || []) if (it.x >= x0 && it.x <= x1 && it.y >= y0 && it.y <= y1) addIt({kind: 'ci', id: it.id});
+      for (const cl of floor().ceilLines || []) if (cl.pts.some(p => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1)) addIt({kind: 'cl', id: cl.id});
+    }
+    const mine = x => (x.mode || 'plan') === S.mode;
+    for (const nt of notesList().filter(mine)) if (nt.x <= x1 && nt.x + (nt.w || 2400) >= x0 && nt.y <= y1 && nt.y + 400 >= y0) addIt({kind: 'note', id: nt.id});
+    for (const ar of arrowsList().filter(mine)) if (ar.pts.some(p => p[0] >= x0 && p[0] <= x1 && p[1] >= y0 && p[1] <= y1)) addIt({kind: 'ar', id: ar.id});
+    for (const ph of floor().photos || []) if (ph.x >= x0 && ph.x <= x1 && ph.y >= y0 && ph.y <= y1) addIt({kind: 'ph', id: ph.id});
+  }
+  function dragMulti(d, w) {
+    const s = S.plan.snap || 10, dx = C.round(w[0] - d.w[0], s), dy = C.round(w[1] - d.w[1], s), bf = d.baseFloor;
+    if (!dx && !dy) return;
+    d.changed = true;
+    for (const m of S.multiSel) {
+      if (m.kind === 'room') { const r = roomById(m.id), br = bf.rooms.find(x => x.id === m.id); if (r && br) r.pts = br.pts.map(p => [p[0] + dx, p[1] + dy]); }
+      else if (m.kind === 'col') { const c = floor().columns.find(x => x.id === m.id), bc = bf.columns.find(x => x.id === m.id); if (c && bc) { c.x = bc.x + dx; c.y = bc.y + dy; } }
+      else if (m.kind === 'ci') { const it = (floor().ceilItems || []).find(x => x.id === m.id), bi = (bf.ceilItems || []).find(x => x.id === m.id); if (it && bi) { it.x = bi.x + dx; it.y = bi.y + dy; } }
+      else if (m.kind === 'cl') { const cl = (floor().ceilLines || []).find(x => x.id === m.id), bl = (bf.ceilLines || []).find(x => x.id === m.id); if (cl && bl) cl.pts = bl.pts.map(p => [p[0] + dx, p[1] + dy]); }
+      else if (m.kind === 'note') { const nt = notesList().find(x => x.id === m.id), bn = (bf.notes || []).find(x => x.id === m.id); if (nt && bn) { nt.x = bn.x + dx; nt.y = bn.y + dy; } }
+      else if (m.kind === 'ar') { const ar = arrowsList().find(x => x.id === m.id), ba = (bf.arrows || []).find(x => x.id === m.id); if (ar && ba) ar.pts = ba.pts.map(p => [p[0] + dx, p[1] + dy]); }
+      else if (m.kind === 'ph') { const ph = (floor().photos || []).find(x => x.id === m.id), bp = (bf.photos || []).find(x => x.id === m.id); if (ph && bp) { ph.x = bp.x + dx; ph.y = bp.y + dy; } }
+    }
+    drawLayer.innerHTML = C.floorPrimitives(S.plan, floor(), renderOpts()).map(primSvg).join('');
+    renderOverlay();
+  }
+  function deleteMulti() {
+    if (!S.multiSel.length) return;
+    const set = new Set(S.multiSel.map(m => m.kind + ':' + m.id));
+    commit(() => {
+      floor().rooms = floor().rooms.filter(r => !set.has('room:' + r.id));
+      floor().columns = (floor().columns || []).filter(c => !set.has('col:' + c.id));
+      floor().ceilItems = (floor().ceilItems || []).filter(c => !set.has('ci:' + c.id));
+      floor().ceilLines = (floor().ceilLines || []).filter(c => !set.has('cl:' + c.id));
+      floor().notes = (floor().notes || []).filter(n => !set.has('note:' + n.id));
+      floor().arrows = (floor().arrows || []).filter(a => !set.has('ar:' + a.id));
+      floor().photos = (floor().photos || []).filter(p => !set.has('ph:' + p.id));
+      floor().dims = (floor().dims || []).filter(d => !set.has('fdim:' + d.id));
+      S.multiSel = [];
+    });
+  }
   svg.addEventListener('pointerdown', e => {
     svg.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, [e.clientX, e.clientY]);
-    if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; drag = {type: 'pinch', d: Math.hypot(p[0] - q[0], p[1] - q[1]), c: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]}; S.sketch = null; return; }
+    if (ptrs.size === 2) { const [p, q] = [...ptrs.values()]; drag = {type: 'pinch', d: Math.hypot(p[0] - q[0], p[1] - q[1]), c: [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2]}; S.sketch = null; S.boxDraft = null; return; }
     const w = toWorld(e.clientX, e.clientY), start = {x: e.clientX, y: e.clientY, w, moved: false, touch: e.pointerType !== 'mouse'};
     if (e.button === 1 || e.button === 2 || e.altKey) { drag = {type: 'pan', ...start, view: {...S.view}}; return; }
     const hit = parseHit(e.target);
     if (S.tool === 'select') {
-      if (!hit) { drag = {type: 'pan', ...start, view: {...S.view}, clear: true}; return; }
+      if (e.shiftKey && hit) {
+        const it = normMulti(hit);
+        if (it) {
+          if (S.sel) { const cur = S.sel.room ? {kind: 'room', id: S.sel.room} : S.sel.id ? {kind: S.sel.kind, id: S.sel.id} : null; if (cur && !inMulti(cur)) S.multiSel.push(cur); S.sel = null; }
+          toggleMultiItem(it); popAt = [e.clientX, e.clientY]; renderAll();
+        }
+        return;
+      }
+      if (!hit) {
+        if (S.multi || e.shiftKey) { drag = {type: 'box', ...start}; return; }
+        drag = {type: 'pan', ...start, view: {...S.view}, clear: true}; return;
+      }
+      const mIt = normMulti(hit);
+      if (S.multiSel.length && inMulti(mIt)) {
+        drag = {type: 'multi', hit, ...start, snapshot: JSON.stringify(S.plan), baseFloor: JSON.parse(JSON.stringify(floor()))};
+        return;
+      }
+      if (S.multi && mIt) { drag = {type: 'multi-pick', hit, ...start}; return; }
       drag = {type: 'obj', hit, ...start, snapshot: JSON.stringify(S.plan), base: JSON.parse(JSON.stringify(currentObj(hit)))};
       return;
     }
@@ -598,6 +702,8 @@
       S.view.x = drag.view.x + e.clientX - drag.x; S.view.y = drag.view.y + e.clientY - drag.y;
       svg.classList.add('is-pan'); applyView(); return;
     }
+    if (drag?.type === 'box') { S.boxDraft = [drag.w, w]; renderOverlay(); return; }
+    if (drag?.type === 'multi' && drag.moved) { dragMulti(drag, w); return; }
     if (drag?.type === 'obj' && drag.moved) { dragObj(drag, w); return; }
     if (S.tool === 'draw' || S.tool === 'ceil-line') {
       if (S.tool === 'draw' && drag?.type === 'draw' && !S.draft && drag.moved) { drag.path.push(w); S.sketch = drag.path; renderOverlay(); return; }
@@ -615,10 +721,26 @@
     drag = null;
     if (d.type === 'pinch') return;
     const w = toWorld(e.clientX, e.clientY);
-    if (d.type === 'pan') { if (!d.moved && d.clear) { S.sel = null; renderAll(); } return; }
+    if (d.type === 'pan') { if (!d.moved && d.clear) { S.sel = null; S.multiSel = []; renderAll(); } return; }
+    if (d.type === 'box') {
+      S.boxDraft = null;
+      if (d.moved) { popAt = [e.clientX, e.clientY]; boxSelect(d.w, w); S.sel = null; }
+      else S.multiSel = [];
+      renderAll(); return;
+    }
+    if (d.type === 'multi-pick') {
+      if (!d.moved) { popAt = [e.clientX, e.clientY]; S.sel = null; toggleMultiItem(normMulti(d.hit)); renderAll(); }
+      return;
+    }
+    if (d.type === 'multi') {
+      if (d.moved) { if (d.changed) { S.hist.push(d.snapshot); S.fut = []; markDirty(); } renderAll(); }
+      else if (S.multi) { toggleMultiItem(normMulti(d.hit)); renderAll(); }
+      else { S.multiSel = []; select(d.hit, e); }
+      return;
+    }
     if (d.type === 'obj') {
       if (d.moved) { if (d.changed) { S.hist.push(d.snapshot); S.fut = []; markDirty(); } renderAll(); }
-      else select(d.hit, e);
+      else { S.multiSel = []; select(d.hit, e); }
       return;
     }
     if (d.type === 'draw') {
@@ -848,6 +970,12 @@
   const num = (label, f, value) => `<label>${label}<div class="vh-step"><button type="button" data-step="${f}:-10">−</button><input data-f="${f}" type="number" inputmode="numeric" value="${Math.round(value)}"><button type="button" data-step="${f}:10">+</button></div></label>`;
   const head = title => `<h3>${esc(title)}<button type="button" class="vh-x" data-pop="close" aria-label="Đóng">×</button></h3>`;
   function renderPop() {
+    if (S.multiSel.length && S.tool === 'select') {
+      pop.innerHTML = head('Đã chọn ' + S.multiSel.length + ' đối tượng') +
+        '<p class="vh-muted">Kéo bất kỳ đối tượng nào trong nhóm để dời cả nhóm, hoặc bấm Delete để xoá.</p>' +
+        `<div class="vh-btns"><button type="button" data-pop="clearMulti">Bỏ chọn</button><button type="button" class="vh-danger" data-pop="delMulti">🗑 Xoá (${S.multiSel.length})</button></div>`;
+      pop.hidden = false; placePop(); return;
+    }
     const sel = S.sel, room = sel?.room && roomById(sel.room);
     if (!sel || S.tool !== 'select') { pop.hidden = true; return; }
     let html = '';
@@ -1006,7 +1134,9 @@
     const act = e.target.closest('[data-pop]')?.dataset.pop;
     if (!act) return;
     const sel = S.sel, room = sel?.room && roomById(sel.room);
-    if (act === 'close') { S.sel = null; renderAll(); }
+    if (act === 'close') { S.sel = null; S.multiSel = []; renderAll(); }
+    else if (act === 'clearMulti') { S.multiSel = []; renderAll(); }
+    else if (act === 'delMulti') deleteMulti();
     else if (['door', 'window', 'open'].includes(act)) addOpening(act);
     else if (act === 'room') { S.sel = {kind: 'room', room: sel.room}; renderAll(); }
     else if (act === 'flip') commit(() => { const op = room.openings.find(o => o.id === sel.id), k = ['l:in', 'r:in', 'r:out', 'l:out'], n = k[(k.indexOf((op.hinge || 'l') + ':' + (op.swing || 'in')) + 1) % 4].split(':'); op.hinge = n[0]; op.swing = n[1]; });
@@ -1144,6 +1274,7 @@
     else if (act === 'png') exportPng();
     else if (act === 'json') download(S.plan.name + '.json', new Blob([JSON.stringify(S.plan, null, 1)], {type: 'application/json'}));
     else if (act === 'mic') mic(!rec);
+    else if (act === 'multi') toggleMultiMode();
     else if (act === 'quick-room') {
       const [x, y] = freeSpot(), room = C.rectRoom(x, y, 3000, 4000, 'P' + (floor().rooms.length + 1));
       commit(() => { floor().rooms.push(room); S.sel = {kind: 'room', room: room.id}; });
@@ -1166,8 +1297,9 @@
     if (S.draft && (/^[0-9]$/.test(e.key))) { cmd.focus(); return; }   // gõ số thẳng vào ô lệnh
     if (e.key === 'Enter' && S.draft) { finishDraft(true); return; }
     if (e.key === 'Backspace' && S.draft) { e.preventDefault(); draftUndo(); return; }
-    if (e.key === 'Escape') { if (S.draft) finishDraft(false); else if (S.dimDraft || S.arrowDraft) { S.dimDraft = null; S.arrowDraft = null; renderOverlay(); } else { S.sel = null; setTool('select'); renderAll(); } return; }
+    if (e.key === 'Escape') { if (S.draft) finishDraft(false); else if (S.dimDraft || S.arrowDraft || S.boxDraft) { S.dimDraft = null; S.arrowDraft = null; S.boxDraft = null; renderOverlay(); } else { S.sel = null; S.multi = false; S.multiSel = []; $('vh-multi')?.classList.remove('is-on'); setTool('select'); renderAll(); } return; }
     if (e.key === 'Enter' && S.arrowDraft?.pts.length >= 2) { const pts = S.arrowDraft.pts.slice(), mode = S.mode; S.arrowDraft = null; renderOverlay(); finishArrow(pts, mode); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && S.multiSel.length) { e.preventDefault(); deleteMulti(); return; }
     if ((e.key === 'Delete' || e.key === 'Backspace') && S.sel) { e.preventDefault(); deleteSel(); return; }
     const tools = {v: 'select', p: 'draw', d: 'device', c: 'column', m: 'dim', t: 'note'};
     if (tools[key]) setTool(tools[key]);

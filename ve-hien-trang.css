@@ -36,6 +36,8 @@
 .vh-ib:hover { background: #f1f5f9; }
 .vh-ib:disabled { opacity: .35; cursor: default; }
 .vh-ib.is-on { background: #dbeafe; color: #1d4ed8; }
+.vh-ib-wide { width: auto; padding: 0 10px; font-size: 13px; border: 1px solid #d1d5db; white-space: nowrap; }
+.vh-ib-wide.is-on { border-color: #1d4ed8; background: #1d4ed8; color: #fff; }
 .vh-export { position: relative; }
 .vh-export summary { list-style: none; }
 .vh-menu { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; min-width: 260px; max-height: 70vh; overflow: auto; background: #fff; border: 1px solid #d1d5db; border-radius: 10px;
