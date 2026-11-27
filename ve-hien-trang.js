@@ -391,8 +391,8 @@
     $('vh-draw-btns').hidden = tool !== 'draw' && tool !== 'ceil-line';
     $('vh-draw-btns').querySelectorAll('[data-cmd="vách"],[data-cmd="cửa sổ"],[data-cmd="cửa đi"],[data-cmd="lối đi"]').forEach(b => { b.hidden = tool === 'ceil-line'; });
     $('vh-hint').textContent = HINTS[tool] || '';
-    if (tool !== 'select') { S.sel = null; S.multi = false; S.multiSel = []; $('vh-multi')?.classList.remove('is-on'); renderPop(); }
-    renderOverlay();
+    if (tool !== 'select') { S.sel = null; S.multi = false; S.multiSel = []; $('vh-multi')?.classList.remove('is-on'); }
+    renderPop(); renderOverlay();   // về Chọn sau khi đặt: hiện bảng thuộc tính của đối tượng vừa đặt
   }
   $('vh-devices').innerHTML = Object.entries(C.DEVICES).map(([k, d]) => `<button type="button" data-dev="${k}">${esc(d.label)}</button>`).join('');
   $('vh-devices').addEventListener('click', e => {
@@ -802,7 +802,7 @@
       draftAdd(p);
       return;
     }
-    if (d.type === 'place' && !d.moved) place(w);
+    if (d.type === 'place' && !d.moved) place(w, d.touch);
   };
   svg.addEventListener('pointerup', endPtr);
   svg.addEventListener('pointercancel', endPtr);
@@ -880,13 +880,13 @@
   }
 
   // ================= Đặt thiết bị / cột / đo =================
-  function place(w) {
+  function place(w, touch = false) {   // chạm tay: đặt xong về Chọn; chuột: giữ công cụ để đặt liên tiếp
     if (S.tool === 'bg-scale') return bgScalePick(w);
     if (S.tool === 'device' && S.elev) {   // mặt đứng: x -> at (theo chiều nhìn), y -> cao độ
       const room = roomById(S.elev.roomId), fr = C.elevFrame(room, S.elev.i), s = S.plan.snap || 10, id = C.uid();
       const x = Math.max(0, Math.min(fr.L, w[0])), at = C.round(fr.flip ? fr.L - x : x, s), h = Math.max(0, C.round(-w[1], s));
       commit(() => { room.devices.push({id, type: S.devType, seg: S.elev.i, at, h}); S.sel = {kind: 'dev', room: room.id, id}; });
-      if (matchMedia('(pointer: coarse)').matches) setTool('select');
+      if (touch) setTool('select');
       return;
     }
     if (S.tool === 'device') {
@@ -894,14 +894,14 @@
         const s = S.plan.snap || 10, x = C.round(w[0], s), y = C.round(w[1], s);
         const spec = C.CEIL[S.ceilType] || C.CEIL.downlight, size = S.ceilSize ?? spec.def, id = C.uid();
         commit(() => { (floor().ceilItems ||= []).push({id, type: S.ceilType, x, y, size, rot: 0, dim: false}); S.sel = {kind: 'ci', id}; });
-        if (matchMedia('(pointer: coarse)').matches) setTool('select');
+        if (touch) setTool('select');
         return;
       }
       const near = C.nearestSeg(floor(), w, (room, i) => C.segInfo(S.plan, room, i).k !== 'open');
       if (!near || near.dist > 700) return Shell.toast('Chạm sát tường để đặt thiết bị.');
       const spec = C.DEVICES[S.devType], id = C.uid();
       commit(() => { near.room.devices.push({id, type: S.devType, seg: near.seg, at: C.round(near.at, S.plan.snap || 10), h: spec.h}); S.sel = {kind: 'dev', room: near.room.id, id}; });
-      if (matchMedia('(pointer: coarse)').matches) setTool('select');
+      if (touch) setTool('select');
     } else if (S.tool === 'column') addColumn(w);
     else if (S.tool === 'dim') {
       const p = snapPt(w);
@@ -1491,8 +1491,9 @@
     $('vh-export-dlg').showModal();
   }
   $('vh-export-form').addEventListener('change', syncExportForm);
-  $('vh-export-dlg').addEventListener('close', () => {
-    if ($('vh-export-dlg').returnValue !== 'ok') return;
+  // submit chạy ngay khi bấm (sự kiện close của dialog có thể bị hoãn khi tab ẩn)
+  $('vh-export-form').addEventListener('submit', e => {
+    if (e.submitter?.value !== 'ok') return;
     const f = expForm, scale = Number(f.scale.value) || 0, mode = f.mode.value, key = mode === 'ceil' ? 'schedCeil' : 'schedPlan';
     if (!S.elev && !!floor()[key] !== f.schedule.checked) commit(() => { floor()[key] = f.schedule.checked; });   // bảng kê lưu theo tầng, hiện cả trên màn vẽ
     const o = {mode, only: f.scope.value === 'room' && S.sel?.room ? [S.sel.room] : undefined, dims: f.dims.checked, schedule: f.schedule.checked,
