@@ -1066,7 +1066,7 @@
         field('Len (mm)', 'skirt', room.skirt || '', 'type="number" inputmode="numeric" placeholder="VD 80"') +
         `<label>Ghi chú<textarea data-f="note" rows="2">${esc(room.note || '')}</textarea></label>` +
         `<p class="vh-muted">${room.closed ? 'Diện tích ' + (C.area(room) / 1e6).toFixed(2).replace('.', ',') + ' m² · ' : 'Nét hở · '}chu vi ${fmt(C.perimeter(room))} mm · ${room.pts.length} góc</p>` +
-        '<div class="vh-btns">' + (room.closed ? '' : '<button type="button" data-pop="continue">✎ Vẽ tiếp</button><button type="button" data-pop="closeRoom">⬚ Khép kín</button>') +
+        '<div class="vh-btns">' + (room.closed ? '' : '<button type="button" data-pop="continue">✎ Vẽ tiếp</button><button type="button" data-pop="closeRoom">▭ Khép kín</button>') +
         '<button type="button" data-pop="dup">⧉ Nhân bản</button><button type="button" data-pop="toFloor">Chuyển tầng…</button><button type="button" class="vh-danger" data-pop="del">🗑 Xoá phòng</button></div>';
     } else if (sel.kind === 'ci') {
       const it = (floor().ceilItems || []).find(c => c.id === sel.id);
