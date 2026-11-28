@@ -93,7 +93,7 @@
     let plans = [];
     try { plans = (await Shell.api('/api/site-plans')).plans || []; }
     catch (error) {
-      list.innerHTML = '<li class="vh-muted">' + (error.status === 401 ? 'Cần đăng nhập. Mở <a href="/tools">Trang chủ công cụ</a> để đăng nhập Gmail rồi quay lại. Vẫn vẽ được, bản vẽ giữ tạm trên máy này.' : esc(error.message)) + '</li>';
+      list.innerHTML = '<li class="vh-muted vh-login">' + (error.status === 401 ? 'Cần đăng nhập. Mở <a href="/tools">Trang chủ công cụ</a> để đăng nhập Gmail rồi quay lại. Vẫn vẽ được, bản vẽ giữ tạm trên máy này.' : esc(error.message)) + '</li>';
     }
     // bản vẽ chỉ có trên máy (chưa lên được server)
     const local = [];
@@ -105,7 +105,7 @@
       try { const c = JSON.parse(localStorage.getItem(k)); if (c?.plan) local.push({id, name: c.plan.name, updatedAt: c.at, rooms: c.plan.floors.reduce((n, f) => n + f.rooms.length, 0), local: true}); } catch { /* hỏng: bỏ */ }
     }
     const all = [...local, ...plans];
-    if (!all.length && list.querySelector('.vh-item') == null && !list.textContent.includes('đăng nhập')) list.innerHTML = '<li class="vh-muted">Chưa có bản vẽ. Tạo bản vẽ mới hoặc mở bản vẽ mẫu để thử.</li>';
+    if (!all.length && !list.querySelector('.vh-login')) list.innerHTML = '<li class="vh-muted">Chưa có bản vẽ. Tạo bản vẽ mới hoặc mở bản vẽ mẫu để thử.</li>';
     if (all.length) list.innerHTML = all.map(p => '<li class="vh-item" data-id="' + esc(p.id) + '"><b data-open>' + esc(p.name) + '</b><span class="vh-muted">' +
       (p.projectId ? '📁 ' + esc(S.projects.find(x => x.id === p.projectId)?.name || p.projectId) + ' · ' : '') + (p.rooms || 0) + ' phòng · ' +
       new Date(p.updatedAt).toLocaleString('vi-VN', {hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric'}) + (p.local ? ' · <b style="color:#b45309">chỉ trên máy này</b>' : '') + '</span>' +
@@ -1056,7 +1056,7 @@
 
   // ================= Chọn + bảng sửa nhanh =================
   function select(hit) {
-    if (hit.kind === 'seg') S.sel = {kind: 'seg', room: hit.a, i: Number(hit.b)};
+    if (hit.kind === 'seg') { if (!(S.sel?.kind === 'seg' && S.sel.room === hit.a)) S.lenMode = 'square'; S.sel = {kind: 'seg', room: hit.a, i: Number(hit.b)}; }
     else if (hit.kind === 'room' || hit.kind === 'vtx') S.sel = {kind: 'room', room: hit.a};
     else if (hit.kind === 'op' || hit.kind === 'dev') S.sel = {kind: hit.kind, room: hit.a, id: hit.b};
     else S.sel = {kind: hit.kind, id: hit.a};
@@ -1199,7 +1199,7 @@
     const nt = notesList().find(n => n.id === sel?.id), ar = arrowsList().find(a => a.id === sel?.id);
     commit(() => {
       switch (f) {
-        case 'len': if (v > 0) C.setSegLength(room, sel.i, v, S.lenMode || 'square'); break;
+        case 'len': if (v > 0 && v <= 200000) C.setSegLength(room, sel.i, v, S.lenMode || 'square'); break;
         case 'thick': if (v > 0) { room.segs[sel.i] = {...room.segs[sel.i], t: v}; } break;
         case 'segk': room.segs[sel.i] = {...room.segs[sel.i], k: raw}; break;
         case 'opw': if (v > 0) { op.w = Math.min(v, C.segLen(room, op.seg)); op.full = false; op.at = Math.min(op.at, C.segLen(room, op.seg) - op.w); } break;
@@ -1248,7 +1248,7 @@
     const f = e.target.dataset.f;
     if (f) applyField(f, e.target.type === 'checkbox' ? e.target.checked : e.target.value);
   });
-  pop.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); e.target.dispatchEvent(new Event('change', {bubbles: true})); } e.stopPropagation(); });
+  pop.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); e.target.blur(); } e.stopPropagation(); });
   pop.addEventListener('click', e => {
     const step = e.target.closest('[data-step]')?.dataset.step;
     if (step) { const [f, dv] = step.split(':'), input = pop.querySelector(`[data-f=${f}]`); applyField(f, Number(input.value) + Number(dv)); return; }
@@ -1415,6 +1415,8 @@
         // tỷ lệ tạm: ảnh rộng 10 m, rồi dùng "Đặt tỷ lệ" để khớp số đo thật
         bg = {kind: isPdf ? 'pdf' : 'img', name, w, h, x: 0, y: 0, mmPerUnit: 10000 / w, opacity: .5, hidden: false};
       }
+      const b0 = C.bounds(viewPrims());
+      if (b0) { bg.x = C.round(b0.x0, 10); bg.y = C.round(b0.y0, 10); }
       commit(() => { floor().bg = bg; });
       S.bgBar = true; renderBg(); fit();
       Shell.toast('Đã nhập nền. Bấm "📏 Đặt tỷ lệ" để khớp số đo thật.');
@@ -1633,7 +1635,8 @@
   });
   $('vh-lock').classList.toggle('is-on', S.lock);
   addEventListener('keydown', e => {
-    if (!S.plan || $('vh-editor').hidden || e.target.closest('input, textarea, select, dialog')) return;
+    if (!S.plan || $('vh-editor').hidden) return;
+    if (e.target.closest('input, textarea, select, dialog') && !(e.target === cmd && !cmd.value && (e.ctrlKey || e.metaKey))) return;
     const key = e.key.toLowerCase();
     if ((e.ctrlKey || e.metaKey) && key === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
     if ((e.ctrlKey || e.metaKey) && key === 'y') { e.preventDefault(); redo(); return; }

@@ -28,7 +28,7 @@ async function handleSitePlans(req, res, urlPath, {store, dataKey, readJsonBody,
   if (!match || !ID.test(match[1])) fail(404, 'Bản vẽ không tồn tại.');
   const id = match[1];
   if (req.method === 'GET' && !match[2]) {
-    const doc = await store.get(planKey(dataKey, id));
+    const doc = await store.get(planKey(dataKey, id)).catch(() => null);   // bản đã xoá lưu "null" -> 404, không 500
     if (!doc) fail(404, 'Bản vẽ không tồn tại hoặc đã bị xoá.');
     return sendJson(res, 200, doc);
   }
