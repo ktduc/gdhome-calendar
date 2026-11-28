@@ -51,6 +51,9 @@ async function handleSitePlans(req, res, urlPath, {store, dataKey, readJsonBody,
   await exclusive(async () => {
     const index = (await store.get(indexKey(dataKey))) || {};
     index.plans ||= {};
+    // máy / tab khác đã lưu bản mới hơn bản mình mở -> không ghi đè im lặng
+    const cur = index.plans[id]?.updatedAt;
+    if (!body.force && typeof body.baseAt === 'number' && cur && cur > body.baseAt) throw Object.assign(new Error('Bản vẽ vừa được sửa ở máy hoặc tab khác.'), {status: 409, updatedAt: cur});
     if (!index.plans[id] && Object.keys(index.plans).length >= MAX_PLANS) fail(400, 'Đã đủ ' + MAX_PLANS + ' bản vẽ, xoá bớt bản cũ trước.');
     index.plans[id] = {name, projectId, updatedAt: doc.updatedAt, rooms: roomCount(body.data)};
     await store.put(planKey(dataKey, id), doc);

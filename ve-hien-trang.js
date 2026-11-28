@@ -35,7 +35,7 @@
 
   // ================= Lưu / tải =================
   const cacheKey = id => 'gd-plan-' + id;
-  function cache() { try { localStorage.setItem(cacheKey(S.id), JSON.stringify({plan: S.plan, at: Date.now(), dirty: S.dirty})); } catch { /* đầy bộ nhớ: bỏ qua */ } }
+  function cache() { try { localStorage.setItem(cacheKey(S.id), JSON.stringify({plan: S.plan, at: Date.now(), dirty: S.dirty, baseAt: S.baseAt})); } catch { /* đầy bộ nhớ: bỏ qua */ } }
   function markDirty() {
     S.dirty = true; cache();
     Shell.saveStatus($('save-status'), 'pending');
@@ -47,14 +47,31 @@
     if (!S.plan || !S.dirty) return;
     S.dirty = false;
     Shell.saveStatus($('save-status'), 'saving');
+    const force = S.force; S.force = false;
     try {
-      await Shell.api('/api/site-plans/' + S.id, {method: 'POST', body: {name: S.plan.name, projectId: S.plan.projectId, data: S.plan}});
+      const res = await Shell.api('/api/site-plans/' + S.id, {method: 'POST', body: {name: S.plan.name, projectId: S.plan.projectId, data: S.plan, baseAt: S.baseAt, force}});
+      if (res?.updatedAt) S.baseAt = res.updatedAt;
       Shell.saveStatus($('save-status'), 'saved'); cache();
     } catch (error) {
       S.dirty = true; cache();
+      if (error.status === 409) return resolveConflict();
       Shell.saveStatus($('save-status'), error.status === 401 ? 'offline' : 'error', error.status === 401 ? 'Chưa đăng nhập – đang giữ trên máy này' : error.message);
-      if (error.status !== 401) S.saveTimer = setTimeout(save, 15000);
+      if (error.status !== 401 && error.status !== 413) S.saveTimer = setTimeout(save, 15000);
+      if (error.status === 413) Shell.toast('Bản vẽ quá lớn để lưu lên server (> 1 MB) – bớt nền DXF hoặc tách tầng sang bản vẽ khác.');
     }
+  }
+  // Bản trên server mới hơn: Ghi đè, hoặc giữ bản server và lưu bản của máy này thành bản sao
+  async function resolveConflict() {
+    const id = S.id, mine = S.plan;
+    const ok = await Shell.ask({title: 'Bản vẽ đã được sửa ở nơi khác', message: 'Máy hoặc tab khác vừa lưu bản mới hơn. Ghi đè bằng bản trên máy này?\nChọn Huỷ: mở bản mới nhất, bản của máy này được lưu thành bản sao.', okText: 'Ghi đè', danger: true});
+    if (S.id !== id) return;
+    if (ok) { S.force = true; S.dirty = true; return save(); }
+    const copyId = newId();
+    try { await Shell.api('/api/site-plans/' + copyId, {method: 'POST', body: {name: (mine.name || 'Bản vẽ') + ' (bản sao)', projectId: mine.projectId, data: {...mine, name: (mine.name || 'Bản vẽ') + ' (bản sao)'}}}); Shell.toast('Đã lưu bản của máy này thành bản sao.'); }
+    catch (error) { Shell.toast('Không lưu được bản sao: ' + error.message); return; }
+    try { localStorage.removeItem(cacheKey(id)); } catch { /* bỏ */ }
+    S.dirty = false;
+    openPlan(id);
   }
   addEventListener('beforeunload', e => { if (S.dirty) { save(); e.preventDefault(); } });
   addEventListener('online', () => { if (S.dirty) save(); });
@@ -67,6 +84,7 @@
     document.querySelectorAll('select[name=projectId]').forEach(s => { const v = s.value; s.innerHTML = opts; s.value = v; });
   }
   async function showHome() {
+    mic(false);
     await save();
     S.plan = null; S.id = '';
     $('vh-editor').hidden = true; $('vh-home').hidden = false;
@@ -97,12 +115,18 @@
     let plan = null;
     let local = null;
     try { local = JSON.parse(localStorage.getItem(cacheKey(id)) || 'null'); } catch { /* bỏ */ }
-    try { plan = (await Shell.api('/api/site-plans/' + id)).data; }
+    let serverAt = 0;
+    try { const doc = await Shell.api('/api/site-plans/' + id); plan = doc.data; serverAt = doc.updatedAt || 0; }
     catch (error) { if (!local) return Shell.toast('Không mở được bản vẽ: ' + error.message); }
-    if (local?.dirty && local.plan) plan = local.plan;   // có thay đổi trên máy chưa lên server
-    startEditor(id, plan || local.plan, !!local?.dirty);
+    let dirty = false;
+    if (local?.dirty && local.plan) {   // có thay đổi trên máy chưa lên server
+      const stale = plan && serverAt && local.baseAt && serverAt > local.baseAt;
+      if (!stale || await Shell.ask({title: 'Có 2 bản khác nhau', message: 'Máy này còn thay đổi chưa lưu, nhưng bản trên server đã được sửa ở nơi khác sau đó. Dùng bản trên máy này (ghi đè bản server)?', okText: 'Dùng bản máy này', danger: true})) { plan = local.plan; dirty = true; }
+    }
+    startEditor(id, plan || local.plan, dirty, serverAt || local?.baseAt || 0);
   }
-  function startEditor(id, plan, dirty = false) {
+  function startEditor(id, plan, dirty = false, baseAt = 0) {
+    S.baseAt = baseAt; S.force = false;
     S.id = id; S.plan = normalize(plan); S.mode = 'plan'; S.multi = false; S.multiSel = []; S.hist = []; S.fut = []; S.sel = null; S.draft = null; S.dirty = false; S.elev = null; S.bgBar = false;
     $('vh-multi')?.classList.remove('is-on');
     $('vh-home').hidden = true; $('vh-editor').hidden = false;
@@ -176,9 +200,9 @@
   });
 
   // ================= Lịch sử =================
+  function pushHist(snap) { S.hist.push(snap); if (S.hist.length > 120) S.hist.shift(); }
   function commit(fn) {
-    S.hist.push(JSON.stringify(S.plan));
-    if (S.hist.length > 120) S.hist.shift();
+    pushHist(JSON.stringify(S.plan));
     S.fut = [];
     fn();
     renderAll(); markDirty();
@@ -228,24 +252,25 @@
 
   // ================= Vẽ ra SVG =================
   function primSvg(p) {
-    const hit = p.hit ? ` data-hit="${p.hit}"` : '';
-    const st = (p.stroke && p.stroke !== 'none' ? ` stroke="${p.stroke}" stroke-width="${p.w || 1}" vector-effect="non-scaling-stroke"` : '') + (p.dash ? ` stroke-dasharray="${p.dash}"` : '');
-    const n = v => Math.round(v * 10) / 10;
+    const hit = p.hit ? ` data-hit="${esc(p.hit)}"` : '';
+    const n = v => Math.round(v * 10) / 10 || 0;
+    const st = (p.stroke && p.stroke !== 'none' ? ` stroke="${esc(p.stroke)}" stroke-width="${n(p.w || 1)}" vector-effect="non-scaling-stroke"` : '') + (p.dash ? ` stroke-dasharray="${esc(p.dash)}"` : '');
     switch (p.t) {
       case 'line': return `<line x1="${n(p.a[0])}" y1="${n(p.a[1])}" x2="${n(p.b[0])}" y2="${n(p.b[1])}"${st} stroke-linecap="round"${hit}/>`;
-      case 'poly': return `<${p.close ? 'polygon' : 'polyline'} points="${p.pts.map(q => n(q[0]) + ',' + n(q[1])).join(' ')}" fill="${p.fill || 'none'}"${st}${hit}/>`;
-      case 'circle': return `<circle cx="${n(p.c[0])}" cy="${n(p.c[1])}" r="${n(p.r)}" fill="${p.fill || 'none'}"${st}${hit}/>`;
+      case 'poly': return `<${p.close ? 'polygon' : 'polyline'} points="${p.pts.map(q => n(q[0]) + ',' + n(q[1])).join(' ')}" fill="${esc(p.fill || 'none')}"${st}${hit}/>`;
+      case 'circle': return `<circle cx="${n(p.c[0])}" cy="${n(p.c[1])}" r="${n(p.r)}" fill="${esc(p.fill || 'none')}"${st}${hit}/>`;
       case 'arc': {
         const s = [p.c[0] + p.r * Math.cos(p.a0), p.c[1] + p.r * Math.sin(p.a0)], e = [p.c[0] + p.r * Math.cos(p.a1), p.c[1] + p.r * Math.sin(p.a1)];
         return `<path d="M${n(s[0])} ${n(s[1])}A${n(p.r)} ${n(p.r)} 0 ${Math.abs(p.a1 - p.a0) > Math.PI ? 1 : 0} ${p.a1 > p.a0 ? 1 : 0} ${n(e[0])} ${n(e[1])}" fill="none"${st}${hit}/>`;
       }
-      case 'text': return `<text x="${n(p.p[0])}" y="${n(p.p[1])}" font-size="${n(p.size)}" text-anchor="${p.anchor || 'middle'}" dominant-baseline="middle" fill="${p.fill || '#111'}"${p.weight ? ` font-weight="${p.weight}"` : ''}${p.rot ? ` transform="rotate(${n(p.rot)} ${n(p.p[0])} ${n(p.p[1])})"` : ''}${hit}>${esc(p.s)}</text>`;
+      case 'text': return `<text x="${n(p.p[0])}" y="${n(p.p[1])}" font-size="${n(p.size)}" text-anchor="${esc(p.anchor || 'middle')}" dominant-baseline="middle" fill="${esc(p.fill || '#111')}"${p.weight ? ` font-weight="${n(p.weight)}"` : ''}${p.rot ? ` transform="rotate(${n(p.rot)} ${n(p.p[0])} ${n(p.p[1])})"` : ''}${hit}>${esc(p.s)}</text>`;
       default: return '';
     }
   }
   function renderAll() {
     if (!S.plan) return;
-    if (S.elev && !roomById(S.elev.roomId)) { S.elev = null; syncModeUI(); }   // phòng bị xoá / hoàn tác
+    const er0 = S.elev && roomById(S.elev.roomId);
+    if (S.elev && (!er0 || S.elev.i >= C.segCount(er0))) { S.elev = null; syncModeUI(); }   // phòng / đoạn bị xoá, hoàn tác
     drawLayer.innerHTML = viewPrims().map(primSvg).join('');
     $('vh-name').textContent = S.plan.name || 'Bản vẽ';
     const selRoom = S.sel?.room && roomById(S.sel.room);
@@ -390,7 +415,7 @@
     renderCeilSub();
     $('vh-draw-btns').hidden = tool !== 'draw' && tool !== 'ceil-line';
     $('vh-draw-btns').querySelectorAll('[data-cmd="vách"],[data-cmd="cửa sổ"],[data-cmd="cửa đi"],[data-cmd="lối đi"]').forEach(b => { b.hidden = tool === 'ceil-line'; });
-    $('vh-hint').textContent = HINTS[tool] || '';
+    $('vh-hint').textContent = tool === 'select' && innerWidth <= 640 ? '' : HINTS[tool] || '';   // điện thoại: chỉ hướng dẫn khi đang dùng công cụ
     if (tool !== 'select') { S.sel = null; S.multi = false; S.multiSel = []; $('vh-multi')?.classList.remove('is-on'); }
     renderPop(); renderOverlay();   // về Chọn sau khi đặt: hiện bảng thuộc tính của đối tượng vừa đặt
   }
@@ -674,8 +699,7 @@
       else if (m.kind === 'ar') { const ar = arrowsList().find(x => x.id === m.id), ba = (bf.arrows || []).find(x => x.id === m.id); if (ar && ba) ar.pts = ba.pts.map(p => [p[0] + dx, p[1] + dy]); }
       else if (m.kind === 'ph') { const ph = (floor().photos || []).find(x => x.id === m.id), bp = (bf.photos || []).find(x => x.id === m.id); if (ph && bp) { ph.x = bp.x + dx; ph.y = bp.y + dy; } }
     }
-    drawLayer.innerHTML = viewPrims().map(primSvg).join('');
-    renderOverlay();
+    drawSoon();
   }
   function deleteMulti() {
     if (!S.multiSel.length) return;
@@ -713,6 +737,7 @@
         drag = {type: 'pan', ...start, view: {...S.view}, clear: true}; return;
       }
       const mIt = normMulti(hit);
+      if (start.touch && !S.multi && !(S.multiSel.length && inMulti(mIt)) && !isSelected(hit)) { drag = {type: 'pan', ...start, view: {...S.view}, tapHit: hit}; return; }
       if (S.multiSel.length && inMulti(mIt)) {
         drag = {type: 'multi', hit, ...start, snapshot: JSON.stringify(S.plan), baseFloor: JSON.parse(JSON.stringify(floor()))};
         return;
@@ -762,7 +787,11 @@
     drag = null;
     if (d.type === 'pinch') return;
     const w = toWorld(e.clientX, e.clientY);
-    if (d.type === 'pan') { if (!d.moved && d.clear) { S.sel = null; S.multiSel = []; renderAll(); } return; }
+    if (d.type === 'pan') {
+      if (!d.moved && d.tapHit) { S.multiSel = []; select(d.tapHit, e); }
+      else if (!d.moved && d.clear) { S.sel = null; S.multiSel = []; renderAll(); }
+      return;
+    }
     if (d.type === 'box') {
       S.boxDraft = null;
       if (d.moved) { boxSelect(d.w, w); S.sel = null; }
@@ -774,17 +803,17 @@
       return;
     }
     if (d.type === 'multi') {
-      if (d.moved) { if (d.changed) { S.hist.push(d.snapshot); S.fut = []; markDirty(); } renderAll(); }
+      if (d.moved) { if (d.changed) { pushHist(d.snapshot); S.fut = []; markDirty(); } renderAll(); }
       else if (S.multi) { toggleMultiItem(normMulti(d.hit)); renderAll(); }
       else { S.multiSel = []; select(d.hit, e); }
       return;
     }
     if (d.type === 'obj') {
-      if (d.moved) { if (d.changed) { S.hist.push(d.snapshot); S.fut = []; markDirty(); } renderAll(); }
+      if (d.moved) { if (d.changed) { pushHist(d.snapshot); S.fut = []; markDirty(); } renderAll(); }
       else if (!d.fab) { S.multiSel = []; select(d.hit, e); }
       return;
     }
-    if (d.type === 'bgmove') { if (d.moved) { S.hist.push(d.snapshot); S.fut = []; markDirty(); renderAll(); } return; }
+    if (d.type === 'bgmove') { if (d.moved) { pushHist(d.snapshot); S.fut = []; markDirty(); renderAll(); } return; }
     if (d.type === 'draw') {
       if (S.tool === 'draw' && !S.draft && d.moved && d.path.length > 4) {   // nét phác một lèo
         S.sketch = null;
@@ -829,6 +858,7 @@
     const delta = C.sub(w, d.w), s = S.plan.snap || 10, base = d.base;
     if (!base) return;
     const room = roomById(d.hit.a);
+    if (!C.round(delta[0], s) && !C.round(delta[1], s) && !d.changed) return;
     d.changed = true;
     const fr = S.elev && room ? C.elevFrame(room, S.elev.i) : null, du = fr ? (fr.flip ? -delta[0] : delta[0]) : 0;
     if (fr && d.hit.kind === 'dev') {   // mặt đứng: dời ngang = at, dời dọc = cao độ
@@ -875,8 +905,22 @@
       const dim = floor().dims.find(c => c.id === d.hit.a);
       dim.off = dimOffset(dim.a, dim.b, w);
     }
-    drawLayer.innerHTML = viewPrims().map(primSvg).join('');
-    renderOverlay();
+    drawSoon();
+  }
+  // kéo liên tục: dựng lại SVG tối đa 1 lần / khung hình
+  let drawPending = false;
+  function drawSoon() {
+    if (drawPending) return;
+    drawPending = true;
+    requestAnimationFrame(() => { drawPending = false; if (S.plan) { drawLayer.innerHTML = viewPrims().map(primSvg).join(''); renderOverlay(); } });
+  }
+  function isSelected(hit) {
+    const s = S.sel;
+    if (!s || !hit) return false;
+    if (hit.kind === 'seg') return s.kind === 'seg' && s.room === hit.a && s.i === Number(hit.b);
+    if (hit.kind === 'room' || hit.kind === 'vtx') return s.kind === 'room' && s.room === hit.a || s.kind === 'seg' && s.room === hit.a && hit.kind === 'vtx';
+    if (hit.kind === 'op' || hit.kind === 'dev') return s.kind === hit.kind && s.id === hit.b;
+    return s.kind === hit.kind && s.id === hit.a;
   }
 
   // ================= Đặt thiết bị / cột / đo =================
@@ -1017,8 +1061,17 @@
     else if (hit.kind === 'op' || hit.kind === 'dev') S.sel = {kind: hit.kind, room: hit.a, id: hit.b};
     else S.sel = {kind: hit.kind, id: hit.a};
     renderAll();
-    if (hit.kind === 'seg') pop.querySelector('[data-f=len]')?.select();
+    revealSel(hit);
+    if (hit.kind === 'seg' && !matchMedia('(pointer: coarse)').matches) pop.querySelector('[data-f=len]')?.select();
     if (hit.kind === 'ph') openPhotoDialog(hit.a);
+  }
+  function revealSel(hit) {
+    if (pop.hidden || innerWidth > 640) return;
+    const key = hit.kind + ':' + hit.a + (hit.b != null ? ':' + hit.b : '');
+    const els = [...drawLayer.querySelectorAll('[data-hit]')].filter(el => el.dataset.hit === key);
+    if (!els.length) return;
+    const bottom = Math.max(...els.map(el => el.getBoundingClientRect().bottom)), top = pop.getBoundingClientRect().top - 16;
+    if (bottom > top) { S.view.y -= bottom - top; applyView(); placeFab?.(); }
   }
   const field = (label, f, value, attrs = '') => `<label>${label}<input data-f="${f}" value="${esc(value)}" ${attrs}></label>`;
   const num = (label, f, value) => `<label>${label}<div class="vh-step"><button type="button" data-step="${f}:-10">−</button><input data-f="${f}" type="number" inputmode="numeric" value="${Math.round(value)}"><button type="button" data-step="${f}:10">+</button></div></label>`;
@@ -1311,8 +1364,9 @@
       for (let j = 0; j + 3 < sg.length; j += 4) d.push('M' + n(x + sg[j] * k) + ' ' + n(y + sg[j + 1] * k) + 'L' + n(x + sg[j + 2] * k) + ' ' + n(y + sg[j + 3] * k));
       g.innerHTML = `<path d="${d.join('')}" fill="none" stroke="#475569" stroke-width="1" vector-effect="non-scaling-stroke" opacity="${op}"/>`;
     } else if (url) g.innerHTML = `<image href="${url}" x="${n(x)}" y="${n(y)}" width="${n(bg.w * k)}" height="${n(bg.h * k)}" opacity="${op}" preserveAspectRatio="none"/>`;
-    else { g.innerHTML = ''; bgKey = ''; assetBlobUrl(bg.name).then(() => renderBg(), err => Shell.toast('Không tải được nền: ' + err.message)); }
+    else { g.innerHTML = ''; bgKey = ''; if (!bgFailed.has(bg.name)) assetBlobUrl(bg.name).then(() => renderBg(), err => { bgFailed.add(bg.name); Shell.toast('Không tải được nền: ' + err.message); }); }
   }
+  const bgFailed = new Set();
   async function loadPdfJs() {
     if (!window.pdfjsLib) await new Promise((ok, fail) => {
       const sc = document.createElement('script');
@@ -1374,7 +1428,7 @@
     S.bgPts = null; renderOverlay();
     if (cur < 1) return;
     const ans = await Shell.ask({title: 'Đặt tỷ lệ nền', message: 'Đoạn vừa chọn đang dài ' + fmt(cur) + ' mm. Số đo thật là bao nhiêu mm?', input: {value: String(Math.round(cur))}});
-    const real = Number(String(ans || '').replace(/[^\d.]/g, ''));
+    const raw = String(ans || '').trim().replace(/\s/g, ''), real = Number(/^\d{1,3}(\.\d{3})+$/.test(raw) ? raw.replace(/\./g, '') : raw.replace(',', '.'));
     if (!(real > 0)) return;
     const r = real / cur, bg = floor().bg;
     commit(() => { bg.mmPerUnit *= r; bg.x = p[0] + ((bg.x || 0) - p[0]) * r; bg.y = p[1] + ((bg.y || 0) - p[1]) * r; });
@@ -1531,6 +1585,7 @@
     for (const k of ['name', 'address', 'surveyor', 'wall', 'partition', 'snap', 'font']) f[k].value = p[k] ?? '';
     f.projectId.value = p.projectId || '';
     for (const k of ['showDims', 'devDims', 'grid']) f[k].checked = p[k] !== false;
+    $('vh-settings').returnValue = '';
     $('vh-settings').showModal();
   }
   $('vh-settings').addEventListener('close', () => {

@@ -37,7 +37,7 @@
   // Tách chữ thành dãy {num}/{word}; số dạng 1.500 = 1500, 8,5 = 8.5
   function tokens(text) {
     const out = [];
-    const raw = String(text || '').toLowerCase().normalize('NFC').replace(/(\d)\s*\+\s*(\d)/g, '$1+$2').replace(/(\d)(m|mm|cm)\b/g, '$1 $2').split(/[\s;]+/).filter(Boolean);
+    const raw = String(text || '').toLowerCase().normalize('NFC').replace(/(\d)\s*\+\s*(\d)/g, '$1+$2').replace(/(\d)(mm|cm|m)(?=\d)/g, '$1 $2 ').replace(/(\d)(m|mm|cm)\b/g, '$1 $2').split(/[\s;]+/).filter(Boolean);
     let words = [];
     const flush = () => { if (!words.length) return; const n = wordsToNumber(words); if (n != null) out.push({num: n}); else words.forEach(w => out.push({word: w})); words = []; };
     for (const t of raw) {
@@ -62,11 +62,12 @@
       if (UNIT_M.includes(next)) {
         let mm = t.num * 1000;
         const frac = toks[i + 2];
-        if (frac?.num != null && !UNIT_M.concat(UNIT_CM, UNIT_MM).includes(toks[i + 3]?.word)) { mm += Number('0.' + String(frac.raw || frac.num).replace(/\D/g, '')) * 1000; i++; }
+        if (frac?.word === 'rưỡi' || frac?.word === 'ruoi') { mm += 500; i++; }
+        else if (frac?.num != null && !UNIT_M.concat(UNIT_CM, UNIT_MM).includes(toks[i + 3]?.word)) { mm += Number('0.' + String(frac.raw || frac.num).replace(/\D/g, '')) * 1000; i++; }
         out.push({len: Math.round(mm)}); i++;
       } else if (UNIT_CM.includes(next)) { out.push({len: Math.round(t.num * 10)}); i++; }
       else if (UNIT_MM.includes(next)) { out.push({len: Math.round(t.num)}); i++; }
-      else out.push({len: Math.round(t.num)});
+      else out.push({len: t.num < 100 && !Number.isInteger(t.num) ? t.num : Math.round(t.num)});   // 3,5 không đơn vị: để người gọi hiểu là mét
     }
     return out;
   }
@@ -173,7 +174,7 @@
     else if (mode === 'shift') room.pts = room.pts.map((p, k) => (bi === 0 ? k === 0 : k > i) ? add(p, mul(d, delta)) : p);
     else room.pts = room.pts.map((p, k) => k === bi || (k !== i && dot(p, d) > endProj - 1 && dot(p, d) > startProj + 1) ? add(p, mul(d, delta)) : p);
     // cửa / thiết bị nằm trên các đoạn bị kéo theo không đổi vị trí tương đối; cửa "cả đoạn" giãn theo đoạn
-    for (const op of room.openings || []) if (op.full) op.w = segLen(room, op.seg);
+    for (const op of room.openings || []) { const L = segLen(room, op.seg); if (op.full) op.w = L; else op.at = Math.max(0, Math.min(op.at, L - op.w)); }
   }
   function centroid(room) {
     const pts = room.pts;
@@ -444,7 +445,8 @@
       else if (p.t === 'circle') e(0, 'CIRCLE', 8, layer, 10, f(p.c[0]), 20, f(-p.c[1]), 30, 0, 40, f(p.r));
       else if (p.t === 'arc') {
         const deg = v => v * 180 / Math.PI, lo = Math.min(p.a0, p.a1), hi = Math.max(p.a0, p.a1);
-        e(0, 'ARC', 8, layer, 10, f(p.c[0]), 20, f(-p.c[1]), 30, 0, 40, f(p.r), 50, f(-deg(hi)), 51, f(-deg(lo)));
+        const n360 = v => ((v % 360) + 360) % 360;
+        e(0, 'ARC', 8, layer, 10, f(p.c[0]), 20, f(-p.c[1]), 30, 0, 40, f(p.r), 50, f(n360(-deg(hi))), 51, f(n360(-deg(lo))));
       } else if (p.t === 'text') e(0, 'TEXT', 8, layer, 10, f(p.p[0]), 20, f(-p.p[1]), 30, 0, 40, f(p.size), 1, dxfText(p.s), 50, f(-(p.rot || 0)), 72, p.anchor === 'start' ? 0 : p.anchor === 'end' ? 2 : 1, 73, 2, 11, f(p.p[0]), 21, f(-p.p[1]), 31, 0);
     }
     e(0, 'ENDSEC', 0, 'EOF');
@@ -616,16 +618,22 @@
   function parseRoomDescription(text) {
     let s = ' ' + String(text || '').toLowerCase().normalize('NFC') + ' ';
     s = s.replace(/(một|1)\s+(phòng|căn)/g, ' $2').replace(/phía\s*trước|mặt\s*trước|\btrước\b/g, ' #down ').replace(/phía\s*sau|mặt\s*sau/g, ' #up ').replace(/\bnhân\b|\bx\b|×|\*/g, ' ');
-    const clauses = s.split(/[,;.\n]|\bvà\b|\brồi\b/);
+    s = s.replace(/(\d)[.,](?=\d)/g, '$1\u0001');
+    const clauses = s.split(/[,;.\n]|\bvà\b|\brồi\b/).map(c => c.replace(/\u0001/g, ','));
     const out = {w: 0, h: 0, openings: [], columns: []};
     for (const raw of clauses) {
       let c = ' ' + raw + ' ';
       for (const [re, tag] of PHRASES) c = c.replace(re, tag);
-      const items = lengths(tokens(c.replace(/\bcách\b/g, ' #at ').replace(/\brộng\b|\brong\b|\bdài\b/g, ' #w ')));
+      const items = lengths(tokens(c.replace(/\bcách\b/g, ' #at ').replace(/\brộng\b|\brong\b|\bdài\b/g, ' #w '))).map(t => t.len != null && t.len < 100 ? {len: Math.round(t.len * 1000)} : t);   // mô tả phòng: số < 100 = mét
       const words = items.filter(t => t.word).map(t => t.word), nums = items.filter(t => t.len != null).map(t => t.len);
       const sideOf = () => words.includes('#down') ? 'bottom' : words.includes('#up') ? 'top' : words.includes('#left') ? 'left' : words.includes('#right') ? 'right' : null;
       const type = words.includes('#window') ? 'window' : words.includes('#door') ? 'door' : words.includes('#open') ? 'open' : null;
-      if (!out.w && !type && nums.length >= 2) { out.w = nums[0]; out.h = nums[1]; continue; }
+      if (!out.w && nums.length >= 2 && (!type || !items.slice(0, items.findIndex(t => t.len != null)).some(t => ['#window', '#door', '#open'].includes(t.word)))) {
+        out.w = nums[0]; out.h = nums[1];
+        if (!type) continue;
+        items.splice(0, items.findIndex((t, k) => t.len != null && k > items.findIndex(x => x.len != null)) + 1);
+        nums.splice(0, 2);
+      }
       if (type) {
         let w = null, at = null;
         items.forEach((t, k) => { if (t.len == null) return; const prev = items[k - 1]?.word; if (prev === '#at') at = t.len; else if (w == null) w = t.len; else if (at == null) at = t.len; });
@@ -731,7 +739,7 @@
         if (e.type === 'BLOCK') { block = {base: [num(e, 10), num(e, 20)], ents: []}; blocks[get(e, 2)] = block; }
         else if (e.type === 'ENDBLK') block = null;
         else if (block) block.ents.push(e);
-      } else if (section === 'ENTITIES') top.push(e);
+      } else if (section === 'ENTITIES' && num(e, 67) !== 1) top.push(e);
     }
     const segs = [];
     function draw(list, T, depth) {
