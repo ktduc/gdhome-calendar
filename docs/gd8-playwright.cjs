@@ -2862,6 +2862,45 @@ async function openMaterials(page) {
   await page.locator('[data-row="g1-r1"]').waitFor();
 }
 
+cases['nhan-su'] = async page => {
+  // Thông tin nhân viên: thêm người, chọn bộ phận / tạo chuyên môn mới, lưu server; TAG hiện trong cột Người bên Thống kê
+  for (const width of [1280,1920,2560,390]) {
+    await page.setViewportSize({width,height:900});
+    await page.goto('/nhan-su',{waitUntil:'domcontentloaded'});
+    await page.locator('#ns-wrap .tk-empty, #ns-wrap table').first().waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth),width,'Trang không rộng ra ở ' + width);
+  }
+  await page.setViewportSize({width:1440,height:900});
+  await page.locator('[data-act=add]').click();
+  const row = page.locator('#ns-wrap tbody tr').last();
+  await row.locator('[data-f=name]').fill('Vũ Đình Khiêm');
+  await row.locator('[data-f=tag]').fill('gd - khiêm');
+  await row.locator('[data-f=birthday]').fill('2000-02-27');
+  await row.locator('[data-f=startAt]').fill('2025-02-05');
+  await row.locator('[data-f=startAt]').press('Tab');
+  await row.locator('[data-pick=dept]').click();
+  await page.locator('.tk-pop [data-opt="Thiết kế"]').click();
+  await row.locator('[data-pick=skills]').click();
+  await page.locator('.tk-pop [data-opt="3D"]').click();
+  await page.locator('.tk-pop [data-q]').fill('Render AI');
+  await page.locator('.tk-pop [data-q]').press('Enter');
+  await page.keyboard.press('Escape');
+  let saved;
+  for (let i = 0; i < 30 && saved?.skills !== '3D, Render AI'; i++) { await page.waitForTimeout(300); saved = (await page.evaluate(() => GDHomeShell.api('/api/staff'))).items.at(-1); }
+  assert.equal(saved.tag,'GD - KHIÊM','TAG viết hoa');
+  assert.equal(saved.dept,'Thiết kế');
+  assert.equal(saved.birthday,'2000-02-27','Sinh nhật lưu');
+  assert.match(await row.locator('.ns-calc').first().innerText(),/năm|tháng/,'Thâm niên tự tính');
+  if (process.env.GD8_SHOTS) await page.screenshot({path:path.join(process.env.GD8_SHOTS,'nhan-su.png')});
+  // Thống kê: TAG nằm trong lựa chọn cột Người làm 3D
+  await page.goto('/thong-ke',{waitUntil:'domcontentloaded'});
+  await page.locator('tr[data-row=p1]').waitFor();
+  await page.locator('[data-mode=table]').click();
+  await page.locator('tr[data-row=p1] [data-f=designer3d]').click();
+  await page.locator('.tk-pop [data-pick="GD - KHIÊM"]').waitFor();
+  await page.keyboard.press('Escape');
+};
+
 cases['ve-hien-trang'] = async (page,{browser}) => {
   // Vẽ hiện trạng: mở bản vẽ mẫu, vẽ phòng bằng ô lệnh, sửa số tường, đặt thiết bị / cửa, hoàn tác, tự lưu, xuất DXF, màn điện thoại
   const shots = process.env.GD8_SHOTS, shot = (p,name) => shots && p.screenshot({path:path.join(shots,name)});

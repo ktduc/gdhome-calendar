@@ -62,6 +62,7 @@
     ['all', 'Tất cả'], ['design', 'Đang thiết kế'], ['build', 'Thi công'], ['soon', 'Deadline 7 ngày'],
     ['late', 'Trễ hạn'], ['pay', 'Chờ thu tiền'], ['done', 'Hoàn thành'],
   ];
+  let staff = [];   // nhân viên từ /api/staff: TAG = tên ở các cột Người
   let projects = [], prefs = {view: 'all', group: '', mode: 'sections', hidden: null, sort: null, collapsed: null};
   try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF_KEY)) || {}); } catch { /* trình duyệt chặn bộ nhớ: dùng mặc định */ }
   if (!prefs.v2) { prefs.mode = 'sections'; prefs.v2 = true; }   // lần đầu có chia phần: mở chế độ Theo phần
@@ -433,6 +434,8 @@
     if (optCache.has(col.key)) return optCache.get(col.key);
     const list = (schema.options?.[col.key] || (col.options || []).map(name => ({name, color: hashColor(name)}))).map(o => ({...o}));
     const known = new Set(list.map(o => norm(o.name))), counts = new Map();
+    // cột Người: thêm TAG nhân viên đang làm (trang /nhan-su)
+    if (col.type === 'people') for (const s of staff) if (s.tag && !known.has(norm(s.tag)) && norm(s.status) !== 'danghi') { known.add(norm(s.tag)); list.push({name: s.tag, color: hashColor(s.tag)}); }
     for (const p of projects) for (const v of splitVals(col, rawOf(p, col))) {
       const k = norm(v);
       if (!k || known.has(k)) continue;
@@ -446,7 +449,8 @@
   }
   const canon = (col, v) => optionsOf(col).find(o => norm(o.name) === norm(v))?.name || v;
   const optLabel = (col, name) => col?.money && /^\d+$/.test(name) ? fmtMoney(name) : name;   // cột tiền dạng chọn: hiện 350.000
-  const chip = (col, name) => `<span class="tk-tag c-${optionsOf(col).find(o => o.name === name)?.color || hashColor(name)}">${esc(optLabel(col, name))}</span>`;
+  const staffName = (col, name) => col?.type === 'people' ? staff.find(s => norm(s.tag) === norm(name))?.name || '' : '';
+  const chip = (col, name) => `<span title="${esc(staffName(col, name))}" class="tk-tag c-${optionsOf(col).find(o => o.name === name)?.color || hashColor(name)}">${esc(optLabel(col, name))}</span>`;
   function storeOptions(col, list) {
     schema.options = {...schema.options, [col.key]: list.map(o => ({name: o.name, color: o.color}))};
     optCache.delete(col.key);
@@ -1013,6 +1017,8 @@
     try {
       const res = await api('/api/project-hub/overview');
       projects = res.projects || [];
+      staff = (await api('/api/staff').catch(() => null))?.items || staff;
+      optCache.clear();
       // đang chờ lưu cấu hình cột thì giữ bản trên máy
       if (res.tableSchema && !schemaDirty) { schema = {columns: res.tableSchema.columns || [], custom: res.tableSchema.custom || [], sections: res.tableSchema.sections || {}, options: res.tableSchema.options || {}}; refreshCols(); }
       render();

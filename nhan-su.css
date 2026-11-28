@@ -1,0 +1,15 @@
+/* Thông tin nhân viên (/nhan-su) – dùng chung kiểu bảng của thong-ke.css */
+.ns-table .tk-col-name { min-width: 210px; }
+.ns-table .ns-tag { min-width: 120px; }
+.ns-table .ns-tag input { font-weight: 600; text-transform: uppercase; }
+.ns-table .ns-phone { min-width: 120px; }
+.ns-table .ns-note { min-width: 220px; }
+.ns-table .tk-col-text { min-width: 150px; }
+.ns-table .tk-col-select { min-width: 140px; }
+.ns-calc { padding: 0 8px !important; color: #5a4e41; }
+.ns-calc a { color: inherit; }
+.ns-date { position: relative; }
+.ns-bday { position: absolute; right: 26px; top: 50%; transform: translateY(-50%); font-size: 12px; color: #b91c1c; pointer-events: auto; }
+.ns-table tr.ns-group th { position: sticky; left: 0; padding: 10px 8px 4px; background: #f4f1ec; text-align: left; font-weight: 600; }
+.ns-hint { margin: 8px 2px 0; font-size: 12px; }
+@media (max-width: 640px) { .tk-body > main.tk-main { padding: 8px; } }

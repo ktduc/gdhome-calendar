@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Thông tin nhân viên · GD HOME</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/shell.css">
+  <link rel="stylesheet" href="/tools.css">
+  <link rel="stylesheet" href="/thong-ke.css">
+  <link rel="stylesheet" href="/nhan-su.css">
+  <script src="/shell.js" defer></script>
+  <script src="/nhan-su.js" defer></script>
+</head>
+<body class="tk-body">
+  <header class="app-header">
+    <div class="header-left">
+      <a class="app-logo" href="/nhan-su">
+        <img src="/gdhome-icon.png" class="header-logo-img" alt="GD HOME">
+        <span>Thông tin nhân viên</span>
+      </a>
+      <details class="gd-tools-menu" data-shell-menu></details>
+    </div>
+    <div class="header-right">
+      <div class="shell-toolbar">
+        <a class="btn btn-outline" href="/thong-ke">← Thống kê dự án</a>
+        <span id="save-status" class="save-status is-inline is-saved" role="status">✓ Đã lưu</span>
+        <button type="button" class="btn btn-primary" data-shell-slot="primary" data-act="add">+ Thêm nhân viên</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="tk-main">
+    <div class="tk-bar">
+      <input type="search" id="ns-search" placeholder="Tìm tên, TAG, bộ phận, chuyên môn…" aria-label="Tìm">
+      <div class="tk-views" id="ns-views" role="tablist" aria-label="Lọc"></div>
+      <label class="tk-field">Nhóm
+        <select id="ns-group"><option value="">Không nhóm</option><option value="dept">Bộ phận</option><option value="skills">Chuyên môn</option><option value="role">Chức vụ</option><option value="status">Trạng thái</option></select>
+      </label>
+    </div>
+    <div class="tk-wrap" id="ns-wrap"><p class="tk-empty">Đang tải…</p></div>
+    <p class="tk-muted ns-hint">TAG là tên rút gọn dùng ở các cột Người làm 3D / HSKT / Giám sát bên Thống kê dự án – nhập đúng như bên đó (VD: GD - KHIÊM). Bấm ô Bộ phận / Chuyên môn / Chức vụ / Trạng thái để chọn, thêm lựa chọn mới, đổi tên hoặc màu (⋯).</p>
+  </main>
+</body>
+</html>
