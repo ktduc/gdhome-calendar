@@ -249,6 +249,7 @@
     applyView();
   }
   new ResizeObserver(() => S.plan && applyView()).observe(svg);
+  screen.orientation?.addEventListener('change', () => setTimeout(() => S.plan && !$('vh-editor').hidden && fit(), 300));
 
   // ================= Vẽ ra SVG =================
   function primSvg(p) {
@@ -577,6 +578,7 @@
         if (S.tool !== 'draw' && S.tool !== 'ceil-line') setTool('draw');
         if (!S.draft) startDraft(freeSpot());
         const d = S.draft;
+        if (a.len > 200000) { Shell.toast('Số đo ' + a.len + ' mm quá lớn, bỏ qua.'); continue; }
         if (a.len == null) { d.arrow = C.stepVector(a.dir, null, d.lastV, d.lastH); continue; }
         const last = d.pts[d.pts.length - 1];
         let v;
@@ -998,7 +1000,6 @@
         commit(() => { (floor().photos ||= []).push({id, x: pend.x, y: pend.y, name, note: ''}); S.sel = {kind: 'ph', id}; });
         openPhotoDialog(id);
       }
-      Shell.toast('Đã lưu ảnh hiện trường.');
     } catch (error) { Shell.toast('Không tải được ảnh: ' + error.message); }
   });
   async function openPhotoDialog(id) {
@@ -1284,9 +1285,10 @@
     if (!target) return;
     commit(() => { floor().rooms.splice(floor().rooms.indexOf(room), 1); S.plan.floors[target[0]].rooms.push(room); S.sel = null; });
   }
-  function deleteSel() {
+  async function deleteSel() {
     const sel = S.sel, room = sel?.room && roomById(sel.room);
     if (!sel) return;
+    if (sel.kind === 'seg' && !await Shell.ask({title: 'Xoá phòng', message: 'Đang chọn 1 bức tường. Xoá cả phòng "' + (room?.name || '') + '"?', okText: 'Xoá phòng', danger: true})) return;
     commit(() => {
       if (sel.kind === 'op') room.openings = room.openings.filter(o => o.id !== sel.id);
       else if (sel.kind === 'dev') room.devices = room.devices.filter(o => o.id !== sel.id);

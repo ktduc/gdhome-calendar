@@ -435,7 +435,9 @@
     e(0, 'SECTION', 2, 'HEADER', 9, '$ACADVER', 1, 'AC1009', 9, '$INSUNITS', 70, 4, 0, 'ENDSEC');
     e(0, 'SECTION', 2, 'TABLES', 0, 'TABLE', 2, 'LAYER', 70, Object.keys(DXF_LAYERS).length);
     for (const [name, color] of Object.entries(DXF_LAYERS)) e(0, 'LAYER', 2, name, 70, 0, 62, color, 6, 'CONTINUOUS');
-    e(0, 'ENDTAB', 0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
+    // font TrueType để chữ tiếng Việt (\U+) hiện đúng trong AutoCAD, không rơi về txt.shx
+    e(0, 'ENDTAB', 0, 'TABLE', 2, 'STYLE', 70, 1, 0, 'STYLE', 2, 'STANDARD', 70, 0, 40, 0, 41, 1, 50, 0, 71, 0, 42, 2.5, 3, 'arial.ttf', 4, '', 0, 'ENDTAB');
+    e(0, 'ENDSEC', 0, 'SECTION', 2, 'ENTITIES');
     const line = (a, b, layer) => e(0, 'LINE', 8, layer, 10, f(a[0]), 20, f(-a[1]), 30, 0, 11, f(b[0]), 21, f(-b[1]), 31, 0);
     for (const p of prims) {
       const layer = DXF_LAYERS[p.layer] != null ? p.layer : null;
